@@ -1,0 +1,66 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/server"
+	"log"
+	"net"
+	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
+)
+
+const (
+	readTimeout     = 10 * time.Second
+	writeTimeout    = 10 * time.Second
+	idleTimeout     = 60 * time.Second
+	shutdownTimeout = 10 * time.Second
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatalf("server: %v", err)
+	}
+}
+
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	notifyContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	httpServer := &http.Server{
+		Addr:         net.JoinHostPort("", cfg.Port),
+		Handler:      server.NewRouter(cfg),
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
+	}
+	serverErrors := make(chan error, 1)
+	go func() {
+		log.Printf("server: listening on http://localhost:%s (env=%s, timezone=%s)", cfg.Port, cfg.AppEnv, cfg.Timezone)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErrors <- err
+			return
+		}
+		serverErrors <- nil
+	}()
+	select {
+	case err := <-serverErrors:
+		return err
+	case <-notifyContext.Done():
+		log.Println("server: shutdown signal received, finishing active requests")
+		stop()
+		shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownContext); err != nil {
+			return err
+		}
+		log.Println("server: stopped cleanly")
+		return nil
+	}
+}
