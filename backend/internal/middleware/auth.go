@@ -43,6 +43,10 @@ func CurrentUser(ctx context.Context) (User, bool) {
 	return user, ok
 }
 
+func WithUser(ctx context.Context, user User) context.Context {
+	return context.WithValue(ctx, currentUserKey, user)
+}
+
 func VerifyToken(tokens TokenParser, users UserStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +80,7 @@ func VerifyToken(tokens TokenParser, users UserStore) func(http.Handler) http.Ha
 				return
 			}
 			current := User{ID: user.ID, Identifier: user.Identifier, Role: effectiveRole}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), currentUserKey, current)))
+			next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), current)))
 		})
 	}
 }
