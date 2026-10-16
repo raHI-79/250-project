@@ -26,6 +26,8 @@ type Dependencies struct {
 	Alerts   handler.NotificationService
 	Classes  handler.CRStore
 	Notifier handler.Notifier
+	Teachers handler.TeacherStore
+	Alarms   handler.BroadcastNotifier
 }
 
 type RouteGroup struct {
@@ -59,6 +61,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Notifier))
+	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
@@ -98,6 +101,22 @@ func CRGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 			middleware.RequireRole(auth.RoleCR),
 		},
 	}
+}
+
+func TeacherGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleTeacher),
+		},
+	}
+}
+
+func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
+	group.Handle("GET /api/teacher/requests", teacher.Requests())
+	group.Handle("POST /api/teacher/requests/{id}/approve", teacher.Approve())
+	group.Handle("POST /api/teacher/requests/{id}/reject", teacher.Reject())
 }
 
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {

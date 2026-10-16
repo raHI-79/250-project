@@ -75,6 +75,8 @@ func run() error {
 			Alerts:   alerts,
 			Classes:  userStore,
 			Notifier: alerts,
+			Teachers: userStore,
+			Alarms:   alerts,
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
