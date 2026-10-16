@@ -54,6 +54,7 @@ func run() error {
 		return err
 	}
 	userStore := store.New(pool)
+	alerts := notify.New(userStore)
 	if cfg.HasAdminSeed() {
 		if err := seedAdmin(startupContext, userStore, cfg); err != nil {
 			return err
@@ -71,7 +72,9 @@ func run() error {
 			People:   userStore,
 			Catalog:  userStore,
 			Lookups:  userStore,
-			Alerts:   notify.New(userStore),
+			Alerts:   alerts,
+			Classes:  userStore,
+			Notifier: alerts,
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,

@@ -24,6 +24,8 @@ type Dependencies struct {
 	Catalog  handler.CatalogStore
 	Lookups  handler.LookupStore
 	Alerts   handler.NotificationService
+	Classes  handler.CRStore
+	Notifier handler.Notifier
 }
 
 type RouteGroup struct {
@@ -56,6 +58,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerAdminRoutes(AdminGroup(mux, deps), handler.NewAdmin(deps.People), handler.NewCatalog(deps.Catalog))
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
+	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Notifier))
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
@@ -85,6 +88,20 @@ func NotificationGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
 		},
 	}
+}
+
+func CRGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleCR),
+		},
+	}
+}
+
+func registerCRRoutes(group RouteGroup, cr *handler.CR) {
+	group.Handle("GET /api/cr/routine", cr.Routine())
 }
 
 func registerLookupRoutes(group RouteGroup, lookups *handler.Lookups) {
