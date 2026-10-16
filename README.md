@@ -22,8 +22,8 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Layer | Technology |
 |---|---|
-| Backend | Go 1.22+, standard library `net/http` |
-| Database | PostgreSQL (via `pgx/v5`, from Set 2) |
+| Backend | Go 1.25+, standard library `net/http` |
+| Database | PostgreSQL 14+ via `pgx/v5` with a `pgxpool` connection pool |
 | Authentication | bcrypt password hashing + JWT (from Set 3) |
 | Frontend | React + Vite + React Router + Tailwind CSS (from Set 16) |
 | File uploads | PDFs on disk in `backend/uploads/`, path saved in the database |
@@ -35,7 +35,9 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 ├── backend/                  Go module (the API server)
 │   ├── cmd/server/           main.go — program entry point
 │   ├── internal/
-│   │   ├── config/           reads environment variables
+│   │   ├── config/           reads backend/.env and environment variables
+│   │   ├── db/               pgxpool connection + embedded SQL migrations
+│   │   │   └── migrations/   schema files, applied in filename order
 │   │   ├── handler/          one file per group of endpoints
 │   │   ├── httpx/            shared JSON response helpers
 │   │   └── server/           router: URL -> handler
@@ -51,13 +53,14 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Requirements
 
-- [Go 1.22 or newer](https://go.dev/dl/) — check with `go version`
-- [PostgreSQL 14 or newer](https://www.postgresql.org/download/) — needed from Set 2 onward
+- [Go 1.25 or newer](https://go.dev/dl/) — check with `go version`
+- [PostgreSQL 14 or newer](https://www.postgresql.org/download/) — the server
+  does not start without it
 
 ## Database setup
 
-The backend does not touch the database yet (that starts in Set 2), but you can
-get it ready now.
+The backend connects to PostgreSQL at startup and creates every table itself, so
+all you have to do is create two empty databases and set your password.
 
 1. **Install PostgreSQL.** On Windows, use the installer from
    [postgresql.org](https://www.postgresql.org/download/windows/) and remember
@@ -86,6 +89,30 @@ get it ready now.
    `backend/.env` is listed in `.gitignore`, so your password is never
    committed. Only `backend/.env.example` is tracked.
 
+5. **Start the server once.** It creates every table automatically:
+
+   ```powershell
+   cd backend
+   go run ./cmd/server
+   ```
+
+   ```
+   db: connected
+   db: applied migration 0001_initial_schema.sql
+   server: listening on http://localhost:8080 (env=development, timezone=Asia/Dhaka)
+   ```
+
+   The SQL files in `backend/internal/db/migrations/` are embedded in the binary,
+   applied in filename order, each inside its own transaction, and recorded in a
+   `schema_migrations` table. Starting the server again applies nothing and
+   prints `db: schema is up to date`, so running it many times is safe.
+
+   To look at the tables yourself:
+
+   ```powershell
+   psql -U postgres -d sust_coord -c "\dt"
+   ```
+
 ## How to run the backend
 
 ```powershell
@@ -96,8 +123,13 @@ go run ./cmd/server
 You should see:
 
 ```
+db: connected
+db: schema is up to date
 server: listening on http://localhost:8080 (env=development, timezone=Asia/Dhaka)
 ```
+
+The server stops with a clear error when `DATABASE_URL` is missing or PostgreSQL
+is not running, so it never starts with a broken database connection.
 
 Then, in a second terminal, check the health endpoint:
 
@@ -106,10 +138,13 @@ Invoke-RestMethod http://localhost:8080/api/health
 ```
 
 ```
-status environment time
------- ----------- ----
-ok     development 2026-10-16T10:30:00+06:00
+status environment database time
+------ ----------- -------- ----
+ok     development ok       2026-10-16T10:30:00+06:00
 ```
+
+`database` is `ok` when the server can reach PostgreSQL and `unavailable` when
+it cannot.
 
 `Invoke-RestMethod` parses the JSON into an object. To see the raw JSON text
 instead, use `Invoke-WebRequest`:
@@ -119,7 +154,7 @@ instead, use `Invoke-WebRequest`:
 ```
 
 ```json
-{"status":"ok","environment":"development","time":"2026-10-16T10:30:00+06:00"}
+{"status":"ok","environment":"development","database":"ok","time":"2026-10-16T10:30:00+06:00"}
 ```
 
 You can also just open <http://localhost:8080/api/health> in a browser, which
@@ -131,7 +166,9 @@ gracefully, finishing any request that is still in progress.
 ### Changing the port
 
 The server reads its settings from environment variables, so nothing needs to
-be edited in the code:
+be edited in the code. On startup it also reads `backend/.env` (when started
+from the `backend/` folder) and only fills in variables that are **not** already
+set, so a real environment variable always wins:
 
 ```powershell
 $env:PORT = "9090"
@@ -143,6 +180,8 @@ go run ./cmd/server
 | `PORT` | `8080` | Port the server listens on |
 | `APP_ENV` | `development` | Environment name reported by `/api/health` |
 | `APP_TIMEZONE` | `Asia/Dhaka` | Timezone used for all dates and times |
+| `DATABASE_URL` | none — **required** | PostgreSQL connection string for the app database |
+| `TEST_DATABASE_URL` | none — optional | Connection string used by the database integration tests |
 
 ## How to run tests
 
@@ -164,9 +203,12 @@ gofmt -l .        # prints nothing when all files are formatted
 go vet ./...      # prints nothing when there are no suspicious patterns
 ```
 
-Integration tests that need a real database (from Set 2 onward) read
-`TEST_DATABASE_URL` and skip themselves when it is not set, so `go test ./...`
-always works even without PostgreSQL running.
+The database integration tests in `backend/internal/db` read
+`TEST_DATABASE_URL` from `backend/.env` and skip themselves when it is not set,
+so `go test ./...` still passes on a machine without PostgreSQL. When it is set
+they refuse to run unless the database name ends with `_test`, and they drop and
+recreate the `public` schema before each test — so never point them at
+`sust_coord`.
 
 ## API endpoints
 
@@ -175,7 +217,7 @@ Every route lives under `/api`. Errors always use the same shape:
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/health` | Returns `status`, `environment` and the current time |
+| `GET` | `/api/health` | Returns `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
 
 Any unknown route returns `404` with `{"error":"Route not found"}`.
 
@@ -190,7 +232,7 @@ These are settled. Do not swap them for something else without agreeing first.
 
 **Backend**
 
-- **Go 1.22+**, routing with the **standard library `net/http`** only
+- **Go 1.25+**, routing with the **standard library `net/http`** only
   (`http.ServeMux` with method patterns such as `"GET /api/health"`). No
   third-party router: no Gin, Echo, Chi or gorilla/mux.
 - **PostgreSQL** through **`github.com/jackc/pgx/v5`** with a **`pgxpool`**
@@ -251,7 +293,9 @@ These are settled. Do not swap them for something else without agreeing first.
 - Prefer **table-driven tests** where there are several similar cases, and use
   `httptest` for handlers.
 - **No comments in Go source code. Keep code self-explanatory with clear
-  names.**
+  names.** The one exception is the required `//go:embed` directive in
+  `internal/db/migrate.go`, which the compiler needs in order to embed the
+  migration files.
 - **No unnecessary blank lines.** No blank lines inside function bodies or
   inside struct, const, var and import blocks; exactly one blank line between
   top-level declarations.
@@ -260,9 +304,9 @@ These are settled. Do not swap them for something else without agreeing first.
 
 ### Git workflow
 
-- **One branch per development set**, named `set-XX-short-name`, for example
-  `set-01-foundation`. Branch off `main`.
-- Each set is split into **2–5 small, logical commits** — for example data
+- **One branch per piece of work**, named `feature/<short-name>`, for example
+  `feature/database-setup`. Branch off `main`.
+- Each branch is split into **2–6 small, logical commits** — for example data
   layer, handlers and routes, tests, docs. **Every commit must build and pass
   tests on its own** and contain a meaningful change. No empty or padding
   commits.
@@ -270,9 +314,10 @@ These are settled. Do not swap them for something else without agreeing first.
   `test:`, `refactor:`. Subject in the imperative mood, no trailing period.
   Scope the backend ones, for example `feat(backend): add health endpoint`.
 - Open a **Pull Request into `main`**, reviewed by the other member. Merge it
-  with a **merge commit** so the set stays visible as a group in the history.
-- The member who owns the set commits it under **their own Git identity**.
+  with a **merge commit** so the whole branch stays visible as a group in the
+  history.
+- The member who owns the work commits it under **their own Git identity**.
   Check with `git config user.name` and `git config user.email` before the
-  first commit of a set.
-- Update the set's **Status in [docs/ROADMAP.md](docs/ROADMAP.md)** to `done`
-  as part of that set.
+  first commit.
+- Update the matching **Status in [docs/ROADMAP.md](docs/ROADMAP.md)** to `done`
+  as part of the same branch.

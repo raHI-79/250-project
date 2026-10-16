@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/db"
 	"github.com/raHI-79/250-project/backend/internal/server"
 	"log"
 	"net"
@@ -18,6 +19,7 @@ const (
 	writeTimeout    = 10 * time.Second
 	idleTimeout     = 60 * time.Second
 	shutdownTimeout = 10 * time.Second
+	startupTimeout  = 30 * time.Second
 )
 
 func main() {
@@ -33,9 +35,21 @@ func run() error {
 	}
 	notifyContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	startupContext, cancelStartup := context.WithTimeout(notifyContext, startupTimeout)
+	defer cancelStartup()
+	pool, err := db.Open(startupContext, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	log.Println("db: connected")
+	if err := db.Migrate(startupContext, pool); err != nil {
+		return err
+	}
+	cancelStartup()
 	httpServer := &http.Server{
 		Addr:         net.JoinHostPort("", cfg.Port),
-		Handler:      server.NewRouter(cfg),
+		Handler:      server.NewRouter(cfg, pool),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,

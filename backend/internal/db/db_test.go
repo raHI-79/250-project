@@ -1,0 +1,400 @@
+package db
+
+import (
+	"context"
+	"errors"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/raHI-79/250-project/backend/internal/config"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+const (
+	testDatabaseSuffix      = "_test"
+	testTimeout             = 30 * time.Second
+	uniqueViolationCode     = "23505"
+	checkViolationCode      = "23514"
+	foreignKeyViolationCode = "23503"
+	notNullViolationCode    = "23502"
+)
+
+var expectedTables = []string{
+	"class_events",
+	"courses",
+	"materials",
+	"messages",
+	"notices",
+	"notifications",
+	"poll_options",
+	"poll_votes",
+	"polls",
+	"routines",
+	"schema_migrations",
+	"students",
+	"teachers",
+	"users",
+}
+
+func TestMain(m *testing.M) {
+	if err := config.LoadEnvFile(filepath.Join("..", "..", ".env")); err != nil {
+		log.Fatalf("db: could not load backend/.env: %v", err)
+	}
+	os.Exit(m.Run())
+}
+
+func newTestDB(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set, skipping the database integration tests")
+	}
+	poolConfig, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		t.Fatalf("TEST_DATABASE_URL could not be parsed: %v", err)
+	}
+	name := poolConfig.ConnConfig.Database
+	if !strings.HasSuffix(name, testDatabaseSuffix) {
+		t.Fatalf("refusing to run against database %q because its name does not end with %q", name, testDatabaseSuffix)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	t.Cleanup(cancel)
+	pool, err := Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("Open() returned an unexpected error: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := pool.Exec(ctx, "DROP SCHEMA public CASCADE; CREATE SCHEMA public"); err != nil {
+		t.Fatalf("could not reset the public schema of %q: %v", name, err)
+	}
+	return ctx, pool
+}
+
+func migratedTestDB(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
+	ctx, pool := newTestDB(t)
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate() returned an unexpected error: %v", err)
+	}
+	return ctx, pool
+}
+
+func pgErrorCode(t *testing.T, err error) string {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a PostgreSQL error, got nil")
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		t.Fatalf("error %v is not a PostgreSQL error", err)
+	}
+	return pgErr.Code
+}
+
+func tableExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, table string) bool {
+	t.Helper()
+	var exists bool
+	query := "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1)"
+	if err := pool.QueryRow(ctx, query, table).Scan(&exists); err != nil {
+		t.Fatalf("could not check whether table %q exists: %v", table, err)
+	}
+	return exists
+}
+
+func countRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, query string, args ...any) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(ctx, query, args...).Scan(&count); err != nil {
+		t.Fatalf("count query failed: %v", err)
+	}
+	return count
+}
+
+func insertUser(t *testing.T, ctx context.Context, pool *pgxpool.Pool, role, identifier string) int64 {
+	t.Helper()
+	var id int64
+	query := "INSERT INTO users (role, identifier, password_hash, status) VALUES ($1, $2, 'not-a-real-hash', 'active') RETURNING id"
+	if err := pool.QueryRow(ctx, query, role, identifier).Scan(&id); err != nil {
+		t.Fatalf("could not insert the %s user %q: %v", role, identifier, err)
+	}
+	return id
+}
+
+func insertStudent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID int64, regNo string) int64 {
+	t.Helper()
+	var id int64
+	query := `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES ($1, 'Test Student', $2, 'CSE-23', 'A', 'student@example.com', '01700000000', 'O+') RETURNING id`
+	if err := pool.QueryRow(ctx, query, userID, regNo).Scan(&id); err != nil {
+		t.Fatalf("could not insert the student %q: %v", regNo, err)
+	}
+	return id
+}
+
+func insertTeacher(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID int64, teacherID string) int64 {
+	t.Helper()
+	var id int64
+	query := `INSERT INTO teachers (user_id, teacher_id, name, email, phone)
+VALUES ($1, $2, 'Test Teacher', 'teacher@example.com', '01800000000') RETURNING id`
+	if err := pool.QueryRow(ctx, query, userID, teacherID).Scan(&id); err != nil {
+		t.Fatalf("could not insert the teacher %q: %v", teacherID, err)
+	}
+	return id
+}
+
+func insertCourse(t *testing.T, ctx context.Context, pool *pgxpool.Pool, code string) int64 {
+	t.Helper()
+	var id int64
+	query := "INSERT INTO courses (code, title) VALUES ($1, 'Digital Logic Design') RETURNING id"
+	if err := pool.QueryRow(ctx, query, code).Scan(&id); err != nil {
+		t.Fatalf("could not insert the course %q: %v", code, err)
+	}
+	return id
+}
+
+func TestMigrateCreatesEveryTable(t *testing.T) {
+	ctx, pool := migratedTestDB(t)
+	for _, table := range expectedTables {
+		if !tableExists(t, ctx, pool, table) {
+			t.Errorf("table %q was not created", table)
+		}
+	}
+	got := countRows(t, ctx, pool, "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+	if got != len(expectedTables) {
+		t.Errorf("public schema has %d tables, want %d", got, len(expectedTables))
+	}
+	versions, err := migrationVersions(migrationFiles)
+	if err != nil {
+		t.Fatalf("migrationVersions() returned an unexpected error: %v", err)
+	}
+	applied := countRows(t, ctx, pool, "SELECT count(*) FROM schema_migrations")
+	if applied != len(versions) {
+		t.Errorf("schema_migrations has %d rows, want %d", applied, len(versions))
+	}
+}
+
+func TestMigrateIsIdempotent(t *testing.T) {
+	ctx, pool := migratedTestDB(t)
+	versions, err := migrationVersions(migrationFiles)
+	if err != nil {
+		t.Fatalf("migrationVersions() returned an unexpected error: %v", err)
+	}
+	for run := 2; run <= 4; run++ {
+		if err := Migrate(ctx, pool); err != nil {
+			t.Fatalf("Migrate() failed on run %d: %v", run, err)
+		}
+		applied := countRows(t, ctx, pool, "SELECT count(*) FROM schema_migrations")
+		if applied != len(versions) {
+			t.Fatalf("after run %d schema_migrations has %d rows, want %d", run, applied, len(versions))
+		}
+	}
+	for _, table := range expectedTables {
+		if !tableExists(t, ctx, pool, table) {
+			t.Errorf("table %q disappeared after repeated migration runs", table)
+		}
+	}
+}
+
+func TestPollVotesRejectASecondVote(t *testing.T) {
+	ctx, pool := migratedTestDB(t)
+	crUserID := insertUser(t, ctx, pool, "student", "2023331001")
+	studentUserID := insertUser(t, ctx, pool, "student", "2023331002")
+	studentID := insertStudent(t, ctx, pool, studentUserID, "2023331002")
+	var pollID int64
+	pollQuery := "INSERT INTO polls (question, batch, section, created_by) VALUES ('Lab on Friday?', 'CSE-23', 'A', $1) RETURNING id"
+	if err := pool.QueryRow(ctx, pollQuery, crUserID).Scan(&pollID); err != nil {
+		t.Fatalf("could not insert the poll: %v", err)
+	}
+	var firstOptionID, secondOptionID int64
+	optionQuery := "INSERT INTO poll_options (poll_id, option_text, position) VALUES ($1, $2, $3) RETURNING id"
+	if err := pool.QueryRow(ctx, optionQuery, pollID, "Yes", 0).Scan(&firstOptionID); err != nil {
+		t.Fatalf("could not insert the first poll option: %v", err)
+	}
+	if err := pool.QueryRow(ctx, optionQuery, pollID, "No", 1).Scan(&secondOptionID); err != nil {
+		t.Fatalf("could not insert the second poll option: %v", err)
+	}
+	voteQuery := "INSERT INTO poll_votes (poll_id, option_id, student_id) VALUES ($1, $2, $3)"
+	if _, err := pool.Exec(ctx, voteQuery, pollID, firstOptionID, studentID); err != nil {
+		t.Fatalf("the first vote was rejected: %v", err)
+	}
+	_, err := pool.Exec(ctx, voteQuery, pollID, secondOptionID, studentID)
+	if code := pgErrorCode(t, err); code != uniqueViolationCode {
+		t.Errorf("second vote error code = %s, want %s (unique violation)", code, uniqueViolationCode)
+	}
+	votes := countRows(t, ctx, pool, "SELECT count(*) FROM poll_votes WHERE poll_id = $1", pollID)
+	if votes != 1 {
+		t.Errorf("poll has %d votes, want 1", votes)
+	}
+}
+
+func TestRoutineAndClassEventTimeChecks(t *testing.T) {
+	ctx, pool := migratedTestDB(t)
+	adminUserID := insertUser(t, ctx, pool, "admin", "admin")
+	teacherUserID := insertUser(t, ctx, pool, "teacher", "T-001")
+	teacherRowID := insertTeacher(t, ctx, pool, teacherUserID, "T-001")
+	courseID := insertCourse(t, ctx, pool, "CSE 250")
+	routineQuery := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-23', 'A', $1, $2, 1, $3, $4, '1003', 'class')`
+	eventQuery := `INSERT INTO class_events (batch, section, course_id, teacher_id, event_date, start_time, end_time, room, event_type, created_by)
+VALUES ('CSE-23', 'A', $1, $2, DATE '2026-10-20', $3, $4, '1003', 'class', $5)`
+	tests := []struct {
+		name      string
+		startTime string
+		endTime   string
+		wantCode  string
+	}{
+		{name: "inside class hours is accepted", startTime: "08:00", endTime: "09:30"},
+		{name: "starting at 07:00 is rejected", startTime: "07:00", endTime: "09:30", wantCode: checkViolationCode},
+		{name: "ending after 17:00 is rejected", startTime: "16:00", endTime: "17:30", wantCode: checkViolationCode},
+		{name: "end before start is rejected", startTime: "11:00", endTime: "10:00", wantCode: checkViolationCode},
+		{name: "end equal to start is rejected", startTime: "11:00", endTime: "11:00", wantCode: checkViolationCode},
+	}
+	for _, tc := range tests {
+		t.Run("routines: "+tc.name, func(t *testing.T) {
+			_, err := pool.Exec(ctx, routineQuery, courseID, teacherRowID, tc.startTime, tc.endTime)
+			if tc.wantCode == "" {
+				if err != nil {
+					t.Fatalf("insert was rejected unexpectedly: %v", err)
+				}
+				return
+			}
+			if code := pgErrorCode(t, err); code != tc.wantCode {
+				t.Errorf("error code = %s, want %s (check violation)", code, tc.wantCode)
+			}
+		})
+		t.Run("class events: "+tc.name, func(t *testing.T) {
+			_, err := pool.Exec(ctx, eventQuery, courseID, teacherRowID, tc.startTime, tc.endTime, adminUserID)
+			if tc.wantCode == "" {
+				if err != nil {
+					t.Fatalf("insert was rejected unexpectedly: %v", err)
+				}
+				return
+			}
+			if code := pgErrorCode(t, err); code != tc.wantCode {
+				t.Errorf("error code = %s, want %s (check violation)", code, tc.wantCode)
+			}
+		})
+	}
+	outOfRange := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-23', 'A', $1, $2, 7, TIME '08:00', TIME '09:30', '1003', 'class')`
+	if _, err := pool.Exec(ctx, outOfRange, courseID, teacherRowID); pgErrorCode(t, err) != checkViolationCode {
+		t.Errorf("day_of_week = 7 error = %v, want a check violation", err)
+	}
+}
+
+func TestForeignKeysAndChecksRejectBadRows(t *testing.T) {
+	ctx, pool := migratedTestDB(t)
+	studentUserID := insertUser(t, ctx, pool, "student", "2023331003")
+	insertStudent(t, ctx, pool, studentUserID, "2023331003")
+	tests := []struct {
+		name     string
+		query    string
+		args     []any
+		wantCode string
+	}{
+		{
+			name: "student without a user row",
+			query: `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES (999999, 'Ghost Student', '2023331999', 'CSE-23', 'A', 'ghost@example.com', '01900000000', 'A+')`,
+			wantCode: foreignKeyViolationCode,
+		},
+		{
+			name: "second student profile for the same user",
+			query: `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES ($1, 'Duplicate Student', '2023331004', 'CSE-23', 'A', 'dup@example.com', '01900000001', 'A+')`,
+			args:     []any{studentUserID},
+			wantCode: uniqueViolationCode,
+		},
+		{
+			name: "invalid blood group",
+			query: `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES (999999, 'Odd Blood', '2023331005', 'CSE-23', 'A', 'odd@example.com', '01900000002', 'C+')`,
+			wantCode: checkViolationCode,
+		},
+		{
+			name: "drop course without a course code",
+			query: `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group, has_drop_course)
+VALUES (999999, 'No Code', '2023331010', 'CSE-23', 'A', 'nocode@example.com', '01900000003', 'A+', TRUE)`,
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "invalid user role",
+			query:    "INSERT INTO users (role, identifier, password_hash) VALUES ('principal', 'p-001', 'not-a-real-hash')",
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "invalid user status",
+			query:    "INSERT INTO users (role, identifier, password_hash, status) VALUES ('student', '2023331006', 'not-a-real-hash', 'banned')",
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "duplicate identifier",
+			query:    "INSERT INTO users (role, identifier, password_hash) VALUES ('student', '2023331003', 'not-a-real-hash')",
+			wantCode: uniqueViolationCode,
+		},
+		{
+			name:     "user without a password hash",
+			query:    "INSERT INTO users (role, identifier) VALUES ('student', '2023331007')",
+			wantCode: notNullViolationCode,
+		},
+		{
+			name:     "notification without any target",
+			query:    "INSERT INTO notifications (type, title, body) VALUES ('notice', 'Hello', 'Body')",
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "message targeting a user without a user id",
+			query:    "INSERT INTO messages (sender_id, sender_role, sender_name, target_type, content) VALUES ($1, 'teacher', 'Test Teacher', 'user', 'Hi')",
+			args:     []any{studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "routine referencing a missing course",
+			query:    "INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type) VALUES ('CSE-23', 'A', 999999, 999999, 1, TIME '08:00', TIME '09:30', '1003', 'class')",
+			wantCode: foreignKeyViolationCode,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := pool.Exec(ctx, tc.query, tc.args...)
+			if code := pgErrorCode(t, err); code != tc.wantCode {
+				t.Errorf("error code = %s, want %s (error was %v)", code, tc.wantCode, err)
+			}
+		})
+	}
+}
+
+func TestNotificationTargetsAreAccepted(t *testing.T) {
+	ctx, pool := migratedTestDB(t)
+	userID := insertUser(t, ctx, pool, "student", "2023331008")
+	tests := []struct {
+		name  string
+		query string
+		args  []any
+	}{
+		{
+			name:  "direct to one user",
+			query: "INSERT INTO notifications (recipient_user_id, type, title, body) VALUES ($1, 'message', 'New message', 'Body')",
+			args:  []any{userID},
+		},
+		{
+			name:  "broadcast to a role",
+			query: "INSERT INTO notifications (recipient_role, type, title, body) VALUES ('teacher', 'request', 'New request', 'Body')",
+		},
+		{
+			name:  "broadcast to a batch and section",
+			query: "INSERT INTO notifications (recipient_batch, recipient_section, type, title, body) VALUES ('CSE-23', 'A', 'notice', 'New notice', 'Body')",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := pool.Exec(ctx, tc.query, tc.args...); err != nil {
+				t.Errorf("insert was rejected unexpectedly: %v", err)
+			}
+		})
+	}
+}

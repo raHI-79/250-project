@@ -1,49 +1,92 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 )
 
+const testDatabaseURL = "postgres://postgres:secret@localhost:5432/sust_coord?sslmode=disable"
+
 func TestLoad(t *testing.T) {
 	tests := []struct {
-		name         string
-		env          map[string]string
-		wantPort     string
-		wantAppEnv   string
-		wantTimezone string
-		wantErr      bool
+		name                string
+		env                 map[string]string
+		wantPort            string
+		wantAppEnv          string
+		wantTimezone        string
+		wantDatabaseURL     string
+		wantTestDatabaseURL string
+		wantErr             bool
+		wantErrContains     string
 	}{
 		{
-			name:         "defaults when nothing is set",
-			env:          map[string]string{"PORT": "", "APP_ENV": "", "APP_TIMEZONE": ""},
-			wantPort:     "8080",
-			wantAppEnv:   "development",
-			wantTimezone: "Asia/Dhaka",
-		},
-		{
-			name: "all three values overridden",
+			name: "defaults when only DATABASE_URL is set",
 			env: map[string]string{
-				"PORT":         "9090",
-				"APP_ENV":      "production",
-				"APP_TIMEZONE": "UTC",
+				"PORT":              "",
+				"APP_ENV":           "",
+				"APP_TIMEZONE":      "",
+				"DATABASE_URL":      testDatabaseURL,
+				"TEST_DATABASE_URL": "",
 			},
-			wantPort:     "9090",
-			wantAppEnv:   "production",
-			wantTimezone: "UTC",
+			wantPort:        "8080",
+			wantAppEnv:      "development",
+			wantTimezone:    "Asia/Dhaka",
+			wantDatabaseURL: testDatabaseURL,
 		},
 		{
-			name:         "only PORT overridden, the rest fall back",
-			env:          map[string]string{"PORT": "3000", "APP_ENV": "", "APP_TIMEZONE": ""},
-			wantPort:     "3000",
-			wantAppEnv:   "development",
-			wantTimezone: "Asia/Dhaka",
+			name: "every value overridden",
+			env: map[string]string{
+				"PORT":              "9090",
+				"APP_ENV":           "production",
+				"APP_TIMEZONE":      "UTC",
+				"DATABASE_URL":      testDatabaseURL,
+				"TEST_DATABASE_URL": "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
+			},
+			wantPort:            "9090",
+			wantAppEnv:          "production",
+			wantTimezone:        "UTC",
+			wantDatabaseURL:     testDatabaseURL,
+			wantTestDatabaseURL: "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
 		},
 		{
-			name:    "invalid timezone is rejected",
-			env:     map[string]string{"PORT": "", "APP_ENV": "", "APP_TIMEZONE": "Mars/Olympus"},
-			wantErr: true,
+			name: "only PORT overridden, the rest fall back",
+			env: map[string]string{
+				"PORT":              "3000",
+				"APP_ENV":           "",
+				"APP_TIMEZONE":      "",
+				"DATABASE_URL":      testDatabaseURL,
+				"TEST_DATABASE_URL": "",
+			},
+			wantPort:        "3000",
+			wantAppEnv:      "development",
+			wantTimezone:    "Asia/Dhaka",
+			wantDatabaseURL: testDatabaseURL,
+		},
+		{
+			name: "missing DATABASE_URL is rejected",
+			env: map[string]string{
+				"PORT":              "",
+				"APP_ENV":           "",
+				"APP_TIMEZONE":      "",
+				"DATABASE_URL":      "",
+				"TEST_DATABASE_URL": "",
+			},
+			wantErr:         true,
+			wantErrContains: "DATABASE_URL",
+		},
+		{
+			name: "invalid timezone is rejected",
+			env: map[string]string{
+				"PORT":              "",
+				"APP_ENV":           "",
+				"APP_TIMEZONE":      "Mars/Olympus",
+				"DATABASE_URL":      testDatabaseURL,
+				"TEST_DATABASE_URL": "",
+			},
+			wantErr:         true,
+			wantErrContains: "Mars/Olympus",
 		},
 	}
 	for _, tc := range tests {
@@ -59,8 +102,8 @@ func TestLoad(t *testing.T) {
 				if cfg != nil {
 					t.Errorf("Load() returned a config alongside the error, want nil")
 				}
-				if !strings.Contains(err.Error(), "Mars/Olympus") {
-					t.Errorf("error %q does not mention the invalid timezone", err)
+				if !strings.Contains(err.Error(), tc.wantErrContains) {
+					t.Errorf("error %q does not mention %q", err, tc.wantErrContains)
 				}
 				return
 			}
@@ -76,6 +119,12 @@ func TestLoad(t *testing.T) {
 			if cfg.Timezone != tc.wantTimezone {
 				t.Errorf("Timezone = %q, want %q", cfg.Timezone, tc.wantTimezone)
 			}
+			if cfg.DatabaseURL != tc.wantDatabaseURL {
+				t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, tc.wantDatabaseURL)
+			}
+			if cfg.TestDatabaseURL != tc.wantTestDatabaseURL {
+				t.Errorf("TestDatabaseURL = %q, want %q", cfg.TestDatabaseURL, tc.wantTestDatabaseURL)
+			}
 			if cfg.Location == nil {
 				t.Fatal("Location is nil, want a loaded timezone")
 			}
@@ -86,10 +135,21 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestLoadMissingDatabaseURLReturnsSentinelError(t *testing.T) {
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("TEST_DATABASE_URL", "")
+	t.Setenv("APP_TIMEZONE", "")
+	if _, err := Load(); !errors.Is(err, ErrMissingDatabaseURL) {
+		t.Errorf("Load() error = %v, want ErrMissingDatabaseURL", err)
+	}
+}
+
 func TestNow(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("APP_ENV", "")
 	t.Setenv("APP_TIMEZONE", "Asia/Dhaka")
+	t.Setenv("DATABASE_URL", testDatabaseURL)
+	t.Setenv("TEST_DATABASE_URL", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() returned an unexpected error: %v", err)

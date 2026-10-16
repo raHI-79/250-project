@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"net/http"
@@ -8,6 +9,12 @@ import (
 	"testing"
 	"time"
 )
+
+type stubPinger struct{}
+
+func (stubPinger) Ping(ctx context.Context) error {
+	return nil
+}
 
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
@@ -20,7 +27,7 @@ func newTestRouter(t *testing.T) http.Handler {
 		AppEnv:   "test",
 		Timezone: "Asia/Dhaka",
 		Location: loc,
-	})
+	}, stubPinger{})
 }
 
 func TestRouterRoutes(t *testing.T) {
@@ -55,6 +62,10 @@ func TestRouterRoutes(t *testing.T) {
 				if body["error"] != "Route not found" {
 					t.Errorf(`body["error"] = %v, want "Route not found"`, body["error"])
 				}
+				return
+			}
+			if body["database"] != "ok" {
+				t.Errorf(`body["database"] = %v, want "ok"`, body["database"])
 			}
 		})
 	}

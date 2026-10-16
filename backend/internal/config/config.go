@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -13,18 +14,30 @@ const (
 	defaultTimezone = "Asia/Dhaka"
 )
 
+var ErrMissingDatabaseURL = errors.New("config: DATABASE_URL is required (copy backend/.env.example to backend/.env and set your database password)")
+
 type Config struct {
-	Port     string
-	AppEnv   string
-	Timezone string
-	Location *time.Location
+	Port            string
+	AppEnv          string
+	Timezone        string
+	Location        *time.Location
+	DatabaseURL     string
+	TestDatabaseURL string
 }
 
 func Load() (*Config, error) {
+	if err := LoadEnvFile(envFileName); err != nil {
+		return nil, err
+	}
 	cfg := &Config{
-		Port:     getEnv("PORT", defaultPort),
-		AppEnv:   getEnv("APP_ENV", defaultAppEnv),
-		Timezone: getEnv("APP_TIMEZONE", defaultTimezone),
+		Port:            getEnv("PORT", defaultPort),
+		AppEnv:          getEnv("APP_ENV", defaultAppEnv),
+		Timezone:        getEnv("APP_TIMEZONE", defaultTimezone),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		TestDatabaseURL: os.Getenv("TEST_DATABASE_URL"),
+	}
+	if cfg.DatabaseURL == "" {
+		return nil, ErrMissingDatabaseURL
 	}
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
