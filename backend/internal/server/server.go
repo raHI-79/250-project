@@ -20,6 +20,7 @@ type Dependencies struct {
 	Tokens   TokenService
 	Users    middleware.UserStore
 	Auth     handler.AuthStore
+	People   handler.AdminStore
 }
 
 type RouteGroup struct {
@@ -49,7 +50,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
 	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
 	authenticated.Handle("GET /api/me", handler.Me())
-	AdminGroup(mux, deps)
+	registerAdminRoutes(AdminGroup(mux, deps), handler.NewAdmin(deps.People))
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
@@ -69,6 +70,12 @@ func AdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 			middleware.RequireRole(auth.RoleAdmin),
 		},
 	}
+}
+
+func registerAdminRoutes(group RouteGroup, admin *handler.Admin) {
+	group.Handle("GET /api/admin/registrations", admin.Registrations())
+	group.Handle("POST /api/admin/registrations/{id}/approve", admin.ApproveRegistration())
+	group.Handle("POST /api/admin/registrations/{id}/reject", admin.RejectRegistration())
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
