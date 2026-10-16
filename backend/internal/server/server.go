@@ -103,6 +103,7 @@ func CRGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {
 	group.Handle("GET /api/cr/routine", cr.Routine())
 	group.Handle("POST /api/cr/class-requests", cr.CreateClassRequest())
+	group.Handle("GET /api/cr/room-availability", cr.RoomAvailability())
 	group.Handle("GET /api/cr/requests", cr.Requests())
 }
 
