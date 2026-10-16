@@ -9,12 +9,19 @@ import (
 )
 
 const (
-	defaultPort     = "8080"
-	defaultAppEnv   = "development"
-	defaultTimezone = "Asia/Dhaka"
+	defaultPort           = "8080"
+	defaultAppEnv         = "development"
+	defaultTimezone       = "Asia/Dhaka"
+	defaultJWTTTL         = "24h"
+	defaultFrontendOrigin = "http://localhost:5173"
+	minJWTSecretLength    = 32
 )
 
-var ErrMissingDatabaseURL = errors.New("config: DATABASE_URL is required (copy backend/.env.example to backend/.env and set your database password)")
+var (
+	ErrMissingDatabaseURL = errors.New("config: DATABASE_URL is required (copy backend/.env.example to backend/.env and set your database password)")
+	ErrMissingJWTSecret   = errors.New("config: JWT_SECRET is required (set a long random value in backend/.env)")
+	ErrShortJWTSecret     = fmt.Errorf("config: JWT_SECRET must be at least %d characters long", minJWTSecretLength)
+)
 
 type Config struct {
 	Port            string
@@ -23,6 +30,11 @@ type Config struct {
 	Location        *time.Location
 	DatabaseURL     string
 	TestDatabaseURL string
+	JWTSecret       string
+	JWTTTL          time.Duration
+	FrontendOrigin  string
+	AdminIdentifier string
+	AdminPassword   string
 }
 
 func Load() (*Config, error) {
@@ -35,10 +47,29 @@ func Load() (*Config, error) {
 		Timezone:        getEnv("APP_TIMEZONE", defaultTimezone),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		TestDatabaseURL: os.Getenv("TEST_DATABASE_URL"),
+		JWTSecret:       os.Getenv("JWT_SECRET"),
+		FrontendOrigin:  getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		AdminIdentifier: os.Getenv("ADMIN_IDENTIFIER"),
+		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL
 	}
+	if cfg.JWTSecret == "" {
+		return nil, ErrMissingJWTSecret
+	}
+	if len(cfg.JWTSecret) < minJWTSecretLength {
+		return nil, ErrShortJWTSecret
+	}
+	rawTTL := getEnv("JWT_TTL", defaultJWTTTL)
+	ttl, err := time.ParseDuration(rawTTL)
+	if err != nil {
+		return nil, fmt.Errorf("config: invalid JWT_TTL %q: %w", rawTTL, err)
+	}
+	if ttl <= 0 {
+		return nil, fmt.Errorf("config: JWT_TTL must be a positive duration, got %q", rawTTL)
+	}
+	cfg.JWTTTL = ttl
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
 		return nil, fmt.Errorf("config: invalid APP_TIMEZONE %q: %w", cfg.Timezone, err)
@@ -49,6 +80,10 @@ func Load() (*Config, error) {
 
 func (c *Config) Now() time.Time {
 	return time.Now().In(c.Location)
+}
+
+func (c *Config) HasAdminSeed() bool {
+	return c.AdminIdentifier != "" && c.AdminPassword != ""
 }
 
 func getEnv(key, fallback string) string {

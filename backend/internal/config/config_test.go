@@ -7,149 +7,216 @@ import (
 	"time"
 )
 
-const testDatabaseURL = "postgres://postgres:secret@localhost:5432/sust_coord?sslmode=disable"
+const (
+	testDatabaseURL = "postgres://postgres:secret@localhost:5432/sust_coord?sslmode=disable"
+	testJWTSecret   = "0123456789abcdef0123456789abcdef"
+)
 
-func TestLoad(t *testing.T) {
+func setEnv(t *testing.T, overrides map[string]string) {
+	t.Helper()
+	env := map[string]string{
+		"PORT":              "",
+		"APP_ENV":           "",
+		"APP_TIMEZONE":      "",
+		"DATABASE_URL":      testDatabaseURL,
+		"TEST_DATABASE_URL": "",
+		"JWT_SECRET":        testJWTSecret,
+		"JWT_TTL":           "",
+		"FRONTEND_ORIGIN":   "",
+		"ADMIN_IDENTIFIER":  "",
+		"ADMIN_PASSWORD":    "",
+	}
+	for key, value := range overrides {
+		env[key] = value
+	}
+	for key, value := range env {
+		t.Setenv(key, value)
+	}
+}
+
+func TestLoadDefaults(t *testing.T) {
+	setEnv(t, nil)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned an unexpected error: %v", err)
+	}
+	checks := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{name: "Port", got: cfg.Port, want: "8080"},
+		{name: "AppEnv", got: cfg.AppEnv, want: "development"},
+		{name: "Timezone", got: cfg.Timezone, want: "Asia/Dhaka"},
+		{name: "DatabaseURL", got: cfg.DatabaseURL, want: testDatabaseURL},
+		{name: "TestDatabaseURL", got: cfg.TestDatabaseURL, want: ""},
+		{name: "JWTSecret", got: cfg.JWTSecret, want: testJWTSecret},
+		{name: "JWTTTL", got: cfg.JWTTTL, want: 24 * time.Hour},
+		{name: "FrontendOrigin", got: cfg.FrontendOrigin, want: "http://localhost:5173"},
+		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: ""},
+		{name: "AdminPassword", got: cfg.AdminPassword, want: ""},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			t.Errorf("%s = %v, want %v", check.name, check.got, check.want)
+		}
+	}
+	if cfg.Location == nil {
+		t.Fatal("Location is nil, want a loaded timezone")
+	}
+	if cfg.HasAdminSeed() {
+		t.Error("HasAdminSeed() = true, want false when the admin variables are unset")
+	}
+}
+
+func TestLoadOverrides(t *testing.T) {
+	testTimeout := "90m"
+	setEnv(t, map[string]string{
+		"PORT":              "9090",
+		"APP_ENV":           "production",
+		"APP_TIMEZONE":      "UTC",
+		"TEST_DATABASE_URL": "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
+		"JWT_TTL":           testTimeout,
+		"FRONTEND_ORIGIN":   "https://coordination.sust.edu",
+		"ADMIN_IDENTIFIER":  "admin",
+		"ADMIN_PASSWORD":    "a-long-enough-password",
+	})
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned an unexpected error: %v", err)
+	}
+	checks := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{name: "Port", got: cfg.Port, want: "9090"},
+		{name: "AppEnv", got: cfg.AppEnv, want: "production"},
+		{name: "Timezone", got: cfg.Timezone, want: "UTC"},
+		{name: "JWTTTL", got: cfg.JWTTTL, want: 90 * time.Minute},
+		{name: "FrontendOrigin", got: cfg.FrontendOrigin, want: "https://coordination.sust.edu"},
+		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: "admin"},
+		{name: "AdminPassword", got: cfg.AdminPassword, want: "a-long-enough-password"},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			t.Errorf("%s = %v, want %v", check.name, check.got, check.want)
+		}
+	}
+	if !cfg.HasAdminSeed() {
+		t.Error("HasAdminSeed() = false, want true when both admin variables are set")
+	}
+}
+
+func TestLoadRejectsBadConfiguration(t *testing.T) {
 	tests := []struct {
-		name                string
-		env                 map[string]string
-		wantPort            string
-		wantAppEnv          string
-		wantTimezone        string
-		wantDatabaseURL     string
-		wantTestDatabaseURL string
-		wantErr             bool
-		wantErrContains     string
+		name            string
+		overrides       map[string]string
+		wantErr         error
+		wantErrContains string
 	}{
 		{
-			name: "defaults when only DATABASE_URL is set",
-			env: map[string]string{
-				"PORT":              "",
-				"APP_ENV":           "",
-				"APP_TIMEZONE":      "",
-				"DATABASE_URL":      testDatabaseURL,
-				"TEST_DATABASE_URL": "",
-			},
-			wantPort:        "8080",
-			wantAppEnv:      "development",
-			wantTimezone:    "Asia/Dhaka",
-			wantDatabaseURL: testDatabaseURL,
-		},
-		{
-			name: "every value overridden",
-			env: map[string]string{
-				"PORT":              "9090",
-				"APP_ENV":           "production",
-				"APP_TIMEZONE":      "UTC",
-				"DATABASE_URL":      testDatabaseURL,
-				"TEST_DATABASE_URL": "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
-			},
-			wantPort:            "9090",
-			wantAppEnv:          "production",
-			wantTimezone:        "UTC",
-			wantDatabaseURL:     testDatabaseURL,
-			wantTestDatabaseURL: "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
-		},
-		{
-			name: "only PORT overridden, the rest fall back",
-			env: map[string]string{
-				"PORT":              "3000",
-				"APP_ENV":           "",
-				"APP_TIMEZONE":      "",
-				"DATABASE_URL":      testDatabaseURL,
-				"TEST_DATABASE_URL": "",
-			},
-			wantPort:        "3000",
-			wantAppEnv:      "development",
-			wantTimezone:    "Asia/Dhaka",
-			wantDatabaseURL: testDatabaseURL,
-		},
-		{
-			name: "missing DATABASE_URL is rejected",
-			env: map[string]string{
-				"PORT":              "",
-				"APP_ENV":           "",
-				"APP_TIMEZONE":      "",
-				"DATABASE_URL":      "",
-				"TEST_DATABASE_URL": "",
-			},
-			wantErr:         true,
+			name:            "missing DATABASE_URL",
+			overrides:       map[string]string{"DATABASE_URL": ""},
+			wantErr:         ErrMissingDatabaseURL,
 			wantErrContains: "DATABASE_URL",
 		},
 		{
-			name: "invalid timezone is rejected",
-			env: map[string]string{
-				"PORT":              "",
-				"APP_ENV":           "",
-				"APP_TIMEZONE":      "Mars/Olympus",
-				"DATABASE_URL":      testDatabaseURL,
-				"TEST_DATABASE_URL": "",
-			},
-			wantErr:         true,
+			name:            "missing JWT_SECRET",
+			overrides:       map[string]string{"JWT_SECRET": ""},
+			wantErr:         ErrMissingJWTSecret,
+			wantErrContains: "JWT_SECRET",
+		},
+		{
+			name:            "JWT_SECRET one character too short",
+			overrides:       map[string]string{"JWT_SECRET": strings.Repeat("x", 31)},
+			wantErr:         ErrShortJWTSecret,
+			wantErrContains: "32 characters",
+		},
+		{
+			name:            "JWT_TTL is not a duration",
+			overrides:       map[string]string{"JWT_TTL": "one day"},
+			wantErrContains: "JWT_TTL",
+		},
+		{
+			name:            "JWT_TTL is zero",
+			overrides:       map[string]string{"JWT_TTL": "0s"},
+			wantErrContains: "positive duration",
+		},
+		{
+			name:            "JWT_TTL is negative",
+			overrides:       map[string]string{"JWT_TTL": "-1h"},
+			wantErrContains: "positive duration",
+		},
+		{
+			name:            "invalid timezone",
+			overrides:       map[string]string{"APP_TIMEZONE": "Mars/Olympus"},
 			wantErrContains: "Mars/Olympus",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			for key, value := range tc.env {
-				t.Setenv(key, value)
-			}
+			setEnv(t, tc.overrides)
 			cfg, err := Load()
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("Load() returned no error, want one")
-				}
-				if cfg != nil {
-					t.Errorf("Load() returned a config alongside the error, want nil")
-				}
-				if !strings.Contains(err.Error(), tc.wantErrContains) {
-					t.Errorf("error %q does not mention %q", err, tc.wantErrContains)
-				}
-				return
+			if err == nil {
+				t.Fatal("Load() returned no error, want one")
 			}
-			if err != nil {
-				t.Fatalf("Load() returned an unexpected error: %v", err)
+			if cfg != nil {
+				t.Error("Load() returned a config alongside the error, want nil")
 			}
-			if cfg.Port != tc.wantPort {
-				t.Errorf("Port = %q, want %q", cfg.Port, tc.wantPort)
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Errorf("Load() error = %v, want %v", err, tc.wantErr)
 			}
-			if cfg.AppEnv != tc.wantAppEnv {
-				t.Errorf("AppEnv = %q, want %q", cfg.AppEnv, tc.wantAppEnv)
-			}
-			if cfg.Timezone != tc.wantTimezone {
-				t.Errorf("Timezone = %q, want %q", cfg.Timezone, tc.wantTimezone)
-			}
-			if cfg.DatabaseURL != tc.wantDatabaseURL {
-				t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, tc.wantDatabaseURL)
-			}
-			if cfg.TestDatabaseURL != tc.wantTestDatabaseURL {
-				t.Errorf("TestDatabaseURL = %q, want %q", cfg.TestDatabaseURL, tc.wantTestDatabaseURL)
-			}
-			if cfg.Location == nil {
-				t.Fatal("Location is nil, want a loaded timezone")
-			}
-			if cfg.Location.String() != tc.wantTimezone {
-				t.Errorf("Location = %q, want %q", cfg.Location, tc.wantTimezone)
+			if !strings.Contains(err.Error(), tc.wantErrContains) {
+				t.Errorf("error %q does not mention %q", err, tc.wantErrContains)
 			}
 		})
 	}
 }
 
-func TestLoadMissingDatabaseURLReturnsSentinelError(t *testing.T) {
-	t.Setenv("DATABASE_URL", "")
-	t.Setenv("TEST_DATABASE_URL", "")
-	t.Setenv("APP_TIMEZONE", "")
-	if _, err := Load(); !errors.Is(err, ErrMissingDatabaseURL) {
-		t.Errorf("Load() error = %v, want ErrMissingDatabaseURL", err)
+func TestLoadErrorsNeverContainTheSecret(t *testing.T) {
+	secret := strings.Repeat("s", 31)
+	setEnv(t, map[string]string{"JWT_SECRET": secret, "JWT_TTL": "not-a-duration"})
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned no error, want one")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Error("the error message contains the JWT secret, want it hidden")
+	}
+}
+
+func TestLoadAdminSeedNeedsBothVariables(t *testing.T) {
+	tests := []struct {
+		name      string
+		overrides map[string]string
+		want      bool
+	}{
+		{name: "neither set", want: false},
+		{name: "only identifier", overrides: map[string]string{"ADMIN_IDENTIFIER": "admin"}, want: false},
+		{name: "only password", overrides: map[string]string{"ADMIN_PASSWORD": "a-long-enough-password"}, want: false},
+		{
+			name:      "both set",
+			overrides: map[string]string{"ADMIN_IDENTIFIER": "admin", "ADMIN_PASSWORD": "a-long-enough-password"},
+			want:      true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, tc.overrides)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() returned an unexpected error: %v", err)
+			}
+			if got := cfg.HasAdminSeed(); got != tc.want {
+				t.Errorf("HasAdminSeed() = %t, want %t", got, tc.want)
+			}
+		})
 	}
 }
 
 func TestNow(t *testing.T) {
-	t.Setenv("PORT", "")
-	t.Setenv("APP_ENV", "")
-	t.Setenv("APP_TIMEZONE", "Asia/Dhaka")
-	t.Setenv("DATABASE_URL", testDatabaseURL)
-	t.Setenv("TEST_DATABASE_URL", "")
+	setEnv(t, map[string]string{"APP_TIMEZONE": "Asia/Dhaka"})
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() returned an unexpected error: %v", err)
