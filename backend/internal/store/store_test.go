@@ -50,7 +50,7 @@ VALUES ($1, $2, 'stored-hash', $3, $4) RETURNING id`
 func insertStudent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID int64, regNo string, isCR bool) {
 	t.Helper()
 	query := `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group, is_cr)
-VALUES ($1, 'Test Student', $2, 'CSE-23', 'A', 'student@example.com', '01700000000', 'O+', $3)`
+VALUES ($1, 'Test Student', $2, 'CSE-23', 'A', $2 || '@student.sust.edu', '01700000000', 'O+', $3)`
 	if _, err := pool.Exec(ctx, query, userID, regNo, isCR); err != nil {
 		t.Fatalf("could not insert the student row: %v", err)
 	}

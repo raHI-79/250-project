@@ -96,7 +96,7 @@ func insertStudent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID
 	t.Helper()
 	var id int64
 	query := `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
-VALUES ($1, 'Test Student', $2, 'CSE-23', 'A', 'student@example.com', '01700000000', 'O+') RETURNING id`
+VALUES ($1, 'Test Student', $2, 'CSE-23', 'A', $2 || '@student.sust.edu', '01700000000', 'O+') RETURNING id`
 	if err := pool.QueryRow(ctx, query, userID, regNo).Scan(&id); err != nil {
 		t.Fatalf("could not insert the student %q: %v", regNo, err)
 	}
