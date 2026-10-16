@@ -7,9 +7,9 @@ import (
 	"net/http"
 )
 
-func NewRouter(cfg *config.Config) http.Handler {
+func NewRouter(cfg *config.Config, database handler.DatabasePinger) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", handler.Health(cfg))
+	mux.HandleFunc("GET /api/health", handler.Health(cfg, database))
 	mux.HandleFunc("/", notFound)
 	return mux
 }
