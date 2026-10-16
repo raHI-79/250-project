@@ -21,6 +21,9 @@ type Dependencies struct {
 	Users    middleware.UserStore
 	Auth     handler.AuthStore
 	People   handler.AdminStore
+	Catalog  handler.CatalogStore
+	Lookups  handler.LookupStore
+	Alerts   handler.NotificationService
 }
 
 type RouteGroup struct {
@@ -50,7 +53,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
 	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
 	authenticated.Handle("GET /api/me", handler.Me())
-	registerAdminRoutes(AdminGroup(mux, deps), handler.NewAdmin(deps.People))
+	registerAdminRoutes(AdminGroup(mux, deps), handler.NewAdmin(deps.People), handler.NewCatalog(deps.Catalog))
+	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
+	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
@@ -72,7 +77,29 @@ func AdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 	}
 }
 
-func registerAdminRoutes(group RouteGroup, admin *handler.Admin) {
+func NotificationGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
+		},
+	}
+}
+
+func registerLookupRoutes(group RouteGroup, lookups *handler.Lookups) {
+	group.Handle("GET /api/lookups/batches", lookups.Batches())
+	group.Handle("GET /api/lookups/sections", lookups.Sections())
+	group.Handle("GET /api/lookups/courses", lookups.Courses())
+	group.Handle("GET /api/lookups/teachers", lookups.Teachers())
+}
+
+func registerNotificationRoutes(group RouteGroup, notifications *handler.Notifications) {
+	group.Handle("GET /api/notifications", notifications.List())
+	group.Handle("GET /api/notifications/unread-count", notifications.UnreadCount())
+}
+
+func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handler.Catalog) {
 	group.Handle("GET /api/admin/registrations", admin.Registrations())
 	group.Handle("POST /api/admin/registrations/{id}/approve", admin.ApproveRegistration())
 	group.Handle("POST /api/admin/registrations/{id}/reject", admin.RejectRegistration())
@@ -86,6 +113,11 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin) {
 	group.Handle("GET /api/admin/teachers", admin.Teachers())
 	group.Handle("POST /api/admin/teachers/{id}/deactivate", admin.DeactivateTeacher())
 	group.Handle("GET /api/admin/stats", admin.Stats())
+	group.Handle("POST /api/admin/courses", catalog.CreateCourse())
+	group.Handle("GET /api/admin/courses", catalog.Courses())
+	group.Handle("POST /api/admin/routines", catalog.CreateRoutine())
+	group.Handle("GET /api/admin/routines", catalog.Routines())
+	group.Handle("DELETE /api/admin/routines/{id}", catalog.DeleteRoutine())
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {

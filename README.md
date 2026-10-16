@@ -275,6 +275,17 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/admin/teachers` | admin | Teacher list with `search` and `status` |
 | `POST` | `/api/admin/teachers/{id}/deactivate` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
+| `POST` | `/api/admin/courses` | admin | Adds a course; the code is stored in upper case, `409` on a duplicate |
+| `GET` | `/api/admin/courses` | admin | Every course, sorted by code |
+| `POST` | `/api/admin/routines` | admin | Adds a fixed routine entry; `400` on a broken rule, `409` on a room clash |
+| `GET` | `/api/admin/routines` | admin | Routine entries with the `batch` and `section` filters |
+| `DELETE` | `/api/admin/routines/{id}` | admin | Deletes one entry; `204` on success, `404` if it does not exist |
+| `GET` | `/api/lookups/batches` | any signed-in role | Batches of the active students and the routine entries |
+| `GET` | `/api/lookups/sections` | any signed-in role | Sections of one `batch` (required), without `ALL` |
+| `GET` | `/api/lookups/courses` | any signed-in role | `id`, `code` and `title` of every course |
+| `GET` | `/api/lookups/teachers` | any signed-in role | `id`, `user_id` and `name` of the active teachers |
+| `GET` | `/api/notifications` | student, CR, teacher | Newest first; `limit` defaults to 30 and may not exceed 100 |
+| `GET` | `/api/notifications/unread-count` | student, CR, teacher | How many matching notifications arrived after `since` |
 
 Rate limited routes allow **10 requests per minute per IP address**; the
 eleventh gets `429` with `{"error":"Too many attempts. Please try again in a
@@ -359,6 +370,42 @@ in **one transaction**. `POST /api/admin/teachers` takes `name`, `teacher_id`,
 Removing, deactivating or demoting an account also raises its
 `token_version`, so **every token that account already holds stops working at
 once** — a demoted CR has to log in again to get a student token.
+
+### Courses, routines and notifications
+
+`POST /api/admin/courses` takes `{"code": "cse233", "title": "Digital Logic
+Design"}`. The code may be written as `CSE-233` or `CSE233` and is stored in
+upper case.
+
+`POST /api/admin/routines` takes `batch`, `section`, `course_id`, `teacher_id`
+(the **`teachers.id`** from the teacher lookup), `day_of_week` (`0` is Sunday,
+`6` is Saturday), `start_time` and `end_time` as `HH:MM`, `room` and `type`
+(`class` or `lab`). `section` is a single letter or **`ALL`**, which means both
+sections. The backend answers `400` unless the start is before the end and both
+sides stay inside **08:00 to 17:00**, and unless the course exists and the
+teacher exists and is still active.
+
+A second entry for the **same room on the same weekday at an overlapping time**
+answers `409` and names the booking it clashes with:
+
+```json
+{"error": "Room 1003 is already booked on Monday 10:30–12:45 by CSE-23 section A (CSE-233)."}
+```
+
+Two entries that only touch (one ends at 12:45, the next starts at 12:45) do
+not clash. The check and the insert run in **one transaction** guarded by
+`pg_advisory_xact_lock` on the room and weekday, so two admins saving at the
+same moment cannot both win. Listing is sorted by batch, section, weekday and
+start time, and a `section` filter also returns the `ALL` entries, because they
+apply to that section too.
+
+Notifications are either **direct** (one user id) or a **broadcast** scoped by
+role, batch and section. A reader sees their own direct notifications plus the
+broadcasts that match their role, batch and section; a broadcast without a
+section reaches the whole batch, and a broadcast to role `student` also reaches
+the CRs of that batch and section. `since` is an RFC 3339 timestamp, which the
+frontend keeps in `localStorage` as the moment the bell was last opened. Admin
+tokens get `403` on both notification routes.
 
 ### Account status messages
 

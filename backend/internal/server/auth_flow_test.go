@@ -10,6 +10,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/dbtest"
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"io"
 	"log"
@@ -61,6 +62,9 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 		Users:    userStore,
 		Auth:     userStore,
 		People:   userStore,
+		Catalog:  userStore,
+		Lookups:  userStore,
+		Alerts:   notify.New(userStore),
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/db"
+	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/server"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"log"
@@ -68,6 +69,9 @@ func run() error {
 			Users:    userStore,
 			Auth:     userStore,
 			People:   userStore,
+			Catalog:  userStore,
+			Lookups:  userStore,
+			Alerts:   notify.New(userStore),
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
