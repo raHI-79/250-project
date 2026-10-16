@@ -82,6 +82,9 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin) {
 	group.Handle("GET /api/admin/crs", admin.CRs())
 	group.Handle("POST /api/admin/crs/{id}/demote", admin.DemoteCR())
 	group.Handle("POST /api/admin/crs/{id}/deactivate", admin.DeactivateCR())
+	group.Handle("POST /api/admin/teachers", admin.CreateTeacher())
+	group.Handle("GET /api/admin/teachers", admin.Teachers())
+	group.Handle("POST /api/admin/teachers/{id}/deactivate", admin.DeactivateTeacher())
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
