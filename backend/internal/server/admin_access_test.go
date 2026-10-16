@@ -105,6 +105,11 @@ func adminRoutes() []adminRoute {
 		{method: http.MethodGet, path: "/api/admin/teachers"},
 		{method: http.MethodPost, path: "/api/admin/teachers/1/deactivate"},
 		{method: http.MethodGet, path: "/api/admin/stats"},
+		{method: http.MethodPost, path: "/api/admin/courses"},
+		{method: http.MethodGet, path: "/api/admin/courses"},
+		{method: http.MethodPost, path: "/api/admin/routines"},
+		{method: http.MethodGet, path: "/api/admin/routines"},
+		{method: http.MethodDelete, path: "/api/admin/routines/1"},
 	}
 }
 
@@ -113,6 +118,9 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps := newTestDependencies(t)
 	deps.Users = accessUserStore{}
 	deps.People = emptyAdminStore{}
+	deps.Catalog = emptyCatalogStore{}
+	deps.Lookups = emptyLookupStore{}
+	deps.Alerts = emptyNotificationService{}
 	return deps, NewRouter(deps)
 }
 
