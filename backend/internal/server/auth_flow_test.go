@@ -68,6 +68,9 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 		Alerts:   alerts,
 		Classes:  userStore,
 		Notifier: alerts,
+		Teachers: userStore,
+		Students: userStore,
+		Alarms:   alerts,
 	})
 }
 

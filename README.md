@@ -199,6 +199,7 @@ go run ./cmd/server
 | `TEST_DATABASE_URL` | none — optional | Connection string used by the database integration tests |
 | `JWT_SECRET` | none — **required** | Key that signs the login tokens, at least 32 characters |
 | `JWT_TTL` | `24h` | How long a login token stays valid, as a Go duration (`24h`, `90m`) |
+| `AUTO_CANCEL_INTERVAL` | `5m` | How often the auto-cancel job looks for requests nobody approved in time |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only browser origin allowed to call the API |
 | `ADMIN_IDENTIFIER` | none — optional | Login id of the admin account created at startup |
 | `ADMIN_PASSWORD` | none — optional | Password of that admin account, at least 8 characters |
@@ -290,6 +291,17 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/cr/class-requests` | CR | Asks the chosen teacher for a class, exam or extra class; `201` with a pending request |
 | `GET` | `/api/cr/room-availability` | CR | Everything booked on a `date`, optionally narrowed to one `room` |
 | `GET` | `/api/cr/requests` | CR | The CR's own requests, newest first, with an optional `status` filter |
+| `GET` | `/api/teacher/requests` | teacher | Pending requests naming this teacher, oldest first, with who asked |
+| `POST` | `/api/teacher/requests/{id}/approve` | teacher | Approves a pending request dated tomorrow or later |
+| `POST` | `/api/teacher/requests/{id}/reject` | teacher | Rejects a pending request |
+| `GET` | `/api/teacher/schedule` | teacher | This teacher's fixed routine for a `date` plus the dated classes of that day |
+| `GET` | `/api/teacher/classes/upcoming` | teacher | Approved classes from today onward, or only those of one `date` |
+| `POST` | `/api/teacher/classes/{id}/cancel` | teacher | Cancels one approved class of this teacher |
+| `POST` | `/api/teacher/routines/{id}/cancel` | teacher | Cancels one `date` of this teacher's fixed routine entry |
+| `GET` | `/api/students/upcoming-routine` | student, CR | The batch's plan for `date` (tomorrow by default), grouped by section |
+| `GET` | `/api/students/drop-course-routine` | student, CR | The drop course's classes and exams in the other batches |
+| `GET` | `/api/students/exams` | student, CR | Approved exams of the own batch and section from today onward |
+| `GET` | `/api/students/routine` | student, CR | Fixed routine browser with `batch`, `section`, `day` and `course` filters |
 
 Rate limited routes allow **10 requests per minute per IP address**; the
 eleventh gets `429` with `{"error":"Too many attempts. Please try again in a
@@ -449,6 +461,49 @@ that date, sorted by room and then start time. Each item carries `room`,
 `class`, `exam` or `extra`), `status` (`fixed`, `pending` or `approved`) and
 `label`, which is **`yours`** for the fixed entries of the CR's own batch and
 **`unavailable`** for everything else.
+
+### Teacher decisions, cancellations and the auto-cancel rule
+
+A teacher only ever sees and changes rows where `teacher_id` is their own
+`teachers.id`; anything else answers `404`. Approving works only while the
+request is still `pending` and its date is **tomorrow or later**: a decided
+request answers `409 This request has already been decided.` and one whose date
+has arrived answers `409 This request can no longer be approved.` An approval
+notifies the CR who asked and broadcasts to the students of that batch and
+section, where section `ALL` reaches the whole batch; a rejection notifies only
+the CR.
+
+`POST /api/teacher/classes/{id}/cancel` cancels an approved class dated today or
+later and notifies the CR and the students.
+`POST /api/teacher/routines/{id}/cancel` takes `{"date": "2026-10-20"}` and
+cancels **one occurrence** of a fixed routine entry: the date must be today or
+later and must fall on that entry's weekday (`400` otherwise), a second attempt
+answers `409`, and the students of that batch and section plus every active CR
+there are notified. Cancelled occurrences are kept in `routine_cancellations`,
+so the routine itself stays untouched.
+
+**Auto-cancel**: a request nobody decided before its date arrives is not left
+hanging. A job runs once at startup and then every `AUTO_CANCEL_INTERVAL`
+(default `5m`), sets every `pending` request whose date is today or earlier to
+`auto_cancelled`, and tells the CR it was not approved in time. The job stops
+with the server's graceful shutdown.
+
+### What a student sees
+
+Batch, section and the drop course come from the caller's own student row.
+`GET /api/students/upcoming-routine` defaults to **tomorrow** in
+`APP_TIMEZONE` and answers `date`, `date_label` (`DD.MM.YY`), `weekday`,
+`batch` and `groups`: one group per section, the lettered sections first and
+`ALL` (`Both Sections`) last, each item carrying `start_time`, `end_time`,
+`course_code`, `course_title`, `kind` (`class`, `lab`, `exam` or `extra`),
+`room`, `teacher_name` and `status`, which is `cancelled` for a cancelled class
+or a cancelled routine occurrence and `scheduled` otherwise.
+
+`GET /api/students/drop-course-routine` answers
+`{"has_drop_course": false, "items": []}` for a student without a drop course.
+Otherwise it lists that course's fixed routine and its approved classes and
+exams from today onward **in the other batches**, both as a flat `items` list
+and grouped by batch.
 
 ### Account status messages
 

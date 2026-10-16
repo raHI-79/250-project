@@ -22,7 +22,7 @@ Full requirements: [SPEC.md](SPEC.md)
 | 5 | A | Admin: approvals, students, CRs, teachers, stats | done |
 | 6 | B | Courses, fixed routines, lookups, notification service | done |
 | 7 | A | CR class/exam/extra requests and room availability | done |
-| 8 | B | Teacher approvals, cancel, schedule, auto-cancel, student routine APIs | todo |
+| 8 | B | Teacher approvals, cancel, schedule, auto-cancel, student routine APIs | done |
 | 9 | A | Uploads, notices, materials, directory, teachers info | todo |
 | 10 | B | Messages, polls, security tests | todo |
 | 11 | A | Frontend setup, theme, shared components, layout, notification bell | todo |
