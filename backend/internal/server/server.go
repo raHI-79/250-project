@@ -117,6 +117,8 @@ func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
 	group.Handle("GET /api/teacher/requests", teacher.Requests())
 	group.Handle("POST /api/teacher/requests/{id}/approve", teacher.Approve())
 	group.Handle("POST /api/teacher/requests/{id}/reject", teacher.Reject())
+	group.Handle("GET /api/teacher/schedule", teacher.Schedule())
+	group.Handle("GET /api/teacher/classes/upcoming", teacher.UpcomingClasses())
 }
 
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {
