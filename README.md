@@ -286,6 +286,10 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/lookups/teachers` | any signed-in role | `id`, `user_id` and `name` of the active teachers |
 | `GET` | `/api/notifications` | student, CR, teacher | Newest first; `limit` defaults to 30 and may not exceed 100 |
 | `GET` | `/api/notifications/unread-count` | student, CR, teacher | How many matching notifications arrived after `since` |
+| `GET` | `/api/cr/routine` | CR | Fixed routine of the CR's own batch and section, including the `ALL` entries |
+| `POST` | `/api/cr/class-requests` | CR | Asks the chosen teacher for a class, exam or extra class; `201` with a pending request |
+| `GET` | `/api/cr/room-availability` | CR | Everything booked on a `date`, optionally narrowed to one `room` |
+| `GET` | `/api/cr/requests` | CR | The CR's own requests, newest first, with an optional `status` filter |
 
 Rate limited routes allow **10 requests per minute per IP address**; the
 eleventh gets `429` with `{"error":"Too many attempts. Please try again in a
@@ -406,6 +410,45 @@ section reaches the whole batch, and a broadcast to role `student` also reaches
 the CRs of that batch and section. `since` is an RFC 3339 timestamp, which the
 frontend keeps in `localStorage` as the moment the bell was last opened. Admin
 tokens get `403` on both notification routes.
+
+### Class requests and room availability
+
+Every `/api/cr/*` route needs role `cr`, and the CR's **batch and section are
+read from their own student row**, never from the request body or the query, so
+a CR can only act for their own batch and section. The create request body is
+`event_type` (`class`, `exam` or `extra`), `course_id`, `teacher_id` (the
+**`teachers.id`**), `event_date` as `YYYY-MM-DD`, `start_time`, `end_time` and
+`room`; any other field is rejected with `400`.
+
+The date must be **tomorrow or later** in `APP_TIMEZONE`, the start must be
+before the end, both must stay inside **08:00 to 17:00**, the course must
+exist, and the teacher must exist and still be active.
+
+The check and the insert run in **one transaction** guarded by
+`pg_advisory_xact_lock` on the room and the date, so the **first CR to book a
+free room wins**. A dated booking (`pending` or `approved`) that overlaps in the
+same room answers:
+
+```json
+{"error": "This room is not available at the selected time."}
+```
+
+A fixed routine entry of **another batch** in that room on that weekday answers
+`409` naming it, for example `Room 1003 is reserved for CSE-22 section B
+(CSE-211) every Monday 10:30–12:45.` The CR's **own batch's** fixed entries do
+**not** block, because that is their own slot.
+
+A new request is stored as `pending` with the CR as `created_by`, and the
+chosen teacher gets a `class_request` notification naming the batch, section,
+course, date, time and room.
+
+`GET /api/cr/room-availability?date=2026-10-17&room=1003` combines the fixed
+routine of that weekday with the `pending` and `approved` dated bookings of
+that date, sorted by room and then start time. Each item carries `room`,
+`start_time`, `end_time`, `batch`, `section`, `course_code`, `source` (`fixed`,
+`class`, `exam` or `extra`), `status` (`fixed`, `pending` or `approved`) and
+`label`, which is **`yours`** for the fixed entries of the CR's own batch and
+**`unavailable`** for everything else.
 
 ### Account status messages
 
