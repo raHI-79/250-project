@@ -5,18 +5,13 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/dbtest"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 )
 
 const (
-	testDatabaseSuffix      = "_test"
-	testTimeout             = 30 * time.Second
 	uniqueViolationCode     = "23505"
 	checkViolationCode      = "23514"
 	foreignKeyViolationCode = "23503"
@@ -41,42 +36,15 @@ var expectedTables = []string{
 }
 
 func TestMain(m *testing.M) {
-	if err := config.LoadEnvFile(filepath.Join("..", "..", ".env")); err != nil {
+	if err := dbtest.LoadEnv(); err != nil {
 		log.Fatalf("db: could not load backend/.env: %v", err)
 	}
 	os.Exit(m.Run())
 }
 
-func newTestDB(t *testing.T) (context.Context, *pgxpool.Pool) {
-	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set, skipping the database integration tests")
-	}
-	poolConfig, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatalf("TEST_DATABASE_URL could not be parsed: %v", err)
-	}
-	name := poolConfig.ConnConfig.Database
-	if !strings.HasSuffix(name, testDatabaseSuffix) {
-		t.Fatalf("refusing to run against database %q because its name does not end with %q", name, testDatabaseSuffix)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	t.Cleanup(cancel)
-	pool, err := Open(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("Open() returned an unexpected error: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	if _, err := pool.Exec(ctx, "DROP SCHEMA public CASCADE; CREATE SCHEMA public"); err != nil {
-		t.Fatalf("could not reset the public schema of %q: %v", name, err)
-	}
-	return ctx, pool
-}
-
 func migratedTestDB(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
-	ctx, pool := newTestDB(t)
+	ctx, pool := dbtest.Pool(t)
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("Migrate() returned an unexpected error: %v", err)
 	}

@@ -16,7 +16,7 @@ Full requirements: [SPEC.md](SPEC.md)
 |---:|:---:|---|---|
 | 1 | A | Monorepo, Go skeleton, config, JSON helpers, health endpoint, guide files | done |
 | 2 | A | PostgreSQL connection and migrations for all tables | done |
-| 3 | A | Security core: bcrypt, JWT (effective role), VerifyToken/RequireRole, logging/recovery/CORS middleware, admin account seed | todo |
+| 3 | A | Security core: bcrypt, JWT, middleware, admin account seed | done |
 | 4 | B | Auth APIs: registration, unified login, admin login, logout, password reset | todo |
 | 5 | A | Admin people: approvals, students, CRs, teachers, overview stats | todo |
 | 6 | B | Courses, fixed routines with conflict + hours rules, lookup endpoints | todo |

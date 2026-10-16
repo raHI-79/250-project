@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/db"
 	"github.com/raHI-79/250-project/backend/internal/server"
+	"github.com/raHI-79/250-project/backend/internal/store"
 	"log"
 	"net"
 	"net/http"
@@ -46,10 +48,25 @@ func run() error {
 	if err := db.Migrate(startupContext, pool); err != nil {
 		return err
 	}
+	tokens, err := auth.NewTokens(cfg.JWTSecret, cfg.JWTTTL)
+	if err != nil {
+		return err
+	}
+	userStore := store.New(pool)
+	if cfg.HasAdminSeed() {
+		if err := seedAdmin(startupContext, userStore, cfg); err != nil {
+			return err
+		}
+	}
 	cancelStartup()
 	httpServer := &http.Server{
-		Addr:         net.JoinHostPort("", cfg.Port),
-		Handler:      server.NewRouter(cfg, pool),
+		Addr: net.JoinHostPort("", cfg.Port),
+		Handler: server.NewRouter(server.Dependencies{
+			Config:   cfg,
+			Database: pool,
+			Tokens:   tokens,
+			Users:    userStore,
+		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
@@ -77,4 +94,16 @@ func run() error {
 		log.Println("server: stopped cleanly")
 		return nil
 	}
+}
+
+func seedAdmin(ctx context.Context, userStore *store.Store, cfg *config.Config) error {
+	hash, err := auth.HashPassword(cfg.AdminPassword)
+	if err != nil {
+		return err
+	}
+	if _, err := userStore.EnsureAdmin(ctx, cfg.AdminIdentifier, hash); err != nil {
+		return err
+	}
+	log.Println("auth: admin account ready")
+	return nil
 }
