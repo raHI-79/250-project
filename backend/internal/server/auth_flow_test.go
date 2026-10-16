@@ -48,6 +48,7 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 		t.Fatalf("auth.NewTokens() returned an unexpected error: %v", err)
 	}
 	userStore := store.New(pool)
+	alerts := notify.New(userStore)
 	log.SetOutput(io.Discard)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	return ctx, pool, NewRouter(Dependencies{
@@ -64,7 +65,9 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 		People:   userStore,
 		Catalog:  userStore,
 		Lookups:  userStore,
-		Alerts:   notify.New(userStore),
+		Alerts:   alerts,
+		Classes:  userStore,
+		Notifier: alerts,
 	})
 }
 
