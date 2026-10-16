@@ -60,6 +60,7 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 		Tokens:   tokens,
 		Users:    userStore,
 		Auth:     userStore,
+		People:   userStore,
 	})
 }
 

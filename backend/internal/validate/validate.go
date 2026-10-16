@@ -18,6 +18,7 @@ var (
 	batchPattern      = regexp.MustCompile(`^[A-Z]{2,6}-[0-9]{2}$`)
 	sectionPattern    = regexp.MustCompile(`^[A-Z]$`)
 	courseCodePattern = regexp.MustCompile(`^[A-Z]{2,6}-?[0-9]{3}$`)
+	teacherIDPattern  = regexp.MustCompile(`^[A-Za-z0-9-]{3,20}$`)
 	bloodGroups       = []string{"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
 )
 
@@ -101,6 +102,17 @@ func CourseCode(label, value string) (string, error) {
 	trimmed = strings.ToUpper(strings.ReplaceAll(trimmed, " ", ""))
 	if !courseCodePattern.MatchString(trimmed) {
 		return "", fmt.Errorf("%s must look like CSE-233 or CSE233.", label)
+	}
+	return trimmed, nil
+}
+
+func TeacherID(label, value string) (string, error) {
+	trimmed, err := Required(label, value)
+	if err != nil {
+		return "", err
+	}
+	if !teacherIDPattern.MatchString(trimmed) {
+		return "", fmt.Errorf("%s must be 3 to 20 letters, digits or hyphens.", label)
 	}
 	return trimmed, nil
 }

@@ -67,6 +67,7 @@ func run() error {
 			Tokens:   tokens,
 			Users:    userStore,
 			Auth:     userStore,
+			People:   userStore,
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,

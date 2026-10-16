@@ -262,6 +262,19 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/auth/reset-password` | public | Sets a new password with that reset token |
 | `POST` | `/api/auth/logout` | any signed-in role | Invalidates **every** token of the account |
 | `GET` | `/api/me` | any signed-in role | The signed-in user: `id`, `identifier`, `role` |
+| `GET` | `/api/admin/registrations` | admin | Pending student registrations, oldest first, with their drop course |
+| `POST` | `/api/admin/registrations/{id}/approve` | admin | Turns a pending account into `active`; `404` unknown, `409` already decided |
+| `POST` | `/api/admin/registrations/{id}/reject` | admin | Turns a pending account into `rejected`; `404` unknown, `409` already decided |
+| `GET` | `/api/admin/students` | admin | `{items, total}` with `search`, `batch`, `section`, `status`, `limit`, `offset` |
+| `POST` | `/api/admin/students/{id}/remove` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
+| `POST` | `/api/admin/crs` | admin | Creates a CR account in one transaction; `409` on a duplicate |
+| `GET` | `/api/admin/crs` | admin | CR list with `search` and `batch` |
+| `POST` | `/api/admin/crs/{id}/demote` | admin | Clears `is_cr` and invalidates the tokens; `409` if not a CR |
+| `POST` | `/api/admin/crs/{id}/deactivate` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
+| `POST` | `/api/admin/teachers` | admin | Creates a teacher account in one transaction; `409` on a duplicate |
+| `GET` | `/api/admin/teachers` | admin | Teacher list with `search` and `status` |
+| `POST` | `/api/admin/teachers/{id}/deactivate` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
+| `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
 
 Rate limited routes allow **10 requests per minute per IP address**; the
 eleventh gets `429` with `{"error":"Too many attempts. Please try again in a
@@ -321,6 +334,31 @@ a course project with no mail server:
 Only the **SHA-256 hash** of that token is stored, so the database never holds
 anything that can be used to log in. The token lasts 15 minutes, works once,
 and resetting a password invalidates every existing login token.
+
+### Admin people endpoints
+
+`{id}` is always the **`users.id`** of the account, which every admin list
+returns as `id`. No admin response ever carries `password_hash` or the password
+reset fields.
+
+`GET /api/admin/students` defaults to every status except `rejected`; pass
+`status=active`, `pending`, `rejected`, `removed` or `all` to choose. `search`
+matches the full name or the registration number and ignores case. `limit`
+defaults to **50** and may not exceed **200**, and the answer looks like
+`{"items": [...], "total": 128}` where `total` counts every match, not just
+the current page. Each item carries `is_cr` and `status`.
+
+`POST /api/admin/crs` takes the registration fields plus `password` and
+`confirm_password`, and writes the `users` row (role `student`, identifier the
+registration number, status `active`) and the `students` row (`is_cr = true`)
+in **one transaction**. `POST /api/admin/teachers` takes `name`, `teacher_id`,
+`email`, `phone`, `password` and `confirm_password` the same way;
+`teacher_id` is 3 to 20 letters, digits or hyphens. Both answer
+`{"id": 12, "message": "..."}` with `201`.
+
+Removing, deactivating or demoting an account also raises its
+`token_version`, so **every token that account already holds stops working at
+once** — a demoted CR has to log in again to get a student token.
 
 ### Account status messages
 
