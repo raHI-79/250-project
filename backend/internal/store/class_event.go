@@ -15,15 +15,18 @@ const (
 	EventStatusCancelled     = "cancelled"
 	EventStatusAutoCancelled = "auto_cancelled"
 	BookingSourceFixed       = "fixed"
+	dateLayout               = "2006-01-02"
 )
 
 var ErrRoomUnavailable = errors.New("store: the room is already booked at this time")
 
 type StudentProfile struct {
-	UserID  int64
-	Batch   string
-	Section string
-	IsCR    bool
+	UserID         int64
+	Batch          string
+	Section        string
+	IsCR           bool
+	HasDropCourse  bool
+	DropCourseCode string
 }
 
 type NewClassEvent struct {
@@ -55,6 +58,7 @@ type ClassEventRow struct {
 	EndTime       string
 	Room          string
 	Status        string
+	CreatedBy     int64
 	CreatedAt     time.Time
 	DecidedAt     *time.Time
 }
@@ -81,7 +85,8 @@ type Booking struct {
 }
 
 const (
-	findStudentProfileSQL = `SELECT u.id, s.batch, s.section, s.is_cr
+	findStudentProfileSQL = `SELECT u.id, s.batch, s.section, s.is_cr, s.has_drop_course,
+COALESCE(s.drop_course_code, '')
 FROM users u
 JOIN students s ON s.user_id = u.id
 WHERE u.id = $1`
@@ -150,6 +155,8 @@ func (s *Store) GetStudentProfile(ctx context.Context, userID int64) (StudentPro
 		&profile.Batch,
 		&profile.Section,
 		&profile.IsCR,
+		&profile.HasDropCourse,
+		&profile.DropCourseCode,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StudentProfile{}, ErrNotFound

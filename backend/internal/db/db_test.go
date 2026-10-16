@@ -28,6 +28,7 @@ var expectedTables = []string{
 	"poll_options",
 	"poll_votes",
 	"polls",
+	"routine_cancellations",
 	"routines",
 	"schema_migrations",
 	"students",
