@@ -16,7 +16,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 | Member | Name | GitHub |
 |---|---|---|
 | A | Ratul Islam | [@raHI-79](https://github.com/raHI-79) |
-| B | TBD | TBD |
+| B | Rakibul Hasan | [@niloySapiens](https://github.com/niloySapiens) |
 
 ## Tech stack
 
@@ -252,10 +252,92 @@ recreate the `public` schema before each test — so never point them at
 Every route lives under `/api`. Errors always use the same shape:
 `{"error": "message"}`.
 
-| Method | Path | Description |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/health` | public | `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
+| `POST` | `/api/auth/register` | public | Student registration. Creates a `pending` account; `201` on success |
+| `POST` | `/api/auth/login` | public, rate limited | Student, CR and teacher login. Returns a token and the user |
+| `POST` | `/api/auth/admin/login` | public, rate limited | Admin login only. Returns a token and the admin user |
+| `POST` | `/api/auth/forgot-password` | public, rate limited | Issues a password reset token valid for 15 minutes |
+| `POST` | `/api/auth/reset-password` | public | Sets a new password with that reset token |
+| `POST` | `/api/auth/logout` | any signed-in role | Invalidates **every** token of the account |
+| `GET` | `/api/me` | any signed-in role | The signed-in user: `id`, `identifier`, `role` |
+
+Rate limited routes allow **10 requests per minute per IP address**; the
+eleventh gets `429` with `{"error":"Too many attempts. Please try again in a
+minute."}`.
+
+### Request and response shapes
+
+`POST /api/auth/register`
+
+```json
+{
+  "full_name": "Ratul Islam",
+  "reg_no": "2023331079",
+  "batch": "CSE-23",
+  "section": "A",
+  "email": "ratul@student.sust.edu",
+  "phone": "01712345678",
+  "blood_group": "O+",
+  "password": "sust-250-project",
+  "confirm_password": "sust-250-project",
+  "has_drop_course": false,
+  "drop_course_code": ""
+}
+```
+
+`batch` must look like `CSE-23`, `section` is a single letter, `blood_group` is
+one of `A+ A- B+ B- AB+ AB- O+ O-`, `phone` is 10 to 15 digits with an optional
+leading `+`, and `drop_course_code` (like `CSE-233` or `CSE233`) is required
+only when `has_drop_course` is `true`. A rejected field answers `400` with a
+message naming it, for example `{"error":"Batch must look like CSE-23."}`.
+
+`POST /api/auth/login` takes `{"identifier":"2023331079","password":"..."}` and
+answers:
+
+```json
+{
+  "token": "<jwt>",
+  "user": {"id": 1, "identifier": "2023331079", "role": "cr", "name": "Ratul Islam", "batch": "CSE-23", "section": "A"}
+}
+```
+
+`role` is the **effective** role (`student`, `cr`, `teacher`), and `batch` and
+`section` appear only for students and CRs. Send the token on later requests as
+`Authorization: Bearer <token>`.
+
+`POST /api/auth/forgot-password` answers with the token itself, because this is
+a course project with no mail server:
+
+```json
+{
+  "message": "Use this token to reset your password. In production it would be sent by email.",
+  "reset_token": "<64 hexadecimal characters>",
+  "expires_at": "2026-10-16T14:15:00+06:00"
+}
+```
+
+Only the **SHA-256 hash** of that token is stored, so the database never holds
+anything that can be used to log in. The token lasts 15 minutes, works once,
+and resetting a password invalidates every existing login token.
+
+### Account status messages
+
+Login checks the password **before** the account status, so a wrong password
+never reveals whether an account exists or what state it is in.
+
+| Case | Status | Body |
 |---|---|---|
-| `GET` | `/api/health` | Returns `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
-| `GET` | `/api/me` | The signed-in user: `id`, `identifier`, `role`. Needs `Authorization: Bearer <token>` |
+| Unknown ID, wrong password, or an admin on the normal login | `401` | `{"error":"Invalid ID or password."}` |
+| A normal user on the admin login | `401` | `{"error":"Invalid ID or password."}` |
+| Correct password, account still waiting for approval | `403` | `{"error":"Your registration is pending approval by the administration."}` |
+| Correct password, registration rejected | `403` | `{"error":"Your registration was rejected. Please contact the department office."}` |
+| Correct password, account removed | `403` | `{"error":"Your account has been removed. Please contact the department office."}` |
+| Duplicate registration number or email | `409` | `{"error":"An account with this registration number or email already exists."}` |
+| Wrong or expired reset token | `400` | `{"error":"Invalid or expired reset token."}` |
+| No active account for a password reset | `404` | `{"error":"No active account found for this ID."}` |
+| Malformed JSON, unknown field, or a body over 1 MB | `400` | `{"error":"Invalid request body"}` |
 
 Any unknown route returns `404` with `{"error":"Route not found"}`.
 

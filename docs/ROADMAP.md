@@ -4,7 +4,7 @@ The project is built in 27 small development sets. Each set is owned by one team
 member, is worked on alone, and ends with reviewed Git commits.
 
 - **Owner A** — Ratul Islam ([@raHI-79](https://github.com/raHI-79))
-- **Owner B** — TBD
+- **Owner B** — Rakibul Hasan ([@niloySapiens](https://github.com/niloySapiens))
 
 Status values: `todo` → `in progress` → `done`.
 
@@ -17,7 +17,7 @@ Full requirements: [SPEC.md](SPEC.md)
 | 1 | A | Monorepo, Go skeleton, config, JSON helpers, health endpoint, guide files | done |
 | 2 | A | PostgreSQL connection and migrations for all tables | done |
 | 3 | A | Security core: bcrypt, JWT, middleware, admin account seed | done |
-| 4 | B | Auth APIs: registration, unified login, admin login, logout, password reset | todo |
+| 4 | B | Auth APIs: registration, unified login, admin login, logout, password reset | done |
 | 5 | A | Admin people: approvals, students, CRs, teachers, overview stats | todo |
 | 6 | B | Courses, fixed routines with conflict + hours rules, lookup endpoints | todo |
 | 7 | B | Notification service and endpoints | todo |

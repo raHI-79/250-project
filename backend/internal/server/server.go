@@ -9,11 +9,17 @@ import (
 	"net/http"
 )
 
+type TokenService interface {
+	middleware.TokenParser
+	handler.TokenIssuer
+}
+
 type Dependencies struct {
 	Config   *config.Config
 	Database handler.DatabasePinger
-	Tokens   middleware.TokenParser
+	Tokens   TokenService
 	Users    middleware.UserStore
+	Auth     handler.AuthStore
 }
 
 type RouteGroup struct {
@@ -31,8 +37,18 @@ func (g RouteGroup) Handle(pattern string, handlerFunc http.HandlerFunc) {
 
 func NewRouter(deps Dependencies) http.Handler {
 	mux := http.NewServeMux()
+	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens)
+	limiter := middleware.NewRateLimiter(middleware.DefaultRateLimit, middleware.DefaultRateWindow)
+	throttled := RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{limiter.Middleware}}
+	authenticated := AuthenticatedGroup(mux, deps)
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
-	AuthenticatedGroup(mux, deps).Handle("GET /api/me", handler.Me())
+	mux.HandleFunc("POST /api/auth/register", authHandler.Register())
+	throttled.Handle("POST /api/auth/login", authHandler.Login())
+	throttled.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
+	throttled.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
+	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
+	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
+	authenticated.Handle("GET /api/me", handler.Me())
 	AdminGroup(mux, deps)
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))

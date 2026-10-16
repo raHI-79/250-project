@@ -66,6 +66,7 @@ func run() error {
 			Database: pool,
 			Tokens:   tokens,
 			Users:    userStore,
+			Auth:     userStore,
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
