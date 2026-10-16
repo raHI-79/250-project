@@ -6,6 +6,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/db"
+	"github.com/raHI-79/250-project/backend/internal/jobs"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/server"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -75,11 +76,17 @@ func run() error {
 			Alerts:   alerts,
 			Classes:  userStore,
 			Notifier: alerts,
+			Teachers: userStore,
+			Students: userStore,
+			Alarms:   alerts,
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
 	}
+	jobContext, stopJobs := context.WithCancel(context.Background())
+	defer stopJobs()
+	go jobs.NewAutoCanceller(userStore, alerts).Run(jobContext, cfg.AutoCancel, cfg.Now)
 	serverErrors := make(chan error, 1)
 	go func() {
 		log.Printf("server: listening on http://localhost:%s (env=%s, timezone=%s)", cfg.Port, cfg.AppEnv, cfg.Timezone)
@@ -95,6 +102,7 @@ func run() error {
 	case <-notifyContext.Done():
 		log.Println("server: shutdown signal received, finishing active requests")
 		stop()
+		stopJobs()
 		shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownContext); err != nil {

@@ -123,6 +123,9 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps.Alerts = emptyNotificationService{}
 	deps.Classes = emptyCRStore{}
 	deps.Notifier = silentNotifier{}
+	deps.Teachers = emptyTeacherStore{}
+	deps.Students = emptyStudentStore{}
+	deps.Alarms = silentAlerts{}
 	return deps, NewRouter(deps)
 }
 

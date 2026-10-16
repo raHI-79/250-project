@@ -26,6 +26,9 @@ type Dependencies struct {
 	Alerts   handler.NotificationService
 	Classes  handler.CRStore
 	Notifier handler.Notifier
+	Teachers handler.TeacherStore
+	Students handler.StudentStore
+	Alarms   handler.BroadcastNotifier
 }
 
 type RouteGroup struct {
@@ -59,6 +62,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Notifier))
+	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
+	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
@@ -98,6 +103,43 @@ func CRGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 			middleware.RequireRole(auth.RoleCR),
 		},
 	}
+}
+
+func TeacherGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleTeacher),
+		},
+	}
+}
+
+func StudentGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleStudent, auth.RoleCR),
+		},
+	}
+}
+
+func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
+	group.Handle("GET /api/teacher/requests", teacher.Requests())
+	group.Handle("POST /api/teacher/requests/{id}/approve", teacher.Approve())
+	group.Handle("POST /api/teacher/requests/{id}/reject", teacher.Reject())
+	group.Handle("GET /api/teacher/schedule", teacher.Schedule())
+	group.Handle("GET /api/teacher/classes/upcoming", teacher.UpcomingClasses())
+	group.Handle("POST /api/teacher/classes/{id}/cancel", teacher.CancelClass())
+	group.Handle("POST /api/teacher/routines/{id}/cancel", teacher.CancelRoutine())
+}
+
+func registerStudentRoutes(group RouteGroup, student *handler.Student) {
+	group.Handle("GET /api/students/upcoming-routine", student.UpcomingRoutine())
+	group.Handle("GET /api/students/drop-course-routine", student.DropCourseRoutine())
+	group.Handle("GET /api/students/exams", student.Exams())
+	group.Handle("GET /api/students/routine", student.Routine())
 }
 
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {

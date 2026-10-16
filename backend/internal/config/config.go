@@ -14,6 +14,7 @@ const (
 	defaultTimezone       = "Asia/Dhaka"
 	defaultJWTTTL         = "24h"
 	defaultFrontendOrigin = "http://localhost:5173"
+	defaultAutoCancel     = "5m"
 	minJWTSecretLength    = 32
 )
 
@@ -33,6 +34,7 @@ type Config struct {
 	JWTSecret       string
 	JWTTTL          time.Duration
 	FrontendOrigin  string
+	AutoCancel      time.Duration
 	AdminIdentifier string
 	AdminPassword   string
 }
@@ -70,6 +72,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: JWT_TTL must be a positive duration, got %q", rawTTL)
 	}
 	cfg.JWTTTL = ttl
+	rawAutoCancel := getEnv("AUTO_CANCEL_INTERVAL", defaultAutoCancel)
+	autoCancel, err := time.ParseDuration(rawAutoCancel)
+	if err != nil {
+		return nil, fmt.Errorf("config: invalid AUTO_CANCEL_INTERVAL %q: %w", rawAutoCancel, err)
+	}
+	if autoCancel <= 0 {
+		return nil, fmt.Errorf("config: AUTO_CANCEL_INTERVAL must be a positive duration, got %q", rawAutoCancel)
+	}
+	cfg.AutoCancel = autoCancel
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
 		return nil, fmt.Errorf("config: invalid APP_TIMEZONE %q: %w", cfg.Timezone, err)
