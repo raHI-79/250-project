@@ -24,7 +24,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 |---|---|
 | Backend | Go 1.25+, standard library `net/http` |
 | Database | PostgreSQL 14+ via `pgx/v5` with a `pgxpool` connection pool |
-| Authentication | bcrypt password hashing + JWT (from Set 3) |
+| Authentication | bcrypt password hashing + JWT (HS256) via `golang-jwt/jwt/v5` |
 | Frontend | React + Vite + React Router + Tailwind CSS (from Set 16) |
 | File uploads | PDFs on disk in `backend/uploads/`, path saved in the database |
 
@@ -35,12 +35,16 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 ├── backend/                  Go module (the API server)
 │   ├── cmd/server/           main.go — program entry point
 │   ├── internal/
+│   │   ├── auth/             bcrypt hashing, JWT issuing and parsing, roles
 │   │   ├── config/           reads backend/.env and environment variables
 │   │   ├── db/               pgxpool connection + embedded SQL migrations
 │   │   │   └── migrations/   schema files, applied in filename order
+│   │   ├── dbtest/           shared helper for the database integration tests
 │   │   ├── handler/          one file per group of endpoints
 │   │   ├── httpx/            shared JSON response helpers
-│   │   └── server/           router: URL -> handler
+│   │   ├── middleware/       VerifyToken, RequireRole, Logger, Recoverer, CORS
+│   │   ├── server/           router: URL -> handler
+│   │   └── store/            database queries used by the API
 │   ├── .env.example          copy to .env and fill in your values
 │   └── go.mod
 ├── frontend/                 React + Vite app (added in Set 16)
@@ -83,8 +87,19 @@ all you have to do is create two empty databases and set your password.
    Copy-Item backend\.env.example backend\.env
    ```
 
-4. **Edit `backend/.env`** and replace `CHANGE_ME` with your own postgres
-   password in both `DATABASE_URL` and `TEST_DATABASE_URL`.
+4. **Edit `backend/.env`**:
+
+   - replace `CHANGE_ME` with your own postgres password in both
+     `DATABASE_URL` and `TEST_DATABASE_URL`,
+   - set `JWT_SECRET` to a long random string of **at least 32 characters**
+     (the server refuses to start otherwise). To generate one:
+
+     ```powershell
+     -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
+     ```
+
+   - set `ADMIN_IDENTIFIER` and `ADMIN_PASSWORD` if you want the hidden admin
+     account created for you at startup.
 
    `backend/.env` is listed in `.gitignore`, so your password is never
    committed. Only `backend/.env.example` is tracked.
@@ -182,6 +197,28 @@ go run ./cmd/server
 | `APP_TIMEZONE` | `Asia/Dhaka` | Timezone used for all dates and times |
 | `DATABASE_URL` | none — **required** | PostgreSQL connection string for the app database |
 | `TEST_DATABASE_URL` | none — optional | Connection string used by the database integration tests |
+| `JWT_SECRET` | none — **required** | Key that signs the login tokens, at least 32 characters |
+| `JWT_TTL` | `24h` | How long a login token stays valid, as a Go duration (`24h`, `90m`) |
+| `FRONTEND_ORIGIN` | `http://localhost:5173` | The only browser origin allowed to call the API |
+| `ADMIN_IDENTIFIER` | none — optional | Login id of the admin account created at startup |
+| `ADMIN_PASSWORD` | none — optional | Password of that admin account, at least 8 characters |
+
+Never commit real values. `backend/.env` is gitignored; only
+`backend/.env.example` is tracked.
+
+### The admin account
+
+The admin account is **not** part of the database schema and there is no
+registration form for it. When **both** `ADMIN_IDENTIFIER` and
+`ADMIN_PASSWORD` are set, the server hashes the password with bcrypt at
+startup and inserts one `active` user with role `admin`. The insert uses
+`ON CONFLICT (identifier) DO NOTHING`, so:
+
+- the account is created **once**, on the first start with an empty database;
+- a later start **never overwrites** the stored hash, even if you change
+  `ADMIN_PASSWORD` in `.env` (change the password through the API instead);
+- the log line is only `auth: admin account ready` — the identifier and the
+  password are never printed or logged.
 
 ## How to run tests
 
@@ -218,8 +255,36 @@ Every route lives under `/api`. Errors always use the same shape:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/health` | Returns `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
+| `GET` | `/api/me` | The signed-in user: `id`, `identifier`, `role`. Needs `Authorization: Bearer <token>` |
 
 Any unknown route returns `404` with `{"error":"Route not found"}`.
+
+### How a request is checked
+
+Every request passes through `Recoverer` → `Logger` → `CORS` → the router. A
+protected route then runs `VerifyToken` and, where a role is required,
+`RequireRole`:
+
+| Situation | Status | Body |
+|---|---|---|
+| No `Authorization` header, or not `Bearer <token>` | `401` | `{"error":"Unauthorized"}` |
+| Token is malformed, expired, signed with another key, or not HS256 | `401` | `{"error":"Unauthorized"}` |
+| Token is valid but the user was deleted, is `pending`, `rejected` or `removed` | `401` | `{"error":"Session expired. Please log in again."}` |
+| Token is valid but the user logged out everywhere (`token_version` moved on) | `401` | `{"error":"Session expired. Please log in again."}` |
+| Token is valid but the user's role changed (a CR was demoted) | `401` | `{"error":"Session expired. Please log in again."}` |
+| Signed in, but the route needs another role | `403` | `{"error":"403 Access Denied / Unauthorized Access"}` |
+
+The important part: **`VerifyToken` reads the user from the database on every
+single request.** A token alone is never enough, so removing or rejecting an
+account takes effect immediately instead of when the token expires.
+
+The token carries the **effective role** (`student`, `cr`, `teacher`,
+`admin`), because a CR is stored as a student row with `is_cr = true`. The
+middleware recomputes that role from the database and rejects the token if it
+no longer matches.
+
+CORS allows `FRONTEND_ORIGIN` only. A preflight `OPTIONS` request answers
+`204`, with the CORS headers present only for that one origin.
 
 ## Development Guidelines
 
