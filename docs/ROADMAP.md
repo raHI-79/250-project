@@ -29,7 +29,7 @@ Full requirements: [SPEC.md](SPEC.md)
 | 12 | B | Auth pages with email code password reset, student panel | done |
 | 13 | B | CR panel | done |
 | 14 | A | Admin panel | done |
-| 15 | B | Teacher panel | todo |
+| 15 | B | Teacher panel | done |
 | 16 | A | Multi-university and department backend | todo |
 | 17 | B | Super admin panel and university/department URLs | todo |
 | 18 | A+B | Polish, final checklist, demo data, docs, CI | todo |

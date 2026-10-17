@@ -26,6 +26,11 @@ import TeacherMessagesPage from './pages/cr/TeacherMessagesPage'
 import CRPostNoticesPage from './pages/cr/CRNoticesPage'
 import CRMaterialsPage from './pages/cr/CRMaterialsPage'
 import CRPollsPage from './pages/cr/CRPollsPage'
+import DailySchedulePage from './pages/teacher/DailySchedulePage'
+import ApprovalRequestsPage from './pages/teacher/ApprovalRequestsPage'
+import CancelClassPage from './pages/teacher/CancelClassPage'
+import CRMessagesPage from './pages/teacher/CRMessagesPage'
+import TeacherSendMessagePage from './pages/teacher/TeacherSendMessagePage'
 import OverviewPage from './pages/admin/OverviewPage'
 import RegistrationsPage from './pages/admin/RegistrationsPage'
 import AdminStudentsPage from './pages/admin/AdminStudentsPage'
@@ -36,11 +41,8 @@ import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
 import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
 import AdminMaterialsPage from './pages/admin/AdminMaterialsPage'
 import NotFoundPage from './pages/NotFoundPage'
-import Placeholder from './pages/Placeholder'
 import { useAuth } from './context/auth'
 import { homeFor, paths } from './lib/paths'
-
-const page = (title, subtitle) => <Placeholder title={title} subtitle={subtitle} />
 
 function RootRedirect() {
   const { isAuthenticated, role } = useAuth()
@@ -99,26 +101,11 @@ export default function Router() {
             path={paths.teacher.home()}
             element={<Navigate to={paths.teacher.schedule()} replace />}
           />
-          <Route
-            path={paths.teacher.schedule()}
-            element={page('Daily Schedule', 'Your classes for the chosen day')}
-          />
-          <Route
-            path={paths.teacher.requests()}
-            element={page('Approval Requests', 'Requests waiting for your decision')}
-          />
-          <Route
-            path={paths.teacher.cancelClass()}
-            element={page('Cancel Class', 'Cancel one of your approved classes')}
-          />
-          <Route
-            path={paths.teacher.crMessages()}
-            element={page('CR Messages', 'Messages class representatives sent you')}
-          />
-          <Route
-            path={paths.teacher.sendMessage()}
-            element={page('Send Message', 'Write to a class representative, a batch or a student')}
-          />
+          <Route path={paths.teacher.schedule()} element={<DailySchedulePage />} />
+          <Route path={paths.teacher.requests()} element={<ApprovalRequestsPage />} />
+          <Route path={paths.teacher.cancelClass()} element={<CancelClassPage />} />
+          <Route path={paths.teacher.crMessages()} element={<CRMessagesPage />} />
+          <Route path={paths.teacher.sendMessage()} element={<TeacherSendMessagePage />} />
         </Route>
       </Route>
       <Route element={<RequireRole roles="admin" />}>
