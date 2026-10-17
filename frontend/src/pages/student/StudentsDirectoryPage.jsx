@@ -12,8 +12,7 @@ import {
   StatusBadge,
 } from '../../components/ui'
 import { useDebounced, useResource } from '../../lib/hooks'
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+import { BLOOD_GROUPS } from '../../lib/options'
 
 const HEADINGS = ['Name', 'Reg No', 'Batch', 'Section', 'Phone', 'Email', 'Blood Group']
 

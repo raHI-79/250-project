@@ -8,8 +8,7 @@ import CampusBackdrop from '../../components/layout/CampusBackdrop'
 import api from '../../lib/api'
 import { BANNER_MONUMENT } from '../../lib/campus'
 import { paths } from '../../lib/paths'
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+import { BLOOD_GROUPS } from '../../lib/options'
 
 const MAX_FIELD = 120
 
