@@ -1,21 +1,10 @@
 import { useState } from 'react'
 import { BookOpen } from 'lucide-react'
-import {
-  Alert,
-  Card,
-  EmptyState,
-  PageHeader,
-  Select,
-  SkeletonCard,
-  StatusBadge,
-} from '../../components/ui'
+import { Alert, Card, EmptyState, PageHeader, Select, SkeletonCard } from '../../components/ui'
+import RoutineByDay from '../../components/RoutineByDay'
 import { useAuth } from '../../context/auth'
 import { useResource } from '../../lib/hooks'
-import { WEEKDAYS, formatTimeRange } from '../../lib/time'
-
-const TYPE_LABELS = { lab: 'Lab', class: 'Class', theory: 'Theory' }
-
-const sectionLabel = (section) => (section === 'ALL' ? 'Both sections' : `Section ${section}`)
+import { WEEKDAYS } from '../../lib/time'
 
 export default function FixedRoutinePage() {
   const { user } = useAuth()
@@ -33,9 +22,6 @@ export default function FixedRoutinePage() {
   if (course) query.course = course
   const { data, loading, error } = useResource('/api/students/routine', query)
   const items = data?.items || []
-  const days = WEEKDAYS.map((name, index) => ({ name, index })).filter((entry) =>
-    items.some((item) => item.day_of_week === entry.index),
-  )
   return (
     <>
       <PageHeader
@@ -95,37 +81,7 @@ export default function FixedRoutinePage() {
           text="Nothing matches these filters yet."
         />
       ) : (
-        <div className="flex flex-col gap-4">
-          {days.map((entry) => (
-            <Card key={entry.name} hover={false} className="animate-fade-in-up">
-              <p className="font-display text-base font-semibold text-brand-800">{entry.name}</p>
-              <ul className="mt-2 flex flex-col">
-                {items
-                  .filter((item) => item.day_of_week === entry.index)
-                  .map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-brand-50 py-2 text-sm last:border-b-0"
-                    >
-                      <span className="font-medium tabular-nums text-brand-600">
-                        {formatTimeRange(item.start_time, item.end_time)}
-                      </span>
-                      <span className="font-medium text-brand-900">
-                        {item.course_code}
-                        {item.course_title ? ` ${item.course_title}` : ''}
-                        {TYPE_LABELS[item.type] ? ` ${TYPE_LABELS[item.type]}` : ''}
-                        {item.room ? ` @ ${item.room}` : ''}
-                      </span>
-                      <StatusBadge status="unavailable" label={sectionLabel(item.section)} />
-                      {item.teacher_name && (
-                        <span className="text-brand-500">{item.teacher_name}</span>
-                      )}
-                    </li>
-                  ))}
-              </ul>
-            </Card>
-          ))}
-        </div>
+        <RoutineByDay items={items} />
       )}
     </>
   )
