@@ -24,3 +24,45 @@ export const formatDate = (value) => {
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+
+export const WEEKDAYS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+]
+
+export const formatClock = (value) => {
+  if (typeof value !== 'string') return ''
+  const [rawHour, rawMinute] = value.split(':')
+  const hour = Number(rawHour)
+  const minute = Number(rawMinute)
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return ''
+  const suffix = hour < 12 ? 'AM' : 'PM'
+  const display = hour % 12 === 0 ? 12 : hour % 12
+  return `${display}:${String(minute).padStart(2, '0')} ${suffix}`
+}
+
+export const formatTimeRange = (start, end) => {
+  const from = formatClock(start)
+  const to = formatClock(end)
+  if (!from) return to
+  if (!to) return from
+  return `${from} – ${to}`
+}
+
+export const formatDateTime = (value) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
