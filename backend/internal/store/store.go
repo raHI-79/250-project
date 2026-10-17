@@ -66,25 +66,39 @@ func (s *Store) GetAuthUser(ctx context.Context, userID int64) (AuthUser, error)
 	return user, nil
 }
 
-const ensureAdminSQL = `INSERT INTO users (role, identifier, password_hash, status)
-VALUES ('admin', $1, $2, 'active')
+const ensureAdminSQL = `INSERT INTO users (role, identifier, password_hash, status, contact_email, contact_phone)
+VALUES ('admin', $1, $2, 'active', NULLIF($3, ''), NULLIF($4, ''))
 ON CONFLICT (identifier) DO NOTHING
 RETURNING id`
 
-func (s *Store) EnsureAdmin(ctx context.Context, identifier, passwordHash string) (bool, error) {
+const fillAdminContactSQL = `UPDATE users
+SET contact_email = COALESCE(NULLIF(contact_email, ''), NULLIF($2, '')),
+    contact_phone = COALESCE(NULLIF(contact_phone, ''), NULLIF($3, '')),
+    updated_at = now()
+WHERE identifier = $1
+  AND role = 'admin'
+  AND (COALESCE(contact_email, '') = '' OR COALESCE(contact_phone, '') = '')`
+
+func (s *Store) EnsureAdmin(ctx context.Context, identifier, passwordHash, contactEmail, contactPhone string) (bool, error) {
 	if identifier == "" {
 		return false, ErrEmptyIdentifier
 	}
 	if passwordHash == "" {
 		return false, ErrEmptyPasswordHash
 	}
+	created := true
 	var id int64
-	err := s.pool.QueryRow(ctx, ensureAdminSQL, identifier, passwordHash).Scan(&id)
+	err := s.pool.QueryRow(ctx, ensureAdminSQL, identifier, passwordHash, contactEmail, contactPhone).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
+		created = false
+	} else if err != nil {
 		return false, fmt.Errorf("store: could not create the admin account: %w", err)
 	}
-	return true, nil
+	if contactEmail == "" && contactPhone == "" {
+		return created, nil
+	}
+	if _, err := s.pool.Exec(ctx, fillAdminContactSQL, identifier, contactEmail, contactPhone); err != nil {
+		return created, fmt.Errorf("store: could not fill the admin contact details: %w", err)
+	}
+	return created, nil
 }
