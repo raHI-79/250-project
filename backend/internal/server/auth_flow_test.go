@@ -76,6 +76,8 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 		Library:  userStore,
 		Contacts: userStore,
 		Files:    upload.NewSaver(t.TempDir(), 1),
+		Mail:     userStore,
+		Votes:    userStore,
 	})
 }
 

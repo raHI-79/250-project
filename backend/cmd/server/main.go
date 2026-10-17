@@ -83,6 +83,8 @@ func run() error {
 			Notices:  userStore,
 			Library:  userStore,
 			Contacts: userStore,
+			Mail:     userStore,
+			Votes:    userStore,
 			Files:    upload.NewSaver(cfg.UploadDir, cfg.MaxUploadMB),
 		}),
 		ReadTimeout:  readTimeout,
