@@ -24,7 +24,7 @@ Full requirements: [SPEC.md](SPEC.md)
 | 7 | A | CR class/exam/extra requests and room availability | done |
 | 8 | B | Teacher approvals, cancel, schedule, auto-cancel, student routine APIs | done |
 | 9 | A | Uploads, notices, materials, directory, teachers info | done |
-| 10 | B | Messages, polls, security tests | todo |
+| 10 | B | Messages, polls, security tests | done |
 | 11 | A | Frontend setup, theme, shared components, layout, notification bell | todo |
 | 12 | B | Auth pages and student panel | todo |
 | 13 | A | CR panel | todo |
