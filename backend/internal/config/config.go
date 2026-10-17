@@ -18,6 +18,7 @@ const (
 	defaultAutoCancel     = "5m"
 	defaultUploadDir      = "uploads"
 	defaultMaxUploadMB    = 10
+	defaultSMTPPort       = 587
 	minJWTSecretLength    = 32
 )
 
@@ -42,6 +43,13 @@ type Config struct {
 	MaxUploadMB     int
 	AdminIdentifier string
 	AdminPassword   string
+	AdminEmail      string
+	AdminPhone      string
+	SMTPHost        string
+	SMTPPort        int
+	SMTPUsername    string
+	SMTPPassword    string
+	MailFrom        string
 }
 
 func Load() (*Config, error) {
@@ -59,6 +67,12 @@ func Load() (*Config, error) {
 		UploadDir:       getEnv("UPLOAD_DIR", defaultUploadDir),
 		AdminIdentifier: os.Getenv("ADMIN_IDENTIFIER"),
 		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
+		AdminEmail:      os.Getenv("ADMIN_EMAIL"),
+		AdminPhone:      os.Getenv("ADMIN_PHONE"),
+		SMTPHost:        os.Getenv("SMTP_HOST"),
+		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
+		MailFrom:        os.Getenv("MAIL_FROM"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL
@@ -96,6 +110,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: MAX_UPLOAD_MB must be a positive number of megabytes, got %q", rawMaxUpload)
 	}
 	cfg.MaxUploadMB = maxUpload
+	rawSMTPPort := getEnv("SMTP_PORT", strconv.Itoa(defaultSMTPPort))
+	smtpPort, err := strconv.Atoi(rawSMTPPort)
+	if err != nil {
+		return nil, fmt.Errorf("config: invalid SMTP_PORT %q: %w", rawSMTPPort, err)
+	}
+	if smtpPort <= 0 || smtpPort > 65535 {
+		return nil, fmt.Errorf("config: SMTP_PORT must be a port number between 1 and 65535, got %q", rawSMTPPort)
+	}
+	cfg.SMTPPort = smtpPort
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
 		return nil, fmt.Errorf("config: invalid APP_TIMEZONE %q: %w", cfg.Timezone, err)
@@ -110,6 +133,14 @@ func (c *Config) Now() time.Time {
 
 func (c *Config) HasAdminSeed() bool {
 	return c.AdminIdentifier != "" && c.AdminPassword != ""
+}
+
+func (c *Config) HasMailer() bool {
+	return c.SMTPHost != ""
+}
+
+func (c *Config) IsProduction() bool {
+	return c.AppEnv == "production"
 }
 
 func getEnv(key, fallback string) string {

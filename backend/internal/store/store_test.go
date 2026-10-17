@@ -67,7 +67,7 @@ VALUES ($1, $2, 'Test Teacher', 'teacher@example.com', '01800000000')`
 
 func TestEnsureAdminCreatesTheAccountOnce(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	created, err := store.EnsureAdmin(ctx, "admin", "first-stored-hash")
+	created, err := store.EnsureAdmin(ctx, "admin", "first-stored-hash", "admin@sust.edu", "01700000000")
 	if err != nil {
 		t.Fatalf("EnsureAdmin() returned an unexpected error: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestEnsureAdminCreatesTheAccountOnce(t *testing.T) {
 		t.Error("the stored hash is not the one that was passed in")
 	}
 	for attempt := 2; attempt <= 3; attempt++ {
-		created, err = store.EnsureAdmin(ctx, "admin", "second-stored-hash")
+		created, err = store.EnsureAdmin(ctx, "admin", "second-stored-hash", "other@sust.edu", "01800000000")
 		if err != nil {
 			t.Fatalf("EnsureAdmin() returned an unexpected error on attempt %d: %v", attempt, err)
 		}
@@ -97,11 +97,44 @@ func TestEnsureAdminCreatesTheAccountOnce(t *testing.T) {
 	if count != 1 {
 		t.Errorf("found %d rows for the admin identifier, want 1", count)
 	}
+	var contactEmail, contactPhone string
+	contacts := "SELECT contact_email, contact_phone FROM users WHERE identifier = $1"
+	if err := pool.QueryRow(ctx, contacts, "admin").Scan(&contactEmail, &contactPhone); err != nil {
+		t.Fatalf("could not read back the admin contact details: %v", err)
+	}
+	if contactEmail != "admin@sust.edu" || contactPhone != "01700000000" {
+		t.Errorf("admin contacts = %q and %q, want the ones from the first call", contactEmail, contactPhone)
+	}
+}
+
+func TestEnsureAdminFillsEmptyContactDetails(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	if _, err := store.EnsureAdmin(ctx, "admin", "stored-hash", "", ""); err != nil {
+		t.Fatalf("EnsureAdmin() returned an unexpected error: %v", err)
+	}
+	var email, phone *string
+	query := "SELECT contact_email, contact_phone FROM users WHERE identifier = $1"
+	if err := pool.QueryRow(ctx, query, "admin").Scan(&email, &phone); err != nil {
+		t.Fatalf("could not read back the admin contact details: %v", err)
+	}
+	if email != nil || phone != nil {
+		t.Error("the admin contact columns are set, want them empty")
+	}
+	if _, err := store.EnsureAdmin(ctx, "admin", "stored-hash", "admin@sust.edu", "01700000000"); err != nil {
+		t.Fatalf("EnsureAdmin() returned an unexpected error: %v", err)
+	}
+	var filledEmail, filledPhone string
+	if err := pool.QueryRow(ctx, query, "admin").Scan(&filledEmail, &filledPhone); err != nil {
+		t.Fatalf("could not read back the admin contact details: %v", err)
+	}
+	if filledEmail != "admin@sust.edu" || filledPhone != "01700000000" {
+		t.Errorf("admin contacts = %q and %q, want them filled from the config", filledEmail, filledPhone)
+	}
 }
 
 func TestEnsureAdminCreatesAnActiveAdmin(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	if _, err := store.EnsureAdmin(ctx, "admin", "stored-hash"); err != nil {
+	if _, err := store.EnsureAdmin(ctx, "admin", "stored-hash", "", ""); err != nil {
 		t.Fatalf("EnsureAdmin() returned an unexpected error: %v", err)
 	}
 	var id int64
@@ -142,7 +175,7 @@ func TestEnsureAdminValidatesItsInput(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			created, err := store.EnsureAdmin(ctx, tc.identifier, tc.hash)
+			created, err := store.EnsureAdmin(ctx, tc.identifier, tc.hash, "", "")
 			if !errors.Is(err, tc.wantErr) {
 				t.Errorf("EnsureAdmin() error = %v, want %v", err, tc.wantErr)
 			}

@@ -6,6 +6,17 @@ import LoginPage from './pages/auth/LoginPage'
 import AdminLoginPage from './pages/auth/AdminLoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import UpcomingRoutinePage from './pages/student/UpcomingRoutinePage'
+import DropCourseRoutinePage from './pages/student/DropCourseRoutinePage'
+import ExamsPage from './pages/student/ExamsPage'
+import FixedRoutinePage from './pages/student/FixedRoutinePage'
+import CRNoticesPage from './pages/student/CRNoticesPage'
+import AdminNoticesPage from './pages/student/AdminNoticesPage'
+import MaterialsPage from './pages/student/MaterialsPage'
+import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
+import PollsPage from './pages/student/PollsPage'
+import TeachersPage from './pages/student/TeachersPage'
+import MessagesPage from './pages/student/MessagesPage'
 import NotFoundPage from './pages/NotFoundPage'
 import Placeholder from './pages/Placeholder'
 import { useAuth } from './context/auth'
@@ -26,50 +37,24 @@ export default function Router() {
       <Route path={paths.register()} element={<RegisterPage />} />
       <Route path={paths.forgotPassword()} element={<ForgotPasswordPage />} />
       <Route path={paths.adminLogin()} element={<AdminLoginPage />} />
+      <Route path={paths.adminForgotPassword()} element={<ForgotPasswordPage admin />} />
       <Route element={<RequireRole roles="student" />}>
         <Route element={<AppLayout />}>
           <Route
             path={paths.student.home()}
             element={<Navigate to={paths.student.upcomingRoutine()} replace />}
           />
-          <Route
-            path={paths.student.upcomingRoutine()}
-            element={page('Upcoming Routine', 'Classes, exams and extra classes ahead')}
-          />
-          <Route
-            path={paths.student.dropCourseRoutine()}
-            element={page('Drop Course Routine', 'Your drop course in the other batches')}
-          />
-          <Route path={paths.student.exams()} element={page('Exams', 'Approved exams ahead')} />
-          <Route
-            path={paths.student.fixedRoutine()}
-            element={page('Fixed Routine', 'The weekly routine of this semester')}
-          />
-          <Route
-            path={paths.student.crNotices()}
-            element={page('CR Notices', 'Notices posted by the class representatives')}
-          />
-          <Route
-            path={paths.student.adminNotices()}
-            element={page('Admin Notices', 'Notices from the department administration')}
-          />
-          <Route
-            path={paths.student.materials()}
-            element={page('Materials', 'Shared links for your batch')}
-          />
-          <Route path={paths.student.students()} element={page('Students', 'The batch directory')} />
-          <Route
-            path={paths.student.polls()}
-            element={page('Polls', 'Open polls for your section')}
-          />
-          <Route
-            path={paths.student.teachers()}
-            element={page('Teachers', 'Contact details of the department teachers')}
-          />
-          <Route
-            path={paths.student.messages()}
-            element={page('Messages', 'Messages from teachers and class representatives')}
-          />
+          <Route path={paths.student.upcomingRoutine()} element={<UpcomingRoutinePage />} />
+          <Route path={paths.student.dropCourseRoutine()} element={<DropCourseRoutinePage />} />
+          <Route path={paths.student.exams()} element={<ExamsPage />} />
+          <Route path={paths.student.fixedRoutine()} element={<FixedRoutinePage />} />
+          <Route path={paths.student.crNotices()} element={<CRNoticesPage />} />
+          <Route path={paths.student.adminNotices()} element={<AdminNoticesPage />} />
+          <Route path={paths.student.materials()} element={<MaterialsPage />} />
+          <Route path={paths.student.students()} element={<StudentsDirectoryPage />} />
+          <Route path={paths.student.polls()} element={<PollsPage />} />
+          <Route path={paths.student.teachers()} element={<TeachersPage />} />
+          <Route path={paths.student.messages()} element={<MessagesPage />} />
         </Route>
       </Route>
       <Route element={<RequireRole roles="cr" />}>

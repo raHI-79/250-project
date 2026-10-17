@@ -16,6 +16,7 @@ const LOGIN_ENDPOINTS = [
   '/api/auth/admin/login',
   '/api/auth/register',
   '/api/auth/forgot-password',
+  '/api/auth/verify-reset-code',
   '/api/auth/reset-password',
 ]
 

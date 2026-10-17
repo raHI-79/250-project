@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"io"
@@ -48,24 +49,67 @@ type resetCall struct {
 	passwordHash string
 }
 
-type setResetCall struct {
+type startResetCall struct {
+	userID    int64
+	codeHash  string
+	expiresAt time.Time
+	sentAt    time.Time
+}
+
+type verifyCall struct {
 	userID    int64
 	tokenHash string
 	expiresAt time.Time
 }
 
+type sentMail struct {
+	to      string
+	subject string
+	body    string
+}
+
+type fakeMailer struct {
+	configured bool
+	err        error
+	sent       []sentMail
+}
+
+func (f *fakeMailer) Configured() bool {
+	return f.configured
+}
+
+func (f *fakeMailer) Send(ctx context.Context, to, subject, body string) error {
+	if !f.configured {
+		return mailer.ErrNotConfigured
+	}
+	if f.err != nil {
+		return f.err
+	}
+	f.sent = append(f.sent, sentMail{to: to, subject: subject, body: body})
+	return nil
+}
+
 type fakeAuthStore struct {
-	users         map[string]store.LoginUser
-	createErr     error
-	findErr       error
-	incrementErr  error
-	setResetErr   error
-	resetErr      error
-	created       []store.Registration
-	incremented   []int64
-	setResetCalls []setResetCall
-	resetCalls    []resetCall
-	nextUserID    int64
+	users           map[string]store.LoginUser
+	targets         map[string]store.ResetTarget
+	challenges      map[string]store.ResetChallenge
+	createErr       error
+	findErr         error
+	incrementErr    error
+	targetErr       error
+	challengeErr    error
+	startResetErr   error
+	attemptErr      error
+	verifyErr       error
+	resetErr        error
+	attempts        int
+	created         []store.Registration
+	incremented     []int64
+	startResetCalls []startResetCall
+	verifyCalls     []verifyCall
+	clearedUsers    []int64
+	resetCalls      []resetCall
+	nextUserID      int64
 }
 
 func (f *fakeAuthStore) CreateRegistration(ctx context.Context, registration store.Registration) (int64, error) {
@@ -96,15 +140,63 @@ func (f *fakeAuthStore) IncrementTokenVersion(ctx context.Context, userID int64)
 	return 1, nil
 }
 
-func (f *fakeAuthStore) SetResetToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
-	if f.setResetErr != nil {
-		return f.setResetErr
+func (f *fakeAuthStore) FindResetTarget(ctx context.Context, identifier string) (store.ResetTarget, error) {
+	if f.targetErr != nil {
+		return store.ResetTarget{}, f.targetErr
 	}
-	f.setResetCalls = append(f.setResetCalls, setResetCall{userID: userID, tokenHash: tokenHash, expiresAt: expiresAt})
+	target, ok := f.targets[identifier]
+	if !ok {
+		return store.ResetTarget{}, store.ErrNotFound
+	}
+	return target, nil
+}
+
+func (f *fakeAuthStore) FindResetChallenge(ctx context.Context, identifier string) (store.ResetChallenge, error) {
+	if f.challengeErr != nil {
+		return store.ResetChallenge{}, f.challengeErr
+	}
+	challenge, ok := f.challenges[identifier]
+	if !ok {
+		return store.ResetChallenge{}, store.ErrNotFound
+	}
+	return challenge, nil
+}
+
+func (f *fakeAuthStore) StartPasswordReset(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error {
+	if f.startResetErr != nil {
+		return f.startResetErr
+	}
+	f.startResetCalls = append(f.startResetCalls, startResetCall{
+		userID:    userID,
+		codeHash:  codeHash,
+		expiresAt: expiresAt,
+		sentAt:    sentAt,
+	})
 	return nil
 }
 
-func (f *fakeAuthStore) ResetPassword(ctx context.Context, identifier, tokenHash, passwordHash string) error {
+func (f *fakeAuthStore) CountResetAttempt(ctx context.Context, userID int64) (int, error) {
+	if f.attemptErr != nil {
+		return 0, f.attemptErr
+	}
+	f.attempts++
+	return f.attempts, nil
+}
+
+func (f *fakeAuthStore) ClearPasswordReset(ctx context.Context, userID int64) error {
+	f.clearedUsers = append(f.clearedUsers, userID)
+	return nil
+}
+
+func (f *fakeAuthStore) VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+	if f.verifyErr != nil {
+		return f.verifyErr
+	}
+	f.verifyCalls = append(f.verifyCalls, verifyCall{userID: userID, tokenHash: tokenHash, expiresAt: expiresAt})
+	return nil
+}
+
+func (f *fakeAuthStore) FinishPasswordReset(ctx context.Context, identifier, tokenHash, passwordHash string) error {
 	if f.resetErr != nil {
 		return f.resetErr
 	}
@@ -178,7 +270,53 @@ func newAuthStore(t *testing.T) *fakeAuthStore {
 			AuthUser:     store.AuthUser{ID: 8, Identifier: "removed-admin", Role: "admin", Status: store.StatusRemoved},
 			PasswordHash: cachedHash(t, adminPassword),
 		},
-	}}
+	},
+		targets: map[string]store.ResetTarget{
+			"2023331001": {
+				AuthUser: store.AuthUser{ID: 1, Identifier: "2023331001", Role: "student", Status: store.StatusActive},
+				Email:    "nayeem@student.sust.edu",
+				Phone:    "01712345678",
+			},
+			"2023331003": {
+				AuthUser: store.AuthUser{ID: 3, Identifier: "2023331003", Role: "student", Status: store.StatusPending},
+				Email:    "pending@student.sust.edu",
+				Phone:    "01712345679",
+			},
+			"T-001": {
+				AuthUser: store.AuthUser{ID: 6, Identifier: "T-001", Role: "teacher", Status: store.StatusActive},
+				Email:    "teacher@sust.edu",
+				Phone:    "01812345678",
+			},
+			"admin": {
+				AuthUser: store.AuthUser{ID: 7, Identifier: "admin", Role: "admin", Status: store.StatusActive},
+				Email:    "admin@sust.edu",
+				Phone:    "01912345678",
+			},
+		},
+		challenges: map[string]store.ResetChallenge{},
+	}
+}
+
+func newAuthHandlerWithMailer(t *testing.T, users AuthStore, mail mailer.Sender, appEnv string) *Auth {
+	t.Helper()
+	loc, err := time.LoadLocation("Asia/Dhaka")
+	if err != nil {
+		t.Fatalf("could not load timezone: %v", err)
+	}
+	cfg := &config.Config{AppEnv: appEnv, Timezone: "Asia/Dhaka", Location: loc}
+	return NewAuth(cfg, users, &fakeIssuer{token: issuedToken}, mail)
+}
+
+func planCodeChallenge(users *fakeAuthStore, identifier string, userID int64, code string, stage string, expiresIn time.Duration, attempts int) {
+	expiresAt := time.Now().Add(expiresIn)
+	users.challenges[identifier] = store.ResetChallenge{
+		UserID:    userID,
+		Status:    store.StatusActive,
+		TokenHash: hashResetSecret(code),
+		Stage:     stage,
+		Attempts:  attempts,
+		ExpiresAt: &expiresAt,
+	}
 }
 
 func newAuthHandler(t *testing.T, users AuthStore, tokens TokenIssuer) *Auth {
@@ -188,7 +326,7 @@ func newAuthHandler(t *testing.T, users AuthStore, tokens TokenIssuer) *Auth {
 		t.Fatalf("could not load timezone: %v", err)
 	}
 	cfg := &config.Config{AppEnv: "test", Timezone: "Asia/Dhaka", Location: loc}
-	return NewAuth(cfg, users, tokens)
+	return NewAuth(cfg, users, tokens, &fakeMailer{})
 }
 
 func silenceLog(t *testing.T) {
@@ -784,35 +922,71 @@ func TestLogout(t *testing.T) {
 func TestForgotPassword(t *testing.T) {
 	silenceLog(t)
 	tests := []struct {
-		name        string
-		body        string
-		setResetErr error
-		findErr     error
-		wantStatus  int
-		wantError   string
+		name          string
+		body          string
+		startResetErr error
+		targetErr     error
+		sentAgo       time.Duration
+		wantStatus    int
+		wantError     string
+		wantHint      string
+		wantUserID    int64
 	}{
-		{name: "active student", body: `{"identifier":"2023331001"}`, wantStatus: http.StatusOK},
+		{
+			name:       "active student",
+			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			wantStatus: http.StatusOK,
+			wantHint:   "n***@student.sust.edu",
+			wantUserID: 1,
+		},
+		{
+			name:       "phone written with the country code",
+			body:       `{"identifier":"2023331001","phone":"+8801712345678"}`,
+			wantStatus: http.StatusOK,
+			wantHint:   "n***@student.sust.edu",
+			wantUserID: 1,
+		},
+		{
+			name:       "teacher",
+			body:       `{"identifier":"T-001","phone":"01812345678"}`,
+			wantStatus: http.StatusOK,
+			wantHint:   "t***@sust.edu",
+			wantUserID: 6,
+		},
+		{
+			name:       "admin",
+			body:       `{"identifier":"admin","phone":"01912345678"}`,
+			wantStatus: http.StatusOK,
+			wantHint:   "a***@sust.edu",
+			wantUserID: 7,
+		},
+		{
+			name:       "phone does not match",
+			body:       `{"identifier":"2023331001","phone":"01799999999"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageResetMismatch,
+		},
 		{
 			name:       "unknown identifier",
-			body:       `{"identifier":"2023339999"}`,
-			wantStatus: http.StatusNotFound,
-			wantError:  MessageNoActiveAccount,
+			body:       `{"identifier":"2023339999","phone":"01712345678"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageResetMismatch,
 		},
 		{
 			name:       "pending account",
-			body:       `{"identifier":"2023331003"}`,
-			wantStatus: http.StatusNotFound,
-			wantError:  MessageNoActiveAccount,
+			body:       `{"identifier":"2023331003","phone":"01712345679"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageResetMismatch,
 		},
 		{
-			name:       "removed account",
-			body:       `{"identifier":"2023331005"}`,
-			wantStatus: http.StatusNotFound,
-			wantError:  MessageNoActiveAccount,
+			name:       "missing phone",
+			body:       `{"identifier":"2023331001","phone":"  "}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Phone number is required.",
 		},
 		{
 			name:       "missing identifier",
-			body:       `{"identifier":"  "}`,
+			body:       `{"identifier":"  ","phone":"01712345678"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "ID is required.",
 		},
@@ -823,16 +997,31 @@ func TestForgotPassword(t *testing.T) {
 			wantError:  "Invalid request body",
 		},
 		{
-			name:        "account became inactive between the two queries",
-			body:        `{"identifier":"2023331001"}`,
-			setResetErr: store.ErrNotFound,
-			wantStatus:  http.StatusNotFound,
-			wantError:   MessageNoActiveAccount,
+			name:       "inside the resend cooldown",
+			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			sentAgo:    20 * time.Second,
+			wantStatus: http.StatusTooManyRequests,
+			wantError:  MessageResetCooldown,
+		},
+		{
+			name:       "after the resend cooldown",
+			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			sentAgo:    90 * time.Second,
+			wantStatus: http.StatusOK,
+			wantHint:   "n***@student.sust.edu",
+			wantUserID: 1,
+		},
+		{
+			name:          "account became inactive between the two queries",
+			body:          `{"identifier":"2023331001","phone":"01712345678"}`,
+			startResetErr: store.ErrNotFound,
+			wantStatus:    http.StatusBadRequest,
+			wantError:     MessageResetMismatch,
 		},
 		{
 			name:       "database failure",
-			body:       `{"identifier":"2023331001"}`,
-			findErr:    errors.New("connection refused"),
+			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			targetErr:  errors.New("connection refused"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  middleware.MessageServerError,
 		},
@@ -840,8 +1029,14 @@ func TestForgotPassword(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			users := newAuthStore(t)
-			users.setResetErr = tc.setResetErr
-			users.findErr = tc.findErr
+			users.startResetErr = tc.startResetErr
+			users.targetErr = tc.targetErr
+			if tc.sentAgo != 0 {
+				sentAt := time.Now().Add(-tc.sentAgo)
+				target := users.targets["2023331001"]
+				target.ResetSentAt = &sentAt
+				users.targets["2023331001"] = target
+			}
 			handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
 			before := time.Now()
 			rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password", tc.body)
@@ -858,8 +1053,275 @@ func TestForgotPassword(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("body is not valid JSON: %v", err)
 			}
-			if body.Message != MessageResetTokenIssued {
-				t.Errorf("message = %q, want %q", body.Message, MessageResetTokenIssued)
+			if body.Message != MessageResetCodeSent {
+				t.Errorf("message = %q, want %q", body.Message, MessageResetCodeSent)
+			}
+			if body.EmailHint != tc.wantHint {
+				t.Errorf("email hint = %q, want %q", body.EmailHint, tc.wantHint)
+			}
+			if !isResetCode(body.DevCode) {
+				t.Errorf("dev code = %q, want 6 digits while no mailer is configured", body.DevCode)
+			}
+			expiresAt, err := time.Parse(time.RFC3339, body.ExpiresAt)
+			if err != nil {
+				t.Fatalf("expires_at %q is not RFC3339: %v", body.ExpiresAt, err)
+			}
+			lifetime := expiresAt.Sub(before)
+			if lifetime < 9*time.Minute || lifetime > 11*time.Minute {
+				t.Errorf("the code expires in %v, want about 10 minutes", lifetime)
+			}
+			if _, offset := expiresAt.Zone(); offset != int((6 * time.Hour).Seconds()) {
+				t.Errorf("expires_at offset = %d seconds, want the Asia/Dhaka offset", offset)
+			}
+			if len(users.startResetCalls) != 1 {
+				t.Fatalf("the store received %d reset codes, want 1", len(users.startResetCalls))
+			}
+			call := users.startResetCalls[0]
+			if call.userID != tc.wantUserID {
+				t.Errorf("the code was stored for user %d, want %d", call.userID, tc.wantUserID)
+			}
+			if call.codeHash == body.DevCode {
+				t.Error("the raw code was stored, want only its hash")
+			}
+			if call.codeHash != hashResetSecret(body.DevCode) {
+				t.Error("the stored value is not the SHA-256 hash of the issued code")
+			}
+			if call.sentAt.IsZero() {
+				t.Error("the store did not receive a sent_at timestamp for the cooldown")
+			}
+		})
+	}
+}
+
+func TestForgotPasswordIssuesADifferentCodeEveryTime(t *testing.T) {
+	silenceLog(t)
+	users := newAuthStore(t)
+	handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
+	seen := make(map[string]bool)
+	for i := 0; i < 5; i++ {
+		rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password",
+			`{"identifier":"2023331001","phone":"01712345678"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+		}
+		var body forgotPasswordResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("body is not valid JSON: %v", err)
+		}
+		seen[body.DevCode] = true
+	}
+	if len(seen) < 2 {
+		t.Error("the same reset code was issued every time, want random codes")
+	}
+}
+
+func TestForgotPasswordDevCodeAndMail(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name        string
+		appEnv      string
+		configured  bool
+		wantDevCode bool
+		wantMail    bool
+	}{
+		{name: "development without a mailer", appEnv: "development", configured: false, wantDevCode: true},
+		{name: "production without a mailer", appEnv: "production", configured: false},
+		{name: "development with a mailer", appEnv: "development", configured: true, wantMail: true},
+		{name: "production with a mailer", appEnv: "production", configured: true, wantMail: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			users := newAuthStore(t)
+			mail := &fakeMailer{configured: tc.configured}
+			handler := newAuthHandlerWithMailer(t, users, mail, tc.appEnv)
+			rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password",
+				`{"identifier":"2023331001","phone":"01712345678"}`)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+			}
+			var body forgotPasswordResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("body is not valid JSON: %v", err)
+			}
+			if tc.wantDevCode && !isResetCode(body.DevCode) {
+				t.Errorf("dev code = %q, want 6 digits", body.DevCode)
+			}
+			if !tc.wantDevCode && body.DevCode != "" {
+				t.Errorf("dev code = %q, want it left out", body.DevCode)
+			}
+			if !tc.wantMail {
+				if len(mail.sent) != 0 {
+					t.Errorf("the mailer sent %d messages, want none", len(mail.sent))
+				}
+				return
+			}
+			if len(mail.sent) != 1 {
+				t.Fatalf("the mailer sent %d messages, want 1", len(mail.sent))
+			}
+			sent := mail.sent[0]
+			if sent.to != "nayeem@student.sust.edu" {
+				t.Errorf("recipient = %q, want the registered email", sent.to)
+			}
+			if sent.subject != ResetEmailSubject {
+				t.Errorf("subject = %q, want %q", sent.subject, ResetEmailSubject)
+			}
+			if !strings.HasPrefix(sent.body, "Your password reset code is ") ||
+				!strings.HasSuffix(sent.body, ". It expires in 10 minutes.") {
+				t.Errorf("body = %q, want the reset code sentence", sent.body)
+			}
+			if len(users.startResetCalls) != 1 {
+				t.Fatalf("the store received %d reset codes, want 1", len(users.startResetCalls))
+			}
+		})
+	}
+}
+
+func TestForgotPasswordClearsTheCodeWhenTheMailFails(t *testing.T) {
+	silenceLog(t)
+	users := newAuthStore(t)
+	mail := &fakeMailer{configured: true, err: errors.New("mailbox unavailable")}
+	handler := newAuthHandlerWithMailer(t, users, mail, "production")
+	rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password",
+		`{"identifier":"2023331001","phone":"01712345678"}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if got := errorMessage(t, rec); got != middleware.MessageServerError {
+		t.Errorf("error = %q, want %q", got, middleware.MessageServerError)
+	}
+	if len(users.clearedUsers) != 1 || users.clearedUsers[0] != 1 {
+		t.Errorf("cleared users = %v, want the reset fields of user 1 cleared", users.clearedUsers)
+	}
+}
+
+func TestVerifyResetCode(t *testing.T) {
+	silenceLog(t)
+	const code = "123456"
+	tests := []struct {
+		name         string
+		body         string
+		stage        string
+		expiresIn    time.Duration
+		attempts     int
+		noChallenge  bool
+		challengeErr error
+		verifyErr    error
+		wantStatus   int
+		wantError    string
+	}{
+		{name: "right code", body: `{"identifier":"2023331001","code":"123456"}`, wantStatus: http.StatusOK},
+		{
+			name:       "wrong code",
+			body:       `{"identifier":"2023331001","code":"999999"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageInvalidResetCode,
+		},
+		{
+			name:       "fifth wrong code",
+			body:       `{"identifier":"2023331001","code":"999999"}`,
+			attempts:   4,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageTooManyResetCodes,
+		},
+		{
+			name:       "expired code",
+			body:       `{"identifier":"2023331001","code":"123456"}`,
+			expiresIn:  -time.Minute,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageInvalidResetCode,
+		},
+		{
+			name:       "already verified stage",
+			body:       `{"identifier":"2023331001","code":"123456"}`,
+			stage:      store.ResetStageVerified,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageInvalidResetCode,
+		},
+		{
+			name:        "no reset in progress",
+			body:        `{"identifier":"2023331001","code":"123456"}`,
+			noChallenge: true,
+			wantStatus:  http.StatusBadRequest,
+			wantError:   MessageInvalidResetCode,
+		},
+		{
+			name:       "code is not six digits",
+			body:       `{"identifier":"2023331001","code":"12345"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageInvalidResetCode,
+		},
+		{
+			name:       "code is not numeric",
+			body:       `{"identifier":"2023331001","code":"12345a"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageInvalidResetCode,
+		},
+		{
+			name:       "missing identifier",
+			body:       `{"identifier":"  ","code":"123456"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "ID is required.",
+		},
+		{
+			name:       "invalid body",
+			body:       `{"identifier":}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Invalid request body",
+		},
+		{
+			name:       "the reset moved on between the two queries",
+			body:       `{"identifier":"2023331001","code":"123456"}`,
+			verifyErr:  store.ErrInvalidResetToken,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageInvalidResetCode,
+		},
+		{
+			name:         "database failure",
+			body:         `{"identifier":"2023331001","code":"123456"}`,
+			challengeErr: errors.New("connection refused"),
+			wantStatus:   http.StatusInternalServerError,
+			wantError:    middleware.MessageServerError,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			users := newAuthStore(t)
+			users.challengeErr = tc.challengeErr
+			users.verifyErr = tc.verifyErr
+			users.attempts = tc.attempts
+			if !tc.noChallenge {
+				stage := tc.stage
+				if stage == "" {
+					stage = store.ResetStageCode
+				}
+				expiresIn := tc.expiresIn
+				if expiresIn == 0 {
+					expiresIn = 10 * time.Minute
+				}
+				planCodeChallenge(users, "2023331001", 1, code, stage, expiresIn, tc.attempts)
+			}
+			handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
+			before := time.Now()
+			rec := post(t, handler.VerifyResetCode(), "/api/auth/verify-reset-code", tc.body)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+			if tc.wantStatus != http.StatusOK {
+				if got := errorMessage(t, rec); got != tc.wantError {
+					t.Errorf("error = %q, want %q", got, tc.wantError)
+				}
+				if tc.wantError == MessageTooManyResetCodes {
+					if len(users.clearedUsers) != 1 || users.clearedUsers[0] != 1 {
+						t.Errorf("cleared users = %v, want the reset fields of user 1 cleared", users.clearedUsers)
+					}
+				} else if len(users.clearedUsers) != 0 {
+					t.Errorf("cleared users = %v, want none", users.clearedUsers)
+				}
+				return
+			}
+			var body verifyResetCodeResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("body is not valid JSON: %v", err)
 			}
 			if len(body.ResetToken) != resetTokenBytes*2 {
 				t.Errorf("reset token has %d characters, want %d", len(body.ResetToken), resetTokenBytes*2)
@@ -867,52 +1329,48 @@ func TestForgotPassword(t *testing.T) {
 			if _, err := hex.DecodeString(body.ResetToken); err != nil {
 				t.Errorf("reset token is not hexadecimal: %v", err)
 			}
-			expiresAt, err := time.Parse(time.RFC3339, body.ExpiresAt)
-			if err != nil {
-				t.Fatalf("expires_at %q is not RFC3339: %v", body.ExpiresAt, err)
+			if len(users.verifyCalls) != 1 {
+				t.Fatalf("the store received %d verified tokens, want 1", len(users.verifyCalls))
 			}
-			lifetime := expiresAt.Sub(before)
-			if lifetime < 14*time.Minute || lifetime > 16*time.Minute {
-				t.Errorf("the token expires in %v, want about 15 minutes", lifetime)
-			}
-			if _, offset := expiresAt.Zone(); offset != int((6 * time.Hour).Seconds()) {
-				t.Errorf("expires_at offset = %d seconds, want the Asia/Dhaka offset", offset)
-			}
-			if len(users.setResetCalls) != 1 {
-				t.Fatalf("the store received %d reset tokens, want 1", len(users.setResetCalls))
-			}
-			call := users.setResetCalls[0]
+			call := users.verifyCalls[0]
 			if call.userID != 1 {
-				t.Errorf("the reset token was stored for user %d, want 1", call.userID)
+				t.Errorf("the token was stored for user %d, want 1", call.userID)
 			}
 			if call.tokenHash == body.ResetToken {
 				t.Error("the raw reset token was stored, want only its hash")
 			}
-			if call.tokenHash != hashResetToken(body.ResetToken) {
+			if call.tokenHash != hashResetSecret(body.ResetToken) {
 				t.Error("the stored value is not the SHA-256 hash of the issued token")
+			}
+			lifetime := call.expiresAt.Sub(before)
+			if lifetime < 9*time.Minute || lifetime > 11*time.Minute {
+				t.Errorf("the token expires in %v, want about 10 minutes", lifetime)
 			}
 		})
 	}
 }
 
-func TestForgotPasswordIssuesADifferentTokenEveryTime(t *testing.T) {
+func TestVerifyResetCodeCountsEveryWrongCode(t *testing.T) {
 	silenceLog(t)
 	users := newAuthStore(t)
+	planCodeChallenge(users, "2023331001", 1, "123456", store.ResetStageCode, 10*time.Minute, 0)
 	handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
-	seen := make(map[string]bool)
-	for i := 0; i < 5; i++ {
-		rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password", `{"identifier":"2023331001"}`)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200", rec.Code)
+	for attempt := 1; attempt <= maxResetAttempts; attempt++ {
+		rec := post(t, handler.VerifyResetCode(), "/api/auth/verify-reset-code",
+			`{"identifier":"2023331001","code":"999999"}`)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("attempt %d status = %d, want 400", attempt, rec.Code)
 		}
-		var body forgotPasswordResponse
-		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-			t.Fatalf("body is not valid JSON: %v", err)
+		want := MessageInvalidResetCode
+		if attempt == maxResetAttempts {
+			want = MessageTooManyResetCodes
 		}
-		if seen[body.ResetToken] {
-			t.Fatal("the same reset token was issued twice")
+		if got := errorMessage(t, rec); got != want {
+			t.Errorf("attempt %d error = %q, want %q", attempt, got, want)
 		}
-		seen[body.ResetToken] = true
+	}
+	if len(users.clearedUsers) != 1 {
+		t.Errorf("the reset fields were cleared %d times, want once", len(users.clearedUsers))
 	}
 }
 
@@ -927,64 +1385,64 @@ func TestResetPassword(t *testing.T) {
 		wantError  string
 	}{
 		{
-			name:       "valid token",
-			body:       `{"identifier":"2023331001","token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
+			name:       "verified token",
+			body:       `{"identifier":"2023331001","reset_token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "wrong token",
-			body:       `{"identifier":"2023331001","token":"wrong-token","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
+			body:       `{"identifier":"2023331001","reset_token":"wrong-token","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
 			resetErr:   store.ErrInvalidResetToken,
 			wantStatus: http.StatusBadRequest,
 			wantError:  MessageInvalidResetToken,
 		},
 		{
-			name:       "expired token",
-			body:       `{"identifier":"2023331001","token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
+			name:       "token still at the code stage",
+			body:       `{"identifier":"2023331001","reset_token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
 			resetErr:   store.ErrInvalidResetToken,
 			wantStatus: http.StatusBadRequest,
 			wantError:  MessageInvalidResetToken,
 		},
 		{
 			name:       "unknown identifier",
-			body:       `{"identifier":"2023339999","token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
+			body:       `{"identifier":"2023339999","reset_token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
 			resetErr:   store.ErrNotFound,
 			wantStatus: http.StatusBadRequest,
 			wantError:  MessageInvalidResetToken,
 		},
 		{
 			name:       "missing token",
-			body:       `{"identifier":"2023331001","token":"","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
+			body:       `{"identifier":"2023331001","reset_token":"","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "Reset token is required.",
 		},
 		{
 			name:       "missing identifier",
-			body:       `{"identifier":"","token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
+			body:       `{"identifier":"","reset_token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "ID is required.",
 		},
 		{
 			name:       "short new password",
-			body:       `{"identifier":"2023331001","token":"` + token + `","new_password":"short","confirm_password":"short"}`,
+			body:       `{"identifier":"2023331001","reset_token":"` + token + `","new_password":"short","confirm_password":"short"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "New password must be at least 8 characters long.",
 		},
 		{
 			name:       "confirmation does not match",
-			body:       `{"identifier":"2023331001","token":"` + token + `","new_password":"brand-new-pass","confirm_password":"other-pass"}`,
+			body:       `{"identifier":"2023331001","reset_token":"` + token + `","new_password":"brand-new-pass","confirm_password":"other-pass"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "New password and the confirmation do not match.",
 		},
 		{
 			name:       "invalid body",
-			body:       `{"identifier":"x","token":"y","new_password":"z","confirm_password":"z","extra":1}`,
+			body:       `{"identifier":"x","reset_token":"y","new_password":"z","confirm_password":"z","extra":1}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "Invalid request body",
 		},
 		{
 			name:       "database failure",
-			body:       `{"identifier":"2023331001","token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
+			body:       `{"identifier":"2023331001","reset_token":"` + token + `","new_password":"brand-new-pass","confirm_password":"brand-new-pass"}`,
 			resetErr:   errors.New("connection refused"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  middleware.MessageServerError,
@@ -1015,7 +1473,7 @@ func TestResetPassword(t *testing.T) {
 			if call.identifier != "2023331001" {
 				t.Errorf("identifier = %q, want %q", call.identifier, "2023331001")
 			}
-			if call.tokenHash != hashResetToken(token) {
+			if call.tokenHash != hashResetSecret(token) {
 				t.Error("the store did not receive the SHA-256 hash of the submitted token")
 			}
 			if call.tokenHash == token {
@@ -1023,6 +1481,27 @@ func TestResetPassword(t *testing.T) {
 			}
 			if err := auth.CheckPassword(call.passwordHash, "brand-new-pass"); err != nil {
 				t.Errorf("the stored hash does not verify against the new password: %v", err)
+			}
+		})
+	}
+}
+
+func TestEmailHint(t *testing.T) {
+	tests := []struct {
+		name  string
+		email string
+		want  string
+	}{
+		{name: "student address", email: "nayeem@student.sust.edu", want: "n***@student.sust.edu"},
+		{name: "single letter local part", email: "a@sust.edu", want: "a***@sust.edu"},
+		{name: "no at sign", email: "nayeem", want: ""},
+		{name: "empty", email: "", want: ""},
+		{name: "leading at sign", email: "@sust.edu", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := emailHint(tc.email); got != tc.want {
+				t.Errorf("emailHint(%q) = %q, want %q", tc.email, got, tc.want)
 			}
 		})
 	}

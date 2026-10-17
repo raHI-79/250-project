@@ -11,6 +11,11 @@ import (
 
 const uniqueViolationCode = "23505"
 
+const (
+	ResetStageCode     = "code"
+	ResetStageVerified = "verified"
+)
+
 var (
 	ErrDuplicateAccount  = errors.New("store: an account with this registration number or email already exists")
 	ErrInvalidResetToken = errors.New("store: the reset token is missing, wrong or expired")
@@ -37,6 +42,22 @@ type LoginUser struct {
 	Section      string
 }
 
+type ResetTarget struct {
+	AuthUser
+	Email       string
+	Phone       string
+	ResetSentAt *time.Time
+}
+
+type ResetChallenge struct {
+	UserID    int64
+	Status    string
+	TokenHash string
+	Stage     string
+	Attempts  int
+	ExpiresAt *time.Time
+}
+
 const (
 	insertUserSQL = `INSERT INTO users (role, identifier, password_hash, status)
 VALUES ('student', $1, $2, 'pending')
@@ -57,19 +78,61 @@ WHERE u.identifier = $1`
 SET token_version = token_version + 1, updated_at = now()
 WHERE id = $1
 RETURNING token_version`
-	setResetTokenSQL = `UPDATE users
-SET reset_token = $2, reset_token_expires_at = $3, updated_at = now()
+	findResetTargetSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version,
+COALESCE(s.is_cr, FALSE),
+COALESCE(s.email, t.email, u.contact_email, ''),
+COALESCE(s.phone, t.phone, u.contact_phone, ''),
+u.reset_sent_at
+FROM users u
+LEFT JOIN students s ON s.user_id = u.id
+LEFT JOIN teachers t ON t.user_id = u.id
+WHERE u.identifier = $1`
+	findResetChallengeSQL = `SELECT id, status, COALESCE(reset_token, ''), COALESCE(reset_stage, ''), reset_attempts, reset_token_expires_at
+FROM users
+WHERE identifier = $1`
+	startPasswordResetSQL = `UPDATE users
+SET reset_token = $2,
+    reset_token_expires_at = $3,
+    reset_stage = 'code',
+    reset_attempts = 0,
+    reset_sent_at = $4,
+    updated_at = now()
 WHERE id = $1 AND status = 'active'
 RETURNING id`
-	resetPasswordSQL = `UPDATE users
+	countResetAttemptSQL = `UPDATE users
+SET reset_attempts = reset_attempts + 1, updated_at = now()
+WHERE id = $1
+RETURNING reset_attempts`
+	clearPasswordResetSQL = `UPDATE users
+SET reset_token = NULL,
+    reset_token_expires_at = NULL,
+    reset_stage = NULL,
+    reset_attempts = 0,
+    reset_sent_at = NULL,
+    updated_at = now()
+WHERE id = $1
+RETURNING id`
+	verifyResetCodeSQL = `UPDATE users
+SET reset_token = $2,
+    reset_token_expires_at = $3,
+    reset_stage = 'verified',
+    reset_attempts = 0,
+    updated_at = now()
+WHERE id = $1 AND status = 'active' AND reset_stage = 'code'
+RETURNING id`
+	finishPasswordResetSQL = `UPDATE users
 SET password_hash = $3,
     reset_token = NULL,
     reset_token_expires_at = NULL,
+    reset_stage = NULL,
+    reset_attempts = 0,
+    reset_sent_at = NULL,
     token_version = token_version + 1,
     updated_at = now()
 WHERE identifier = $1
   AND status = 'active'
   AND reset_token = $2
+  AND reset_stage = 'verified'
   AND reset_token_expires_at > now()
 RETURNING id`
 )
@@ -151,21 +214,98 @@ func (s *Store) IncrementTokenVersion(ctx context.Context, userID int64) (int, e
 	return tokenVersion, nil
 }
 
-func (s *Store) SetResetToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+func (s *Store) FindResetTarget(ctx context.Context, identifier string) (ResetTarget, error) {
+	var target ResetTarget
+	err := s.pool.QueryRow(ctx, findResetTargetSQL, identifier).Scan(
+		&target.ID,
+		&target.Identifier,
+		&target.Role,
+		&target.Status,
+		&target.TokenVersion,
+		&target.IsCR,
+		&target.Email,
+		&target.Phone,
+		&target.ResetSentAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResetTarget{}, ErrNotFound
+	}
+	if err != nil {
+		return ResetTarget{}, fmt.Errorf("store: could not load the password reset target: %w", err)
+	}
+	return target, nil
+}
+
+func (s *Store) FindResetChallenge(ctx context.Context, identifier string) (ResetChallenge, error) {
+	var challenge ResetChallenge
+	err := s.pool.QueryRow(ctx, findResetChallengeSQL, identifier).Scan(
+		&challenge.UserID,
+		&challenge.Status,
+		&challenge.TokenHash,
+		&challenge.Stage,
+		&challenge.Attempts,
+		&challenge.ExpiresAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResetChallenge{}, ErrNotFound
+	}
+	if err != nil {
+		return ResetChallenge{}, fmt.Errorf("store: could not load the password reset challenge: %w", err)
+	}
+	return challenge, nil
+}
+
+func (s *Store) StartPasswordReset(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error {
 	var id int64
-	err := s.pool.QueryRow(ctx, setResetTokenSQL, userID, tokenHash, expiresAt).Scan(&id)
+	err := s.pool.QueryRow(ctx, startPasswordResetSQL, userID, codeHash, expiresAt, sentAt).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("store: could not store the reset token: %w", err)
+		return fmt.Errorf("store: could not store the password reset code: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) ResetPassword(ctx context.Context, identifier, tokenHash, passwordHash string) error {
+func (s *Store) CountResetAttempt(ctx context.Context, userID int64) (int, error) {
+	var attempts int
+	err := s.pool.QueryRow(ctx, countResetAttemptSQL, userID).Scan(&attempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("store: could not count the password reset attempt: %w", err)
+	}
+	return attempts, nil
+}
+
+func (s *Store) ClearPasswordReset(ctx context.Context, userID int64) error {
 	var id int64
-	err := s.pool.QueryRow(ctx, resetPasswordSQL, identifier, tokenHash, passwordHash).Scan(&id)
+	err := s.pool.QueryRow(ctx, clearPasswordResetSQL, userID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not clear the password reset fields: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, verifyResetCodeSQL, userID, tokenHash, expiresAt).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInvalidResetToken
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not store the verified password reset token: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) FinishPasswordReset(ctx context.Context, identifier, tokenHash, passwordHash string) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, finishPasswordResetSQL, identifier, tokenHash, passwordHash).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInvalidResetToken
 	}

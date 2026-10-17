@@ -290,26 +290,38 @@ func TestIncrementTokenVersion(t *testing.T) {
 	}
 }
 
-func TestSetResetToken(t *testing.T) {
+func TestStartPasswordReset(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	activeID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
 	pendingID := insertUser(t, ctx, pool, "student", "2023331002", StatusPending, 0)
 	removedID := insertUser(t, ctx, pool, "student", "2023331003", StatusRemoved, 0)
-	expiresAt := time.Now().Add(15 * time.Minute)
-	if err := store.SetResetToken(ctx, activeID, "token-hash", expiresAt); err != nil {
-		t.Fatalf("SetResetToken() returned an unexpected error: %v", err)
+	sentAt := time.Now()
+	expiresAt := sentAt.Add(10 * time.Minute)
+	if err := store.StartPasswordReset(ctx, activeID, "code-hash", expiresAt, sentAt); err != nil {
+		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
 	}
-	var storedHash string
-	var storedExpiry time.Time
-	query := "SELECT reset_token, reset_token_expires_at FROM users WHERE id = $1"
-	if err := pool.QueryRow(ctx, query, activeID).Scan(&storedHash, &storedExpiry); err != nil {
-		t.Fatalf("could not read back the reset token: %v", err)
+	var storedHash, storedStage string
+	var storedExpiry, storedSentAt time.Time
+	var attempts int
+	query := `SELECT reset_token, reset_stage, reset_token_expires_at, reset_sent_at, reset_attempts
+FROM users WHERE id = $1`
+	if err := pool.QueryRow(ctx, query, activeID).Scan(&storedHash, &storedStage, &storedExpiry, &storedSentAt, &attempts); err != nil {
+		t.Fatalf("could not read back the reset fields: %v", err)
 	}
-	if storedHash != "token-hash" {
-		t.Errorf("stored reset token = %q, want %q", storedHash, "token-hash")
+	if storedHash != "code-hash" {
+		t.Errorf("stored code hash = %q, want %q", storedHash, "code-hash")
+	}
+	if storedStage != ResetStageCode {
+		t.Errorf("stored stage = %q, want %q", storedStage, ResetStageCode)
+	}
+	if attempts != 0 {
+		t.Errorf("stored attempts = %d, want 0", attempts)
 	}
 	if storedExpiry.Sub(expiresAt).Abs() > time.Second {
 		t.Errorf("stored expiry = %v, want about %v", storedExpiry, expiresAt)
+	}
+	if storedSentAt.Sub(sentAt).Abs() > time.Second {
+		t.Errorf("stored sent_at = %v, want about %v", storedSentAt, sentAt)
 	}
 	tests := []struct {
 		name   string
@@ -321,55 +333,194 @@ func TestSetResetToken(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := store.SetResetToken(ctx, tc.userID, "token-hash-2", expiresAt); !errors.Is(err, ErrNotFound) {
-				t.Errorf("SetResetToken() error = %v, want ErrNotFound", err)
+			err := store.StartPasswordReset(ctx, tc.userID, "code-hash-2", expiresAt, sentAt)
+			if !errors.Is(err, ErrNotFound) {
+				t.Errorf("StartPasswordReset() error = %v, want ErrNotFound", err)
 			}
 		})
 	}
 }
 
-func TestResetPassword(t *testing.T) {
+func TestFindResetTarget(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	studentID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
+	insertStudent(t, ctx, pool, studentID, "2023331001", false)
+	teacherID := insertUser(t, ctx, pool, "teacher", "T-001", StatusActive, 0)
+	insertTeacher(t, ctx, pool, teacherID, "T-001")
+	if _, err := store.EnsureAdmin(ctx, "admin", "stored-hash", "admin@sust.edu", "+8801999999999"); err != nil {
+		t.Fatalf("EnsureAdmin() returned an unexpected error: %v", err)
+	}
+	tests := []struct {
+		name       string
+		identifier string
+		wantEmail  string
+		wantPhone  string
+	}{
+		{
+			name:       "student reads the student row",
+			identifier: "2023331001",
+			wantEmail:  "2023331001@student.sust.edu",
+			wantPhone:  "01700000000",
+		},
+		{name: "teacher reads the teacher row", identifier: "T-001", wantEmail: "teacher@example.com", wantPhone: "01800000000"},
+		{name: "admin reads the contact columns", identifier: "admin", wantEmail: "admin@sust.edu", wantPhone: "+8801999999999"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			target, err := store.FindResetTarget(ctx, tc.identifier)
+			if err != nil {
+				t.Fatalf("FindResetTarget() returned an unexpected error: %v", err)
+			}
+			if target.Email != tc.wantEmail {
+				t.Errorf("email = %q, want %q", target.Email, tc.wantEmail)
+			}
+			if target.Phone != tc.wantPhone {
+				t.Errorf("phone = %q, want %q", target.Phone, tc.wantPhone)
+			}
+			if !target.IsActive() {
+				t.Errorf("status = %q, want active", target.Status)
+			}
+			if target.ResetSentAt != nil {
+				t.Error("reset_sent_at is set on a fresh account, want nil")
+			}
+		})
+	}
+	if _, err := store.FindResetTarget(ctx, "2023339999"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("FindResetTarget() error for an unknown id = %v, want ErrNotFound", err)
+	}
+}
+
+func TestResetChallengeAttemptsAndClear(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	userID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
+	now := time.Now()
+	if err := store.StartPasswordReset(ctx, userID, "code-hash", now.Add(10*time.Minute), now); err != nil {
+		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
+	}
+	challenge, err := store.FindResetChallenge(ctx, "2023331001")
+	if err != nil {
+		t.Fatalf("FindResetChallenge() returned an unexpected error: %v", err)
+	}
+	if challenge.UserID != userID || challenge.TokenHash != "code-hash" || challenge.Stage != ResetStageCode {
+		t.Errorf("challenge = %+v, want the stored code challenge", challenge)
+	}
+	if challenge.Attempts != 0 || challenge.ExpiresAt == nil {
+		t.Errorf("challenge attempts = %d and expiry = %v, want 0 and a timestamp", challenge.Attempts, challenge.ExpiresAt)
+	}
+	for want := 1; want <= 3; want++ {
+		got, err := store.CountResetAttempt(ctx, userID)
+		if err != nil {
+			t.Fatalf("CountResetAttempt() returned an unexpected error: %v", err)
+		}
+		if got != want {
+			t.Errorf("CountResetAttempt() = %d, want %d", got, want)
+		}
+	}
+	if _, err := store.CountResetAttempt(ctx, 999999); !errors.Is(err, ErrNotFound) {
+		t.Errorf("CountResetAttempt() error for an unknown user = %v, want ErrNotFound", err)
+	}
+	if err := store.ClearPasswordReset(ctx, userID); err != nil {
+		t.Fatalf("ClearPasswordReset() returned an unexpected error: %v", err)
+	}
+	cleared, err := store.FindResetChallenge(ctx, "2023331001")
+	if err != nil {
+		t.Fatalf("FindResetChallenge() returned an unexpected error: %v", err)
+	}
+	if cleared.TokenHash != "" || cleared.Stage != "" || cleared.Attempts != 0 || cleared.ExpiresAt != nil {
+		t.Errorf("challenge after clearing = %+v, want empty reset fields", cleared)
+	}
+	if _, err := store.FindResetChallenge(ctx, "2023339999"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("FindResetChallenge() error for an unknown id = %v, want ErrNotFound", err)
+	}
+}
+
+func TestVerifyResetCodeNeedsTheCodeStage(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	userID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
+	now := time.Now()
+	if err := store.VerifyResetCode(ctx, userID, "token-hash", now.Add(10*time.Minute)); !errors.Is(err, ErrInvalidResetToken) {
+		t.Fatalf("VerifyResetCode() without a code stage = %v, want ErrInvalidResetToken", err)
+	}
+	if err := store.StartPasswordReset(ctx, userID, "code-hash", now.Add(10*time.Minute), now); err != nil {
+		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
+	}
+	if _, err := store.CountResetAttempt(ctx, userID); err != nil {
+		t.Fatalf("CountResetAttempt() returned an unexpected error: %v", err)
+	}
+	if err := store.VerifyResetCode(ctx, userID, "token-hash", now.Add(10*time.Minute)); err != nil {
+		t.Fatalf("VerifyResetCode() returned an unexpected error: %v", err)
+	}
+	challenge, err := store.FindResetChallenge(ctx, "2023331001")
+	if err != nil {
+		t.Fatalf("FindResetChallenge() returned an unexpected error: %v", err)
+	}
+	if challenge.Stage != ResetStageVerified {
+		t.Errorf("stage = %q, want %q", challenge.Stage, ResetStageVerified)
+	}
+	if challenge.TokenHash != "token-hash" {
+		t.Errorf("token hash = %q, want %q", challenge.TokenHash, "token-hash")
+	}
+	if challenge.Attempts != 0 {
+		t.Errorf("attempts = %d, want them reset to 0", challenge.Attempts)
+	}
+	if err := store.VerifyResetCode(ctx, userID, "second-hash", now.Add(10*time.Minute)); !errors.Is(err, ErrInvalidResetToken) {
+		t.Errorf("VerifyResetCode() on an already verified reset = %v, want ErrInvalidResetToken", err)
+	}
+}
+
+func TestFinishPasswordReset(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	userID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 4)
-	if err := store.SetResetToken(ctx, userID, "correct-hash", time.Now().Add(15*time.Minute)); err != nil {
-		t.Fatalf("SetResetToken() returned an unexpected error: %v", err)
+	now := time.Now()
+	if err := store.StartPasswordReset(ctx, userID, "code-hash", now.Add(10*time.Minute), now); err != nil {
+		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
 	}
-	if err := store.ResetPassword(ctx, "2023331001", "wrong-hash", "new-stored-hash"); !errors.Is(err, ErrInvalidResetToken) {
-		t.Fatalf("ResetPassword() with a wrong token = %v, want ErrInvalidResetToken", err)
+	err := store.FinishPasswordReset(ctx, "2023331001", "code-hash", "new-stored-hash")
+	if !errors.Is(err, ErrInvalidResetToken) {
+		t.Fatalf("FinishPasswordReset() at the code stage = %v, want ErrInvalidResetToken", err)
 	}
-	if err := store.ResetPassword(ctx, "2023331001", "correct-hash", "new-stored-hash"); err != nil {
-		t.Fatalf("ResetPassword() returned an unexpected error: %v", err)
+	if err := store.VerifyResetCode(ctx, userID, "token-hash", now.Add(10*time.Minute)); err != nil {
+		t.Fatalf("VerifyResetCode() returned an unexpected error: %v", err)
+	}
+	if err := store.FinishPasswordReset(ctx, "2023331001", "wrong-hash", "new-stored-hash"); !errors.Is(err, ErrInvalidResetToken) {
+		t.Fatalf("FinishPasswordReset() with a wrong token = %v, want ErrInvalidResetToken", err)
+	}
+	if err := store.FinishPasswordReset(ctx, "2023331001", "token-hash", "new-stored-hash"); err != nil {
+		t.Fatalf("FinishPasswordReset() returned an unexpected error: %v", err)
 	}
 	var passwordHash string
-	var resetToken, resetExpiry *string
-	var tokenVersion int
-	query := "SELECT password_hash, reset_token, reset_token_expires_at::text, token_version FROM users WHERE id = $1"
-	if err := pool.QueryRow(ctx, query, userID).Scan(&passwordHash, &resetToken, &resetExpiry, &tokenVersion); err != nil {
+	var resetToken, resetExpiry, resetStage, resetSentAt *string
+	var tokenVersion, attempts int
+	query := `SELECT password_hash, reset_token, reset_token_expires_at::text, reset_stage, reset_sent_at::text,
+token_version, reset_attempts FROM users WHERE id = $1`
+	if err := pool.QueryRow(ctx, query, userID).Scan(&passwordHash, &resetToken, &resetExpiry,
+		&resetStage, &resetSentAt, &tokenVersion, &attempts); err != nil {
 		t.Fatalf("could not read back the user row: %v", err)
 	}
 	if passwordHash != "new-stored-hash" {
 		t.Error("the password hash was not replaced")
 	}
-	if resetToken != nil || resetExpiry != nil {
-		t.Error("the reset token fields were not cleared")
+	if resetToken != nil || resetExpiry != nil || resetStage != nil || resetSentAt != nil || attempts != 0 {
+		t.Error("the reset fields were not cleared")
 	}
 	if tokenVersion != 5 {
 		t.Errorf("token version = %d, want 5 so that old tokens stop working", tokenVersion)
 	}
-	if err := store.ResetPassword(ctx, "2023331001", "correct-hash", "third-stored-hash"); !errors.Is(err, ErrInvalidResetToken) {
+	if err := store.FinishPasswordReset(ctx, "2023331001", "token-hash", "third-stored-hash"); !errors.Is(err, ErrInvalidResetToken) {
 		t.Errorf("reusing the same reset token = %v, want ErrInvalidResetToken", err)
 	}
 }
 
-func TestResetPasswordRejectsExpiredAndInactive(t *testing.T) {
+func TestFinishPasswordResetRejectsExpiredAndInactive(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	expiredID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
 	pendingID := insertUser(t, ctx, pool, "student", "2023331002", StatusPending, 0)
-	expireQuery := `UPDATE users SET reset_token = $2, reset_token_expires_at = now() - INTERVAL '1 minute' WHERE id = $1`
-	if _, err := pool.Exec(ctx, expireQuery, expiredID, "expired-hash"); err != nil {
+	plant := `UPDATE users SET reset_token = $2, reset_stage = 'verified',
+reset_token_expires_at = now() - INTERVAL '1 minute' WHERE id = $1`
+	if _, err := pool.Exec(ctx, plant, expiredID, "expired-hash"); err != nil {
 		t.Fatalf("could not plant an expired reset token: %v", err)
 	}
-	if _, err := pool.Exec(ctx, expireQuery, pendingID, "pending-hash"); err != nil {
+	if _, err := pool.Exec(ctx, plant, pendingID, "pending-hash"); err != nil {
 		t.Fatalf("could not plant a reset token on a pending account: %v", err)
 	}
 	tests := []struct {
@@ -383,9 +534,9 @@ func TestResetPasswordRejectsExpiredAndInactive(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := store.ResetPassword(ctx, tc.identifier, tc.tokenHash, "new-stored-hash")
+			err := store.FinishPasswordReset(ctx, tc.identifier, tc.tokenHash, "new-stored-hash")
 			if !errors.Is(err, ErrInvalidResetToken) {
-				t.Errorf("ResetPassword() error = %v, want ErrInvalidResetToken", err)
+				t.Errorf("FinishPasswordReset() error = %v, want ErrInvalidResetToken", err)
 			}
 		})
 	}
