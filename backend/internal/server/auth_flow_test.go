@@ -12,6 +12,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"github.com/raHI-79/250-project/backend/internal/upload"
 	"io"
 	"log"
 	"net/http"
@@ -71,6 +72,10 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 		Teachers: userStore,
 		Students: userStore,
 		Alarms:   alerts,
+		Notices:  userStore,
+		Library:  userStore,
+		Contacts: userStore,
+		Files:    upload.NewSaver(t.TempDir(), 1),
 	})
 }
 

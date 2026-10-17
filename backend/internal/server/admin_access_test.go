@@ -6,6 +6,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"github.com/raHI-79/250-project/backend/internal/upload"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -126,6 +127,10 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps.Teachers = emptyTeacherStore{}
 	deps.Students = emptyStudentStore{}
 	deps.Alarms = silentAlerts{}
+	deps.Notices = emptyNoticeStore{}
+	deps.Library = emptyMaterialStore{}
+	deps.Contacts = emptyDirectoryStore{}
+	deps.Files = upload.NewSaver(t.TempDir(), 1)
 	return deps, NewRouter(deps)
 }
 
