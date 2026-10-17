@@ -131,6 +131,8 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps.Library = emptyMaterialStore{}
 	deps.Contacts = emptyDirectoryStore{}
 	deps.Files = upload.NewSaver(t.TempDir(), 1)
+	deps.Mail = emptyMessageStore{}
+	deps.Votes = emptyPollStore{}
 	return deps, NewRouter(deps)
 }
 
