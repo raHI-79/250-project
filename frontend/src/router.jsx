@@ -26,6 +26,7 @@ export default function Router() {
       <Route path={paths.register()} element={<RegisterPage />} />
       <Route path={paths.forgotPassword()} element={<ForgotPasswordPage />} />
       <Route path={paths.adminLogin()} element={<AdminLoginPage />} />
+      <Route path={paths.adminForgotPassword()} element={<ForgotPasswordPage admin />} />
       <Route element={<RequireRole roles="student" />}>
         <Route element={<AppLayout />}>
           <Route

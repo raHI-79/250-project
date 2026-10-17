@@ -4,8 +4,14 @@ import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
 import { Input } from '../../components/ui/Field'
+import AuthScreen from '../../components/layout/AuthScreen'
 import { useAuth } from '../../context/auth'
+import { HERO_IMAGES } from '../../lib/campus'
 import { homeFor, paths } from '../../lib/paths'
+
+const SLIDE_AFTER = 6000
+
+const OVERLAY = 'bg-linear-to-br from-brand-950/88 via-brand-800/72 to-brand-600/45'
 
 export default function LoginPage() {
   const { login, isAuthenticated, role } = useAuth()
@@ -29,8 +35,8 @@ export default function LoginPage() {
     }
   }
   return (
-    <div className="flex min-h-screen items-center justify-center bg-page px-4 py-10">
-      <Card hover={false} className="animate-fade-in-up w-full max-w-sm">
+    <AuthScreen images={HERO_IMAGES} rotateAfter={SLIDE_AFTER} overlay={OVERLAY}>
+      <Card hover={false} className="animate-fade-in-up w-full backdrop-blur-sm">
         <div className="text-center">
           <p className="font-display text-2xl font-semibold text-brand-700">SUST CSE</p>
           <p className="mt-1 text-sm text-brand-500">
@@ -40,7 +46,7 @@ export default function LoginPage() {
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
           <Input
-            label="Registration number or email"
+            label="Registration No. or Teacher ID"
             value={identifier}
             onChange={(event) => setIdentifier(event.target.value)}
             autoComplete="username"
@@ -70,6 +76,6 @@ export default function LoginPage() {
           </p>
         </div>
       </Card>
-    </div>
+    </AuthScreen>
   )
 }

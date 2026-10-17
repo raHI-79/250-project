@@ -15,6 +15,7 @@ export const paths = {
   register: () => build('register'),
   forgotPassword: () => build('forgot-password'),
   adminLogin: () => build('portal-admin'),
+  adminForgotPassword: () => build('portal-admin', 'forgot-password'),
   student: {
     home: () => build('student'),
     upcomingRoutine: () => build('student', 'upcoming-routine'),

@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react'
+import { BANNER_IMAGES } from '../../lib/campus'
 import cx from '../../lib/cx'
-
-const IMAGES = [
-  '/campus/banner-monument.jpg',
-  '/campus/banner-building.jpg',
-  '/campus/banner-entrance.jpg',
-]
 
 const ROTATE_AFTER = 6000
 
@@ -14,7 +9,7 @@ export default function CampusBanner({ className }) {
   const [broken, setBroken] = useState({})
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setIndex((current) => (current + 1) % IMAGES.length)
+      setIndex((current) => (current + 1) % BANNER_IMAGES.length)
     }, ROTATE_AFTER)
     return () => window.clearInterval(timer)
   }, [])
@@ -25,7 +20,7 @@ export default function CampusBanner({ className }) {
         className,
       )}
     >
-      {IMAGES.map((source, position) =>
+      {BANNER_IMAGES.map((source, position) =>
         broken[source] ? null : (
           <img
             key={source}
