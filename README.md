@@ -319,7 +319,37 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/students/materials` | student, CR | Materials of the own batch and the ones marked `ALL`, newest first |
 | `GET` | `/api/students/directory` | student, CR | Active students with the `batch`, `blood_group` and `search` filters; at most 200 rows |
 | `GET` | `/api/teachers-info` | student, CR, teacher | Active teachers (`name`, `phone`, `email`) with the optional `search` filter |
+| `POST` | `/api/cr/messages` | CR | `multipart/form-data` with `content`, optional PDF `file` and `target` (`own_batch`, `batch` + another `batch`, or `teacher` + `teacher_user_id`) |
+| `GET` | `/api/cr/messages/inbox` | CR | Messages teachers sent to this CR, newest first |
+| `GET` | `/api/cr/messages/sent` | CR | Messages this CR sent, newest first |
+| `POST` | `/api/teacher/messages` | teacher | `multipart/form-data` with `content`, optional PDF `file`, and `target` (`cr` or `student` + `target_user_id`, or `batch` + `batch` and optional `section`); `reply_to_id` answers a CR instead |
+| `GET` | `/api/teacher/messages/inbox` | teacher | Messages CRs sent to this teacher, with the sender's batch and section |
+| `GET` | `/api/teacher/messages/sent` | teacher | Messages this teacher sent, newest first |
+| `GET` | `/api/teacher/lookups/crs` | teacher | Active CRs (`user_id`, `full_name`, `batch`, `section`) with the optional `batch` filter |
+| `GET` | `/api/teacher/lookups/students` | teacher | Up to 20 active students matched by name or registration number with `search` |
+| `GET` | `/api/students/messages` | student, CR | Read-only inbox: direct, batch and section messages from teachers and CRs |
+| `POST` | `/api/cr/polls` | CR | `{question, options, scope}`; 2 to 10 unique options, `scope` is `section` or `batch` |
+| `POST` | `/api/cr/polls/{id}/close` | CR | Closes one of this CR's own polls; `404` otherwise, `409` if it is already closed |
+| `GET` | `/api/cr/polls` | CR | The polls this CR made, with the counted results |
+| `GET` | `/api/students/polls` | student, CR | Polls for the own batch and section with `options`, `total_votes` and `my_option_id` |
+| `POST` | `/api/students/polls/{id}/vote` | student, CR | `{option_id}`; `409` when the poll is closed or the student already voted |
 | `GET` | `/uploads/{name}` | public | Serves one uploaded PDF inline; only the generated file names resolve, anything else is `404` |
+
+### Access rules
+
+- Every `/api/...` route except `/api/health`, the `/api/auth/...` entry points and
+  `GET /uploads/{name}` needs a `Bearer` token; a missing or stale token answers
+  `401`.
+- A token carries the **effective role**: `student`, `cr`, `teacher` or `admin`. A
+  route refuses every other role with `403` and
+  `{"error":"403 Access Denied / Unauthorized Access"}`.
+- `/api/admin/...` is admin only, `/api/cr/...` is CR only, `/api/teacher/...` is
+  teacher only, `/api/students/...` is student and CR, and `/api/notifications`,
+  `/api/teachers-info` and `/api/lookups/...` are open to the signed-in panels.
+- **Students never send messages.** There is no send endpoint for them, so
+  `POST /api/students/messages` answers `404`.
+- Batch and section always come from the caller's own student row, never from the
+  request, and a CR can only close or delete what they created themselves.
 
 Rate limited routes allow **10 requests per minute per IP address**; the
 eleventh gets `429` with `{"error":"Too many attempts. Please try again in a
