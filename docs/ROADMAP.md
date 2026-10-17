@@ -27,7 +27,7 @@ Full requirements: [SPEC.md](SPEC.md)
 | 10 | B | Messages, polls, security tests | done |
 | 11 | A | Frontend foundation: theme, components, layouts, notifications | done |
 | 12 | B | Auth pages with email code password reset, student panel | done |
-| 13 | B | CR panel | todo |
+| 13 | B | CR panel | done |
 | 14 | A | Admin panel | todo |
 | 15 | B | Teacher panel | todo |
 | 16 | A | Multi-university and department backend | todo |
