@@ -17,6 +17,15 @@ import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
 import TeachersPage from './pages/student/TeachersPage'
 import MessagesPage from './pages/student/MessagesPage'
+import CRFixedRoutinePage from './pages/cr/CRFixedRoutinePage'
+import CreateClassPage from './pages/cr/CreateClassPage'
+import ExtraClassPage from './pages/cr/ExtraClassPage'
+import MyRequestsPage from './pages/cr/MyRequestsPage'
+import SendMessagePage from './pages/cr/SendMessagePage'
+import TeacherMessagesPage from './pages/cr/TeacherMessagesPage'
+import CRPostNoticesPage from './pages/cr/CRNoticesPage'
+import CRMaterialsPage from './pages/cr/CRMaterialsPage'
+import CRPollsPage from './pages/cr/CRPollsPage'
 import NotFoundPage from './pages/NotFoundPage'
 import Placeholder from './pages/Placeholder'
 import { useAuth } from './context/auth'
@@ -63,37 +72,16 @@ export default function Router() {
             path={paths.cr.home()}
             element={<Navigate to={paths.cr.fixedRoutine()} replace />}
           />
-          <Route
-            path={paths.cr.fixedRoutine()}
-            element={page('Fixed Routine', 'The weekly routine of your batch and section')}
-          />
-          <Route
-            path={paths.cr.createClass()}
-            element={page('Create Class/Exam', 'Ask a teacher to approve a class or an exam')}
-          />
-          <Route
-            path={paths.cr.extraClass()}
-            element={page('Extra Class', 'Request an extra class outside the routine')}
-          />
-          <Route
-            path={paths.cr.requests()}
-            element={page('My Requests', 'What you asked for and where it stands')}
-          />
-          <Route
-            path={paths.cr.sendMessage()}
-            element={page('Send Message', 'Write to your batch, another batch or a teacher')}
-          />
-          <Route
-            path={paths.cr.teacherMessages()}
-            element={page('Teacher Messages', 'Messages teachers sent you')}
-          />
-          <Route path={paths.cr.notices()} element={page('Notices', 'Notices you posted')} />
-          <Route path={paths.cr.materials()} element={page('Materials', 'Links you shared')} />
-          <Route path={paths.cr.polls()} element={page('Polls', 'Polls you created')} />
-          <Route
-            path={paths.cr.teachers()}
-            element={page('Teachers', 'Contact details of the department teachers')}
-          />
+          <Route path={paths.cr.fixedRoutine()} element={<CRFixedRoutinePage />} />
+          <Route path={paths.cr.createClass()} element={<CreateClassPage />} />
+          <Route path={paths.cr.extraClass()} element={<ExtraClassPage />} />
+          <Route path={paths.cr.requests()} element={<MyRequestsPage />} />
+          <Route path={paths.cr.sendMessage()} element={<SendMessagePage />} />
+          <Route path={paths.cr.teacherMessages()} element={<TeacherMessagesPage />} />
+          <Route path={paths.cr.notices()} element={<CRPostNoticesPage />} />
+          <Route path={paths.cr.materials()} element={<CRMaterialsPage />} />
+          <Route path={paths.cr.polls()} element={<CRPollsPage />} />
+          <Route path={paths.cr.teachers()} element={<TeachersPage />} />
         </Route>
       </Route>
       <Route element={<RequireRole roles="teacher" />}>
