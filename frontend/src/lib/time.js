@@ -93,3 +93,12 @@ export const tomorrow = () => {
   date.setDate(date.getDate() + 1)
   return isoDate(date)
 }
+
+export const today = () => isoDate(new Date())
+
+export const shiftDate = (value, days) => {
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  date.setDate(date.getDate() + days)
+  return isoDate(date)
+}
