@@ -56,6 +56,25 @@ func Phone(label, value string) (string, error) {
 	return trimmed, nil
 }
 
+func PhoneDigits(value string) string {
+	var digits strings.Builder
+	for _, symbol := range value {
+		if symbol >= '0' && symbol <= '9' {
+			digits.WriteRune(symbol)
+		}
+	}
+	cleaned := digits.String()
+	if len(cleaned) > 11 && strings.HasPrefix(cleaned, "88") {
+		cleaned = cleaned[2:]
+	}
+	return cleaned
+}
+
+func SamePhone(left, right string) bool {
+	cleaned := PhoneDigits(left)
+	return cleaned != "" && cleaned == PhoneDigits(right)
+}
+
 func Batch(label, value string) (string, error) {
 	trimmed, err := Required(label, value)
 	if err != nil {

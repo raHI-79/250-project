@@ -5,6 +5,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
+	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/upload"
 	"net/http"
@@ -34,6 +35,7 @@ type Dependencies struct {
 	Library  handler.MaterialStore
 	Contacts handler.DirectoryStore
 	Files    *upload.Saver
+	Mailer   mailer.Sender
 	Mail     handler.MessageStore
 	Votes    handler.PollStore
 }
@@ -53,7 +55,11 @@ func (g RouteGroup) Handle(pattern string, handlerFunc http.HandlerFunc) {
 
 func NewRouter(deps Dependencies) http.Handler {
 	mux := http.NewServeMux()
-	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens)
+	mail := deps.Mailer
+	if mail == nil {
+		mail = mailer.NewSMTP(mailer.Options{})
+	}
+	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail)
 	limiter := middleware.NewRateLimiter(middleware.DefaultRateLimit, middleware.DefaultRateWindow)
 	throttled := RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{limiter.Middleware}}
 	authenticated := AuthenticatedGroup(mux, deps)
@@ -62,6 +68,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	throttled.Handle("POST /api/auth/login", authHandler.Login())
 	throttled.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
 	throttled.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
+	throttled.Handle("POST /api/auth/verify-reset-code", authHandler.VerifyResetCode())
 	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
 	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
 	authenticated.Handle("GET /api/me", handler.Me())

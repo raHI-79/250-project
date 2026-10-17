@@ -7,6 +7,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/db"
 	"github.com/raHI-79/250-project/backend/internal/jobs"
+	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/server"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -86,6 +87,13 @@ func run() error {
 			Mail:     userStore,
 			Votes:    userStore,
 			Files:    upload.NewSaver(cfg.UploadDir, cfg.MaxUploadMB),
+			Mailer: mailer.NewSMTP(mailer.Options{
+				Host:     cfg.SMTPHost,
+				Port:     cfg.SMTPPort,
+				Username: cfg.SMTPUsername,
+				Password: cfg.SMTPPassword,
+				From:     cfg.MailFrom,
+			}),
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
@@ -125,7 +133,7 @@ func seedAdmin(ctx context.Context, userStore *store.Store, cfg *config.Config) 
 	if err != nil {
 		return err
 	}
-	if _, err := userStore.EnsureAdmin(ctx, cfg.AdminIdentifier, hash); err != nil {
+	if _, err := userStore.EnsureAdmin(ctx, cfg.AdminIdentifier, hash, cfg.AdminEmail, cfg.AdminPhone); err != nil {
 		return err
 	}
 	log.Println("auth: admin account ready")

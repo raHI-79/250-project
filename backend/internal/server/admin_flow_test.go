@@ -28,6 +28,8 @@ const (
 	adminFlowCR = `{"full_name":"Flow CR","reg_no":"2023331601","batch":"CSE-23","section":"B",
 "email":"flowcr@student.sust.edu","phone":"01712345601","blood_group":"A+",
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
+	adminFlowEmail   = "flowadmin@sust.edu"
+	adminFlowPhone   = "01799999999"
 	adminFlowTeacher = `{"name":"Flow Teacher","teacher_id":"T-900","email":"flowteacher@sust.edu",
 "phone":"01712345602","password":"sust-250-project","confirm_password":"sust-250-project"}`
 )
@@ -38,7 +40,7 @@ func seedAdmin(t *testing.T, ctx context.Context, pool *pgxpool.Pool, router htt
 	if err != nil {
 		t.Fatalf("HashPassword() returned an unexpected error: %v", err)
 	}
-	if _, err := store.New(pool).EnsureAdmin(ctx, adminFlowIdentifier, hash); err != nil {
+	if _, err := store.New(pool).EnsureAdmin(ctx, adminFlowIdentifier, hash, adminFlowEmail, adminFlowPhone); err != nil {
 		t.Fatalf("EnsureAdmin() returned an unexpected error: %v", err)
 	}
 	body := `{"identifier":"` + adminFlowIdentifier + `","password":"` + adminFlowPassword + `"}`

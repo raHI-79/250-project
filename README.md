@@ -212,6 +212,13 @@ go run ./cmd/server
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only browser origin allowed to call the API |
 | `ADMIN_IDENTIFIER` | none — optional | Login id of the admin account created at startup |
 | `ADMIN_PASSWORD` | none — optional | Password of that admin account, at least 8 characters |
+| `ADMIN_EMAIL` | none — optional | Email the admin receives password reset codes on |
+| `ADMIN_PHONE` | none — optional | Phone number the admin proves a password reset with |
+| `SMTP_HOST` | none — optional | SMTP server that sends the reset codes; empty means no mailer is configured |
+| `SMTP_PORT` | `587` | Port of that SMTP server |
+| `SMTP_USERNAME` | none — optional | SMTP user; when it is empty the server connects without authenticating |
+| `SMTP_PASSWORD` | none — optional | SMTP password |
+| `MAIL_FROM` | the SMTP username | Address the reset emails come from |
 
 Never commit real values. `backend/.env` is gitignored; only
 `backend/.env.example` is tracked.
@@ -308,7 +315,8 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/auth/register` | public | Student registration. Creates a `pending` account; `201` on success |
 | `POST` | `/api/auth/login` | public, rate limited | Student, CR and teacher login. Returns a token and the user |
 | `POST` | `/api/auth/admin/login` | public, rate limited | Admin login only. Returns a token and the admin user |
-| `POST` | `/api/auth/forgot-password` | public, rate limited | Issues a password reset token valid for 15 minutes |
+| `POST` | `/api/auth/forgot-password` | public, rate limited | Emails a 6-digit reset code valid for 10 minutes |
+| `POST` | `/api/auth/verify-reset-code` | public, rate limited | Exchanges that code for a reset token valid for 10 minutes |
 | `POST` | `/api/auth/reset-password` | public | Sets a new password with that reset token |
 | `POST` | `/api/auth/logout` | any signed-in role | Invalidates **every** token of the account |
 | `GET` | `/api/me` | any signed-in role | The signed-in user: `id`, `identifier`, `role` |
@@ -442,20 +450,40 @@ answers:
 `section` appear only for students and CRs. Send the token on later requests as
 `Authorization: Bearer <token>`.
 
-`POST /api/auth/forgot-password` answers with the token itself, because this is
-a course project with no mail server:
+The password reset runs in three steps and works for students, CRs, teachers
+and the admin.
+
+`POST /api/auth/forgot-password` takes `{"identifier", "phone"}`. The account
+must be **active** and the phone must match the number registered with it —
+`students.phone`, `teachers.phone` or `users.contact_phone` for the admin,
+compared on digits only so a leading `+88` makes no difference. It emails a
+6-digit code and answers:
 
 ```json
 {
-  "message": "Use this token to reset your password. In production it would be sent by email.",
-  "reset_token": "<64 hexadecimal characters>",
+  "message": "We sent a 6-digit code to the email address registered with this account.",
+  "email_hint": "n***@student.sust.edu",
   "expires_at": "2026-10-16T14:15:00+06:00"
 }
 ```
 
-Only the **SHA-256 hash** of that token is stored, so the database never holds
-anything that can be used to log in. The token lasts 15 minutes, works once,
-and resetting a password invalidates every existing login token.
+A fourth field, `dev_code`, carries the code itself **only** when no mailer is
+configured (`SMTP_HOST` is empty) and `APP_ENV` is not `production`, so the flow
+can be tested without a mail server. Asking for a second code within 60 seconds
+returns `429`.
+
+`POST /api/auth/verify-reset-code` takes `{"identifier", "code"}` and answers
+`{"reset_token": "<64 hexadecimal characters>"}`. Five wrong codes clear the
+reset and the user has to ask for a new one.
+
+`POST /api/auth/reset-password` takes `{"identifier", "reset_token",
+"new_password", "confirm_password"}` and only works once the code has been
+verified.
+
+Only the **SHA-256 hash** of the code and of the token is stored, so the
+database never holds anything that can be used to log in. Both last 10 minutes,
+the token works once, and resetting a password invalidates every existing login
+token.
 
 ### Admin people endpoints
 
@@ -614,7 +642,10 @@ never reveals whether an account exists or what state it is in.
 | Correct password, account removed | `403` | `{"error":"Your account has been removed. Please contact the department office."}` |
 | Duplicate registration number or email | `409` | `{"error":"An account with this registration number or email already exists."}` |
 | Wrong or expired reset token | `400` | `{"error":"Invalid or expired reset token."}` |
-| No active account for a password reset | `404` | `{"error":"No active account found for this ID."}` |
+| ID and phone do not match an active account | `400` | `{"error":"The ID and phone number do not match an active account."}` |
+| A new reset code asked for within 60 seconds | `429` | `{"error":"Please wait a minute before requesting a new code."}` |
+| Wrong or expired reset code | `400` | `{"error":"Invalid or expired code."}` |
+| Five wrong reset codes | `400` | `{"error":"Too many wrong codes. Please request a new code."}` |
 | Malformed JSON, unknown field, or a body over 1 MB | `400` | `{"error":"Invalid request body"}` |
 
 Any unknown route returns `404` with `{"error":"Route not found"}`.

@@ -6,14 +6,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
+	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
+	"math/big"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -25,20 +29,33 @@ const (
 	MessageDuplicateAccount  = "An account with this registration number or email already exists."
 	MessageRegistrationDone  = "Registration submitted. You can log in after the administration approves your account."
 	MessageLoggedOut         = "Logged out."
-	MessageNoActiveAccount   = "No active account found for this ID."
-	MessageResetTokenIssued  = "Use this token to reset your password. In production it would be sent by email."
+	MessageResetMismatch     = "The ID and phone number do not match an active account."
+	MessageResetCooldown     = "Please wait a minute before requesting a new code."
+	MessageResetCodeSent     = "We sent a 6-digit code to the email address registered with this account."
+	MessageInvalidResetCode  = "Invalid or expired code."
+	MessageTooManyResetCodes = "Too many wrong codes. Please request a new code."
 	MessageInvalidResetToken = "Invalid or expired reset token."
 	MessagePasswordUpdated   = "Password updated. Please log in with your new password."
+	ResetEmailSubject        = "Password reset code"
 	resetTokenBytes          = 32
-	resetTokenLifetime       = 15 * time.Minute
+	resetCodeDigits          = 6
+	resetCodeLifetime        = 10 * time.Minute
+	resetTokenLifetime       = 10 * time.Minute
+	resetResendCooldown      = time.Minute
+	maxResetAttempts         = 5
 )
 
 type AuthStore interface {
 	CreateRegistration(ctx context.Context, registration store.Registration) (int64, error)
 	FindLoginUser(ctx context.Context, identifier string) (store.LoginUser, error)
 	IncrementTokenVersion(ctx context.Context, userID int64) (int, error)
-	SetResetToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
-	ResetPassword(ctx context.Context, identifier, tokenHash, passwordHash string) error
+	FindResetTarget(ctx context.Context, identifier string) (store.ResetTarget, error)
+	FindResetChallenge(ctx context.Context, identifier string) (store.ResetChallenge, error)
+	StartPasswordReset(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error
+	CountResetAttempt(ctx context.Context, userID int64) (int, error)
+	ClearPasswordReset(ctx context.Context, userID int64) error
+	VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
+	FinishPasswordReset(ctx context.Context, identifier, tokenHash, passwordHash string) error
 }
 
 type TokenIssuer interface {
@@ -49,10 +66,11 @@ type Auth struct {
 	cfg    *config.Config
 	users  AuthStore
 	tokens TokenIssuer
+	mail   mailer.Sender
 }
 
-func NewAuth(cfg *config.Config, users AuthStore, tokens TokenIssuer) *Auth {
-	return &Auth{cfg: cfg, users: users, tokens: tokens}
+func NewAuth(cfg *config.Config, users AuthStore, tokens TokenIssuer, mail mailer.Sender) *Auth {
+	return &Auth{cfg: cfg, users: users, tokens: tokens, mail: mail}
 }
 
 type registerRequest struct {
@@ -94,17 +112,28 @@ type loginResponse struct {
 
 type forgotPasswordRequest struct {
 	Identifier string `json:"identifier"`
+	Phone      string `json:"phone"`
 }
 
 type forgotPasswordResponse struct {
-	Message    string `json:"message"`
+	Message   string `json:"message"`
+	EmailHint string `json:"email_hint"`
+	ExpiresAt string `json:"expires_at"`
+	DevCode   string `json:"dev_code,omitempty"`
+}
+
+type verifyResetCodeRequest struct {
+	Identifier string `json:"identifier"`
+	Code       string `json:"code"`
+}
+
+type verifyResetCodeResponse struct {
 	ResetToken string `json:"reset_token"`
-	ExpiresAt  string `json:"expires_at"`
 }
 
 type resetPasswordRequest struct {
 	Identifier      string `json:"identifier"`
-	Token           string `json:"token"`
+	ResetToken      string `json:"reset_token"`
 	NewPassword     string `json:"new_password"`
 	ConfirmPassword string `json:"confirm_password"`
 }
@@ -297,9 +326,14 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		user, err := a.users.FindLoginUser(r.Context(), identifier)
+		phone, err := validate.Required("Phone number", request.Phone)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		target, err := a.users.FindResetTarget(r.Context(), identifier)
 		if errors.Is(err, store.ErrNotFound) {
-			httpx.WriteError(w, http.StatusNotFound, MessageNoActiveAccount)
+			httpx.WriteError(w, http.StatusBadRequest, MessageResetMismatch)
 			return
 		}
 		if err != nil {
@@ -307,8 +341,99 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		if !user.IsActive() {
-			httpx.WriteError(w, http.StatusNotFound, MessageNoActiveAccount)
+		if !target.IsActive() || !validate.SamePhone(phone, target.Phone) {
+			httpx.WriteError(w, http.StatusBadRequest, MessageResetMismatch)
+			return
+		}
+		now := a.cfg.Now()
+		if target.ResetSentAt != nil && now.Sub(*target.ResetSentAt) < resetResendCooldown {
+			httpx.WriteError(w, http.StatusTooManyRequests, MessageResetCooldown)
+			return
+		}
+		code, err := newResetCode()
+		if err != nil {
+			log.Printf("handler: could not generate a reset code: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		expiresAt := now.Add(resetCodeLifetime)
+		if err := a.users.StartPasswordReset(r.Context(), target.ID, hashResetSecret(code), expiresAt, now); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				httpx.WriteError(w, http.StatusBadRequest, MessageResetMismatch)
+				return
+			}
+			log.Printf("handler: could not store a reset code: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		body := forgotPasswordResponse{
+			Message:   MessageResetCodeSent,
+			EmailHint: emailHint(target.Email),
+			ExpiresAt: expiresAt.Format(time.RFC3339),
+		}
+		if a.mailerReady() {
+			if err := a.mail.Send(r.Context(), target.Email, ResetEmailSubject, resetEmailBody(code)); err != nil {
+				log.Printf("handler: could not email a reset code to user %d: %v", target.ID, err)
+				if clearErr := a.users.ClearPasswordReset(r.Context(), target.ID); clearErr != nil {
+					log.Printf("handler: could not clear the reset fields of user %d: %v", target.ID, clearErr)
+				}
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+		} else if !a.cfg.IsProduction() {
+			body.DevCode = code
+		}
+		httpx.WriteJSON(w, http.StatusOK, body)
+	}
+}
+
+func (a *Auth) VerifyResetCode() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request verifyResetCodeRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		identifier, err := validate.Required("ID", request.Identifier)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		code := strings.TrimSpace(request.Code)
+		if !isResetCode(code) {
+			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetCode)
+			return
+		}
+		challenge, err := a.users.FindResetChallenge(r.Context(), identifier)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetCode)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not load a reset challenge: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		now := a.cfg.Now()
+		if challenge.Status != store.StatusActive || challenge.Stage != store.ResetStageCode ||
+			challenge.TokenHash == "" || challenge.ExpiresAt == nil || !challenge.ExpiresAt.After(now) {
+			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetCode)
+			return
+		}
+		if challenge.TokenHash != hashResetSecret(code) {
+			attempts, err := a.users.CountResetAttempt(r.Context(), challenge.UserID)
+			if err != nil {
+				log.Printf("handler: could not count a reset attempt: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			if attempts >= maxResetAttempts {
+				if err := a.users.ClearPasswordReset(r.Context(), challenge.UserID); err != nil {
+					log.Printf("handler: could not clear the reset fields of user %d: %v", challenge.UserID, err)
+				}
+				httpx.WriteError(w, http.StatusBadRequest, MessageTooManyResetCodes)
+				return
+			}
+			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetCode)
 			return
 		}
 		token, hash, err := newResetToken()
@@ -317,21 +442,17 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		expiresAt := a.cfg.Now().Add(resetTokenLifetime)
-		if err := a.users.SetResetToken(r.Context(), user.ID, hash, expiresAt); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				httpx.WriteError(w, http.StatusNotFound, MessageNoActiveAccount)
-				return
-			}
-			log.Printf("handler: could not store a reset token: %v", err)
+		err = a.users.VerifyResetCode(r.Context(), challenge.UserID, hash, now.Add(resetTokenLifetime))
+		if errors.Is(err, store.ErrInvalidResetToken) || errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetCode)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not store a verified reset token: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, forgotPasswordResponse{
-			Message:    MessageResetTokenIssued,
-			ResetToken: token,
-			ExpiresAt:  expiresAt.Format(time.RFC3339),
-		})
+		httpx.WriteJSON(w, http.StatusOK, verifyResetCodeResponse{ResetToken: token})
 	}
 }
 
@@ -346,7 +467,7 @@ func (a *Auth) ResetPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		token, err := validate.Required("Reset token", request.Token)
+		token, err := validate.Required("Reset token", request.ResetToken)
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -361,7 +482,7 @@ func (a *Auth) ResetPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		err = a.users.ResetPassword(r.Context(), identifier, hashResetToken(token), hash)
+		err = a.users.FinishPasswordReset(r.Context(), identifier, hashResetSecret(token), hash)
 		if errors.Is(err, store.ErrInvalidResetToken) || errors.Is(err, store.ErrNotFound) {
 			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetToken)
 			return
@@ -375,16 +496,56 @@ func (a *Auth) ResetPassword() http.HandlerFunc {
 	}
 }
 
+func (a *Auth) mailerReady() bool {
+	return a.mail != nil && a.mail.Configured()
+}
+
+func resetEmailBody(code string) string {
+	return fmt.Sprintf("Your password reset code is %s. It expires in 10 minutes.", code)
+}
+
+func emailHint(email string) string {
+	at := strings.Index(email, "@")
+	if at <= 0 {
+		return ""
+	}
+	return email[:1] + "***" + email[at:]
+}
+
+func isResetCode(code string) bool {
+	if len(code) != resetCodeDigits {
+		return false
+	}
+	for _, symbol := range code {
+		if symbol < '0' || symbol > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func newResetCode() (string, error) {
+	limit := big.NewInt(1)
+	for i := 0; i < resetCodeDigits; i++ {
+		limit.Mul(limit, big.NewInt(10))
+	}
+	drawn, err := rand.Int(rand.Reader, limit)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%0*d", resetCodeDigits, drawn), nil
+}
+
 func newResetToken() (string, string, error) {
 	raw := make([]byte, resetTokenBytes)
 	if _, err := rand.Read(raw); err != nil {
 		return "", "", err
 	}
 	token := hex.EncodeToString(raw)
-	return token, hashResetToken(token), nil
+	return token, hashResetSecret(token), nil
 }
 
-func hashResetToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
+func hashResetSecret(secret string) string {
+	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])
 }
