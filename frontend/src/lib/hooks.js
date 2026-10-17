@@ -47,3 +47,29 @@ export const useDebounced = (value, delay = 300) => {
   }, [value, delay])
   return settled
 }
+
+export const useCountUp = (target, duration = 900) => {
+  const [value, setValue] = useState(0)
+  useEffect(() => {
+    const goal = Number(target) || 0
+    if (goal <= 0) {
+      setValue(goal)
+      return undefined
+    }
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduced) {
+      setValue(goal)
+      return undefined
+    }
+    let frame = 0
+    const started = performance.now()
+    const step = (now) => {
+      const progress = Math.min((now - started) / duration, 1)
+      setValue(Math.round(goal * (1 - (1 - progress) ** 3)))
+      if (progress < 1) frame = window.requestAnimationFrame(step)
+    }
+    frame = window.requestAnimationFrame(step)
+    return () => window.cancelAnimationFrame(frame)
+  }, [target, duration])
+  return value
+}
