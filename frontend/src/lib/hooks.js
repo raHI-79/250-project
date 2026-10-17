@@ -11,6 +11,10 @@ export const useResource = (path, query) => {
   const [attempt, setAttempt] = useState(0)
   const reload = useCallback(() => setAttempt((current) => current + 1), [])
   useEffect(() => {
+    if (!path) {
+      setLoading(false)
+      return undefined
+    }
     const controller = new AbortController()
     let active = true
     setLoading(true)
