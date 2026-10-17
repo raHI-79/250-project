@@ -1,7 +1,7 @@
 # Development Roadmap
 
-The project is built in 15 development steps. Each step is owned by one team
-member, is worked on alone, and ends with reviewed Git commits. Step 15 is
+The project is built in 18 development steps. Each step is owned by one team
+member, is worked on alone, and ends with reviewed Git commits. The last step is
 shared.
 
 - **Owner A** — Ratul Islam ([@raHI-79](https://github.com/raHI-79))
@@ -25,8 +25,11 @@ Full requirements: [SPEC.md](SPEC.md)
 | 8 | B | Teacher approvals, cancel, schedule, auto-cancel, student routine APIs | done |
 | 9 | A | Uploads, notices, materials, directory, teachers info | done |
 | 10 | B | Messages, polls, security tests | done |
-| 11 | A | Frontend setup, theme, shared components, layout, notification bell | todo |
-| 12 | B | Auth pages and student panel | todo |
-| 13 | A | CR panel | todo |
-| 14 | B | Teacher panel and admin panel | todo |
-| 15 | A+B | Polish, demo data, final docs, CI | todo |
+| 11 | A | Frontend foundation: theme, components, layouts, notifications | done |
+| 12 | B | Auth pages with email code password reset, student panel | todo |
+| 13 | B | CR panel | todo |
+| 14 | A | Admin panel | todo |
+| 15 | B | Teacher panel | todo |
+| 16 | A | Multi-university and department backend | todo |
+| 17 | B | Super admin panel and university/department URLs | todo |
+| 18 | A+B | Polish, final checklist, demo data, docs, CI | todo |

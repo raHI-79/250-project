@@ -25,7 +25,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 | Backend | Go 1.25+, standard library `net/http` |
 | Database | PostgreSQL 14+ via `pgx/v5` with a `pgxpool` connection pool |
 | Authentication | bcrypt password hashing + JWT (HS256) via `golang-jwt/jwt/v5` |
-| Frontend | React + Vite + React Router + Tailwind CSS (from Set 16) |
+| Frontend | React 19 + Vite 7 + React Router + Tailwind CSS v4 |
 | File uploads | PDFs on disk in `backend/uploads/` (`UPLOAD_DIR`), path saved in the database |
 
 ## Folder structure
@@ -47,10 +47,17 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 │   │   └── store/            database queries used by the API
 │   ├── .env.example          copy to .env and fill in your values
 │   └── go.mod
-├── frontend/                 React + Vite app (added in Set 16)
+├── frontend/                 React + Vite app (the browser client)
+│   ├── public/campus/        campus photos used by the banners and heroes
+│   └── src/
+│       ├── components/ui/    Button, Card, Field, Alert, Toast, Modal, Skeleton
+│       ├── components/layout/ sidebar, header, banner, notification bell
+│       ├── context/          the signed-in session
+│       ├── lib/              paths, API client, navigation, helpers
+│       └── pages/            one file per screen
 ├── docs/
 │   ├── SPEC.md               full requirements (do not edit)
-│   └── ROADMAP.md            the 27 development sets and their status
+│   └── ROADMAP.md            the development steps and their status
 ├── .gitignore
 └── README.md
 ```
@@ -222,6 +229,46 @@ startup and inserts one `active` user with role `admin`. The insert uses
   `ADMIN_PASSWORD` in `.env` (change the password through the API instead);
 - the log line is only `auth: admin account ready` — the identifier and the
   password are never printed or logged.
+
+## How to run the frontend
+
+The browser client lives in `frontend/`. It needs **Node.js 20.19+ or 22.12+**
+and talks to the API through a relative `/api` URL, so the backend has to be
+running on port `8080` first.
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Then open <http://localhost:5173>. The dev server proxies `/api` and `/uploads`
+to `http://localhost:8080`, so no API base URL is configured anywhere in the
+code.
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server with hot reload on port `5173` |
+| `npm run lint` | ESLint over every `.js` and `.jsx` file |
+| `npm run build` | Production bundle in `frontend/dist/` |
+| `npm run preview` | Serves the built bundle |
+
+Students, CRs and teachers log in at `/login`. The administration logs in at
+`/portal-admin`, which is never linked from any normal page.
+
+### Campus photos
+
+The login heroes and the dashboard banner read their images from
+`frontend/public/campus/`. The folder is empty on purpose — drop the real
+photos in with exactly these names and nothing else has to change:
+
+| File | Size | Used by |
+|---|---|---|
+| `hero-monument.jpg`, `hero-building.jpg`, `hero-entrance.jpg` | 1920 × 1080 | the login backgrounds |
+| `banner-monument.jpg`, `banner-building.jpg`, `banner-entrance.jpg` | 1600 × 260 | the dashboard banner |
+
+When a photo is missing the banner falls back to its green gradient, so the app
+still looks finished without them.
 
 ## How to run tests
 
@@ -653,9 +700,21 @@ These are settled. Do not swap them for something else without agreeing first.
   Enforced on the backend, with `min`/`max` on the frontend time inputs as a
   convenience only.
 
-**Frontend (from Set 16)**
+**Frontend**
 
-- **React + Vite + React Router + Tailwind CSS**, in `frontend/`.
+- **React + Vite + React Router + Tailwind CSS v4**, in `frontend/`, written in
+  plain JavaScript with JSX.
+- **Every route and every link is built through `src/lib/paths.js`.** No path is
+  typed as a string anywhere else, so serving the app under a
+  `/:university/:department` prefix later only touches that file and the router.
+- **Every request goes through `src/lib/api.js`**, which attaches the bearer
+  token, turns `{"error"}` into an `ApiError` and sends the user back to the
+  right login page on a `401`.
+- **Relative API URLs only.** The dev server proxies `/api` and `/uploads` to
+  the backend, so there is no base URL to configure.
+- The signed-in session lives in `localStorage` behind `AuthProvider`, and every
+  read and write is wrapped so a blocked storage never breaks the app.
+- **Destructive actions use `useConfirm()`**, never `window.confirm`.
 
 ### Code conventions
 
