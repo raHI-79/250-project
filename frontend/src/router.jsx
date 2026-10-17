@@ -26,6 +26,15 @@ import TeacherMessagesPage from './pages/cr/TeacherMessagesPage'
 import CRPostNoticesPage from './pages/cr/CRNoticesPage'
 import CRMaterialsPage from './pages/cr/CRMaterialsPage'
 import CRPollsPage from './pages/cr/CRPollsPage'
+import OverviewPage from './pages/admin/OverviewPage'
+import RegistrationsPage from './pages/admin/RegistrationsPage'
+import AdminStudentsPage from './pages/admin/AdminStudentsPage'
+import CRsPage from './pages/admin/CRsPage'
+import AdminTeachersPage from './pages/admin/AdminTeachersPage'
+import CoursesPage from './pages/admin/CoursesPage'
+import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
+import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
+import AdminMaterialsPage from './pages/admin/AdminMaterialsPage'
 import NotFoundPage from './pages/NotFoundPage'
 import Placeholder from './pages/Placeholder'
 import { useAuth } from './context/auth'
@@ -114,30 +123,15 @@ export default function Router() {
       </Route>
       <Route element={<RequireRole roles="admin" />}>
         <Route element={<AdminLayout />}>
-          <Route
-            path={paths.admin.overview()}
-            element={page('Overview', 'How the department is doing right now')}
-          />
-          <Route
-            path={paths.admin.registrations()}
-            element={page('Registrations', 'Student accounts waiting for approval')}
-          />
-          <Route path={paths.admin.students()} element={page('Students', 'Every student account')} />
-          <Route path={paths.admin.crs()} element={page('CRs', 'Class representative accounts')} />
-          <Route path={paths.admin.teachers()} element={page('Teachers', 'Teacher accounts')} />
-          <Route path={paths.admin.courses()} element={page('Courses', 'The course catalogue')} />
-          <Route
-            path={paths.admin.routines()}
-            element={page('Routines', 'The fixed weekly routine')}
-          />
-          <Route
-            path={paths.admin.notices()}
-            element={page('Notices', 'Notices from the administration')}
-          />
-          <Route
-            path={paths.admin.materials()}
-            element={page('Materials', 'Links shared with the students')}
-          />
+          <Route path={paths.admin.overview()} element={<OverviewPage />} />
+          <Route path={paths.admin.registrations()} element={<RegistrationsPage />} />
+          <Route path={paths.admin.students()} element={<AdminStudentsPage />} />
+          <Route path={paths.admin.crs()} element={<CRsPage />} />
+          <Route path={paths.admin.teachers()} element={<AdminTeachersPage />} />
+          <Route path={paths.admin.courses()} element={<CoursesPage />} />
+          <Route path={paths.admin.routines()} element={<AdminRoutinesPage />} />
+          <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />
+          <Route path={paths.admin.materials()} element={<AdminMaterialsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundPage />} />
