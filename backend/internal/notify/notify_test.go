@@ -157,6 +157,13 @@ func TestNotifyBroadcast(t *testing.T) {
 			wantCall: broadcastCall{role: "teacher", kind: TypeRequest, title: "New request"},
 		},
 		{
+			name:     "every batch for the students",
+			role:     "student",
+			kind:     TypeNotice,
+			title:    "New notice",
+			wantCall: broadcastCall{role: "student", kind: TypeNotice, title: "New notice"},
+		},
+		{
 			name:     "batch only",
 			batch:    "CSE-23",
 			kind:     TypeNotice,

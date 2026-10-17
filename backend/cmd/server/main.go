@@ -10,6 +10,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/server"
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"github.com/raHI-79/250-project/backend/internal/upload"
 	"log"
 	"net"
 	"net/http"
@@ -79,6 +80,10 @@ func run() error {
 			Teachers: userStore,
 			Students: userStore,
 			Alarms:   alerts,
+			Notices:  userStore,
+			Library:  userStore,
+			Contacts: userStore,
+			Files:    upload.NewSaver(cfg.UploadDir, cfg.MaxUploadMB),
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,

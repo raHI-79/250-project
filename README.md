@@ -26,7 +26,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 | Database | PostgreSQL 14+ via `pgx/v5` with a `pgxpool` connection pool |
 | Authentication | bcrypt password hashing + JWT (HS256) via `golang-jwt/jwt/v5` |
 | Frontend | React + Vite + React Router + Tailwind CSS (from Set 16) |
-| File uploads | PDFs on disk in `backend/uploads/`, path saved in the database |
+| File uploads | PDFs on disk in `backend/uploads/` (`UPLOAD_DIR`), path saved in the database |
 
 ## Folder structure
 
@@ -200,6 +200,8 @@ go run ./cmd/server
 | `JWT_SECRET` | none — **required** | Key that signs the login tokens, at least 32 characters |
 | `JWT_TTL` | `24h` | How long a login token stays valid, as a Go duration (`24h`, `90m`) |
 | `AUTO_CANCEL_INTERVAL` | `5m` | How often the auto-cancel job looks for requests nobody approved in time |
+| `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs are saved, created when it is missing |
+| `MAX_UPLOAD_MB` | `10` | Largest accepted PDF in megabytes; a bigger file gets `413` |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only browser origin allowed to call the API |
 | `ADMIN_IDENTIFIER` | none — optional | Login id of the admin account created at startup |
 | `ADMIN_PASSWORD` | none — optional | Password of that admin account, at least 8 characters |
@@ -302,6 +304,22 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/students/drop-course-routine` | student, CR | The drop course's classes and exams in the other batches |
 | `GET` | `/api/students/exams` | student, CR | Approved exams of the own batch and section from today onward |
 | `GET` | `/api/students/routine` | student, CR | Fixed routine browser with `batch`, `section`, `day` and `course` filters |
+| `POST` | `/api/admin/notices` | admin | `multipart/form-data` with `title`, `description`, optional `batch` and optional PDF `file`; an empty `batch` means every batch |
+| `GET` | `/api/admin/notices` | admin | Every administration notice, newest first |
+| `DELETE` | `/api/admin/notices/{id}` | admin | Deletes one administration notice and its PDF; `204` on success, `404` if it does not exist |
+| `POST` | `/api/admin/materials` | admin | `{batch, title, link}`; `batch` is a code or `ALL`, `link` must start with `http://` or `https://` |
+| `GET` | `/api/admin/materials` | admin | Materials, newest first, with the optional `batch` filter |
+| `POST` | `/api/cr/notices` | CR | `multipart/form-data` with `title`, `description`, `target` (`own` or another batch code) and optional PDF `file` |
+| `GET` | `/api/cr/notices` | CR | The notices this CR posted, newest first |
+| `POST` | `/api/cr/materials` | CR | `{title, link, visibility, batch}`; `visibility` is `mine`, `batch` (needs another `batch`) or `all` |
+| `GET` | `/api/cr/materials` | CR | The materials this CR added, newest first |
+| `DELETE` | `/api/cr/materials/{id}` | CR | Removes one of this CR's own materials; `204` on success, `404` otherwise |
+| `GET` | `/api/students/notices/cr` | student, CR | CR notices with `scope=my` (own batch, the default) or `scope=other` (every other batch) |
+| `GET` | `/api/students/notices/admin` | student, CR | Administration notices for every batch plus the ones aimed at the own batch |
+| `GET` | `/api/students/materials` | student, CR | Materials of the own batch and the ones marked `ALL`, newest first |
+| `GET` | `/api/students/directory` | student, CR | Active students with the `batch`, `blood_group` and `search` filters; at most 200 rows |
+| `GET` | `/api/teachers-info` | student, CR, teacher | Active teachers (`name`, `phone`, `email`) with the optional `search` filter |
+| `GET` | `/uploads/{name}` | public | Serves one uploaded PDF inline; only the generated file names resolve, anything else is `404` |
 
 Rate limited routes allow **10 requests per minute per IP address**; the
 eleventh gets `429` with `{"error":"Too many attempts. Please try again in a

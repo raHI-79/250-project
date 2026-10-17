@@ -6,6 +6,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/upload"
 	"net/http"
 )
 
@@ -29,6 +30,10 @@ type Dependencies struct {
 	Teachers handler.TeacherStore
 	Students handler.StudentStore
 	Alarms   handler.BroadcastNotifier
+	Notices  handler.NoticeStore
+	Library  handler.MaterialStore
+	Contacts handler.DirectoryStore
+	Files    *upload.Saver
 }
 
 type RouteGroup struct {
@@ -64,6 +69,17 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Notifier))
 	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
 	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
+	files := deps.Files
+	if files == nil {
+		files = upload.NewSaver(deps.Config.UploadDir, deps.Config.MaxUploadMB)
+	}
+	notices := handler.NewNotice(deps.Notices, files, deps.Alarms)
+	materials := handler.NewMaterial(deps.Library)
+	contacts := handler.NewDirectory(deps.Contacts)
+	registerNoticeRoutes(mux, deps, notices, materials)
+	registerBoardRoutes(StudentGroup(mux, deps), notices, materials, contacts)
+	ContactGroup(mux, deps).Handle("GET /api/teachers-info", contacts.Teachers())
+	mux.HandleFunc("GET "+upload.URLPrefix+"{"+upload.PathValueName+"}", files.Serve())
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
@@ -86,6 +102,16 @@ func AdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 }
 
 func NotificationGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
+		},
+	}
+}
+
+func ContactGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 	return RouteGroup{
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
@@ -147,6 +173,28 @@ func registerCRRoutes(group RouteGroup, cr *handler.CR) {
 	group.Handle("POST /api/cr/class-requests", cr.CreateClassRequest())
 	group.Handle("GET /api/cr/room-availability", cr.RoomAvailability())
 	group.Handle("GET /api/cr/requests", cr.Requests())
+}
+
+func registerNoticeRoutes(mux *http.ServeMux, deps Dependencies, notices *handler.Notice, materials *handler.Material) {
+	admin := AdminGroup(mux, deps)
+	admin.Handle("POST /api/admin/notices", notices.AdminCreate())
+	admin.Handle("GET /api/admin/notices", notices.AdminList())
+	admin.Handle("DELETE /api/admin/notices/{id}", notices.AdminDelete())
+	admin.Handle("POST /api/admin/materials", materials.AdminCreate())
+	admin.Handle("GET /api/admin/materials", materials.AdminList())
+	cr := CRGroup(mux, deps)
+	cr.Handle("POST /api/cr/notices", notices.CRCreate())
+	cr.Handle("GET /api/cr/notices", notices.CRList())
+	cr.Handle("POST /api/cr/materials", materials.CRCreate())
+	cr.Handle("GET /api/cr/materials", materials.CRList())
+	cr.Handle("DELETE /api/cr/materials/{id}", materials.CRDelete())
+}
+
+func registerBoardRoutes(group RouteGroup, notices *handler.Notice, materials *handler.Material, contacts *handler.Directory) {
+	group.Handle("GET /api/students/notices/cr", notices.StudentCRNotices())
+	group.Handle("GET /api/students/notices/admin", notices.StudentAdminNotices())
+	group.Handle("GET /api/students/materials", materials.StudentList())
+	group.Handle("GET /api/students/directory", contacts.Students())
 }
 
 func registerLookupRoutes(group RouteGroup, lookups *handler.Lookups) {

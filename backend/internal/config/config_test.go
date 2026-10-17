@@ -23,6 +23,8 @@ func setEnv(t *testing.T, overrides map[string]string) {
 		"JWT_SECRET":        testJWTSecret,
 		"JWT_TTL":           "",
 		"FRONTEND_ORIGIN":   "",
+		"UPLOAD_DIR":        "",
+		"MAX_UPLOAD_MB":     "",
 		"ADMIN_IDENTIFIER":  "",
 		"ADMIN_PASSWORD":    "",
 	}
@@ -53,6 +55,8 @@ func TestLoadDefaults(t *testing.T) {
 		{name: "JWTSecret", got: cfg.JWTSecret, want: testJWTSecret},
 		{name: "JWTTTL", got: cfg.JWTTTL, want: 24 * time.Hour},
 		{name: "FrontendOrigin", got: cfg.FrontendOrigin, want: "http://localhost:5173"},
+		{name: "UploadDir", got: cfg.UploadDir, want: "uploads"},
+		{name: "MaxUploadMB", got: cfg.MaxUploadMB, want: 10},
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: ""},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: ""},
 	}
@@ -78,6 +82,8 @@ func TestLoadOverrides(t *testing.T) {
 		"TEST_DATABASE_URL": "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
 		"JWT_TTL":           testTimeout,
 		"FRONTEND_ORIGIN":   "https://coordination.sust.edu",
+		"UPLOAD_DIR":        "files",
+		"MAX_UPLOAD_MB":     "25",
 		"ADMIN_IDENTIFIER":  "admin",
 		"ADMIN_PASSWORD":    "a-long-enough-password",
 	})
@@ -95,6 +101,8 @@ func TestLoadOverrides(t *testing.T) {
 		{name: "Timezone", got: cfg.Timezone, want: "UTC"},
 		{name: "JWTTTL", got: cfg.JWTTTL, want: 90 * time.Minute},
 		{name: "FrontendOrigin", got: cfg.FrontendOrigin, want: "https://coordination.sust.edu"},
+		{name: "UploadDir", got: cfg.UploadDir, want: "files"},
+		{name: "MaxUploadMB", got: cfg.MaxUploadMB, want: 25},
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: "admin"},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: "a-long-enough-password"},
 	}
@@ -120,6 +128,16 @@ func TestLoadRejectsBadConfiguration(t *testing.T) {
 			overrides:       map[string]string{"DATABASE_URL": ""},
 			wantErr:         ErrMissingDatabaseURL,
 			wantErrContains: "DATABASE_URL",
+		},
+		{
+			name:            "MAX_UPLOAD_MB is not a number",
+			overrides:       map[string]string{"MAX_UPLOAD_MB": "ten"},
+			wantErrContains: "MAX_UPLOAD_MB",
+		},
+		{
+			name:            "MAX_UPLOAD_MB is zero",
+			overrides:       map[string]string{"MAX_UPLOAD_MB": "0"},
+			wantErrContains: "MAX_UPLOAD_MB",
 		},
 		{
 			name:            "missing JWT_SECRET",

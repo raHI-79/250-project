@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 	_ "time/tzdata"
 )
@@ -15,6 +16,8 @@ const (
 	defaultJWTTTL         = "24h"
 	defaultFrontendOrigin = "http://localhost:5173"
 	defaultAutoCancel     = "5m"
+	defaultUploadDir      = "uploads"
+	defaultMaxUploadMB    = 10
 	minJWTSecretLength    = 32
 )
 
@@ -35,6 +38,8 @@ type Config struct {
 	JWTTTL          time.Duration
 	FrontendOrigin  string
 	AutoCancel      time.Duration
+	UploadDir       string
+	MaxUploadMB     int
 	AdminIdentifier string
 	AdminPassword   string
 }
@@ -51,6 +56,7 @@ func Load() (*Config, error) {
 		TestDatabaseURL: os.Getenv("TEST_DATABASE_URL"),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		FrontendOrigin:  getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		UploadDir:       getEnv("UPLOAD_DIR", defaultUploadDir),
 		AdminIdentifier: os.Getenv("ADMIN_IDENTIFIER"),
 		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
 	}
@@ -81,6 +87,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: AUTO_CANCEL_INTERVAL must be a positive duration, got %q", rawAutoCancel)
 	}
 	cfg.AutoCancel = autoCancel
+	rawMaxUpload := getEnv("MAX_UPLOAD_MB", strconv.Itoa(defaultMaxUploadMB))
+	maxUpload, err := strconv.Atoi(rawMaxUpload)
+	if err != nil {
+		return nil, fmt.Errorf("config: invalid MAX_UPLOAD_MB %q: %w", rawMaxUpload, err)
+	}
+	if maxUpload <= 0 {
+		return nil, fmt.Errorf("config: MAX_UPLOAD_MB must be a positive number of megabytes, got %q", rawMaxUpload)
+	}
+	cfg.MaxUploadMB = maxUpload
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
 		return nil, fmt.Errorf("config: invalid APP_TIMEZONE %q: %w", cfg.Timezone, err)
