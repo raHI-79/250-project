@@ -1,8 +1,9 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -10,51 +11,76 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
-type createTeacherRequest struct {
-	Name            string `json:"name"`
-	TeacherID       string `json:"teacher_id"`
-	Email           string `json:"email"`
-	Phone           string `json:"phone"`
-	Password        string `json:"password"`
-	ConfirmPassword string `json:"confirm_password"`
-}
+const (
+	InviteEmailSubject = "Your teacher account invitation"
+	inviteTokenBytes   = 32
+	inviteLifetime     = 72 * time.Hour
+)
 
 type teacherItem struct {
-	ID        int64  `json:"id"`
-	TeacherID string `json:"teacher_id"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
+	ID          int64  `json:"id"`
+	UserID      int64  `json:"user_id"`
+	TeacherID   string `json:"teacher_id"`
+	Name        string `json:"name"`
+	Designation string `json:"designation"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	BloodGroup  string `json:"blood_group,omitempty"`
+	DateOfBirth string `json:"date_of_birth,omitempty"`
+	OfficeRoom  string `json:"office_room,omitempty"`
+	JoiningDate string `json:"joining_date,omitempty"`
+	Bio         string `json:"bio,omitempty"`
+	PhotoURL    string `json:"photo_url,omitempty"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type teachersResponse struct {
 	Items []teacherItem `json:"items"`
 }
 
+type inviteCreatedResponse struct {
+	ID         int64  `json:"id"`
+	Message    string `json:"message"`
+	InviteLink string `json:"invite_link,omitempty"`
+	ExpiresAt  string `json:"expires_at"`
+}
+
 func (a *Admin) CreateTeacher() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request createTeacherRequest
-		if !httpx.DecodeJSON(w, r, &request) {
+		if err := a.photos.Parse(r); err != nil {
+			status, message := photoError(err)
+			httpx.WriteError(w, status, message)
 			return
 		}
-		teacher, err := request.toNewTeacher()
+		teacher, err := a.teacherFrom(r)
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		hash, err := auth.HashPassword(request.Password)
+		photoPath, err := a.photos.Save(r)
 		if err != nil {
-			log.Printf("handler: could not hash a teacher password: %v", err)
+			status, message := photoError(err)
+			httpx.WriteError(w, status, message)
+			return
+		}
+		teacher.PhotoPath = photoPath
+		token, hash, err := newInviteToken()
+		if err != nil {
+			a.removePhoto(photoPath)
+			log.Printf("handler: could not generate an invitation token: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		teacher.PasswordHash = hash
+		expiresAt := a.cfg.Now().Add(inviteLifetime)
+		teacher.InviteHash = hash
+		teacher.InviteExpiresAt = expiresAt
 		userID, err := a.people.CreateTeacher(r.Context(), teacher)
 		if err != nil {
+			a.removePhoto(photoPath)
 			if errors.Is(err, store.ErrDuplicateAccount) {
 				httpx.WriteError(w, http.StatusConflict, MessageDuplicateTeacher)
 				return
@@ -63,34 +89,148 @@ func (a *Admin) CreateTeacher() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusCreated, createdResponse{ID: userID, Message: MessageTeacherCreated})
+		body := inviteCreatedResponse{
+			ID:        userID,
+			Message:   MessageTeacherInvited,
+			ExpiresAt: expiresAt.Format(time.RFC3339),
+		}
+		a.sendInvite(r, teacher.Email, token, &body)
+		httpx.WriteJSON(w, http.StatusCreated, body)
 	}
 }
 
-func (request createTeacherRequest) toNewTeacher() (store.NewTeacher, error) {
+func (a *Admin) teacherFrom(r *http.Request) (store.NewTeacher, error) {
 	var teacher store.NewTeacher
 	fields := []struct {
 		target *string
-		value  string
+		field  string
 		label  string
 		check  func(string, string) (string, error)
 	}{
-		{target: &teacher.Name, value: request.Name, label: "Name", check: validate.Required},
-		{target: &teacher.TeacherID, value: request.TeacherID, label: "Teacher ID", check: validate.TeacherID},
-		{target: &teacher.Email, value: request.Email, label: "Email", check: validate.Email},
-		{target: &teacher.Phone, value: request.Phone, label: "Phone", check: validate.Phone},
+		{target: &teacher.Name, field: "name", label: "Name", check: validate.Required},
+		{target: &teacher.TeacherID, field: fieldTeacherID, label: "Teacher ID", check: validate.TeacherID},
+		{target: &teacher.Designation, field: "designation", label: "Designation", check: validate.Required},
+		{target: &teacher.Phone, field: fieldPhone, label: "Phone", check: validate.Phone},
+		{target: &teacher.BloodGroup, field: fieldBloodGroup, label: "Blood group", check: validate.BloodGroup},
+		{target: &teacher.OfficeRoom, field: fieldOfficeRoom, label: "Office room", check: validate.Required},
 	}
 	for _, field := range fields {
-		value, err := field.check(field.label, field.value)
+		value, err := field.check(field.label, r.FormValue(field.field))
 		if err != nil {
 			return store.NewTeacher{}, err
 		}
 		*field.target = value
 	}
-	if err := validate.Password("Password", request.Password, request.ConfirmPassword); err != nil {
+	email, err := validate.EmailInDomain("Email", r.FormValue(fieldEmail), a.cfg.TeacherDomain)
+	if err != nil {
 		return store.NewTeacher{}, err
 	}
+	teacher.Email = email
+	birthDate, err := validate.BirthDate("Date of birth", r.FormValue(fieldDateOfBirth), a.cfg.Now())
+	if err != nil {
+		return store.NewTeacher{}, err
+	}
+	teacher.DateOfBirth = birthDate
+	if raw := strings.TrimSpace(r.FormValue(fieldJoiningDate)); raw != "" {
+		joiningDate, err := validate.PlainDate("Joining date", raw)
+		if err != nil {
+			return store.NewTeacher{}, err
+		}
+		teacher.JoiningDate = joiningDate
+	}
 	return teacher, nil
+}
+
+func (a *Admin) UpdateTeacher() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request updateTeacherRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		update, err := request.toUpdate(a.cfg)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		err = a.people.UpdateTeacher(r.Context(), userID, update)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessageTeacherNotFound)
+		case errors.Is(err, store.ErrDuplicateAccount):
+			httpx.WriteError(w, http.StatusConflict, MessageDuplicateTeacher)
+		case err != nil:
+			log.Printf("handler: could not update a teacher: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageTeacherUpdated})
+		}
+	}
+}
+
+func (a *Admin) ResendInvite() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		token, hash, err := newInviteToken()
+		if err != nil {
+			log.Printf("handler: could not generate an invitation token: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		expiresAt := a.cfg.Now().Add(inviteLifetime)
+		invite, err := a.people.ResetTeacherInvite(r.Context(), userID, hash, expiresAt)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessageTeacherNotFound)
+			return
+		case errors.Is(err, store.ErrNotInvited):
+			httpx.WriteError(w, http.StatusConflict, MessageTeacherNotInvited)
+			return
+		case err != nil:
+			log.Printf("handler: could not refresh a teacher invitation: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		body := inviteCreatedResponse{
+			ID:        invite.UserID,
+			Message:   MessageInviteResent,
+			ExpiresAt: expiresAt.Format(time.RFC3339),
+		}
+		a.sendInvite(r, invite.Email, token, &body)
+		httpx.WriteJSON(w, http.StatusOK, body)
+	}
+}
+
+func (a *Admin) sendInvite(r *http.Request, email, token string, body *inviteCreatedResponse) {
+	link := a.cfg.FrontendOrigin + "/teacher/activate?token=" + token
+	if a.mailerReady() {
+		if err := a.mail.Send(r.Context(), email, InviteEmailSubject, inviteEmailBody(link)); err != nil {
+			log.Printf("handler: could not email a teacher invitation: %v", err)
+		}
+		return
+	}
+	if !a.cfg.IsProduction() {
+		body.InviteLink = link
+	}
+}
+
+func (a *Admin) mailerReady() bool {
+	return a.mail != nil && a.mail.Configured()
+}
+
+func (a *Admin) removePhoto(photoPath string) {
+	if photoPath == "" {
+		return
+	}
+	if err := a.photos.Delete(photoPath); err != nil {
+		log.Printf("handler: could not delete a profile photo: %v", err)
+	}
 }
 
 func (a *Admin) Teachers() http.HandlerFunc {
@@ -111,13 +251,21 @@ func (a *Admin) Teachers() http.HandlerFunc {
 		items := make([]teacherItem, 0, len(teachers))
 		for _, teacher := range teachers {
 			items = append(items, teacherItem{
-				ID:        teacher.ID,
-				TeacherID: teacher.TeacherID,
-				Name:      teacher.Name,
-				Email:     teacher.Email,
-				Phone:     teacher.Phone,
-				Status:    teacher.Status,
-				CreatedAt: timestamp(teacher.CreatedAt),
+				ID:          teacher.ID,
+				UserID:      teacher.ID,
+				TeacherID:   teacher.TeacherID,
+				Name:        teacher.Name,
+				Designation: teacher.Designation,
+				Email:       teacher.Email,
+				Phone:       teacher.Phone,
+				BloodGroup:  teacher.BloodGroup,
+				DateOfBirth: teacher.DateOfBirth,
+				OfficeRoom:  teacher.OfficeRoom,
+				JoiningDate: teacher.JoiningDate,
+				Bio:         teacher.Bio,
+				PhotoURL:    teacher.PhotoPath,
+				Status:      teacher.Status,
+				CreatedAt:   timestamp(teacher.CreatedAt),
 			})
 		}
 		httpx.WriteJSON(w, http.StatusOK, teachersResponse{Items: items})
@@ -143,4 +291,18 @@ func (a *Admin) DeactivateTeacher() http.HandlerFunc {
 			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageTeacherDeactivated})
 		}
 	}
+}
+
+func inviteEmailBody(link string) string {
+	return "You have been invited to the SUST CSE coordination system.\n\n" +
+		"Open this link within 72 hours to set your password and activate your account:\n" + link
+}
+
+func newInviteToken() (string, string, error) {
+	raw := make([]byte, inviteTokenBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	token := hex.EncodeToString(raw)
+	return token, hashResetSecret(token), nil
 }

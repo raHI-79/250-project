@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,8 +29,12 @@ type fakeAdminStore struct {
 	demoted             []int64
 	deactivatedCRs      []int64
 	deactivatedTeachers []int64
-	createdCRs          []store.NewCR
+	promoted            []int64
+	promotion           store.PromotedCR
 	createdTeachers     []store.NewTeacher
+	teacherUpdates      []store.TeacherUpdate
+	resentInvites       []int64
+	invite              store.TeacherInvite
 	studentFilter       store.StudentFilter
 	crFilter            store.CRFilter
 	teacherFilter       store.TeacherFilter
@@ -69,13 +74,14 @@ func (f *fakeAdminStore) RemoveStudent(ctx context.Context, userID int64) error 
 	return nil
 }
 
-func (f *fakeAdminStore) CreateCR(ctx context.Context, cr store.NewCR) (int64, error) {
+func (f *fakeAdminStore) PromoteCR(ctx context.Context, userID int64) (store.PromotedCR, error) {
 	if f.err != nil {
-		return 0, f.err
+		return store.PromotedCR{}, f.err
 	}
-	f.createdCRs = append(f.createdCRs, cr)
-	f.nextID++
-	return f.nextID, nil
+	f.promoted = append(f.promoted, userID)
+	promotion := f.promotion
+	promotion.UserID = userID
+	return promotion, nil
 }
 
 func (f *fakeAdminStore) ListCRs(ctx context.Context, filter store.CRFilter) ([]store.StudentRow, error) {
@@ -109,6 +115,24 @@ func (f *fakeAdminStore) CreateTeacher(ctx context.Context, teacher store.NewTea
 	f.createdTeachers = append(f.createdTeachers, teacher)
 	f.nextID++
 	return f.nextID, nil
+}
+
+func (f *fakeAdminStore) UpdateTeacher(ctx context.Context, userID int64, update store.TeacherUpdate) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.teacherUpdates = append(f.teacherUpdates, update)
+	return nil
+}
+
+func (f *fakeAdminStore) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (store.TeacherInvite, error) {
+	if f.err != nil {
+		return store.TeacherInvite{}, f.err
+	}
+	f.resentInvites = append(f.resentInvites, userID)
+	invite := f.invite
+	invite.UserID = userID
+	return invite, nil
 }
 
 func (f *fakeAdminStore) ListTeachers(ctx context.Context, filter store.TeacherFilter) ([]store.TeacherRow, error) {
@@ -149,6 +173,11 @@ func adminCall(t *testing.T, handlerFunc http.HandlerFunc, method, target, id, b
 	return rec
 }
 
+func newAdminHandler(t *testing.T, people AdminStore) *Admin {
+	t.Helper()
+	return NewAdmin(accountConfig(t, "test"), people, &fakeNotifier{}, &fakeMailer{}, testPhotos(t))
+}
+
 func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var payload map[string]any
@@ -183,20 +212,22 @@ func TestAdminRegistrations(t *testing.T) {
 	silenceLog(t)
 	people := &fakeAdminStore{pending: []store.PendingRegistration{
 		{
-			ID:             7,
-			FullName:       "Pending Student",
-			RegNo:          "2023331100",
-			Batch:          "CSE-23",
-			Section:        "A",
-			Email:          "pending@student.sust.edu",
-			Phone:          "01712345678",
-			BloodGroup:     "O+",
-			HasDropCourse:  true,
-			DropCourseCode: "CSE-233",
-			CreatedAt:      adminNow,
+			ID:          7,
+			StudentID:   3,
+			FullName:    "Pending Student",
+			RegNo:       "2023331100",
+			Batch:       "CSE-23",
+			Section:     "A",
+			Email:       "pending@student.sust.edu",
+			Phone:       "01712345678",
+			BloodGroup:  "O+",
+			DateOfBirth: "2003-05-14",
+			PhotoPath:   "/uploads/photos/aaaa.jpg",
+			DropCourses: []store.Course{{ID: 4, Code: "CSE-233", Title: "Algorithms"}},
+			CreatedAt:   adminNow,
 		},
 	}}
-	admin := NewAdmin(people)
+	admin := newAdminHandler(t, people)
 	rec := adminCall(t, admin.Registrations(), http.MethodGet, "/api/admin/registrations", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
@@ -206,27 +237,35 @@ func TestAdminRegistrations(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(list))
 	}
 	wantFields := map[string]any{
-		"id":               float64(7),
-		"full_name":        "Pending Student",
-		"reg_no":           "2023331100",
-		"batch":            "CSE-23",
-		"section":          "A",
-		"email":            "pending@student.sust.edu",
-		"phone":            "01712345678",
-		"blood_group":      "O+",
-		"has_drop_course":  true,
-		"drop_course_code": "CSE-233",
-		"created_at":       adminNow.Format(time.RFC3339),
+		"id":            float64(7),
+		"user_id":       float64(7),
+		"full_name":     "Pending Student",
+		"reg_no":        "2023331100",
+		"batch":         "CSE-23",
+		"section":       "A",
+		"email":         "pending@student.sust.edu",
+		"phone":         "01712345678",
+		"blood_group":   "O+",
+		"date_of_birth": "2003-05-14",
+		"photo_url":     "/uploads/photos/aaaa.jpg",
+		"created_at":    adminNow.Format(time.RFC3339),
 	}
 	for name, want := range wantFields {
 		if got := list[0][name]; got != want {
 			t.Errorf("item %s = %v, want %v", name, got, want)
 		}
 	}
+	courses, ok := list[0]["drop_courses"].([]any)
+	if !ok || len(courses) != 1 {
+		t.Fatalf("drop_courses = %v, want one course", list[0]["drop_courses"])
+	}
+	if course, ok := courses[0].(map[string]any); !ok || course["code"] != "CSE-233" {
+		t.Errorf("drop course = %v, want CSE-233", courses[0])
+	}
 	if strings.Contains(rec.Body.String(), "password") {
 		t.Error("the registrations response mentions a password field")
 	}
-	failing := NewAdmin(&fakeAdminStore{err: errors.New("database is down")})
+	failing := newAdminHandler(t, &fakeAdminStore{err: errors.New("database is down")})
 	broken := adminCall(t, failing.Registrations(), http.MethodGet, "/api/admin/registrations", "", "")
 	if broken.Code != http.StatusInternalServerError {
 		t.Errorf("failing store status = %d, want 500", broken.Code)
@@ -256,7 +295,7 @@ func TestAdminRegistrationDecisions(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			people := &fakeAdminStore{err: test.storeErr}
-			admin := NewAdmin(people)
+			admin := newAdminHandler(t, people)
 			handlerFunc := admin.RejectRegistration()
 			path := "/api/admin/registrations/" + test.id + "/reject"
 			if test.approve {
@@ -318,7 +357,7 @@ func TestAdminStudentsFilters(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			people := &fakeAdminStore{}
-			admin := NewAdmin(people)
+			admin := newAdminHandler(t, people)
 			rec := adminCall(t, admin.Students(), http.MethodGet, "/api/admin/students"+test.query, "", "")
 			if rec.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
@@ -344,7 +383,7 @@ func TestAdminStudentsResponse(t *testing.T) {
 			{ID: 2, FullName: "Class Representative", RegNo: "2023331002", Batch: "CSE-23", Section: "B", Email: "cr@student.sust.edu", Phone: "01712345679", BloodGroup: "B+", IsCR: true, Status: store.StatusActive, CreatedAt: adminNow},
 		},
 	}
-	admin := NewAdmin(people)
+	admin := newAdminHandler(t, people)
 	rec := adminCall(t, admin.Students(), http.MethodGet, "/api/admin/students", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
@@ -366,7 +405,7 @@ func TestAdminStudentsResponse(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "password") {
 		t.Error("the students response mentions a password field")
 	}
-	failing := NewAdmin(&fakeAdminStore{err: errors.New("database is down")})
+	failing := newAdminHandler(t, &fakeAdminStore{err: errors.New("database is down")})
 	broken := adminCall(t, failing.Students(), http.MethodGet, "/api/admin/students", "", "")
 	if broken.Code != http.StatusInternalServerError {
 		t.Errorf("failing store status = %d, want 500", broken.Code)
@@ -392,7 +431,7 @@ func TestAdminRemoveStudent(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			people := &fakeAdminStore{err: test.storeErr}
-			admin := NewAdmin(people)
+			admin := newAdminHandler(t, people)
 			rec := adminCall(t, admin.RemoveStudent(), http.MethodPost, "/api/admin/students/"+test.id+"/remove", test.id, "")
 			if rec.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
@@ -414,54 +453,52 @@ func TestAdminRemoveStudent(t *testing.T) {
 	}
 }
 
-const validCR = `{"full_name":"New CR","reg_no":"2023331200","batch":"CSE-23","section":"A",
-"email":"newcr@student.sust.edu","phone":"01712345670","blood_group":"A+",
-"password":"sust-250-project","confirm_password":"sust-250-project"}`
-
-func TestAdminCreateCR(t *testing.T) {
+func TestAdminPromoteCR(t *testing.T) {
 	silenceLog(t)
 	tests := []struct {
-		name       string
-		body       string
-		storeErr   error
-		wantStatus int
-		wantError  string
+		name        string
+		body        string
+		storeErr    error
+		wantStatus  int
+		wantMessage string
+		wantError   string
 	}{
-		{name: "created", body: validCR, wantStatus: http.StatusCreated},
+		{name: "promoted", body: `{"user_id":11}`, wantStatus: http.StatusOK, wantMessage: MessageCRPromoted},
 		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
-		{name: "unknown field", body: `{"full_name":"A","is_cr":true}`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
+		{name: "unknown field", body: `{"user_id":11,"is_cr":true}`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
+		{name: "missing user id", body: `{}`, wantStatus: http.StatusBadRequest, wantError: MessageInvalidUserID},
+		{name: "negative user id", body: `{"user_id":-3}`, wantStatus: http.StatusBadRequest, wantError: MessageInvalidUserID},
 		{
-			name:       "missing full name",
-			body:       strings.Replace(validCR, `"full_name":"New CR"`, `"full_name":" "`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Full name is required.",
+			name:       "not an active student",
+			body:       `{"user_id":11}`,
+			storeErr:   store.ErrNotFound,
+			wantStatus: http.StatusNotFound,
+			wantError:  MessageActiveStudentNotFound,
 		},
 		{
-			name:       "bad batch",
-			body:       strings.Replace(validCR, `"batch":"CSE-23"`, `"batch":"CSE23"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Batch must look like CSE-23.",
+			name:       "already a class representative",
+			body:       `{"user_id":11}`,
+			storeErr:   store.ErrAlreadyCR,
+			wantStatus: http.StatusConflict,
+			wantError:  MessageAlreadyCR,
 		},
 		{
-			name:       "bad blood group",
-			body:       strings.Replace(validCR, `"blood_group":"A+"`, `"blood_group":"C+"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Blood group must be one of A+, A-, B+, B-, AB+, AB-, O+, O-.",
+			name:       "store failure",
+			body:       `{"user_id":11}`,
+			storeErr:   errors.New("database is down"),
+			wantStatus: http.StatusInternalServerError,
+			wantError:  "Internal server error",
 		},
-		{
-			name:       "passwords do not match",
-			body:       strings.Replace(validCR, `"confirm_password":"sust-250-project"`, `"confirm_password":"other-password"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Password and the confirmation do not match.",
-		},
-		{name: "duplicate", body: validCR, storeErr: store.ErrDuplicateAccount, wantStatus: http.StatusConflict, wantError: MessageDuplicateAccount},
-		{name: "store failure", body: validCR, storeErr: errors.New("database is down"), wantStatus: http.StatusInternalServerError, wantError: "Internal server error"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			people := &fakeAdminStore{err: test.storeErr}
-			admin := NewAdmin(people)
-			rec := adminCall(t, admin.CreateCR(), http.MethodPost, "/api/admin/crs", "", test.body)
+			people := &fakeAdminStore{
+				err:       test.storeErr,
+				promotion: store.PromotedCR{FullName: "New CR", Batch: "CSE-23", Section: "B"},
+			}
+			alerts := &fakeNotifier{}
+			admin := NewAdmin(accountConfig(t, "test"), people, alerts, &fakeMailer{}, testPhotos(t))
+			rec := adminCall(t, admin.PromoteCR(), http.MethodPost, "/api/admin/crs/promote", "", test.body)
 			if rec.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
 			}
@@ -469,23 +506,26 @@ func TestAdminCreateCR(t *testing.T) {
 				if got := errorMessage(t, rec); got != test.wantError {
 					t.Errorf("error = %q, want %q", got, test.wantError)
 				}
+				if alerts.calls != 0 {
+					t.Errorf("notifications = %d, want none", alerts.calls)
+				}
 				return
 			}
-			if len(people.createdCRs) != 1 {
-				t.Fatalf("the store received %d class representatives, want 1", len(people.createdCRs))
+			if got := successMessage(t, rec); got != test.wantMessage {
+				t.Errorf("message = %q, want %q", got, test.wantMessage)
 			}
-			created := people.createdCRs[0]
-			if created.RegNo != "2023331200" || created.Batch != "CSE-23" || created.Section != "A" {
-				t.Errorf("created = %+v, want the submitted registration number, batch and section", created)
+			if len(people.promoted) != 1 || people.promoted[0] != 11 {
+				t.Errorf("promoted = %v, want [11]", people.promoted)
 			}
-			if created.PasswordHash == "" || created.PasswordHash == "sust-250-project" {
-				t.Error("the store did not receive a hashed password")
+			if alerts.calls != 1 {
+				t.Fatalf("notifications = %d, want 1", alerts.calls)
 			}
-			if strings.Contains(rec.Body.String(), created.PasswordHash) || strings.Contains(rec.Body.String(), "sust-250-project") {
-				t.Error("the response body leaks the password or its hash")
+			want := "You are now the Class Representative of CSE-23 section B"
+			if alerts.title != want {
+				t.Errorf("notification title = %q, want %q", alerts.title, want)
 			}
-			if got := decodeBody(t, rec)["id"]; got != float64(1) {
-				t.Errorf("id = %v, want 1", got)
+			if alerts.userID != 11 {
+				t.Errorf("notification user = %d, want 11", alerts.userID)
 			}
 		})
 	}
@@ -496,7 +536,7 @@ func TestAdminCRs(t *testing.T) {
 	people := &fakeAdminStore{crs: []store.StudentRow{
 		{ID: 2, FullName: "Class Representative", RegNo: "2023331002", Batch: "CSE-23", Section: "B", IsCR: true, Status: store.StatusActive, CreatedAt: adminNow},
 	}}
-	admin := NewAdmin(people)
+	admin := newAdminHandler(t, people)
 	rec := adminCall(t, admin.CRs(), http.MethodGet, "/api/admin/crs?search=class&batch=cse-23", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
@@ -511,7 +551,7 @@ func TestAdminCRs(t *testing.T) {
 	if bad.Code != http.StatusBadRequest {
 		t.Errorf("bad batch status = %d, want 400", bad.Code)
 	}
-	failing := NewAdmin(&fakeAdminStore{err: errors.New("database is down")})
+	failing := newAdminHandler(t, &fakeAdminStore{err: errors.New("database is down")})
 	broken := adminCall(t, failing.CRs(), http.MethodGet, "/api/admin/crs", "", "")
 	if broken.Code != http.StatusInternalServerError {
 		t.Errorf("failing store status = %d, want 500", broken.Code)
@@ -541,7 +581,7 @@ func TestAdminDemoteAndDeactivateCR(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			people := &fakeAdminStore{err: test.storeErr}
-			admin := NewAdmin(people)
+			admin := newAdminHandler(t, people)
 			handlerFunc := admin.DemoteCR()
 			path := "/api/admin/crs/" + test.id + "/demote"
 			if test.deactivate {
@@ -562,64 +602,117 @@ func TestAdminDemoteAndDeactivateCR(t *testing.T) {
 	}
 }
 
-const validTeacher = `{"name":"New Teacher","teacher_id":"T-100","email":"teacher@sust.edu",
-"phone":"01712345671","password":"sust-250-project","confirm_password":"sust-250-project"}`
+func teacherForm() map[string][]string {
+	return map[string][]string{
+		"name":          {"New Teacher"},
+		"teacher_id":    {"T-100"},
+		"designation":   {"Assistant Professor"},
+		"email":         {"teacher@sust.edu"},
+		"phone":         {"01712345671"},
+		"blood_group":   {"A+"},
+		"date_of_birth": {"1988-03-09"},
+		"office_room":   {"AB-401"},
+		"joining_date":  {"2015-01-15"},
+	}
+}
 
-func TestAdminCreateTeacher(t *testing.T) {
+func withoutField(values map[string][]string, name string, replacement ...string) map[string][]string {
+	copied := make(map[string][]string, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	if len(replacement) == 0 {
+		delete(copied, name)
+		return copied
+	}
+	copied[name] = replacement
+	return copied
+}
+
+func TestAdminInviteTeacher(t *testing.T) {
 	silenceLog(t)
 	tests := []struct {
 		name       string
-		body       string
+		values     map[string][]string
+		withPhoto  bool
 		storeErr   error
 		wantStatus int
 		wantError  string
 	}{
-		{name: "created", body: validTeacher, wantStatus: http.StatusCreated},
-		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
+		{name: "invited", values: teacherForm(), wantStatus: http.StatusCreated},
+		{name: "invited with a photo", values: teacherForm(), withPhoto: true, wantStatus: http.StatusCreated},
 		{
-			name:       "missing name",
-			body:       strings.Replace(validTeacher, `"name":"New Teacher"`, `"name":""`, 1),
+			name:       "missing designation",
+			values:     withoutField(teacherForm(), "designation"),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Name is required.",
+			wantError:  "Designation is required.",
+		},
+		{
+			name:       "email outside the teacher domain",
+			values:     withoutField(teacherForm(), "email", "teacher@gmail.com"),
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Email must end with @sust.edu.",
+		},
+		{
+			name:       "student email domain",
+			values:     withoutField(teacherForm(), "email", "teacher@student.sust.edu"),
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Email must end with @sust.edu.",
 		},
 		{
 			name:       "short teacher id",
-			body:       strings.Replace(validTeacher, `"teacher_id":"T-100"`, `"teacher_id":"T1"`, 1),
+			values:     withoutField(teacherForm(), "teacher_id", "T1"),
 			wantStatus: http.StatusBadRequest,
 			wantError:  "Teacher ID must be 3 to 20 letters, digits or hyphens.",
 		},
 		{
-			name:       "teacher id with spaces",
-			body:       strings.Replace(validTeacher, `"teacher_id":"T-100"`, `"teacher_id":"T 100"`, 1),
+			name:       "bad phone",
+			values:     withoutField(teacherForm(), "phone", "0171234567"),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Teacher ID must be 3 to 20 letters, digits or hyphens.",
+			wantError:  validate.MessagePhone,
 		},
 		{
-			name:       "bad email",
-			body:       strings.Replace(validTeacher, `"email":"teacher@sust.edu"`, `"email":"teacher.sust.edu"`, 1),
+			name:       "missing birth date",
+			values:     withoutField(teacherForm(), "date_of_birth"),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Email must be a valid email address.",
+			wantError:  "Date of birth is required.",
 		},
 		{
-			name:       "short password",
-			body:       strings.ReplaceAll(validTeacher, `"sust-250-project"`, `"short"`),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Password must be at least 8 characters long.",
+			name:       "duplicate",
+			values:     teacherForm(),
+			storeErr:   store.ErrDuplicateAccount,
+			wantStatus: http.StatusConflict,
+			wantError:  MessageDuplicateTeacher,
 		},
-		{name: "duplicate", body: validTeacher, storeErr: store.ErrDuplicateAccount, wantStatus: http.StatusConflict, wantError: MessageDuplicateTeacher},
-		{name: "store failure", body: validTeacher, storeErr: errors.New("database is down"), wantStatus: http.StatusInternalServerError, wantError: "Internal server error"},
+		{
+			name:       "store failure",
+			values:     teacherForm(),
+			storeErr:   errors.New("database is down"),
+			wantStatus: http.StatusInternalServerError,
+			wantError:  "Internal server error",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			people := &fakeAdminStore{err: test.storeErr}
-			admin := NewAdmin(people)
-			rec := adminCall(t, admin.CreateTeacher(), http.MethodPost, "/api/admin/teachers", "", test.body)
+			mail := &fakeMailer{}
+			photos := testPhotos(t)
+			admin := NewAdmin(accountConfig(t, "test"), people, &fakeNotifier{}, mail, photos)
+			files := []formFile{}
+			if test.withPhoto {
+				files = append(files, formFile{field: "photo", name: "teacher.png", data: pngPhoto(t, 240, 240)})
+			}
+			request := multipartRequest(t, http.MethodPost, "/api/admin/teachers", test.values, files...)
+			rec := serve(admin.CreateTeacher(), request)
 			if rec.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
 			}
 			if test.wantError != "" {
 				if got := errorMessage(t, rec); got != test.wantError {
 					t.Errorf("error = %q, want %q", got, test.wantError)
+				}
+				if savedPhotos(t, photos) != 0 {
+					t.Error("a photo stayed on disk although the invitation failed")
 				}
 				return
 			}
@@ -630,11 +723,176 @@ func TestAdminCreateTeacher(t *testing.T) {
 			if created.TeacherID != "T-100" || created.Email != "teacher@sust.edu" {
 				t.Errorf("created = %+v, want the submitted teacher ID and email", created)
 			}
-			if created.PasswordHash == "" || created.PasswordHash == "sust-250-project" {
-				t.Error("the store did not receive a hashed password")
+			if created.Designation != "Assistant Professor" || created.OfficeRoom != "AB-401" {
+				t.Errorf("created = %+v, want the submitted designation and office room", created)
 			}
-			if strings.Contains(rec.Body.String(), created.PasswordHash) || strings.Contains(rec.Body.String(), "sust-250-project") {
-				t.Error("the response body leaks the password or its hash")
+			if created.DateOfBirth != "1988-03-09" || created.JoiningDate != "2015-01-15" {
+				t.Errorf("created = %+v, want the submitted dates", created)
+			}
+			if created.InviteHash == "" || created.InviteExpiresAt.IsZero() {
+				t.Error("the store did not receive an invitation token and expiry")
+			}
+			if test.withPhoto && created.PhotoPath == "" {
+				t.Error("the store did not receive the uploaded photo")
+			}
+			payload := decodeBody(t, rec)
+			link, _ := payload["invite_link"].(string)
+			if !strings.HasPrefix(link, "http://localhost:5173/teacher/activate?token=") {
+				t.Errorf("invite_link = %q, want an activation link", link)
+			}
+			if strings.Contains(link, created.InviteHash) {
+				t.Error("the invitation link leaks the stored hash")
+			}
+			if strings.Contains(rec.Body.String(), "password") {
+				t.Error("the invitation response mentions a password field")
+			}
+		})
+	}
+}
+
+func TestAdminInviteTeacherMailedInProduction(t *testing.T) {
+	silenceLog(t)
+	people := &fakeAdminStore{}
+	mail := &fakeMailer{configured: true}
+	admin := NewAdmin(accountConfig(t, "production"), people, &fakeNotifier{}, mail, testPhotos(t))
+	request := multipartRequest(t, http.MethodPost, "/api/admin/teachers", teacherForm())
+	rec := serve(admin.CreateTeacher(), request)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if _, present := decodeBody(t, rec)["invite_link"]; present {
+		t.Error("the response carries an invite_link although the mailer is configured")
+	}
+	if len(mail.sent) != 1 || mail.sent[0].to != "teacher@sust.edu" {
+		t.Fatalf("sent mail = %+v, want one message to the teacher", mail.sent)
+	}
+	if !strings.Contains(mail.sent[0].body, "/teacher/activate?token=") {
+		t.Errorf("mail body = %q, want the activation link", mail.sent[0].body)
+	}
+}
+
+func TestAdminUpdateTeacher(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name       string
+		id         string
+		body       string
+		storeErr   error
+		wantStatus int
+		wantError  string
+	}{
+		{name: "updated", id: "6", body: `{"designation":"Professor"}`, wantStatus: http.StatusOK},
+		{name: "bad id", id: "six", body: `{"designation":"Professor"}`, wantStatus: http.StatusBadRequest, wantError: MessageInvalidID},
+		{name: "nothing to change", id: "6", body: `{}`, wantStatus: http.StatusBadRequest, wantError: MessageNothingToUpdate},
+		{
+			name:       "phone is not an admin field",
+			id:         "6",
+			body:       `{"phone":"01712345678"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Invalid request body",
+		},
+		{
+			name:       "bio is not an admin field",
+			id:         "6",
+			body:       `{"bio":"hello"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Invalid request body",
+		},
+		{
+			name:       "email outside the teacher domain",
+			id:         "6",
+			body:       `{"email":"teacher@gmail.com"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Email must end with @sust.edu.",
+		},
+		{
+			name:       "unknown teacher",
+			id:         "6",
+			body:       `{"designation":"Professor"}`,
+			storeErr:   store.ErrNotFound,
+			wantStatus: http.StatusNotFound,
+			wantError:  MessageTeacherNotFound,
+		},
+		{
+			name:       "duplicate teacher id",
+			id:         "6",
+			body:       `{"teacher_id":"T-200"}`,
+			storeErr:   store.ErrDuplicateAccount,
+			wantStatus: http.StatusConflict,
+			wantError:  MessageDuplicateTeacher,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			people := &fakeAdminStore{err: test.storeErr}
+			admin := newAdminHandler(t, people)
+			rec := adminCall(t, admin.UpdateTeacher(), http.MethodPatch, "/api/admin/teachers/"+test.id, test.id, test.body)
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantError != "" {
+				if got := errorMessage(t, rec); got != test.wantError {
+					t.Errorf("error = %q, want %q", got, test.wantError)
+				}
+				return
+			}
+			if got := successMessage(t, rec); got != MessageTeacherUpdated {
+				t.Errorf("message = %q, want %q", got, MessageTeacherUpdated)
+			}
+			if len(people.teacherUpdates) != 1 || people.teacherUpdates[0].Designation == nil {
+				t.Fatalf("updates = %+v, want one designation change", people.teacherUpdates)
+			}
+			if *people.teacherUpdates[0].Designation != "Professor" {
+				t.Errorf("designation = %q, want Professor", *people.teacherUpdates[0].Designation)
+			}
+		})
+	}
+}
+
+func TestAdminResendInvite(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name       string
+		id         string
+		storeErr   error
+		wantStatus int
+		wantError  string
+	}{
+		{name: "resent", id: "6", wantStatus: http.StatusOK},
+		{name: "bad id", id: "six", wantStatus: http.StatusBadRequest, wantError: MessageInvalidID},
+		{name: "unknown teacher", id: "6", storeErr: store.ErrNotFound, wantStatus: http.StatusNotFound, wantError: MessageTeacherNotFound},
+		{
+			name:       "already activated",
+			id:         "6",
+			storeErr:   store.ErrNotInvited,
+			wantStatus: http.StatusConflict,
+			wantError:  MessageTeacherNotInvited,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			people := &fakeAdminStore{
+				err:    test.storeErr,
+				invite: store.TeacherInvite{Email: "teacher@sust.edu", Name: "Active Teacher"},
+			}
+			admin := newAdminHandler(t, people)
+			path := "/api/admin/teachers/" + test.id + "/resend-invite"
+			rec := adminCall(t, admin.ResendInvite(), http.MethodPost, path, test.id, "")
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantError != "" {
+				if got := errorMessage(t, rec); got != test.wantError {
+					t.Errorf("error = %q, want %q", got, test.wantError)
+				}
+				return
+			}
+			if len(people.resentInvites) != 1 || people.resentInvites[0] != 6 {
+				t.Errorf("resent = %v, want [6]", people.resentInvites)
+			}
+			link, _ := decodeBody(t, rec)["invite_link"].(string)
+			if !strings.HasPrefix(link, "http://localhost:5173/teacher/activate?token=") {
+				t.Errorf("invite_link = %q, want an activation link", link)
 			}
 		})
 	}
@@ -643,9 +901,13 @@ func TestAdminCreateTeacher(t *testing.T) {
 func TestAdminTeachers(t *testing.T) {
 	silenceLog(t)
 	people := &fakeAdminStore{teachers: []store.TeacherRow{
-		{ID: 6, TeacherID: "T-001", Name: "Active Teacher", Email: "teacher@sust.edu", Phone: "01712345672", Status: store.StatusActive, CreatedAt: adminNow},
+		{
+			ID: 6, TeacherID: "T-001", Name: "Active Teacher", Designation: "Lecturer",
+			Email: "teacher@sust.edu", Phone: "01712345672", OfficeRoom: "AB-401",
+			PhotoPath: "/uploads/photos/bbbb.png", Status: store.StatusActive, CreatedAt: adminNow,
+		},
 	}}
-	admin := NewAdmin(people)
+	admin := newAdminHandler(t, people)
 	rec := adminCall(t, admin.Teachers(), http.MethodGet, "/api/admin/teachers?search=active&status=active", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
@@ -660,6 +922,12 @@ func TestAdminTeachers(t *testing.T) {
 	if got := list[0]["teacher_id"]; got != "T-001" {
 		t.Errorf("teacher_id = %v, want T-001", got)
 	}
+	if got := list[0]["photo_url"]; got != "/uploads/photos/bbbb.png" {
+		t.Errorf("photo_url = %v, want the stored photo", got)
+	}
+	if got := list[0]["designation"]; got != "Lecturer" {
+		t.Errorf("designation = %v, want Lecturer", got)
+	}
 	if strings.Contains(rec.Body.String(), "password") {
 		t.Error("the teachers response mentions a password field")
 	}
@@ -667,7 +935,7 @@ func TestAdminTeachers(t *testing.T) {
 	if bad.Code != http.StatusBadRequest {
 		t.Errorf("bad status filter = %d, want 400", bad.Code)
 	}
-	failing := NewAdmin(&fakeAdminStore{err: errors.New("database is down")})
+	failing := newAdminHandler(t, &fakeAdminStore{err: errors.New("database is down")})
 	broken := adminCall(t, failing.Teachers(), http.MethodGet, "/api/admin/teachers", "", "")
 	if broken.Code != http.StatusInternalServerError {
 		t.Errorf("failing store status = %d, want 500", broken.Code)
@@ -693,7 +961,7 @@ func TestAdminDeactivateTeacher(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			people := &fakeAdminStore{err: test.storeErr}
-			admin := NewAdmin(people)
+			admin := newAdminHandler(t, people)
 			rec := adminCall(t, admin.DeactivateTeacher(), http.MethodPost, "/api/admin/teachers/"+test.id+"/deactivate", test.id, "")
 			if rec.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
@@ -716,7 +984,7 @@ func TestAdminDeactivateTeacher(t *testing.T) {
 func TestAdminStats(t *testing.T) {
 	silenceLog(t)
 	people := &fakeAdminStore{stats: store.Stats{TotalStudents: 42, TotalCRs: 4, TotalTeachers: 7, PendingApprovals: 3}}
-	admin := NewAdmin(people)
+	admin := newAdminHandler(t, people)
 	rec := adminCall(t, admin.Stats(), http.MethodGet, "/api/admin/stats", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
@@ -733,7 +1001,7 @@ func TestAdminStats(t *testing.T) {
 			t.Errorf("%s = %v, want %v", name, got, value)
 		}
 	}
-	failing := NewAdmin(&fakeAdminStore{err: errors.New("database is down")})
+	failing := newAdminHandler(t, &fakeAdminStore{err: errors.New("database is down")})
 	broken := adminCall(t, failing.Stats(), http.MethodGet, "/api/admin/stats", "", "")
 	if broken.Code != http.StatusInternalServerError {
 		t.Errorf("failing store status = %d, want 500", broken.Code)
