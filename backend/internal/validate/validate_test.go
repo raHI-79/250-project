@@ -61,25 +61,32 @@ func TestEmail(t *testing.T) {
 }
 
 func TestPhone(t *testing.T) {
-	const message = "Phone must be 10 to 15 digits, with an optional leading +."
 	tests := []struct {
 		name    string
 		value   string
 		want    string
 		wantErr string
 	}{
-		{name: "eleven digits", value: "01712345678", want: "01712345678"},
-		{name: "ten digits", value: "1712345678", want: "1712345678"},
-		{name: "fifteen digits", value: "012345678901234", want: "012345678901234"},
-		{name: "country code", value: "+8801712345678", want: "+8801712345678"},
+		{name: "grameenphone", value: "01712345678", want: "01712345678"},
+		{name: "robi", value: "01812345678", want: "01812345678"},
+		{name: "banglalink", value: "01912345678", want: "01912345678"},
+		{name: "teletalk", value: "01512345678", want: "01512345678"},
+		{name: "airtel", value: "01612345678", want: "01612345678"},
+		{name: "lowest allowed operator digit", value: "01312345678", want: "01312345678"},
 		{name: "spaces are trimmed", value: " 01712345678 ", want: "01712345678"},
 		{name: "empty", value: "", wantErr: "Phone is required."},
-		{name: "nine digits", value: "017123456", wantErr: message},
-		{name: "sixteen digits", value: "0123456789012345", wantErr: message},
-		{name: "letters", value: "01712345abc", wantErr: message},
-		{name: "inner dash", value: "01712-345678", wantErr: message},
-		{name: "inner space", value: "017 1234 5678", wantErr: message},
-		{name: "plus in the middle", value: "0171+2345678", wantErr: message},
+		{name: "ten digits", value: "1712345678", wantErr: MessagePhone},
+		{name: "twelve digits", value: "017123456789", wantErr: MessagePhone},
+		{name: "country code", value: "+8801712345678", wantErr: MessagePhone},
+		{name: "country code without a plus", value: "8801712345678", wantErr: MessagePhone},
+		{name: "operator digit zero", value: "01012345678", wantErr: MessagePhone},
+		{name: "operator digit two", value: "01212345678", wantErr: MessagePhone},
+		{name: "does not start with zero one", value: "02712345678", wantErr: MessagePhone},
+		{name: "nine digits", value: "017123456", wantErr: MessagePhone},
+		{name: "letters", value: "01712345abc", wantErr: MessagePhone},
+		{name: "inner dash", value: "01712-345678", wantErr: MessagePhone},
+		{name: "inner space", value: "017 1234 5678", wantErr: MessagePhone},
+		{name: "plus in the middle", value: "0171+2345678", wantErr: MessagePhone},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
