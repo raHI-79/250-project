@@ -20,6 +20,7 @@ type scheduleItem struct {
 	EndTime     string `json:"end_time"`
 	Room        string `json:"room"`
 	Cancelled   bool   `json:"cancelled"`
+	Note        string `json:"note,omitempty"`
 }
 
 type scheduleResponse struct {
@@ -40,6 +41,7 @@ type classItem struct {
 	EndTime     string `json:"end_time"`
 	Room        string `json:"room"`
 	Status      string `json:"status"`
+	Note        string `json:"note,omitempty"`
 }
 
 type classesResponse struct {
@@ -82,6 +84,7 @@ func (t *Teacher) Schedule() http.HandlerFunc {
 				EndTime:     entry.EndTime,
 				Room:        entry.Room,
 				Cancelled:   entry.Cancelled,
+				Note:        entry.Note,
 			})
 		}
 		httpx.WriteJSON(w, http.StatusOK, scheduleResponse{
@@ -126,6 +129,7 @@ func (t *Teacher) UpcomingClasses() http.HandlerFunc {
 				StartTime:   class.StartTime,
 				EndTime:     class.EndTime,
 				Room:        class.Room,
+				Note:        class.Note,
 				Status:      class.Status,
 			})
 		}

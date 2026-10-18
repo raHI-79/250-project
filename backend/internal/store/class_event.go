@@ -29,16 +29,18 @@ type StudentProfile struct {
 }
 
 type NewClassEvent struct {
-	Batch     string
-	Section   string
-	EventType string
-	CourseID  int64
-	TeacherID int64
-	EventDate string
-	StartTime string
-	EndTime   string
-	Room      string
-	CreatedBy int64
+	Note         string
+	NoteAudience string
+	Batch        string
+	Section      string
+	EventType    string
+	CourseID     int64
+	TeacherID    int64
+	EventDate    string
+	StartTime    string
+	EndTime      string
+	Room         string
+	CreatedBy    int64
 }
 
 type ClassEventRow struct {
@@ -60,6 +62,8 @@ type ClassEventRow struct {
 	CreatedBy     int64
 	CreatedAt     time.Time
 	DecidedAt     *time.Time
+	Note          string
+	NoteAudience  string
 }
 
 type FixedSlotError struct {
@@ -118,8 +122,10 @@ WHERE r.room = $1
 ORDER BY r.start_time
 LIMIT 1`
 	insertClassEventSQL = `INSERT INTO class_events
-(batch, section, course_id, teacher_id, event_date, start_time, end_time, room, event_type, status, created_by)
-VALUES ($1, $2, $3, $4, $5::date, $6::time, $7::time, $8, $9, 'pending', $10)
+(batch, section, course_id, teacher_id, event_date, start_time, end_time, room, event_type, status,
+created_by, note, note_audience)
+VALUES ($1, $2, $3, $4, $5::date, $6::time, $7::time, $8, $9, 'pending', $10,
+NULLIF($11::text, ''), NULLIF($12::text, ''))
 RETURNING id, created_at`
 	listRoomBookingsSQL = `SELECT r.room, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'),
 r.batch, r.section, c.code, 'fixed' AS source, 'fixed' AS status
@@ -138,7 +144,8 @@ WHERE e.event_date = $1::date
 ORDER BY 1, 2, 3`
 	listClassRequestsSQL = `SELECT e.id, e.batch, e.section, e.event_type, e.course_id, c.code, c.title,
 e.teacher_id, t.user_id, t.name, to_char(e.event_date, 'YYYY-MM-DD'),
-to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'), e.room, e.status, e.created_at, e.decided_at
+to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'), e.room, e.status, e.created_at, e.decided_at,
+COALESCE(e.note, ''), COALESCE(e.note_audience, '')
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 JOIN teachers t ON t.id = e.teacher_id
@@ -273,6 +280,8 @@ func (s *Store) CreateClassRequest(ctx context.Context, event NewClassEvent) (Cl
 		event.Room,
 		event.EventType,
 		event.CreatedBy,
+		event.Note,
+		event.NoteAudience,
 	).Scan(&row.ID, &row.CreatedAt)
 	if err != nil {
 		return ClassEventRow{}, fmt.Errorf("store: could not create the class request: %w", err)
@@ -340,6 +349,8 @@ func (s *Store) ListClassRequests(ctx context.Context, createdBy int64, status s
 			&request.Status,
 			&request.CreatedAt,
 			&request.DecidedAt,
+			&request.Note,
+			&request.NoteAudience,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a class request: %w", err)

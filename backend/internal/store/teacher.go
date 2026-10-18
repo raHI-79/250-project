@@ -35,6 +35,7 @@ type RequestRow struct {
 	RequestedByRegNo string
 	CreatedBy        int64
 	CreatedAt        time.Time
+	Note             string
 }
 
 type EventDecision struct {
@@ -51,6 +52,7 @@ type EventDecision struct {
 	Status      string
 	CreatedBy   int64
 	DecidedAt   time.Time
+	Note        string
 }
 
 type ScheduleItem struct {
@@ -64,13 +66,15 @@ type ScheduleItem struct {
 	EndTime     string
 	Room        string
 	Cancelled   bool
+	Note        string
 }
 
 const (
 	findTeacherByUserSQL   = `SELECT id, user_id, name FROM teachers WHERE user_id = $1`
 	listTeacherRequestsSQL = `SELECT e.id, e.event_type, e.batch, e.section, c.code, c.title,
 to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-e.room, COALESCE(s.full_name, ''), COALESCE(s.reg_no, ''), e.created_by, e.created_at
+e.room, COALESCE(s.full_name, ''), COALESCE(s.reg_no, ''), e.created_by, e.created_at,
+CASE WHEN e.note_audience IN ('teacher', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 LEFT JOIN students s ON s.user_id = e.created_by
@@ -89,21 +93,24 @@ WHERE id = $1
 RETURNING id`
 	listTeacherScheduleSQL = `SELECT 'fixed' AS kind, r.id, r.batch, r.section, c.code, c.title,
 to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room,
-EXISTS (SELECT 1 FROM routine_cancellations rc WHERE rc.routine_id = r.id AND rc.cancel_date = $2::date) AS cancelled
+EXISTS (SELECT 1 FROM routine_cancellations rc WHERE rc.routine_id = r.id AND rc.cancel_date = $2::date) AS cancelled,
+'' AS note
 FROM routines r
 JOIN courses c ON c.id = r.course_id
 WHERE r.teacher_id = $1 AND r.day_of_week = EXTRACT(DOW FROM $2::date)::int
 UNION ALL
 SELECT e.event_type, e.id, e.batch, e.section, c.code, c.title,
 to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'), e.room,
-(e.status = 'cancelled') AS cancelled
+(e.status = 'cancelled') AS cancelled,
+CASE WHEN e.note_audience IN ('teacher', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 WHERE e.teacher_id = $1 AND e.event_date = $2::date AND e.status IN ('approved', 'cancelled')
 ORDER BY 7, 2`
 	listTeacherClassesSQL = `SELECT e.id, e.event_type, e.batch, e.section, c.code, c.title,
 to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-e.room, e.status, e.created_by
+e.room, e.status, e.created_by,
+CASE WHEN e.note_audience IN ('teacher', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 WHERE e.teacher_id = $1 AND e.status = 'approved'
@@ -174,6 +181,7 @@ func (s *Store) ListTeacherRequests(ctx context.Context, teacherID int64) ([]Req
 			&request.RequestedByRegNo,
 			&request.CreatedBy,
 			&request.CreatedAt,
+			&request.Note,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a request: %w", err)
@@ -298,6 +306,7 @@ func (s *Store) ListTeacherSchedule(ctx context.Context, teacherID int64, date s
 			&item.EndTime,
 			&item.Room,
 			&item.Cancelled,
+			&item.Note,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a schedule item: %w", err)
@@ -332,6 +341,7 @@ func (s *Store) ListTeacherClasses(ctx context.Context, teacherID int64, date st
 			&class.Room,
 			&class.Status,
 			&class.CreatedBy,
+			&class.Note,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a class: %w", err)

@@ -51,6 +51,7 @@ type examItem struct {
 	Batch       string `json:"batch"`
 	Section     string `json:"section"`
 	Room        string `json:"room"`
+	Note        string `json:"note,omitempty"`
 }
 
 type examsResponse struct {
@@ -144,6 +145,7 @@ func (s *Student) Exams() http.HandlerFunc {
 				Batch:       exam.Batch,
 				Section:     exam.Section,
 				Room:        exam.Room,
+				Note:        exam.Note,
 			})
 		}
 		httpx.WriteJSON(w, http.StatusOK, examsResponse{Items: items})
