@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Users } from 'lucide-react'
 import {
   Alert,
+  Avatar,
   Card,
   DataTable,
   EmptyState,
@@ -12,6 +14,7 @@ import {
   StatusBadge,
 } from '../../components/ui'
 import { useDebounced, useResource } from '../../lib/hooks'
+import { paths } from '../../lib/paths'
 import { BLOOD_GROUPS } from '../../lib/options'
 
 const HEADINGS = ['Name', 'Reg No', 'Batch', 'Section', 'Phone', 'Email', 'Blood Group']
@@ -85,8 +88,16 @@ export default function StudentsDirectoryPage() {
             {items.map((item) => (
               <tr key={item.reg_no} className="border-b border-brand-50 last:border-b-0">
                 <td className="px-4 py-3 text-brand-900">
-                  <span className="font-medium">{item.full_name}</span>
-                  {item.is_cr && <StatusBadge status="approved" label="CR" className="ml-2" />}
+                  <span className="flex items-center gap-2.5">
+                    <Avatar src={item.photo_url} name={item.full_name} size="sm" />
+                    <Link
+                      to={paths.person(item.user_id)}
+                      className="font-medium text-brand-900 hover:text-brand-600 hover:underline"
+                    >
+                      {item.full_name}
+                    </Link>
+                    {item.is_cr && <StatusBadge status="approved" label="CR" />}
+                  </span>
                 </td>
                 <td className="px-4 py-3 tabular-nums text-brand-700">{item.reg_no}</td>
                 <td className="px-4 py-3 text-brand-700">{item.batch}</td>

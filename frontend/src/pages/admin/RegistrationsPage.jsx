@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { UserCheck } from 'lucide-react'
 import {
   Alert,
+  Avatar,
   Button,
   DataTable,
   EmptyState,
@@ -23,7 +24,8 @@ const HEADINGS = [
   'Email',
   'Phone',
   'Blood Group',
-  'Drop Course',
+  'Date of Birth',
+  'Drop Courses',
   'Registered',
   '',
 ]
@@ -64,7 +66,7 @@ export default function RegistrationsPage() {
       />
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
       {loading ? (
-        <SkeletonTable columns={8} />
+        <SkeletonTable columns={10} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={UserCheck}
@@ -85,18 +87,30 @@ export default function RegistrationsPage() {
           <tbody>
             {items.map((item) => (
               <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
-                <td className="px-4 py-3 font-medium text-brand-900">{item.full_name}</td>
+                <td className="px-4 py-3">
+                  <span className="flex items-center gap-2.5">
+                    <Avatar src={item.photo_url} name={item.full_name} size="sm" />
+                    <span className="font-medium text-brand-900">{item.full_name}</span>
+                  </span>
+                </td>
                 <td className="px-4 py-3 tabular-nums text-brand-700">{item.reg_no}</td>
                 <td className="px-4 py-3 text-brand-700">{item.batch}</td>
                 <td className="px-4 py-3 text-brand-700">{item.section}</td>
                 <td className="px-4 py-3 text-brand-700">{item.email}</td>
                 <td className="px-4 py-3 text-brand-700">{item.phone}</td>
                 <td className="px-4 py-3 text-brand-700">{item.blood_group}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-brand-700">
+                  {item.date_of_birth ? formatDate(item.date_of_birth) : '—'}
+                </td>
                 <td className="px-4 py-3">
-                  {item.has_drop_course ? (
-                    <StatusBadge status="yours" label={item.drop_course_code} />
-                  ) : (
+                  {(item.drop_courses || []).length === 0 ? (
                     <span className="text-brand-500">No</span>
+                  ) : (
+                    <span className="flex flex-wrap gap-1">
+                      {item.drop_courses.map((course) => (
+                        <StatusBadge key={course.id} status="yours" label={course.code} />
+                      ))}
+                    </span>
                   )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-brand-700">

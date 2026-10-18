@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
 import { X } from 'lucide-react'
+import ProfileNavLink from './ProfileNavLink'
 import cx from '../../lib/cx'
 
 export default function Sidebar({ items, open, onClose }) {
-  const content = (
-    <nav className="flex h-full flex-col gap-1 overflow-y-auto px-3 py-4">
+  const links = (
+    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
       {items.map((item) => (
         <NavLink
           key={item.label}
@@ -24,6 +25,14 @@ export default function Sidebar({ items, open, onClose }) {
         </NavLink>
       ))}
     </nav>
+  )
+  const content = (
+    <div className="flex h-full min-h-0 flex-col">
+      {links}
+      <div className="border-t border-white/10 pt-3">
+        <ProfileNavLink onNavigate={onClose} />
+      </div>
+    </div>
   )
   return (
     <>

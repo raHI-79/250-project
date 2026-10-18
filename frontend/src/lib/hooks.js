@@ -73,3 +73,39 @@ export const useCountUp = (target, duration = 900) => {
   }, [target, duration])
   return value
 }
+
+let authConfig = null
+
+export const useAuthConfig = () => {
+  const [config, setConfig] = useState(authConfig)
+  useEffect(() => {
+    if (authConfig) return undefined
+    let active = true
+    api
+      .get('/api/auth/config', { auth: false })
+      .then((data) => {
+        authConfig = data || {}
+        if (active) setConfig(authConfig)
+      })
+      .catch(() => null)
+    return () => {
+      active = false
+    }
+  }, [])
+  return {
+    studentEmailDomain: config?.student_email_domain || '',
+    teacherEmailDomain: config?.teacher_email_domain || '',
+    googleEnabled: Boolean(config?.google_enabled),
+    loaded: Boolean(config),
+  }
+}
+
+export const useCountdown = (initial = 0) => {
+  const [seconds, setSeconds] = useState(initial)
+  useEffect(() => {
+    if (seconds <= 0) return undefined
+    const timer = window.setTimeout(() => setSeconds((current) => current - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [seconds])
+  return [seconds, setSeconds]
+}

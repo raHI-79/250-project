@@ -31,7 +31,7 @@ Full requirements: [SPEC.md](SPEC.md)
 | 14 | A | Admin panel | done |
 | 15 | B | Teacher panel | done |
 | 16 | B | Account backend: verification, invitations, promotion, profiles | done |
-| 17 | A | Account and profile pages | todo |
+| 17 | A | Account and profile pages | done |
 | 18 | B | Unified messaging, teacher notices and attachments | todo |
 | 19 | A | Routine experience, materials by batch and CR student access | todo |
 | 20 | A | Browser push notifications | todo |

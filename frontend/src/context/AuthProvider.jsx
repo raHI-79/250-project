@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import api, { SESSION_KEY } from '../lib/api'
 import { readJson, remove, writeJson } from '../lib/storage'
+import { PORTAL_STUDENT } from '../lib/paths'
 import { AuthContext } from './auth'
 
 const loadSession = () => {
@@ -20,8 +21,12 @@ export default function AuthProvider({ children }) {
     setSession({ token: null, user: null })
   }, [])
   const login = useCallback(
-    async (identifier, password) => {
-      const data = await api.post('/api/auth/login', { identifier, password }, { auth: false })
+    async (identifier, password, portal = PORTAL_STUDENT) => {
+      const data = await api.post(
+        '/api/auth/login',
+        { identifier, password, portal },
+        { auth: false },
+      )
       const next = { token: data.token, user: data.user }
       persist(next)
       return next.user
@@ -41,6 +46,17 @@ export default function AuthProvider({ children }) {
     },
     [persist],
   )
+  const updateUser = useCallback(
+    (changes) => {
+      setSession((current) => {
+        if (!current.token || !current.user) return current
+        const next = { ...current, user: { ...current.user, ...changes } }
+        writeJson(SESSION_KEY, next)
+        return next
+      })
+    },
+    [],
+  )
   const logout = useCallback(async () => {
     await api.post('/api/auth/logout').catch(() => null)
     clear()
@@ -53,9 +69,10 @@ export default function AuthProvider({ children }) {
       isAuthenticated: Boolean(session.token && session.user),
       login,
       adminLogin,
+      updateUser,
       logout,
     }),
-    [session, login, adminLogin, logout],
+    [session, login, adminLogin, updateUser, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

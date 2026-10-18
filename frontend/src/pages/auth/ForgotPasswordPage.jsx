@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import Alert from '../../components/ui/Alert'
-import Button from '../../components/ui/Button'
-import Card from '../../components/ui/Card'
-import { Input } from '../../components/ui/Field'
+import { Alert, Button, Card, Input, Stepper } from '../../components/ui'
+import PhoneInput from '../../components/forms/PhoneInput'
 import AuthScreen from '../../components/layout/AuthScreen'
 import api from '../../lib/api'
 import { HERO_IMAGES } from '../../lib/campus'
-import cx from '../../lib/cx'
-import { paths } from '../../lib/paths'
+import { useCountdown } from '../../lib/hooks'
+import { PORTAL_ADMIN, loginForPortal } from '../../lib/paths'
+import {
+  CODE_PATTERN,
+  PHONE_MESSAGE,
+  birthDateBounds,
+  isPhone,
+  passwordError,
+} from '../../lib/account'
 
 const OVERLAY = 'bg-linear-to-b from-white/92 via-white/88 to-brand-50/90'
 
@@ -16,42 +21,33 @@ const RESEND_SECONDS = 60
 
 const STEPS = ['Your account', 'Email code', 'New password']
 
-function Stepper({ step }) {
-  return (
-    <ol className="mt-5 flex items-center gap-2">
-      {STEPS.map((label, position) => {
-        const number = position + 1
-        const reached = step >= number
-        return (
-          <li key={label} className="flex flex-1 flex-col items-center gap-1.5 text-center">
-            <span
-              className={cx(
-                'inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold transition-colors',
-                reached ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-500',
-              )}
-            >
-              {number}
-            </span>
-            <span
-              className={cx(
-                'text-xs',
-                reached ? 'font-medium text-brand-700' : 'text-brand-400',
-              )}
-            >
-              {label}
-            </span>
-          </li>
-        )
-      })}
-    </ol>
-  )
+const copy = {
+  student: {
+    heading: 'Reset your password',
+    subtitle: 'We check your registration number against the date of birth on your account.',
+    identifier: 'Registration number',
+  },
+  teacher: {
+    heading: 'Reset your password',
+    subtitle: 'We check your teacher ID against the date of birth on your account.',
+    identifier: 'Teacher ID',
+  },
+  admin: {
+    heading: 'Administration password reset',
+    subtitle: 'We check your ID against the phone number registered with your account.',
+    identifier: 'Admin ID',
+  },
 }
 
-export default function ForgotPasswordPage({ admin = false }) {
-  const loginPath = admin ? paths.adminLogin() : paths.login()
+export default function ForgotPasswordPage({ portal }) {
+  const page = copy[portal] || copy.student
+  const byPhone = portal === PORTAL_ADMIN
+  const loginPath = loginForPortal(portal)
+  const bounds = birthDateBounds()
   const [step, setStep] = useState(1)
   const [identifier, setIdentifier] = useState('')
   const [phone, setPhone] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -60,25 +56,27 @@ export default function ForgotPasswordPage({ admin = false }) {
   const [resetToken, setResetToken] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [secondsLeft, setSecondsLeft] = useState(0)
-  useEffect(() => {
-    if (secondsLeft <= 0) return undefined
-    const timer = window.setTimeout(() => setSecondsLeft((current) => current - 1), 1000)
-    return () => window.clearTimeout(timer)
-  }, [secondsLeft])
+  const [seconds, setSeconds] = useCountdown(0)
   const requestCode = async () => {
     setError('')
+    if (byPhone && !isPhone(phone)) {
+      setError(PHONE_MESSAGE)
+      return
+    }
+    if (!byPhone && !dateOfBirth) {
+      setError('Date of birth is required.')
+      return
+    }
     setLoading(true)
     try {
-      const data = await api.post(
-        '/api/auth/forgot-password',
-        { identifier: identifier.trim(), phone: phone.trim() },
-        { auth: false },
-      )
+      const body = byPhone
+        ? { identifier: identifier.trim(), phone: phone.trim() }
+        : { identifier: identifier.trim(), date_of_birth: dateOfBirth }
+      const data = await api.post('/api/auth/forgot-password', body, { auth: false })
       setEmailHint(data?.email_hint || '')
       setDevCode(data?.dev_code || '')
       setCode('')
-      setSecondsLeft(RESEND_SECONDS)
+      setSeconds(RESEND_SECONDS)
       setStep(2)
     } catch (failure) {
       setError(failure.message)
@@ -88,7 +86,7 @@ export default function ForgotPasswordPage({ admin = false }) {
   }
   const verifyCode = async () => {
     setError('')
-    if (!/^[0-9]{6}$/.test(code.trim())) {
+    if (!CODE_PATTERN.test(code.trim())) {
       setError('Please enter the 6-digit code from the email.')
       return
     }
@@ -109,12 +107,9 @@ export default function ForgotPasswordPage({ admin = false }) {
   }
   const savePassword = async () => {
     setError('')
-    if (password.length < 8) {
-      setError('New password must be at least 8 characters long.')
-      return
-    }
-    if (password !== confirmPassword) {
-      setError('New password and the confirmation do not match.')
+    const problem = passwordError(password, confirmPassword)
+    if (problem) {
+      setError(problem.replace('Password', 'New password'))
       return
     }
     setLoading(true)
@@ -146,14 +141,10 @@ export default function ForgotPasswordPage({ admin = false }) {
     <AuthScreen images={HERO_IMAGES} rotateAfter={0} overlay={OVERLAY} className="max-w-md">
       <Card hover={false} className="animate-fade-in-up w-full">
         <div className="text-center">
-          <p className="font-display text-xl font-semibold text-brand-800">
-            {admin ? 'Administration password reset' : 'Reset your password'}
-          </p>
-          <p className="mt-1 text-sm text-brand-500">
-            We check your ID against the phone number registered with your account.
-          </p>
+          <p className="font-display text-xl font-semibold text-brand-800">{page.heading}</p>
+          <p className="mt-1 text-sm text-brand-500">{page.subtitle}</p>
         </div>
-        {step < 4 && <Stepper step={step} />}
+        {step < 4 && <Stepper steps={STEPS} current={step} className="mt-5" />}
         {step === 4 ? (
           <div className="mt-5 flex flex-col gap-4">
             <Alert tone="success" title="Password updated">
@@ -169,20 +160,32 @@ export default function ForgotPasswordPage({ admin = false }) {
             {step === 1 && (
               <>
                 <Input
-                  label={admin ? 'Admin ID' : 'Registration No. or Teacher ID'}
+                  label={page.identifier}
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
                   autoComplete="username"
                   required
                 />
-                <Input
-                  label="Registered phone number"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  autoComplete="tel"
-                  hint="The number saved on your account, for example 01712345678"
-                  required
-                />
+                {byPhone ? (
+                  <PhoneInput
+                    label="Registered phone number"
+                    value={phone}
+                    onChange={setPhone}
+                    hint="The number saved on your account"
+                    required
+                  />
+                ) : (
+                  <Input
+                    label="Date of birth"
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(event) => setDateOfBirth(event.target.value)}
+                    min={bounds.min}
+                    max={bounds.max}
+                    hint="The date saved on your account"
+                    required
+                  />
+                )}
                 <Button type="submit" loading={loading} className="w-full">
                   Send the code
                 </Button>
@@ -215,10 +218,10 @@ export default function ForgotPasswordPage({ admin = false }) {
                 <Button
                   variant="secondary"
                   onClick={requestCode}
-                  disabled={loading || secondsLeft > 0}
+                  disabled={loading || seconds > 0}
                   className="w-full"
                 >
-                  {secondsLeft > 0 ? `Resend in ${secondsLeft}s` : 'Resend the code'}
+                  {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
                 </Button>
               </>
             )}
