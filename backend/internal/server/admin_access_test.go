@@ -10,7 +10,34 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
+
+type emptyAccountStore struct{}
+
+func (emptyAccountStore) GetProfile(ctx context.Context, userID int64) (store.Profile, error) {
+	return store.Profile{}, store.ErrNotFound
+}
+
+func (emptyAccountStore) UpdateProfile(ctx context.Context, userID int64, role string, update store.ProfileUpdate) (string, error) {
+	return "", store.ErrNotFound
+}
+
+func (emptyAccountStore) GetPasswordHash(ctx context.Context, userID int64) (string, error) {
+	return "", store.ErrNotFound
+}
+
+func (emptyAccountStore) SetPassword(ctx context.Context, userID int64, passwordHash string) (int, error) {
+	return 0, store.ErrNotFound
+}
+
+func (emptyAccountStore) FilterDropCourseIDs(ctx context.Context, courseIDs []int64) ([]int64, error) {
+	return nil, nil
+}
+
+func (emptyAccountStore) FindPerson(ctx context.Context, userID int64) (store.PersonCard, error) {
+	return store.PersonCard{}, store.ErrNotFound
+}
 
 const (
 	accessStudentID = int64(101)
@@ -54,8 +81,8 @@ func (emptyAdminStore) RemoveStudent(ctx context.Context, userID int64) error {
 	return store.ErrNotFound
 }
 
-func (emptyAdminStore) CreateCR(ctx context.Context, cr store.NewCR) (int64, error) {
-	return 0, store.ErrDuplicateAccount
+func (emptyAdminStore) PromoteCR(ctx context.Context, userID int64) (store.PromotedCR, error) {
+	return store.PromotedCR{}, store.ErrNotFound
 }
 
 func (emptyAdminStore) ListCRs(ctx context.Context, filter store.CRFilter) ([]store.StudentRow, error) {
@@ -72,6 +99,14 @@ func (emptyAdminStore) DeactivateCR(ctx context.Context, userID int64) error {
 
 func (emptyAdminStore) CreateTeacher(ctx context.Context, teacher store.NewTeacher) (int64, error) {
 	return 0, store.ErrDuplicateAccount
+}
+
+func (emptyAdminStore) UpdateTeacher(ctx context.Context, userID int64, update store.TeacherUpdate) error {
+	return store.ErrNotFound
+}
+
+func (emptyAdminStore) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (store.TeacherInvite, error) {
+	return store.TeacherInvite{}, store.ErrNotFound
 }
 
 func (emptyAdminStore) ListTeachers(ctx context.Context, filter store.TeacherFilter) ([]store.TeacherRow, error) {
@@ -98,12 +133,14 @@ func adminRoutes() []adminRoute {
 		{method: http.MethodPost, path: "/api/admin/registrations/1/reject"},
 		{method: http.MethodGet, path: "/api/admin/students"},
 		{method: http.MethodPost, path: "/api/admin/students/1/remove"},
-		{method: http.MethodPost, path: "/api/admin/crs"},
+		{method: http.MethodPost, path: "/api/admin/crs/promote"},
 		{method: http.MethodGet, path: "/api/admin/crs"},
 		{method: http.MethodPost, path: "/api/admin/crs/1/demote"},
 		{method: http.MethodPost, path: "/api/admin/crs/1/deactivate"},
 		{method: http.MethodPost, path: "/api/admin/teachers"},
 		{method: http.MethodGet, path: "/api/admin/teachers"},
+		{method: http.MethodPatch, path: "/api/admin/teachers/1"},
+		{method: http.MethodPost, path: "/api/admin/teachers/1/resend-invite"},
 		{method: http.MethodPost, path: "/api/admin/teachers/1/deactivate"},
 		{method: http.MethodGet, path: "/api/admin/stats"},
 		{method: http.MethodPost, path: "/api/admin/courses"},
@@ -131,6 +168,8 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps.Library = emptyMaterialStore{}
 	deps.Contacts = emptyDirectoryStore{}
 	deps.Files = upload.NewSaver(t.TempDir(), 1)
+	deps.Photos = upload.NewPhotos(t.TempDir())
+	deps.Accounts = emptyAccountStore{}
 	deps.Mail = emptyMessageStore{}
 	deps.Votes = emptyPollStore{}
 	return deps, NewRouter(deps)

@@ -23,8 +23,7 @@ const (
 	adminFlowPersonPass   = "sust-250-project"
 	adminFlowRegistration = `{"full_name":"Approval Student","reg_no":"2023331600","batch":"CSE-23","section":"A",
 "email":"approval@student.sust.edu","phone":"01712345600","blood_group":"O+",
-"password":"sust-250-project","confirm_password":"sust-250-project","has_drop_course":true,
-"drop_course_code":"CSE-233"}`
+"password":"sust-250-project","confirm_password":"sust-250-project"}`
 	adminFlowCR = `{"full_name":"Flow CR","reg_no":"2023331601","batch":"CSE-23","section":"B",
 "email":"flowcr@student.sust.edu","phone":"01712345601","blood_group":"A+",
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
@@ -111,10 +110,11 @@ func checkStats(t *testing.T, router http.Handler, token string, students, crs, 
 func TestAdminPeopleFlow(t *testing.T) {
 	ctx, pool, router := newFlowRouter(t)
 	adminToken := seedAdmin(t, ctx, pool, router)
-	registered := call(t, router, http.MethodPost, "/api/auth/register", adminFlowRegistration, "")
+	registered := registerStudent(t, router, adminFlowRegistration)
 	if registered.Code != http.StatusCreated {
 		t.Fatalf("register status = %d, want 201 (body = %q)", registered.Code, registered.Body.String())
 	}
+	verifyStudentEmail(t, router, registered, adminFlowRegNo)
 	checkStats(t, router, adminToken, 0, 0, 0, 1)
 	pending := call(t, router, http.MethodGet, "/api/admin/registrations", "", adminToken)
 	if pending.Code != http.StatusOK {
@@ -124,8 +124,8 @@ func TestAdminPeopleFlow(t *testing.T) {
 	if entry["reg_no"] != adminFlowRegNo {
 		t.Fatalf("registration reg_no = %v, want %q", entry["reg_no"], adminFlowRegNo)
 	}
-	if entry["drop_course_code"] != "CSE-233" || entry["has_drop_course"] != true {
-		t.Errorf("the pending registration hides the drop course (item = %v)", entry)
+	if entry["photo_url"] == "" || entry["date_of_birth"] != flowBirthDate {
+		t.Errorf("the pending registration hides the photo or the birth date (item = %v)", entry)
 	}
 	if _, leaked := entry["password_hash"]; leaked {
 		t.Error("the pending registration carries a password hash")
@@ -152,14 +152,14 @@ func TestAdminPeopleFlow(t *testing.T) {
 	if loggedIn.Code != http.StatusOK {
 		t.Fatalf("student login status = %d, want 200 (body = %q)", loggedIn.Code, loggedIn.Body.String())
 	}
-	createdCR := call(t, router, http.MethodPost, "/api/admin/crs", adminFlowCR, adminToken)
-	if createdCR.Code != http.StatusCreated {
-		t.Fatalf("create class representative status = %d, want 201 (body = %q)", createdCR.Code, createdCR.Body.String())
-	}
-	crID := int64(number(t, createdCR, "id"))
-	duplicateCR := call(t, router, http.MethodPost, "/api/admin/crs", adminFlowCR, adminToken)
+	crID := onboardCR(t, router, adminToken, adminFlowCR)
+	duplicateCR := call(t, router, http.MethodPost, "/api/admin/crs/promote",
+		`{"user_id":`+strconv.FormatInt(crID, 10)+`}`, adminToken)
 	if duplicateCR.Code != http.StatusConflict {
-		t.Errorf("duplicate class representative status = %d, want 409 (body = %q)", duplicateCR.Code, duplicateCR.Body.String())
+		t.Errorf("second promotion status = %d, want 409 (body = %q)", duplicateCR.Code, duplicateCR.Body.String())
+	}
+	if got := field(t, duplicateCR, "error"); got != handler.MessageAlreadyCR {
+		t.Errorf("second promotion error = %q, want %q", got, handler.MessageAlreadyCR)
 	}
 	crLogin := `{"identifier":"` + adminFlowCRRegNo + `","password":"` + adminFlowPersonPass + `"}`
 	crLoggedIn := call(t, router, http.MethodPost, "/api/auth/login", crLogin, "")
@@ -199,12 +199,12 @@ func TestAdminPeopleFlow(t *testing.T) {
 	if demotedAgain.Code != http.StatusConflict {
 		t.Errorf("second demote status = %d, want 409 (body = %q)", demotedAgain.Code, demotedAgain.Body.String())
 	}
-	createdTeacher := call(t, router, http.MethodPost, "/api/admin/teachers", adminFlowTeacher, adminToken)
+	createdTeacher := teacherInviteCall(t, router, adminToken, adminFlowTeacher)
 	if createdTeacher.Code != http.StatusCreated {
 		t.Fatalf("create teacher status = %d, want 201 (body = %q)", createdTeacher.Code, createdTeacher.Body.String())
 	}
 	teacherID := int64(number(t, createdTeacher, "id"))
-	duplicateTeacher := call(t, router, http.MethodPost, "/api/admin/teachers", adminFlowTeacher, adminToken)
+	duplicateTeacher := teacherInviteCall(t, router, adminToken, adminFlowTeacher)
 	if duplicateTeacher.Code != http.StatusConflict {
 		t.Errorf("duplicate teacher status = %d, want 409 (body = %q)", duplicateTeacher.Code, duplicateTeacher.Body.String())
 	}

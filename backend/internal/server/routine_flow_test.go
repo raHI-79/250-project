@@ -93,7 +93,7 @@ func TestRoutineFlow(t *testing.T) {
 	if duplicate.Code != http.StatusConflict {
 		t.Errorf("duplicate course status = %d, want 409 (body = %q)", duplicate.Code, duplicate.Body.String())
 	}
-	createdTeacher := call(t, router, http.MethodPost, "/api/admin/teachers", flowTeacher, adminToken)
+	createdTeacher := teacherInviteCall(t, router, adminToken, flowTeacher)
 	if createdTeacher.Code != http.StatusCreated {
 		t.Fatalf("create teacher status = %d, want 201 (body = %q)", createdTeacher.Code, createdTeacher.Body.String())
 	}
@@ -224,10 +224,11 @@ func TestNotificationFlow(t *testing.T) {
 	ctx, pool, router := newFlowRouter(t)
 	adminToken := seedAdmin(t, ctx, pool, router)
 	for _, body := range []string{flowStudentOne, flowStudentTwo} {
-		rec := call(t, router, http.MethodPost, "/api/auth/register", body, "")
+		rec := registerStudent(t, router, body)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("register status = %d, want 201 (body = %q)", rec.Code, rec.Body.String())
 		}
+		verifyStudentEmail(t, router, rec, regNoOf(t, body))
 	}
 	firstID := approveStudent(t, router, adminToken, "2023331700")
 	approveStudent(t, router, adminToken, "2022331701")

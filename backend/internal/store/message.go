@@ -73,11 +73,12 @@ type CROption struct {
 }
 
 type StudentOption struct {
-	UserID   int64
-	FullName string
-	RegNo    string
-	Batch    string
-	Section  string
+	UserID    int64
+	FullName  string
+	RegNo     string
+	Batch     string
+	Section   string
+	PhotoPath string
 }
 
 const (
@@ -143,7 +144,7 @@ JOIN students s ON s.user_id = u.id
 WHERE u.status = 'active' AND s.is_cr
   AND ($1::text = '' OR s.batch = $1::text)
 ORDER BY s.batch, s.section, s.full_name, u.id`
-	searchStudentsSQL = `SELECT u.id, s.full_name, s.reg_no, s.batch, s.section
+	searchStudentsSQL = `SELECT u.id, s.full_name, s.reg_no, s.batch, s.section, COALESCE(u.photo_path, '')
 FROM users u
 JOIN students s ON s.user_id = u.id
 WHERE u.status = 'active'
@@ -259,7 +260,8 @@ func (s *Store) SearchStudents(ctx context.Context, search string) ([]StudentOpt
 	options := make([]StudentOption, 0)
 	for rows.Next() {
 		var option StudentOption
-		err := rows.Scan(&option.UserID, &option.FullName, &option.RegNo, &option.Batch, &option.Section)
+		err := rows.Scan(&option.UserID, &option.FullName, &option.RegNo, &option.Batch,
+			&option.Section, &option.PhotoPath)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a student: %w", err)
 		}

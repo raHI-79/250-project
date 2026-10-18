@@ -1,6 +1,6 @@
 # Development Roadmap
 
-The project is built in 18 development steps. Each step is owned by one team
+The project is built in 22 development steps. Each step is owned by one team
 member, is worked on alone, and ends with reviewed Git commits. The last step is
 shared.
 
@@ -30,6 +30,10 @@ Full requirements: [SPEC.md](SPEC.md)
 | 13 | B | CR panel | done |
 | 14 | A | Admin panel | done |
 | 15 | B | Teacher panel | done |
-| 16 | A | Multi-university and department backend | todo |
-| 17 | B | Super admin panel and university/department URLs | todo |
-| 18 | A+B | Polish, final checklist, demo data, docs, CI | todo |
+| 16 | B | Account backend: verification, invitations, promotion, profiles | done |
+| 17 | A | Account and profile pages | todo |
+| 18 | B | Unified messaging, teacher notices and attachments | todo |
+| 19 | A | Routine experience, materials by batch and CR student access | todo |
+| 20 | A | Browser push notifications | todo |
+| 21 | B | Maroon academic interface redesign | todo |
+| 22 | A+B | Requirement updates, demo data, docs and CI | todo |

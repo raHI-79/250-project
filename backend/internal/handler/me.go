@@ -8,8 +8,10 @@ import (
 
 type meResponse struct {
 	ID         int64  `json:"id"`
+	UserID     int64  `json:"user_id"`
 	Identifier string `json:"identifier"`
 	Role       string `json:"role"`
+	PhotoURL   string `json:"photo_url,omitempty"`
 }
 
 func Me() http.HandlerFunc {
@@ -21,8 +23,10 @@ func Me() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, meResponse{
 			ID:         user.ID,
+			UserID:     user.ID,
 			Identifier: user.Identifier,
 			Role:       user.Role,
+			PhotoURL:   user.PhotoPath,
 		})
 	}
 }

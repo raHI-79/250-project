@@ -95,6 +95,7 @@ type studentOptionItem struct {
 	RegNo    string `json:"reg_no"`
 	Batch    string `json:"batch"`
 	Section  string `json:"section"`
+	PhotoURL string `json:"photo_url,omitempty"`
 }
 
 type studentOptionsResponse struct {
@@ -330,6 +331,7 @@ func (m *Message) StudentLookup() http.HandlerFunc {
 				RegNo:    option.RegNo,
 				Batch:    option.Batch,
 				Section:  option.Section,
+				PhotoURL: option.PhotoPath,
 			})
 		}
 		httpx.WriteJSON(w, http.StatusOK, studentOptionsResponse{Items: items})

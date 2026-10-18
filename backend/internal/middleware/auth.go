@@ -32,6 +32,7 @@ type User struct {
 	ID         int64
 	Identifier string
 	Role       string
+	PhotoPath  string
 }
 
 type contextKey struct{}
@@ -79,7 +80,12 @@ func VerifyToken(tokens TokenParser, users UserStore) func(http.Handler) http.Ha
 				httpx.WriteError(w, http.StatusUnauthorized, MessageSessionExpired)
 				return
 			}
-			current := User{ID: user.ID, Identifier: user.Identifier, Role: effectiveRole}
+			current := User{
+				ID:         user.ID,
+				Identifier: user.Identifier,
+				Role:       effectiveRole,
+				PhotoPath:  user.PhotoPath,
+			}
 			next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), current)))
 		})
 	}

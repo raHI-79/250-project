@@ -25,6 +25,8 @@ func NewDirectory(contacts DirectoryStore) *Directory {
 }
 
 type directoryItem struct {
+	UserID     int64  `json:"user_id"`
+	PhotoURL   string `json:"photo_url,omitempty"`
 	FullName   string `json:"full_name"`
 	RegNo      string `json:"reg_no"`
 	Batch      string `json:"batch"`
@@ -40,9 +42,13 @@ type directoryResponse struct {
 }
 
 type teacherInfoItem struct {
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
-	Email string `json:"email"`
+	UserID      int64  `json:"user_id"`
+	Name        string `json:"name"`
+	Designation string `json:"designation,omitempty"`
+	OfficeRoom  string `json:"office_room,omitempty"`
+	Phone       string `json:"phone"`
+	Email       string `json:"email"`
+	PhotoURL    string `json:"photo_url,omitempty"`
 }
 
 type teacherInfoResponse struct {
@@ -84,6 +90,8 @@ func (d *Directory) Students() http.HandlerFunc {
 		items := make([]directoryItem, 0, len(people))
 		for _, person := range people {
 			items = append(items, directoryItem{
+				UserID:     person.UserID,
+				PhotoURL:   person.PhotoPath,
 				FullName:   person.FullName,
 				RegNo:      person.RegNo,
 				Batch:      person.Batch,
@@ -113,7 +121,15 @@ func (d *Directory) Teachers() http.HandlerFunc {
 		}
 		items := make([]teacherInfoItem, 0, len(teachers))
 		for _, teacher := range teachers {
-			items = append(items, teacherInfoItem{Name: teacher.Name, Phone: teacher.Phone, Email: teacher.Email})
+			items = append(items, teacherInfoItem{
+				UserID:      teacher.UserID,
+				Name:        teacher.Name,
+				Designation: teacher.Designation,
+				OfficeRoom:  teacher.OfficeRoom,
+				Phone:       teacher.Phone,
+				Email:       teacher.Email,
+				PhotoURL:    teacher.PhotoPath,
+			})
 		}
 		httpx.WriteJSON(w, http.StatusOK, teacherInfoResponse{Items: items})
 	}
