@@ -91,7 +91,8 @@ func run() error {
 			Notices:  userStore,
 			Library:  userStore,
 			Contacts: userStore,
-			Mail:     userStore,
+			Chats:    userStore,
+			Shared:   upload.NewAttachments(cfg.UploadDir, cfg.MaxUploadMB),
 			Votes:    userStore,
 			Files:    upload.NewSaver(cfg.UploadDir, cfg.MaxUploadMB),
 			Mailer: mailer.NewSMTP(mailer.Options{

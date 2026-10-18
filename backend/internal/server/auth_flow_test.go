@@ -77,6 +77,7 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 		Tokens:   tokens,
 		Proofs:   proofs,
 		Photos:   upload.NewPhotos(t.TempDir()),
+		Shared:   upload.NewAttachments(t.TempDir(), 10),
 		Accounts: userStore,
 		Users:    userStore,
 		Auth:     userStore,
@@ -93,7 +94,7 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 		Library:  userStore,
 		Contacts: userStore,
 		Files:    upload.NewSaver(t.TempDir(), 1),
-		Mail:     userStore,
+		Chats:    userStore,
 		Votes:    userStore,
 	})
 }
