@@ -9,6 +9,7 @@ import (
 const NoDayFilter = -1
 
 type PlanItem struct {
+	Batch       string
 	Section     string
 	StartTime   string
 	EndTime     string
@@ -55,27 +56,29 @@ type RoutineFilter struct {
 }
 
 const (
-	listDayPlanSQL = `SELECT r.section, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'),
+	listDayPlanSQL = `SELECT r.batch, r.section, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'),
 c.code, c.title, r.type, r.room, t.name,
 EXISTS (SELECT 1 FROM routine_cancellations rc WHERE rc.routine_id = r.id AND rc.cancel_date = $2::date) AS cancelled
 FROM routines r
 JOIN courses c ON c.id = r.course_id
 JOIN teachers t ON t.id = r.teacher_id
-WHERE r.batch = $1 AND r.day_of_week = EXTRACT(DOW FROM $2::date)::int
+WHERE r.day_of_week = EXTRACT(DOW FROM $2::date)::int
+  AND (r.batch = $1 OR (r.batch <> $1 AND c.code = ANY($3::text[])))
 UNION ALL
-SELECT e.section, to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
+SELECT e.batch, e.section, to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
 c.code, c.title, e.event_type, e.room, t.name, (e.status = 'cancelled') AS cancelled
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 JOIN teachers t ON t.id = e.teacher_id
-WHERE e.batch = $1 AND e.event_date = $2::date AND e.status IN ('approved', 'cancelled')
-ORDER BY 1, 2`
+WHERE e.event_date = $2::date AND e.status IN ('approved', 'cancelled')
+  AND (e.batch = $1 OR (e.batch <> $1 AND c.code = ANY($3::text[])))
+ORDER BY 1, 2, 3`
 	listDropCourseSQL = `SELECT 'fixed' AS source, r.batch, r.section, c.code, c.title, r.type,
 r.day_of_week, '' AS event_date, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, t.name
 FROM routines r
 JOIN courses c ON c.id = r.course_id
 JOIN teachers t ON t.id = r.teacher_id
-WHERE c.code = $1 AND r.batch <> $2
+WHERE c.code = ANY($1::text[]) AND r.batch <> $2
 UNION ALL
 SELECT 'dated' AS source, e.batch, e.section, c.code, c.title, e.event_type,
 EXTRACT(DOW FROM e.event_date)::int, to_char(e.event_date, 'YYYY-MM-DD'),
@@ -83,9 +86,9 @@ to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'), e.room, t.name
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 JOIN teachers t ON t.id = e.teacher_id
-WHERE c.code = $1 AND e.batch <> $2 AND e.status = 'approved'
+WHERE c.code = ANY($1::text[]) AND e.batch <> $2 AND e.status = 'approved'
   AND e.event_type IN ('class', 'exam') AND e.event_date >= $3::date
-ORDER BY 2, 7, 9`
+ORDER BY 4, 2, 7, 9`
 	listExamsSQL = `SELECT e.id, to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'),
 to_char(e.end_time, 'HH24:MI'), c.code, c.title, e.batch, e.section, e.room
 FROM class_events e
@@ -105,8 +108,8 @@ WHERE r.batch = $1
 ORDER BY r.day_of_week, r.start_time, r.section, r.id`
 )
 
-func (s *Store) ListDayPlan(ctx context.Context, batch, date string) ([]PlanItem, error) {
-	rows, err := s.pool.Query(ctx, listDayPlanSQL, batch, date)
+func (s *Store) ListDayPlan(ctx context.Context, batch, date string, dropCourseCodes []string) ([]PlanItem, error) {
+	rows, err := s.pool.Query(ctx, listDayPlanSQL, batch, date, dropCourseCodes)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the plan of %s on %s: %w", batch, date, err)
 	}
@@ -115,6 +118,7 @@ func (s *Store) ListDayPlan(ctx context.Context, batch, date string) ([]PlanItem
 	for rows.Next() {
 		var item PlanItem
 		err := rows.Scan(
+			&item.Batch,
 			&item.Section,
 			&item.StartTime,
 			&item.EndTime,
@@ -136,10 +140,10 @@ func (s *Store) ListDayPlan(ctx context.Context, batch, date string) ([]PlanItem
 	return items, nil
 }
 
-func (s *Store) ListDropCourseSchedule(ctx context.Context, courseCode, ownBatch string, now time.Time) ([]DropCourseItem, error) {
-	rows, err := s.pool.Query(ctx, listDropCourseSQL, courseCode, ownBatch, now.Format(dateLayout))
+func (s *Store) ListDropCourseSchedule(ctx context.Context, courseCodes []string, ownBatch string, now time.Time) ([]DropCourseItem, error) {
+	rows, err := s.pool.Query(ctx, listDropCourseSQL, courseCodes, ownBatch, now.Format(dateLayout))
 	if err != nil {
-		return nil, fmt.Errorf("store: could not list the schedule of the course %s: %w", courseCode, err)
+		return nil, fmt.Errorf("store: could not list the schedule of the drop courses: %w", err)
 	}
 	defer rows.Close()
 	items := make([]DropCourseItem, 0)

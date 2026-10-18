@@ -25,8 +25,10 @@ type fakeStudentStore struct {
 	err        error
 	askedBatch string
 	askedDate  string
-	askedCode  string
+	askedCodes []string
 	askedOwn   string
+	courses    []store.Course
+	courseErr  error
 	askedExam  string
 	filter     store.RoutineFilter
 }
@@ -38,16 +40,23 @@ func (f *fakeStudentStore) GetStudentProfile(ctx context.Context, userID int64) 
 	return f.profile, nil
 }
 
-func (f *fakeStudentStore) ListDayPlan(ctx context.Context, batch, date string) ([]store.PlanItem, error) {
-	f.askedBatch, f.askedDate = batch, date
+func (f *fakeStudentStore) ListStudentDropCourses(ctx context.Context, studentID int64) ([]store.Course, error) {
+	if f.courseErr != nil {
+		return nil, f.courseErr
+	}
+	return f.courses, nil
+}
+
+func (f *fakeStudentStore) ListDayPlan(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error) {
+	f.askedBatch, f.askedDate, f.askedCodes = batch, date, dropCourseCodes
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.plan, nil
 }
 
-func (f *fakeStudentStore) ListDropCourseSchedule(ctx context.Context, courseCode, ownBatch string, now time.Time) ([]store.DropCourseItem, error) {
-	f.askedCode, f.askedOwn = courseCode, ownBatch
+func (f *fakeStudentStore) ListDropCourseSchedule(ctx context.Context, courseCodes []string, ownBatch string, now time.Time) ([]store.DropCourseItem, error) {
+	f.askedCodes, f.askedOwn = courseCodes, ownBatch
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -72,7 +81,7 @@ func (f *fakeStudentStore) ListFilteredRoutines(ctx context.Context, filter stor
 
 func newStudentStore() *fakeStudentStore {
 	return &fakeStudentStore{
-		profile: store.StudentProfile{UserID: studentUserID, Batch: "CSE-23", Section: "A"},
+		profile: store.StudentProfile{UserID: studentUserID, StudentID: 3, Batch: "CSE-23", Section: "A"},
 	}
 }
 
@@ -106,10 +115,10 @@ func TestStudentUpcomingRoutine(t *testing.T) {
 	tomorrow := tomorrowInDhaka(t)
 	students := newStudentStore()
 	students.plan = []store.PlanItem{
-		{Section: "A", StartTime: "10:30", EndTime: "12:45", CourseCode: "CSE-233", CourseTitle: "Digital Logic Design", Kind: "lab", Room: "1003", TeacherName: "First Teacher"},
-		{Section: "A", StartTime: "08:00", EndTime: "09:00", CourseCode: "CSE-250", CourseTitle: "Software Engineering", Kind: "class", Room: "1004", TeacherName: "Second Teacher", Cancelled: true},
-		{Section: "ALL", StartTime: "13:00", EndTime: "14:00", CourseCode: "CSE-233", CourseTitle: "Digital Logic Design", Kind: "exam", Room: "2001", TeacherName: "First Teacher"},
-		{Section: "B", StartTime: "09:00", EndTime: "10:00", CourseCode: "CSE-250", CourseTitle: "Software Engineering", Kind: "class", Room: "1005", TeacherName: "Second Teacher"},
+		{Batch: "CSE-23", Section: "A", StartTime: "10:30", EndTime: "12:45", CourseCode: "CSE-233", CourseTitle: "Digital Logic Design", Kind: "lab", Room: "1003", TeacherName: "First Teacher"},
+		{Batch: "CSE-23", Section: "A", StartTime: "08:00", EndTime: "09:00", CourseCode: "CSE-250", CourseTitle: "Software Engineering", Kind: "class", Room: "1004", TeacherName: "Second Teacher", Cancelled: true},
+		{Batch: "CSE-23", Section: "ALL", StartTime: "13:00", EndTime: "14:00", CourseCode: "CSE-233", CourseTitle: "Digital Logic Design", Kind: "exam", Room: "2001", TeacherName: "First Teacher"},
+		{Batch: "CSE-23", Section: "B", StartTime: "09:00", EndTime: "10:00", CourseCode: "CSE-250", CourseTitle: "Software Engineering", Kind: "class", Room: "1005", TeacherName: "Second Teacher"},
 	}
 	rec := studentCall(t, newStudentHandler(t, students).UpcomingRoutine(), "/api/students/upcoming-routine")
 	if rec.Code != http.StatusOK {
@@ -193,12 +202,11 @@ func TestStudentDropCourseRoutine(t *testing.T) {
 	if list, ok := payload["items"].([]any); !ok || len(list) != 0 {
 		t.Errorf("items = %v, want an empty list", payload["items"])
 	}
-	if without.askedCode != "" {
+	if len(without.askedCodes) != 0 {
 		t.Error("the store was asked for a drop course although the student has none")
 	}
 	students := newStudentStore()
-	students.profile.HasDropCourse = true
-	students.profile.DropCourseCode = "CSE-211"
+	students.courses = []store.Course{{ID: 9, Code: "CSE-211", Title: "Data Structures"}}
 	students.drops = []store.DropCourseItem{
 		{Source: "fixed", Batch: "CSE-22", Section: "A", CourseCode: "CSE-211", CourseTitle: "Data Structures", Kind: "class", DayOfWeek: 1, StartTime: "08:00", EndTime: "09:00", Room: "1003", TeacherName: "First Teacher"},
 		{Source: "dated", Batch: "CSE-22", Section: "ALL", CourseCode: "CSE-211", CourseTitle: "Data Structures", Kind: "exam", DayOfWeek: 2, EventDate: "2026-10-20", StartTime: "10:30", EndTime: "12:45", Room: "2001", TeacherName: "First Teacher"},
@@ -208,12 +216,19 @@ func TestStudentDropCourseRoutine(t *testing.T) {
 	if full.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", full.Code, full.Body.String())
 	}
-	if students.askedCode != "CSE-211" || students.askedOwn != "CSE-23" {
-		t.Errorf("the store was asked for %q excluding %q, want CSE-211 excluding CSE-23", students.askedCode, students.askedOwn)
+	if len(students.askedCodes) != 1 || students.askedCodes[0] != "CSE-211" || students.askedOwn != "CSE-23" {
+		t.Errorf("the store was asked for %v excluding %q, want CSE-211 excluding CSE-23", students.askedCodes, students.askedOwn)
 	}
 	body := decodeBody(t, full)
-	if body["has_drop_course"] != true || body["course_code"] != "CSE-211" {
-		t.Errorf("payload = %v, want the drop course flag and code", body)
+	if body["has_drop_course"] != true {
+		t.Errorf("payload = %v, want the drop course flag", body)
+	}
+	chosen, ok := body["courses"].([]any)
+	if !ok || len(chosen) != 1 {
+		t.Fatalf("courses = %v, want one course", body["courses"])
+	}
+	if course, ok := chosen[0].(map[string]any); !ok || course["code"] != "CSE-211" {
+		t.Errorf("course = %v, want CSE-211", chosen[0])
 	}
 	if list := items(t, full); len(list) != 3 || list[0]["day"] != "Monday" || list[1]["event_date"] != "2026-10-20" {
 		t.Errorf("items = %v, want the three entries with day names", list)

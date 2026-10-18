@@ -54,11 +54,15 @@ func (emptyStudentStore) GetStudentProfile(ctx context.Context, userID int64) (s
 	return store.StudentProfile{UserID: userID, Batch: "CSE-23", Section: "A"}, nil
 }
 
-func (emptyStudentStore) ListDayPlan(ctx context.Context, batch, date string) ([]store.PlanItem, error) {
+func (emptyStudentStore) ListStudentDropCourses(ctx context.Context, studentID int64) ([]store.Course, error) {
 	return nil, nil
 }
 
-func (emptyStudentStore) ListDropCourseSchedule(ctx context.Context, courseCode, ownBatch string, now time.Time) ([]store.DropCourseItem, error) {
+func (emptyStudentStore) ListDayPlan(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error) {
+	return nil, nil
+}
+
+func (emptyStudentStore) ListDropCourseSchedule(ctx context.Context, courseCodes []string, ownBatch string, now time.Time) ([]store.DropCourseItem, error) {
 	return nil, nil
 }
 

@@ -36,7 +36,7 @@ type dropCourseGroup struct {
 
 type dropCourseResponse struct {
 	HasDropCourse bool              `json:"has_drop_course"`
-	CourseCode    string            `json:"course_code,omitempty"`
+	Courses       []profileCourse   `json:"courses"`
 	Items         []dropCourseItem  `json:"items"`
 	Groups        []dropCourseGroup `json:"groups"`
 }
@@ -63,14 +63,25 @@ func (s *Student) DropCourseRoutine() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if !profile.HasDropCourse || profile.DropCourseCode == "" {
+		courses, err := s.students.ListStudentDropCourses(r.Context(), profile.StudentID)
+		if err != nil {
+			log.Printf("handler: could not list the drop courses of a student: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		if len(courses) == 0 {
 			httpx.WriteJSON(w, http.StatusOK, dropCourseResponse{
-				Items:  make([]dropCourseItem, 0),
-				Groups: make([]dropCourseGroup, 0),
+				Courses: make([]profileCourse, 0),
+				Items:   make([]dropCourseItem, 0),
+				Groups:  make([]dropCourseGroup, 0),
 			})
 			return
 		}
-		entries, err := s.students.ListDropCourseSchedule(r.Context(), profile.DropCourseCode, profile.Batch, s.cfg.Now())
+		codes := make([]string, 0, len(courses))
+		for _, course := range courses {
+			codes = append(codes, course.Code)
+		}
+		entries, err := s.students.ListDropCourseSchedule(r.Context(), codes, profile.Batch, s.cfg.Now())
 		if err != nil {
 			log.Printf("handler: could not list the drop course routine of a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -102,7 +113,7 @@ func (s *Student) DropCourseRoutine() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, dropCourseResponse{
 			HasDropCourse: true,
-			CourseCode:    profile.DropCourseCode,
+			Courses:       profileCourses(courses),
 			Items:         items,
 			Groups:        groups,
 		})
