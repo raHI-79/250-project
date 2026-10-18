@@ -22,16 +22,27 @@ var (
 )
 
 type Registration struct {
-	FullName       string
-	RegNo          string
-	Batch          string
-	Section        string
-	Email          string
-	Phone          string
-	BloodGroup     string
-	PasswordHash   string
-	HasDropCourse  bool
-	DropCourseCode string
+	FullName        string
+	RegNo           string
+	Batch           string
+	Section         string
+	Email           string
+	Phone           string
+	BloodGroup      string
+	DateOfBirth     string
+	PasswordHash    string
+	PhotoPath       string
+	Status          string
+	DropCourseIDs   []int64
+	EmailVerifiedAt *time.Time
+	CodeHash        string
+	CodeExpiresAt   *time.Time
+	CodeSentAt      *time.Time
+}
+
+type RegistrationResult struct {
+	UserID         int64
+	ReplacedPhotos []string
 }
 
 type LoginUser struct {
@@ -46,6 +57,7 @@ type ResetTarget struct {
 	AuthUser
 	Email       string
 	Phone       string
+	DateOfBirth string
 	ResetSentAt *time.Time
 }
 
@@ -59,13 +71,21 @@ type ResetChallenge struct {
 }
 
 const (
-	insertUserSQL = `INSERT INTO users (role, identifier, password_hash, status)
-VALUES ('student', $1, $2, 'pending')
+	findConflictingAccountsSQL = `SELECT u.id, u.status, COALESCE(u.photo_path, '')
+FROM users u
+LEFT JOIN students s ON s.user_id = u.id
+WHERE u.identifier = $1 OR lower(s.email) = lower($2)`
+	deleteUserSQL = `DELETE FROM users WHERE id = $1`
+	insertUserSQL = `INSERT INTO users
+(role, identifier, password_hash, status, photo_path, email_verified_at, email_code, email_code_expires_at, email_code_sent_at)
+VALUES ('student', $1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7, $8)
 RETURNING id`
 	insertStudentSQL = `INSERT INTO students
-(user_id, full_name, reg_no, batch, section, email, phone, blood_group, has_drop_course, drop_course_code, is_cr)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE)`
-	findLoginUserSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version, u.password_hash,
+(user_id, full_name, reg_no, batch, section, email, phone, blood_group, date_of_birth, is_cr)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, FALSE)
+RETURNING id`
+	findLoginUserSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version, COALESCE(u.photo_path, ''),
+u.password_hash,
 COALESCE(s.is_cr, FALSE),
 COALESCE(s.full_name, t.name, ''),
 COALESCE(s.batch, ''),
@@ -82,6 +102,7 @@ RETURNING token_version`
 COALESCE(s.is_cr, FALSE),
 COALESCE(s.email, t.email, u.contact_email, ''),
 COALESCE(s.phone, t.phone, u.contact_phone, ''),
+COALESCE(to_char(s.date_of_birth, 'YYYY-MM-DD'), to_char(t.date_of_birth, 'YYYY-MM-DD'), ''),
 u.reset_sent_at
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
@@ -137,25 +158,40 @@ WHERE identifier = $1
 RETURNING id`
 )
 
-func (s *Store) CreateRegistration(ctx context.Context, registration Registration) (int64, error) {
+func (s *Store) CreateRegistration(ctx context.Context, registration Registration) (RegistrationResult, error) {
+	var result RegistrationResult
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("store: could not start the registration transaction: %w", err)
+		return result, fmt.Errorf("store: could not start the registration transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	replaceable, photos, err := conflictingAccounts(ctx, tx, registration.RegNo, registration.Email)
+	if err != nil {
+		return result, err
+	}
+	if !replaceable {
+		return result, ErrDuplicateAccount
+	}
+	result.ReplacedPhotos = photos
 	var userID int64
-	if err := tx.QueryRow(ctx, insertUserSQL, registration.RegNo, registration.PasswordHash).Scan(&userID); err != nil {
+	err = tx.QueryRow(ctx, insertUserSQL,
+		registration.RegNo,
+		registration.PasswordHash,
+		registration.Status,
+		registration.PhotoPath,
+		registration.EmailVerifiedAt,
+		registration.CodeHash,
+		registration.CodeExpiresAt,
+		registration.CodeSentAt,
+	).Scan(&userID)
+	if err != nil {
 		if isUniqueViolation(err) {
-			return 0, ErrDuplicateAccount
+			return RegistrationResult{}, ErrDuplicateAccount
 		}
-		return 0, fmt.Errorf("store: could not create the user row: %w", err)
+		return RegistrationResult{}, fmt.Errorf("store: could not create the user row: %w", err)
 	}
-	var dropCourseCode *string
-	if registration.HasDropCourse && registration.DropCourseCode != "" {
-		code := registration.DropCourseCode
-		dropCourseCode = &code
-	}
-	_, err = tx.Exec(ctx, insertStudentSQL,
+	var studentID int64
+	err = tx.QueryRow(ctx, insertStudentSQL,
 		userID,
 		registration.FullName,
 		registration.RegNo,
@@ -164,19 +200,60 @@ func (s *Store) CreateRegistration(ctx context.Context, registration Registratio
 		registration.Email,
 		registration.Phone,
 		registration.BloodGroup,
-		registration.HasDropCourse,
-		dropCourseCode,
-	)
+		registration.DateOfBirth,
+	).Scan(&studentID)
 	if err != nil {
 		if isUniqueViolation(err) {
-			return 0, ErrDuplicateAccount
+			return RegistrationResult{}, ErrDuplicateAccount
 		}
-		return 0, fmt.Errorf("store: could not create the student row: %w", err)
+		return RegistrationResult{}, fmt.Errorf("store: could not create the student row: %w", err)
+	}
+	if err := replaceDropCourses(ctx, tx, studentID, registration.DropCourseIDs); err != nil {
+		return RegistrationResult{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("store: could not commit the registration: %w", err)
+		return RegistrationResult{}, fmt.Errorf("store: could not commit the registration: %w", err)
 	}
-	return userID, nil
+	result.UserID = userID
+	return result, nil
+}
+
+func conflictingAccounts(ctx context.Context, tx pgx.Tx, regNo, email string) (bool, []string, error) {
+	rows, err := tx.Query(ctx, findConflictingAccountsSQL, regNo, email)
+	if err != nil {
+		return false, nil, fmt.Errorf("store: could not look for an existing account: %w", err)
+	}
+	type candidate struct {
+		id     int64
+		status string
+		photo  string
+	}
+	candidates := make([]candidate, 0, 2)
+	for rows.Next() {
+		var found candidate
+		if err := rows.Scan(&found.id, &found.status, &found.photo); err != nil {
+			rows.Close()
+			return false, nil, fmt.Errorf("store: could not scan an existing account: %w", err)
+		}
+		candidates = append(candidates, found)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, nil, fmt.Errorf("store: could not read the existing accounts: %w", err)
+	}
+	photos := make([]string, 0, len(candidates))
+	for _, found := range candidates {
+		if found.status != StatusUnverified {
+			return false, nil, nil
+		}
+		if _, err := tx.Exec(ctx, deleteUserSQL, found.id); err != nil {
+			return false, nil, fmt.Errorf("store: could not replace the unverified account %d: %w", found.id, err)
+		}
+		if found.photo != "" {
+			photos = append(photos, found.photo)
+		}
+	}
+	return true, photos, nil
 }
 
 func (s *Store) FindLoginUser(ctx context.Context, identifier string) (LoginUser, error) {
@@ -187,6 +264,7 @@ func (s *Store) FindLoginUser(ctx context.Context, identifier string) (LoginUser
 		&user.Role,
 		&user.Status,
 		&user.TokenVersion,
+		&user.PhotoPath,
 		&user.PasswordHash,
 		&user.IsCR,
 		&user.Name,
@@ -225,6 +303,7 @@ func (s *Store) FindResetTarget(ctx context.Context, identifier string) (ResetTa
 		&target.IsCR,
 		&target.Email,
 		&target.Phone,
+		&target.DateOfBirth,
 		&target.ResetSentAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {

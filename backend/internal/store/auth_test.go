@@ -17,8 +17,20 @@ func newRegistration(regNo, email string) Registration {
 		Email:        email,
 		Phone:        "01712345678",
 		BloodGroup:   "O+",
+		DateOfBirth:  "2003-05-14",
 		PasswordHash: "stored-hash",
+		PhotoPath:    "/uploads/photos/" + regNo + ".jpg",
+		Status:       StatusPending,
 	}
+}
+
+func newDropCourse(t *testing.T, ctx context.Context, store *Store, code, title string) int64 {
+	t.Helper()
+	course, err := store.CreateCourse(ctx, code, title)
+	if err != nil {
+		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
+	}
+	return course.ID
 }
 
 func countUsers(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int {
@@ -32,10 +44,11 @@ func countUsers(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int {
 
 func TestCreateRegistration(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	userID, err := store.CreateRegistration(ctx, newRegistration("2023331079", "ratul@student.sust.edu"))
+	result, err := store.CreateRegistration(ctx, newRegistration("2023331079", "ratul@student.sust.edu"))
 	if err != nil {
 		t.Fatalf("CreateRegistration() returned an unexpected error: %v", err)
 	}
+	userID := result.UserID
 	if userID == 0 {
 		t.Fatal("CreateRegistration() returned user id 0")
 	}
@@ -60,13 +73,12 @@ func TestCreateRegistration(t *testing.T) {
 			t.Errorf("%s = %v, want %v", check.name, check.got, check.want)
 		}
 	}
-	var fullName, batch, section, email, phone, bloodGroup string
-	var hasDropCourse bool
-	var dropCourseCode *string
-	query := `SELECT full_name, batch, section, email, phone, blood_group, has_drop_course, drop_course_code
+	var fullName, batch, section, email, phone, bloodGroup, birthDate string
+	var studentID int64
+	query := `SELECT id, full_name, batch, section, email, phone, blood_group, to_char(date_of_birth, 'YYYY-MM-DD')
 FROM students WHERE user_id = $1`
 	if err := pool.QueryRow(ctx, query, userID).Scan(
-		&fullName, &batch, &section, &email, &phone, &bloodGroup, &hasDropCourse, &dropCourseCode,
+		&studentID, &fullName, &batch, &section, &email, &phone, &bloodGroup, &birthDate,
 	); err != nil {
 		t.Fatalf("could not read back the student row: %v", err)
 	}
@@ -76,34 +88,64 @@ FROM students WHERE user_id = $1`
 	if email != "ratul@student.sust.edu" || phone != "01712345678" || bloodGroup != "O+" {
 		t.Errorf("contact row = %q/%q/%q", email, phone, bloodGroup)
 	}
-	if hasDropCourse {
-		t.Error("has_drop_course = true, want false")
+	if birthDate != "2003-05-14" {
+		t.Errorf("date_of_birth = %q, want 2003-05-14", birthDate)
 	}
-	if dropCourseCode != nil {
-		t.Errorf("drop_course_code = %q, want NULL", *dropCourseCode)
+	if user.PhotoPath != "/uploads/photos/2023331079.jpg" {
+		t.Errorf("photo_path = %q, want the saved photo", user.PhotoPath)
+	}
+	courses, err := store.ListStudentDropCourses(ctx, studentID)
+	if err != nil {
+		t.Fatalf("ListStudentDropCourses() returned an unexpected error: %v", err)
+	}
+	if len(courses) != 0 {
+		t.Errorf("drop courses = %d rows, want none", len(courses))
 	}
 }
 
-func TestCreateRegistrationWithADropCourse(t *testing.T) {
+func TestCreateRegistrationWithDropCourses(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
+	first := newDropCourse(t, ctx, store, "CSE-233", "Algorithms")
+	second := newDropCourse(t, ctx, store, "CSE-245", "Databases")
 	registration := newRegistration("2023331080", "drop@student.sust.edu")
-	registration.HasDropCourse = true
-	registration.DropCourseCode = "CSE-233"
-	userID, err := store.CreateRegistration(ctx, registration)
+	registration.DropCourseIDs = []int64{first, second}
+	result, err := store.CreateRegistration(ctx, registration)
 	if err != nil {
 		t.Fatalf("CreateRegistration() returned an unexpected error: %v", err)
 	}
-	var hasDropCourse bool
-	var dropCourseCode *string
-	query := "SELECT has_drop_course, drop_course_code FROM students WHERE user_id = $1"
-	if err := pool.QueryRow(ctx, query, userID).Scan(&hasDropCourse, &dropCourseCode); err != nil {
+	var studentID int64
+	if err := pool.QueryRow(ctx, "SELECT id FROM students WHERE user_id = $1", result.UserID).Scan(&studentID); err != nil {
 		t.Fatalf("could not read back the student row: %v", err)
 	}
-	if !hasDropCourse {
-		t.Error("has_drop_course = false, want true")
+	courses, err := store.ListStudentDropCourses(ctx, studentID)
+	if err != nil {
+		t.Fatalf("ListStudentDropCourses() returned an unexpected error: %v", err)
 	}
-	if dropCourseCode == nil || *dropCourseCode != "CSE-233" {
-		t.Errorf("drop_course_code = %v, want CSE-233", dropCourseCode)
+	if len(courses) != 2 || courses[0].Code != "CSE-233" || courses[1].Code != "CSE-245" {
+		t.Errorf("drop courses = %+v, want CSE-233 and CSE-245", courses)
+	}
+}
+
+func TestCreateRegistrationReplacesAnUnverifiedAccount(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	pending := newRegistration("2023331090", "retry@student.sust.edu")
+	pending.Status = StatusUnverified
+	first, err := store.CreateRegistration(ctx, pending)
+	if err != nil {
+		t.Fatalf("the first registration failed: %v", err)
+	}
+	second, err := store.CreateRegistration(ctx, newRegistration("2023331090", "retry@student.sust.edu"))
+	if err != nil {
+		t.Fatalf("the replacement registration failed: %v", err)
+	}
+	if second.UserID == first.UserID {
+		t.Error("the replacement reused the old user row, want a fresh one")
+	}
+	if len(second.ReplacedPhotos) != 1 || second.ReplacedPhotos[0] != pending.PhotoPath {
+		t.Errorf("ReplacedPhotos = %v, want %q", second.ReplacedPhotos, pending.PhotoPath)
+	}
+	if got := countUsers(t, ctx, pool); got != 1 {
+		t.Errorf("users = %d rows, want 1", got)
 	}
 }
 
@@ -132,12 +174,12 @@ func TestCreateRegistrationRejectsDuplicates(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			before := countUsers(t, ctx, pool)
-			userID, err := store.CreateRegistration(ctx, tc.registration)
+			result, err := store.CreateRegistration(ctx, tc.registration)
 			if !errors.Is(err, ErrDuplicateAccount) {
 				t.Fatalf("CreateRegistration() error = %v, want ErrDuplicateAccount", err)
 			}
-			if userID != 0 {
-				t.Errorf("CreateRegistration() returned user id %d alongside the error, want 0", userID)
+			if result.UserID != 0 {
+				t.Errorf("CreateRegistration() returned user id %d alongside the error, want 0", result.UserID)
 			}
 			if after := countUsers(t, ctx, pool); after != before {
 				t.Errorf("the users table grew from %d to %d rows, want the transaction rolled back", before, after)
