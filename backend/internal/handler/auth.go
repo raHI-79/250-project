@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/googleauth"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
@@ -22,31 +23,39 @@ import (
 )
 
 const (
-	MessageInvalidLogin      = "Invalid ID or password."
-	MessagePendingAccount    = "Your registration is pending approval by the administration."
-	MessageRejectedAccount   = "Your registration was rejected. Please contact the department office."
-	MessageRemovedAccount    = "Your account has been removed. Please contact the department office."
-	MessageDuplicateAccount  = "An account with this registration number or email already exists."
-	MessageRegistrationDone  = "Registration submitted. You can log in after the administration approves your account."
-	MessageLoggedOut         = "Logged out."
-	MessageResetMismatch     = "The ID and phone number do not match an active account."
-	MessageResetCooldown     = "Please wait a minute before requesting a new code."
-	MessageResetCodeSent     = "We sent a 6-digit code to the email address registered with this account."
-	MessageInvalidResetCode  = "Invalid or expired code."
-	MessageTooManyResetCodes = "Too many wrong codes. Please request a new code."
-	MessageInvalidResetToken = "Invalid or expired reset token."
-	MessagePasswordUpdated   = "Password updated. Please log in with your new password."
-	ResetEmailSubject        = "Password reset code"
-	resetTokenBytes          = 32
-	resetCodeDigits          = 6
-	resetCodeLifetime        = 10 * time.Minute
-	resetTokenLifetime       = 10 * time.Minute
-	resetResendCooldown      = time.Minute
-	maxResetAttempts         = 5
+	MessageInvalidLogin        = "Invalid ID or password."
+	MessagePendingAccount      = "Your registration is pending approval by the administration."
+	MessageRejectedAccount     = "Your registration was rejected. Please contact the department office."
+	MessageRemovedAccount      = "Your account has been removed. Please contact the department office."
+	MessageUnverifiedAccount   = "Please verify your email first."
+	MessageInvitedAccount      = "Your account is not activated yet. Use the link in your invitation email."
+	MessageStudentPortal       = "Use the student login page."
+	MessageTeacherPortal       = "Use the teacher login page."
+	MessageDuplicateAccount    = "An account with this registration number or email already exists."
+	MessageLoggedOut           = "Logged out."
+	MessageResetMismatch       = "The ID and phone number do not match an active account."
+	MessageResetBirthMismatch  = "The ID and date of birth do not match an active account."
+	MessageResetCooldown       = "Please wait a minute before requesting a new code."
+	MessageResetCodeSent       = "We sent a 6-digit code to the email address registered with this account."
+	MessageInvalidResetCode    = "Invalid or expired code."
+	MessageTooManyResetCodes   = "Too many wrong codes. Please request a new code."
+	MessageInvalidResetToken   = "Invalid or expired reset token."
+	MessagePasswordUpdated     = "Password updated. Please log in with your new password."
+	MessageUnknownLoginPortal  = "portal must be student or teacher."
+	MessageDateOfBirthRequired = "Date of birth is required."
+	ResetEmailSubject          = "Password reset code"
+	PortalStudent              = "student"
+	PortalTeacher              = "teacher"
+	resetTokenBytes            = 32
+	resetCodeDigits            = 6
+	resetCodeLifetime          = 10 * time.Minute
+	resetTokenLifetime         = 10 * time.Minute
+	resetResendCooldown        = time.Minute
+	maxResetAttempts           = 5
 )
 
 type AuthStore interface {
-	CreateRegistration(ctx context.Context, registration store.Registration) (int64, error)
+	CreateRegistration(ctx context.Context, registration store.Registration) (store.RegistrationResult, error)
 	FindLoginUser(ctx context.Context, identifier string) (store.LoginUser, error)
 	IncrementTokenVersion(ctx context.Context, userID int64) (int, error)
 	FindResetTarget(ctx context.Context, identifier string) (store.ResetTarget, error)
@@ -56,10 +65,32 @@ type AuthStore interface {
 	ClearPasswordReset(ctx context.Context, userID int64) error
 	VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
 	FinishPasswordReset(ctx context.Context, identifier, tokenHash, passwordHash string) error
+	FindEmailChallenge(ctx context.Context, regNo string) (store.EmailChallenge, error)
+	StartEmailVerification(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error
+	CountEmailAttempt(ctx context.Context, userID int64) (int, error)
+	ClearEmailCode(ctx context.Context, userID int64) error
+	ConfirmEmail(ctx context.Context, userID int64, verifiedAt time.Time) error
+	SearchDropCourseOptions(ctx context.Context, search string) ([]store.Course, error)
+	FilterDropCourseIDs(ctx context.Context, courseIDs []int64) ([]int64, error)
+	FindInvite(ctx context.Context, inviteHash string) (store.TeacherInvite, error)
+	CountInviteAttempt(ctx context.Context, userID int64) (int, error)
+	ClearInvite(ctx context.Context, userID int64) error
+	ActivateTeacher(ctx context.Context, userID int64, passwordHash, photoPath string) error
 }
 
 type TokenIssuer interface {
 	IssueToken(userID int64, effectiveRole string, tokenVersion int) (string, error)
+}
+
+type ProofIssuer interface {
+	IssueEmailProof(email string) (string, time.Time, error)
+	CheckEmailProof(token, email string) error
+}
+
+type PhotoStore interface {
+	Parse(r *http.Request) error
+	Save(r *http.Request) (string, error)
+	Delete(photoPath string) error
 }
 
 type Auth struct {
@@ -67,24 +98,14 @@ type Auth struct {
 	users  AuthStore
 	tokens TokenIssuer
 	mail   mailer.Sender
+	proofs ProofIssuer
+	google googleauth.Validator
+	photos PhotoStore
 }
 
-func NewAuth(cfg *config.Config, users AuthStore, tokens TokenIssuer, mail mailer.Sender) *Auth {
-	return &Auth{cfg: cfg, users: users, tokens: tokens, mail: mail}
-}
-
-type registerRequest struct {
-	FullName        string `json:"full_name"`
-	RegNo           string `json:"reg_no"`
-	Batch           string `json:"batch"`
-	Section         string `json:"section"`
-	Email           string `json:"email"`
-	Phone           string `json:"phone"`
-	BloodGroup      string `json:"blood_group"`
-	Password        string `json:"password"`
-	ConfirmPassword string `json:"confirm_password"`
-	HasDropCourse   bool   `json:"has_drop_course"`
-	DropCourseCode  string `json:"drop_course_code"`
+func NewAuth(cfg *config.Config, users AuthStore, tokens TokenIssuer, mail mailer.Sender,
+	proofs ProofIssuer, google googleauth.Validator, photos PhotoStore) *Auth {
+	return &Auth{cfg: cfg, users: users, tokens: tokens, mail: mail, proofs: proofs, google: google, photos: photos}
 }
 
 type messageResponse struct {
@@ -94,15 +115,18 @@ type messageResponse struct {
 type loginRequest struct {
 	Identifier string `json:"identifier"`
 	Password   string `json:"password"`
+	Portal     string `json:"portal"`
 }
 
 type loginUser struct {
 	ID         int64  `json:"id"`
+	UserID     int64  `json:"user_id"`
 	Identifier string `json:"identifier"`
 	Role       string `json:"role"`
 	Name       string `json:"name,omitempty"`
 	Batch      string `json:"batch,omitempty"`
 	Section    string `json:"section,omitempty"`
+	PhotoURL   string `json:"photo_url,omitempty"`
 }
 
 type loginResponse struct {
@@ -111,8 +135,9 @@ type loginResponse struct {
 }
 
 type forgotPasswordRequest struct {
-	Identifier string `json:"identifier"`
-	Phone      string `json:"phone"`
+	Identifier  string `json:"identifier"`
+	Phone       string `json:"phone"`
+	DateOfBirth string `json:"date_of_birth"`
 }
 
 type forgotPasswordResponse struct {
@@ -138,73 +163,6 @@ type resetPasswordRequest struct {
 	ConfirmPassword string `json:"confirm_password"`
 }
 
-func (a *Auth) Register() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var request registerRequest
-		if !httpx.DecodeJSON(w, r, &request) {
-			return
-		}
-		registration, err := request.toRegistration()
-		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		hash, err := auth.HashPassword(request.Password)
-		if err != nil {
-			log.Printf("handler: could not hash a registration password: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
-		}
-		registration.PasswordHash = hash
-		if _, err := a.users.CreateRegistration(r.Context(), registration); err != nil {
-			if errors.Is(err, store.ErrDuplicateAccount) {
-				httpx.WriteError(w, http.StatusConflict, MessageDuplicateAccount)
-				return
-			}
-			log.Printf("handler: could not create a registration: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
-		}
-		httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessageRegistrationDone})
-	}
-}
-
-func (request registerRequest) toRegistration() (store.Registration, error) {
-	registration := store.Registration{HasDropCourse: request.HasDropCourse}
-	fields := []struct {
-		target *string
-		value  string
-		label  string
-		check  func(string, string) (string, error)
-	}{
-		{target: &registration.FullName, value: request.FullName, label: "Full name", check: validate.Required},
-		{target: &registration.RegNo, value: request.RegNo, label: "Registration number", check: validate.Required},
-		{target: &registration.Batch, value: request.Batch, label: "Batch", check: validate.Batch},
-		{target: &registration.Section, value: request.Section, label: "Section", check: validate.Section},
-		{target: &registration.Email, value: request.Email, label: "Email", check: validate.Email},
-		{target: &registration.Phone, value: request.Phone, label: "Phone", check: validate.Phone},
-		{target: &registration.BloodGroup, value: request.BloodGroup, label: "Blood group", check: validate.BloodGroup},
-	}
-	for _, field := range fields {
-		value, err := field.check(field.label, field.value)
-		if err != nil {
-			return store.Registration{}, err
-		}
-		*field.target = value
-	}
-	if err := validate.Password("Password", request.Password, request.ConfirmPassword); err != nil {
-		return store.Registration{}, err
-	}
-	if request.HasDropCourse {
-		code, err := validate.CourseCode("Drop course code", request.DropCourseCode)
-		if err != nil {
-			return store.Registration{}, err
-		}
-		registration.DropCourseCode = code
-	}
-	return registration, nil
-}
-
 func (a *Auth) Login() http.HandlerFunc {
 	return a.login(false)
 }
@@ -228,6 +186,11 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, "Password is required.")
 			return
 		}
+		portal := strings.ToLower(strings.TrimSpace(request.Portal))
+		if portal != "" && portal != PortalStudent && portal != PortalTeacher {
+			httpx.WriteError(w, http.StatusBadRequest, MessageUnknownLoginPortal)
+			return
+		}
 		user, err := a.users.FindLoginUser(r.Context(), identifier)
 		if errors.Is(err, store.ErrNotFound) {
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
@@ -238,12 +201,20 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		if auth.CheckPassword(user.PasswordHash, request.Password) != nil {
+		isAdmin := user.Role == auth.RoleAdmin
+		if isAdmin != adminOnly {
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return
 		}
-		isAdmin := user.Role == auth.RoleAdmin
-		if isAdmin != adminOnly {
+		if message, wrong := portalMessage(portal, user.Role); wrong {
+			httpx.WriteError(w, http.StatusUnauthorized, message)
+			return
+		}
+		if !adminOnly && user.Status == store.StatusInvited {
+			httpx.WriteError(w, http.StatusForbidden, MessageInvitedAccount)
+			return
+		}
+		if auth.CheckPassword(user.PasswordHash, request.Password) != nil {
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return
 		}
@@ -267,9 +238,11 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			Token: token,
 			User: loginUser{
 				ID:         user.ID,
+				UserID:     user.ID,
 				Identifier: user.Identifier,
 				Role:       role,
 				Name:       user.Name,
+				PhotoURL:   user.PhotoPath,
 			},
 		}
 		if role == auth.RoleStudent || role == auth.RoleCR {
@@ -280,6 +253,20 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 	}
 }
 
+func portalMessage(portal, dbRole string) (string, bool) {
+	switch portal {
+	case PortalStudent:
+		if dbRole == auth.RoleTeacher {
+			return MessageTeacherPortal, true
+		}
+	case PortalTeacher:
+		if dbRole == auth.RoleStudent {
+			return MessageStudentPortal, true
+		}
+	}
+	return "", false
+}
+
 func statusMessage(status string) (string, bool) {
 	switch status {
 	case store.StatusPending:
@@ -288,6 +275,10 @@ func statusMessage(status string) (string, bool) {
 		return MessageRejectedAccount, true
 	case store.StatusRemoved:
 		return MessageRemovedAccount, true
+	case store.StatusUnverified:
+		return MessageUnverifiedAccount, true
+	case store.StatusInvited:
+		return MessageInvitedAccount, true
 	case store.StatusActive:
 		return "", false
 	default:
@@ -326,14 +317,19 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		phone, err := validate.Required("Phone number", request.Phone)
-		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		birthDate := strings.TrimSpace(request.DateOfBirth)
+		phone := strings.TrimSpace(request.Phone)
+		if birthDate == "" && phone == "" {
+			httpx.WriteError(w, http.StatusBadRequest, MessageDateOfBirthRequired)
 			return
+		}
+		mismatch := MessageResetBirthMismatch
+		if birthDate == "" {
+			mismatch = MessageResetMismatch
 		}
 		target, err := a.users.FindResetTarget(r.Context(), identifier)
 		if errors.Is(err, store.ErrNotFound) {
-			httpx.WriteError(w, http.StatusBadRequest, MessageResetMismatch)
+			httpx.WriteError(w, http.StatusBadRequest, mismatch)
 			return
 		}
 		if err != nil {
@@ -341,9 +337,18 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		if !target.IsActive() || !validate.SamePhone(phone, target.Phone) {
-			httpx.WriteError(w, http.StatusBadRequest, MessageResetMismatch)
-			return
+		if target.Role == auth.RoleAdmin {
+			mismatch = MessageResetMismatch
+			if phone == "" || !target.IsActive() || !validate.SamePhone(phone, target.Phone) {
+				httpx.WriteError(w, http.StatusBadRequest, mismatch)
+				return
+			}
+		} else {
+			mismatch = MessageResetBirthMismatch
+			if birthDate == "" || !target.IsActive() || target.DateOfBirth == "" || target.DateOfBirth != birthDate {
+				httpx.WriteError(w, http.StatusBadRequest, mismatch)
+				return
+			}
 		}
 		now := a.cfg.Now()
 		if target.ResetSentAt != nil && now.Sub(*target.ResetSentAt) < resetResendCooldown {
@@ -359,7 +364,7 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 		expiresAt := now.Add(resetCodeLifetime)
 		if err := a.users.StartPasswordReset(r.Context(), target.ID, hashResetSecret(code), expiresAt, now); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
-				httpx.WriteError(w, http.StatusBadRequest, MessageResetMismatch)
+				httpx.WriteError(w, http.StatusBadRequest, mismatch)
 				return
 			}
 			log.Printf("handler: could not store a reset code: %v", err)
@@ -399,7 +404,7 @@ func (a *Auth) VerifyResetCode() http.HandlerFunc {
 			return
 		}
 		code := strings.TrimSpace(request.Code)
-		if !isResetCode(code) {
+		if !isSixDigitCode(code) {
 			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetCode)
 			return
 		}
@@ -512,7 +517,7 @@ func emailHint(email string) string {
 	return email[:1] + "***" + email[at:]
 }
 
-func isResetCode(code string) bool {
+func isSixDigitCode(code string) bool {
 	if len(code) != resetCodeDigits {
 		return false
 	}

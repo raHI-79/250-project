@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/auth"
-	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -90,10 +89,10 @@ func (f *fakeMailer) Send(ctx context.Context, to, subject, body string) error {
 }
 
 type fakeAuthStore struct {
+	*accountStore
 	users           map[string]store.LoginUser
 	targets         map[string]store.ResetTarget
 	challenges      map[string]store.ResetChallenge
-	createErr       error
 	findErr         error
 	incrementErr    error
 	targetErr       error
@@ -103,22 +102,11 @@ type fakeAuthStore struct {
 	verifyErr       error
 	resetErr        error
 	attempts        int
-	created         []store.Registration
 	incremented     []int64
 	startResetCalls []startResetCall
 	verifyCalls     []verifyCall
 	clearedUsers    []int64
 	resetCalls      []resetCall
-	nextUserID      int64
-}
-
-func (f *fakeAuthStore) CreateRegistration(ctx context.Context, registration store.Registration) (int64, error) {
-	if f.createErr != nil {
-		return 0, f.createErr
-	}
-	f.created = append(f.created, registration)
-	f.nextUserID++
-	return f.nextUserID, nil
 }
 
 func (f *fakeAuthStore) FindLoginUser(ctx context.Context, identifier string) (store.LoginUser, error) {
@@ -225,7 +213,7 @@ func (f *fakeIssuer) IssueToken(userID int64, effectiveRole string, tokenVersion
 func newAuthStore(t *testing.T) *fakeAuthStore {
 	t.Helper()
 	studentHash := cachedHash(t, studentPassword)
-	return &fakeAuthStore{users: map[string]store.LoginUser{
+	return &fakeAuthStore{accountStore: newAccountStore(), users: map[string]store.LoginUser{
 		"2023331001": {
 			AuthUser:     store.AuthUser{ID: 1, Identifier: "2023331001", Role: "student", Status: store.StatusActive},
 			PasswordHash: studentHash,
@@ -273,19 +261,22 @@ func newAuthStore(t *testing.T) *fakeAuthStore {
 	},
 		targets: map[string]store.ResetTarget{
 			"2023331001": {
-				AuthUser: store.AuthUser{ID: 1, Identifier: "2023331001", Role: "student", Status: store.StatusActive},
-				Email:    "nayeem@student.sust.edu",
-				Phone:    "01712345678",
+				AuthUser:    store.AuthUser{ID: 1, Identifier: "2023331001", Role: "student", Status: store.StatusActive},
+				Email:       "nayeem@student.sust.edu",
+				Phone:       "01712345678",
+				DateOfBirth: "2003-05-14",
 			},
 			"2023331003": {
-				AuthUser: store.AuthUser{ID: 3, Identifier: "2023331003", Role: "student", Status: store.StatusPending},
-				Email:    "pending@student.sust.edu",
-				Phone:    "01712345679",
+				AuthUser:    store.AuthUser{ID: 3, Identifier: "2023331003", Role: "student", Status: store.StatusPending},
+				Email:       "pending@student.sust.edu",
+				Phone:       "01712345679",
+				DateOfBirth: "2004-01-02",
 			},
 			"T-001": {
-				AuthUser: store.AuthUser{ID: 6, Identifier: "T-001", Role: "teacher", Status: store.StatusActive},
-				Email:    "teacher@sust.edu",
-				Phone:    "01812345678",
+				AuthUser:    store.AuthUser{ID: 6, Identifier: "T-001", Role: "teacher", Status: store.StatusActive},
+				Email:       "teacher@sust.edu",
+				Phone:       "01812345678",
+				DateOfBirth: "1988-03-09",
 			},
 			"admin": {
 				AuthUser: store.AuthUser{ID: 7, Identifier: "admin", Role: "admin", Status: store.StatusActive},
@@ -299,12 +290,8 @@ func newAuthStore(t *testing.T) *fakeAuthStore {
 
 func newAuthHandlerWithMailer(t *testing.T, users AuthStore, mail mailer.Sender, appEnv string) *Auth {
 	t.Helper()
-	loc, err := time.LoadLocation("Asia/Dhaka")
-	if err != nil {
-		t.Fatalf("could not load timezone: %v", err)
-	}
-	cfg := &config.Config{AppEnv: appEnv, Timezone: "Asia/Dhaka", Location: loc}
-	return NewAuth(cfg, users, &fakeIssuer{token: issuedToken}, mail)
+	return NewAuth(accountConfig(t, appEnv), users, &fakeIssuer{token: issuedToken}, mail,
+		testProofs(t, auth.ProofTTL), nil, testPhotos(t))
 }
 
 func planCodeChallenge(users *fakeAuthStore, identifier string, userID int64, code string, stage string, expiresIn time.Duration, attempts int) {
@@ -321,12 +308,8 @@ func planCodeChallenge(users *fakeAuthStore, identifier string, userID int64, co
 
 func newAuthHandler(t *testing.T, users AuthStore, tokens TokenIssuer) *Auth {
 	t.Helper()
-	loc, err := time.LoadLocation("Asia/Dhaka")
-	if err != nil {
-		t.Fatalf("could not load timezone: %v", err)
-	}
-	cfg := &config.Config{AppEnv: "test", Timezone: "Asia/Dhaka", Location: loc}
-	return NewAuth(cfg, users, tokens, &fakeMailer{})
+	return NewAuth(accountConfig(t, "test"), users, tokens, &fakeMailer{},
+		testProofs(t, auth.ProofTTL), nil, testPhotos(t))
 }
 
 func silenceLog(t *testing.T) {
@@ -364,236 +347,6 @@ func successMessage(t *testing.T, rec *httptest.ResponseRecorder) string {
 		t.Fatalf("body is not valid JSON: %v (body = %q)", err, rec.Body.String())
 	}
 	return payload.Message
-}
-
-const validRegistration = `{"full_name":"Ratul Islam","reg_no":"2023331079","batch":"CSE-23","section":"A",
-"email":"ratul@student.sust.edu","phone":"01712345678","blood_group":"O+",
-"password":"sust-250-project","confirm_password":"sust-250-project","has_drop_course":false}`
-
-func TestRegisterValidation(t *testing.T) {
-	silenceLog(t)
-	tests := []struct {
-		name       string
-		body       string
-		wantStatus int
-		wantError  string
-	}{
-		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
-		{name: "empty body", body: ``, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
-		{
-			name:       "unknown field",
-			body:       `{"full_name":"A","role":"admin"}`,
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Invalid request body",
-		},
-		{
-			name:       "missing full name",
-			body:       strings.Replace(validRegistration, `"full_name":"Ratul Islam"`, `"full_name":"  "`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Full name is required.",
-		},
-		{
-			name:       "missing registration number",
-			body:       strings.Replace(validRegistration, `"reg_no":"2023331079"`, `"reg_no":""`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Registration number is required.",
-		},
-		{
-			name:       "bad batch",
-			body:       strings.Replace(validRegistration, `"batch":"CSE-23"`, `"batch":"CSE2023"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Batch must look like CSE-23.",
-		},
-		{
-			name:       "bad section",
-			body:       strings.Replace(validRegistration, `"section":"A"`, `"section":"AB"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Section must be a single letter from A to Z.",
-		},
-		{
-			name:       "bad email",
-			body:       strings.Replace(validRegistration, `"email":"ratul@student.sust.edu"`, `"email":"ratul-at-sust"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Email must be a valid email address.",
-		},
-		{
-			name:       "bad phone",
-			body:       strings.Replace(validRegistration, `"phone":"01712345678"`, `"phone":"0171"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Phone must be 10 to 15 digits, with an optional leading +.",
-		},
-		{
-			name:       "bad blood group",
-			body:       strings.Replace(validRegistration, `"blood_group":"O+"`, `"blood_group":"C+"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Blood group must be one of A+, A-, B+, B-, AB+, AB-, O+, O-.",
-		},
-		{
-			name:       "short password",
-			body:       strings.ReplaceAll(validRegistration, `"sust-250-project"`, `"short"`),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Password must be at least 8 characters long.",
-		},
-		{
-			name:       "confirmation does not match",
-			body:       strings.Replace(validRegistration, `"confirm_password":"sust-250-project"`, `"confirm_password":"sust-250-projecT"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Password and the confirmation do not match.",
-		},
-		{
-			name:       "drop course without a code",
-			body:       strings.Replace(validRegistration, `"has_drop_course":false`, `"has_drop_course":true`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Drop course code is required.",
-		},
-		{
-			name: "drop course with a bad code",
-			body: strings.Replace(validRegistration, `"has_drop_course":false`,
-				`"has_drop_course":true,"drop_course_code":"CSE-23"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Drop course code must look like CSE-233 or CSE233.",
-		},
-		{
-			name: "the first invalid field is reported",
-			body: strings.Replace(strings.Replace(validRegistration, `"full_name":"Ratul Islam"`, `"full_name":""`, 1),
-				`"email":"ratul@student.sust.edu"`, `"email":"nonsense"`, 1),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Full name is required.",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			users := newAuthStore(t)
-			handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
-			rec := post(t, handler.Register(), "/api/auth/register", tc.body)
-			if rec.Code != tc.wantStatus {
-				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, tc.wantStatus, rec.Body.String())
-			}
-			if got := errorMessage(t, rec); got != tc.wantError {
-				t.Errorf("error = %q, want %q", got, tc.wantError)
-			}
-			if len(users.created) != 0 {
-				t.Errorf("the store was asked to create %d registrations, want 0", len(users.created))
-			}
-		})
-	}
-}
-
-func TestRegisterSuccess(t *testing.T) {
-	silenceLog(t)
-	tests := []struct {
-		name               string
-		body               string
-		wantBatch          string
-		wantSection        string
-		wantEmail          string
-		wantHasDropCourse  bool
-		wantDropCourseCode string
-	}{
-		{
-			name:        "without a drop course",
-			body:        validRegistration,
-			wantBatch:   "CSE-23",
-			wantSection: "A",
-			wantEmail:   "ratul@student.sust.edu",
-		},
-		{
-			name: "with a drop course",
-			body: strings.Replace(validRegistration, `"has_drop_course":false`,
-				`"has_drop_course":true,"drop_course_code":"cse-233"`, 1),
-			wantBatch:          "CSE-23",
-			wantSection:        "A",
-			wantEmail:          "ratul@student.sust.edu",
-			wantHasDropCourse:  true,
-			wantDropCourseCode: "CSE-233",
-		},
-		{
-			name: "values are normalised",
-			body: strings.Replace(strings.Replace(validRegistration, `"batch":"CSE-23"`, `"batch":"cse-23"`, 1),
-				`"email":"ratul@student.sust.edu"`, `"email":" Ratul@Student.SUST.edu "`, 1),
-			wantBatch:   "CSE-23",
-			wantSection: "A",
-			wantEmail:   "ratul@student.sust.edu",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			users := newAuthStore(t)
-			handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
-			rec := post(t, handler.Register(), "/api/auth/register", tc.body)
-			if rec.Code != http.StatusCreated {
-				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, http.StatusCreated, rec.Body.String())
-			}
-			if got := successMessage(t, rec); got != MessageRegistrationDone {
-				t.Errorf("message = %q, want %q", got, MessageRegistrationDone)
-			}
-			if len(users.created) != 1 {
-				t.Fatalf("the store received %d registrations, want 1", len(users.created))
-			}
-			created := users.created[0]
-			if created.Batch != tc.wantBatch {
-				t.Errorf("Batch = %q, want %q", created.Batch, tc.wantBatch)
-			}
-			if created.Section != tc.wantSection {
-				t.Errorf("Section = %q, want %q", created.Section, tc.wantSection)
-			}
-			if created.Email != tc.wantEmail {
-				t.Errorf("Email = %q, want %q", created.Email, tc.wantEmail)
-			}
-			if created.HasDropCourse != tc.wantHasDropCourse {
-				t.Errorf("HasDropCourse = %t, want %t", created.HasDropCourse, tc.wantHasDropCourse)
-			}
-			if created.DropCourseCode != tc.wantDropCourseCode {
-				t.Errorf("DropCourseCode = %q, want %q", created.DropCourseCode, tc.wantDropCourseCode)
-			}
-			if created.PasswordHash == "sust-250-project" || created.PasswordHash == "" {
-				t.Fatal("the registration was stored without a real password hash")
-			}
-			if err := auth.CheckPassword(created.PasswordHash, "sust-250-project"); err != nil {
-				t.Errorf("the stored hash does not verify against the submitted password: %v", err)
-			}
-			if strings.Contains(rec.Body.String(), created.PasswordHash) {
-				t.Error("the response body contains the password hash")
-			}
-		})
-	}
-}
-
-func TestRegisterStoreErrors(t *testing.T) {
-	silenceLog(t)
-	tests := []struct {
-		name       string
-		createErr  error
-		wantStatus int
-		wantError  string
-	}{
-		{
-			name:       "duplicate account",
-			createErr:  store.ErrDuplicateAccount,
-			wantStatus: http.StatusConflict,
-			wantError:  MessageDuplicateAccount,
-		},
-		{
-			name:       "database failure",
-			createErr:  errors.New("connection refused"),
-			wantStatus: http.StatusInternalServerError,
-			wantError:  middleware.MessageServerError,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			users := newAuthStore(t)
-			users.createErr = tc.createErr
-			handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
-			rec := post(t, handler.Register(), "/api/auth/register", validRegistration)
-			if rec.Code != tc.wantStatus {
-				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
-			}
-			if got := errorMessage(t, rec); got != tc.wantError {
-				t.Errorf("error = %q, want %q", got, tc.wantError)
-			}
-		})
-	}
 }
 
 func TestLogin(t *testing.T) {
@@ -933,60 +686,72 @@ func TestForgotPassword(t *testing.T) {
 		wantUserID    int64
 	}{
 		{
-			name:       "active student",
-			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			name:       "active student by date of birth",
+			body:       `{"identifier":"2023331001","date_of_birth":"2003-05-14"}`,
 			wantStatus: http.StatusOK,
 			wantHint:   "n***@student.sust.edu",
 			wantUserID: 1,
 		},
 		{
-			name:       "phone written with the country code",
-			body:       `{"identifier":"2023331001","phone":"+8801712345678"}`,
-			wantStatus: http.StatusOK,
-			wantHint:   "n***@student.sust.edu",
-			wantUserID: 1,
-		},
-		{
-			name:       "teacher",
-			body:       `{"identifier":"T-001","phone":"01812345678"}`,
+			name:       "teacher by date of birth",
+			body:       `{"identifier":"T-001","date_of_birth":"1988-03-09"}`,
 			wantStatus: http.StatusOK,
 			wantHint:   "t***@sust.edu",
 			wantUserID: 6,
 		},
 		{
-			name:       "admin",
+			name:       "admin by phone",
 			body:       `{"identifier":"admin","phone":"01912345678"}`,
 			wantStatus: http.StatusOK,
 			wantHint:   "a***@sust.edu",
 			wantUserID: 7,
 		},
 		{
-			name:       "phone does not match",
-			body:       `{"identifier":"2023331001","phone":"01799999999"}`,
+			name:       "admin phone written with the country code",
+			body:       `{"identifier":"admin","phone":"+8801912345678"}`,
+			wantStatus: http.StatusOK,
+			wantHint:   "a***@sust.edu",
+			wantUserID: 7,
+		},
+		{
+			name:       "student date of birth does not match",
+			body:       `{"identifier":"2023331001","date_of_birth":"2003-05-15"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageResetBirthMismatch,
+		},
+		{
+			name:       "student phone is not accepted",
+			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageResetBirthMismatch,
+		},
+		{
+			name:       "admin date of birth is not accepted",
+			body:       `{"identifier":"admin","date_of_birth":"2003-05-14"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  MessageResetMismatch,
 		},
 		{
 			name:       "unknown identifier",
-			body:       `{"identifier":"2023339999","phone":"01712345678"}`,
+			body:       `{"identifier":"2023339999","date_of_birth":"2003-05-14"}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  MessageResetMismatch,
+			wantError:  MessageResetBirthMismatch,
 		},
 		{
 			name:       "pending account",
-			body:       `{"identifier":"2023331003","phone":"01712345679"}`,
+			body:       `{"identifier":"2023331003","date_of_birth":"2004-01-02"}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  MessageResetMismatch,
+			wantError:  MessageResetBirthMismatch,
 		},
 		{
-			name:       "missing phone",
-			body:       `{"identifier":"2023331001","phone":"  "}`,
+			name:       "nothing to match on",
+			body:       `{"identifier":"2023331001"}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Phone number is required.",
+			wantError:  MessageDateOfBirthRequired,
 		},
 		{
 			name:       "missing identifier",
-			body:       `{"identifier":"  ","phone":"01712345678"}`,
+			body:       `{"identifier":"  ","date_of_birth":"2003-05-14"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "ID is required.",
 		},
@@ -998,14 +763,14 @@ func TestForgotPassword(t *testing.T) {
 		},
 		{
 			name:       "inside the resend cooldown",
-			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			body:       `{"identifier":"2023331001","date_of_birth":"2003-05-14"}`,
 			sentAgo:    20 * time.Second,
 			wantStatus: http.StatusTooManyRequests,
 			wantError:  MessageResetCooldown,
 		},
 		{
 			name:       "after the resend cooldown",
-			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			body:       `{"identifier":"2023331001","date_of_birth":"2003-05-14"}`,
 			sentAgo:    90 * time.Second,
 			wantStatus: http.StatusOK,
 			wantHint:   "n***@student.sust.edu",
@@ -1013,14 +778,14 @@ func TestForgotPassword(t *testing.T) {
 		},
 		{
 			name:          "account became inactive between the two queries",
-			body:          `{"identifier":"2023331001","phone":"01712345678"}`,
+			body:          `{"identifier":"2023331001","date_of_birth":"2003-05-14"}`,
 			startResetErr: store.ErrNotFound,
 			wantStatus:    http.StatusBadRequest,
-			wantError:     MessageResetMismatch,
+			wantError:     MessageResetBirthMismatch,
 		},
 		{
 			name:       "database failure",
-			body:       `{"identifier":"2023331001","phone":"01712345678"}`,
+			body:       `{"identifier":"2023331001","date_of_birth":"2003-05-14"}`,
 			targetErr:  errors.New("connection refused"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  middleware.MessageServerError,
@@ -1059,7 +824,7 @@ func TestForgotPassword(t *testing.T) {
 			if body.EmailHint != tc.wantHint {
 				t.Errorf("email hint = %q, want %q", body.EmailHint, tc.wantHint)
 			}
-			if !isResetCode(body.DevCode) {
+			if !isSixDigitCode(body.DevCode) {
 				t.Errorf("dev code = %q, want 6 digits while no mailer is configured", body.DevCode)
 			}
 			expiresAt, err := time.Parse(time.RFC3339, body.ExpiresAt)
@@ -1100,7 +865,7 @@ func TestForgotPasswordIssuesADifferentCodeEveryTime(t *testing.T) {
 	seen := make(map[string]bool)
 	for i := 0; i < 5; i++ {
 		rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password",
-			`{"identifier":"2023331001","phone":"01712345678"}`)
+			`{"identifier":"2023331001","date_of_birth":"2003-05-14"}`)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 		}
@@ -1135,7 +900,7 @@ func TestForgotPasswordDevCodeAndMail(t *testing.T) {
 			mail := &fakeMailer{configured: tc.configured}
 			handler := newAuthHandlerWithMailer(t, users, mail, tc.appEnv)
 			rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password",
-				`{"identifier":"2023331001","phone":"01712345678"}`)
+				`{"identifier":"2023331001","date_of_birth":"2003-05-14"}`)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 			}
@@ -1143,7 +908,7 @@ func TestForgotPasswordDevCodeAndMail(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("body is not valid JSON: %v", err)
 			}
-			if tc.wantDevCode && !isResetCode(body.DevCode) {
+			if tc.wantDevCode && !isSixDigitCode(body.DevCode) {
 				t.Errorf("dev code = %q, want 6 digits", body.DevCode)
 			}
 			if !tc.wantDevCode && body.DevCode != "" {
@@ -1182,7 +947,7 @@ func TestForgotPasswordClearsTheCodeWhenTheMailFails(t *testing.T) {
 	mail := &fakeMailer{configured: true, err: errors.New("mailbox unavailable")}
 	handler := newAuthHandlerWithMailer(t, users, mail, "production")
 	rec := post(t, handler.ForgotPassword(), "/api/auth/forgot-password",
-		`{"identifier":"2023331001","phone":"01712345678"}`)
+		`{"identifier":"2023331001","date_of_birth":"2003-05-14"}`)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500 (body = %q)", rec.Code, rec.Body.String())
 	}
