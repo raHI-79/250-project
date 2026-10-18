@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ShieldCheck } from 'lucide-react'
 import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
@@ -15,6 +15,8 @@ const OVERLAY = 'bg-brand-950/92'
 export default function AdminLoginPage() {
   const { adminLogin, isAuthenticated, role } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const notice = location.state?.notice || ''
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -44,6 +46,7 @@ export default function AdminLoginPage() {
           <p className="mt-1 text-sm text-brand-500">Department staff access only</p>
         </div>
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
+          {notice && <Alert tone="success">{notice}</Alert>}
           {error && <Alert tone="error">{error}</Alert>}
           <Input
             label="Admin ID"
