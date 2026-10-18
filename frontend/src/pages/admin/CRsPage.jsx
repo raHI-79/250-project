@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Plus, UserCog } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { UserCog, UserPlus } from 'lucide-react'
 import {
   Alert,
+  Avatar,
   Button,
   Card,
   DataTable,
@@ -10,6 +12,7 @@ import {
   Modal,
   PageHeader,
   Select,
+  SkeletonLines,
   SkeletonTable,
   StatusBadge,
   useConfirm,
@@ -17,21 +20,114 @@ import {
 } from '../../components/ui'
 import api from '../../lib/api'
 import { useDebounced, useResource } from '../../lib/hooks'
-import { BLOOD_GROUPS } from '../../lib/options'
-
-const EMPTY = {
-  full_name: '',
-  reg_no: '',
-  batch: '',
-  section: '',
-  email: '',
-  phone: '',
-  blood_group: '',
-  password: '',
-  confirm_password: '',
-}
+import { paths } from '../../lib/paths'
 
 const HEADINGS = ['Name', 'Reg No', 'Batch', 'Section', 'Email', 'Phone', 'Status', '']
+
+function PromoteModal({ open, onClose, batches, onPromoted }) {
+  const confirm = useConfirm()
+  const toast = useToast()
+  const [search, setSearch] = useState('')
+  const [batch, setBatch] = useState('')
+  const [busy, setBusy] = useState(0)
+  const [problem, setProblem] = useState('')
+  const settled = useDebounced(search)
+  const query = { status: 'active', limit: 20 }
+  if (settled.trim()) query.search = settled.trim()
+  if (batch) query.batch = batch
+  const { data, loading, error, reload } = useResource(open ? '/api/admin/students' : null, query)
+  const candidates = (data?.items || []).filter((item) => !item.is_cr)
+  const promote = async (item) => {
+    const ok = await confirm({
+      title: 'Make this student a CR?',
+      message: `${item.full_name} (${item.reg_no}) becomes the class representative of ${item.batch} section ${item.section} and has to log in again.`,
+      confirmLabel: 'Promote',
+    })
+    if (!ok) return
+    setProblem('')
+    setBusy(item.user_id || item.id)
+    try {
+      await api.post('/api/admin/crs/promote', { user_id: item.user_id || item.id })
+      toast.success('Class representative added')
+      reload()
+      onPromoted()
+      onClose()
+    } catch (failure) {
+      setProblem(failure.message)
+    } finally {
+      setBusy(0)
+    }
+  }
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Make CR"
+      className="max-w-2xl"
+      footer={
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {problem && <Alert tone="error">{problem}</Alert>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Search active students"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Name or registration number"
+          />
+          <Select label="Batch" value={batch} onChange={(event) => setBatch(event.target.value)}>
+            <option value="">Every batch</option>
+            {batches.map((entry) => (
+              <option key={entry} value={entry}>
+                {entry}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {error && <Alert tone="error">{error}</Alert>}
+        {loading ? (
+          <SkeletonLines lines={4} />
+        ) : candidates.length === 0 ? (
+          <p className="py-4 text-center text-sm text-brand-500">
+            No active student matches this search.
+          </p>
+        ) : (
+          <ul className="flex max-h-80 flex-col gap-1 overflow-y-auto">
+            {candidates.map((item) => (
+              <li
+                key={item.user_id || item.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-brand-100 px-3 py-2"
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Avatar src={item.photo_url} name={item.full_name} size="sm" />
+                  <span className="min-w-0 leading-tight">
+                    <span className="block truncate text-sm font-medium text-brand-900">
+                      {item.full_name}
+                    </span>
+                    <span className="block text-xs text-brand-500">
+                      {item.reg_no} · {item.batch} section {item.section}
+                    </span>
+                  </span>
+                </span>
+                <Button
+                  size="sm"
+                  loading={busy === (item.user_id || item.id)}
+                  onClick={() => promote(item)}
+                >
+                  Promote
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Modal>
+  )
+}
 
 export default function CRsPage() {
   const toast = useToast()
@@ -39,9 +135,6 @@ export default function CRsPage() {
   const [search, setSearch] = useState('')
   const [batch, setBatch] = useState('')
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(EMPTY)
-  const [formError, setFormError] = useState('')
-  const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(0)
   const settled = useDebounced(search)
   const batches = useResource('/api/lookups/batches')
@@ -49,31 +142,6 @@ export default function CRsPage() {
   if (settled.trim()) query.search = settled.trim()
   if (batch) query.batch = batch
   const { data, loading, error, reload } = useResource('/api/admin/crs', query)
-  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
-  const close = () => {
-    setOpen(false)
-    setFormError('')
-    setForm(EMPTY)
-  }
-  const save = async (event) => {
-    event.preventDefault()
-    setFormError('')
-    if (form.password !== form.confirm_password) {
-      setFormError('Password and the confirmation do not match.')
-      return
-    }
-    setSaving(true)
-    try {
-      await api.post('/api/admin/crs', form)
-      toast.success('CR account created')
-      close()
-      reload()
-    } catch (failure) {
-      setFormError(failure.message)
-    } finally {
-      setSaving(false)
-    }
-  }
   const act = async (item, action) => {
     const ok = await confirm(
       action === 'demote'
@@ -105,11 +173,11 @@ export default function CRsPage() {
     <>
       <PageHeader
         title="CRs"
-        subtitle="Class representative accounts"
+        subtitle="Class representatives are promoted from active students"
         actions={
           <Button onClick={() => setOpen(true)}>
-            <Plus size={15} />
-            Add CR
+            <UserPlus size={15} />
+            Make CR
           </Button>
         }
       />
@@ -131,11 +199,20 @@ export default function CRsPage() {
           </Select>
         </div>
       </Card>
-      {error && <Alert tone="error" className="mb-5">{error}</Alert>}
+      {error && (
+        <Alert tone="error" className="mb-5">
+          {error}
+        </Alert>
+      )}
       {loading ? (
         <SkeletonTable columns={8} />
       ) : items.length === 0 ? (
-        <EmptyState icon={UserCog} title="No CRs" text="No class representative matches this." />
+        <EmptyState
+          icon={UserCog}
+          title="No CRs"
+          text="No class representative matches this."
+          action={<Button onClick={() => setOpen(true)}>Make CR</Button>}
+        />
       ) : (
         <DataTable className="animate-fade-in">
           <thead>
@@ -150,7 +227,17 @@ export default function CRsPage() {
           <tbody>
             {items.map((item) => (
               <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
-                <td className="px-4 py-3 font-medium text-brand-900">{item.full_name}</td>
+                <td className="px-4 py-3">
+                  <span className="flex items-center gap-2.5">
+                    <Avatar src={item.photo_url} name={item.full_name} size="sm" />
+                    <Link
+                      to={paths.person(item.user_id || item.id)}
+                      className="font-medium text-brand-900 hover:text-brand-600 hover:underline"
+                    >
+                      {item.full_name}
+                    </Link>
+                  </span>
+                </td>
                 <td className="px-4 py-3 tabular-nums text-brand-700">{item.reg_no}</td>
                 <td className="px-4 py-3 text-brand-700">{item.batch}</td>
                 <td className="px-4 py-3 text-brand-700">{item.section}</td>
@@ -185,86 +272,12 @@ export default function CRsPage() {
           </tbody>
         </DataTable>
       )}
-      <Modal
+      <PromoteModal
         open={open}
-        onClose={close}
-        title="Add a CR"
-        footer={
-          <>
-            <Button variant="secondary" onClick={close}>
-              Cancel
-            </Button>
-            <Button form="cr-form" type="submit" loading={saving}>
-              Create the account
-            </Button>
-          </>
-        }
-      >
-        <form id="cr-form" onSubmit={save} className="flex flex-col gap-4">
-          {formError && <Alert tone="error">{formError}</Alert>}
-          <Input label="Full name" value={form.full_name} onChange={set('full_name')} required />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Registration number"
-              value={form.reg_no}
-              onChange={set('reg_no')}
-              required
-            />
-            <Input
-              label="Batch"
-              value={form.batch}
-              onChange={set('batch')}
-              placeholder="CSE-23"
-              required
-            />
-            <Input
-              label="Section"
-              value={form.section}
-              onChange={set('section')}
-              maxLength={1}
-              required
-            />
-            <Select
-              label="Blood group"
-              value={form.blood_group}
-              onChange={set('blood_group')}
-              required
-            >
-              <option value="">Choose a blood group</option>
-              {BLOOD_GROUPS.map((group) => (
-                <option key={group} value={group}>
-                  {group}
-                </option>
-              ))}
-            </Select>
-            <Input
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={set('email')}
-              required
-            />
-            <Input label="Phone" value={form.phone} onChange={set('phone')} required />
-            <Input
-              label="Password"
-              type="password"
-              value={form.password}
-              onChange={set('password')}
-              autoComplete="new-password"
-              hint="At least 8 characters"
-              required
-            />
-            <Input
-              label="Confirm password"
-              type="password"
-              value={form.confirm_password}
-              onChange={set('confirm_password')}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-        </form>
-      </Modal>
+        onClose={() => setOpen(false)}
+        batches={batches.data?.items || []}
+        onPromoted={reload}
+      />
     </>
   )
 }
