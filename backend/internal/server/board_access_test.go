@@ -35,6 +35,18 @@ func (emptyNoticeStore) ListBatchCRNotices(ctx context.Context, batch string, ot
 	return nil, nil
 }
 
+func (emptyNoticeStore) ListTeacherNotices(ctx context.Context, createdBy int64) ([]store.NoticeRow, error) {
+	return nil, nil
+}
+
+func (emptyNoticeStore) ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error) {
+	return nil, nil
+}
+
+func (emptyNoticeStore) DeleteOwnNotice(ctx context.Context, noticeID int64, source string, createdBy int64) (string, error) {
+	return "", store.ErrNotFound
+}
+
 func (emptyNoticeStore) DeleteAdminNotice(ctx context.Context, noticeID int64) (string, error) {
 	return "", store.ErrNotFound
 }
@@ -97,8 +109,7 @@ func boardCRRoutes() []scheduleRoute {
 
 func boardStudentRoutes() []scheduleRoute {
 	return []scheduleRoute{
-		{method: http.MethodGet, path: "/api/students/notices/cr", wantForOwn: http.StatusOK},
-		{method: http.MethodGet, path: "/api/students/notices/admin", wantForOwn: http.StatusOK},
+		{method: http.MethodGet, path: "/api/students/notices", wantForOwn: http.StatusOK},
 		{method: http.MethodGet, path: "/api/students/materials", wantForOwn: http.StatusOK},
 		{method: http.MethodGet, path: "/api/students/directory", wantForOwn: http.StatusOK},
 	}

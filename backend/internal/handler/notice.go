@@ -20,7 +20,6 @@ const (
 	MessageNoticePosted   = "Notice posted."
 	MessageNoticeUnknown  = "No notice found with this ID."
 	MessageFileTooLarge   = "The attached file is larger than the allowed size."
-	MessageFileNotPDF     = "Only PDF files can be attached."
 	MessageOwnBatchTarget = "Use own to post a notice to your own batch."
 	fieldTitle            = "title"
 	fieldDescription      = "description"
@@ -32,37 +31,38 @@ type NoticeStore interface {
 	GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error)
 	CreateNotice(ctx context.Context, notice store.NewNotice) (store.NoticeRow, error)
 	ListAdminNotices(ctx context.Context) ([]store.NoticeRow, error)
-	ListStudentAdminNotices(ctx context.Context, batch string) ([]store.NoticeRow, error)
 	ListCRNotices(ctx context.Context, createdBy int64) ([]store.NoticeRow, error)
-	ListBatchCRNotices(ctx context.Context, batch string, otherBatches bool) ([]store.NoticeRow, error)
+	ListTeacherNotices(ctx context.Context, createdBy int64) ([]store.NoticeRow, error)
+	ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error)
 	DeleteAdminNotice(ctx context.Context, noticeID int64) (string, error)
-}
-
-type FileStore interface {
-	Parse(r *http.Request) error
-	Save(r *http.Request) (string, error)
-	Delete(filePath string) error
+	DeleteOwnNotice(ctx context.Context, noticeID int64, source string, createdBy int64) (string, error)
 }
 
 type Notice struct {
 	notices NoticeStore
-	files   FileStore
+	files   AttachmentStore
 	alerts  BroadcastNotifier
 }
 
-func NewNotice(notices NoticeStore, files FileStore, alerts BroadcastNotifier) *Notice {
+func NewNotice(notices NoticeStore, files AttachmentStore, alerts BroadcastNotifier) *Notice {
 	return &Notice{notices: notices, files: files, alerts: alerts}
 }
 
 type noticeItem struct {
-	ID            int64   `json:"id"`
-	Source        string  `json:"source"`
-	Title         string  `json:"title"`
-	Description   string  `json:"description"`
-	Batch         string  `json:"batch"`
-	FileURL       *string `json:"file_url"`
-	CreatedByName string  `json:"created_by_name"`
-	CreatedAt     string  `json:"created_at"`
+	ID            int64  `json:"id"`
+	Source        string `json:"source"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	Batch         string `json:"batch"`
+	Section       string `json:"section,omitempty"`
+	LinkURL       string `json:"link_url,omitempty"`
+	FileURL       string `json:"file_url,omitempty"`
+	FileName      string `json:"file_name,omitempty"`
+	FileMime      string `json:"file_mime,omitempty"`
+	FileSize      int64  `json:"file_size,omitempty"`
+	CreatedByName string `json:"created_by_name"`
+	PostedByPhoto string `json:"posted_by_photo_url,omitempty"`
+	CreatedAt     string `json:"created_at"`
 }
 
 type noticesResponse struct {
@@ -127,12 +127,17 @@ func (n *Notice) AdminDelete() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		if filePath != "" {
-			if err := n.files.Delete(filePath); err != nil {
-				log.Printf("handler: could not delete the file of a notice: %v", err)
-			}
-		}
+		n.removeFile(filePath)
 		httpx.WriteJSON(w, http.StatusNoContent, nil)
+	}
+}
+
+func (n *Notice) removeFile(filePath string) {
+	if filePath == "" {
+		return
+	}
+	if err := n.files.Delete(filePath); err != nil {
+		log.Printf("handler: could not delete the file of a notice: %v", err)
 	}
 }
 
@@ -184,14 +189,97 @@ func (n *Notice) CRList() http.HandlerFunc {
 	}
 }
 
-func (n *Notice) StudentCRNotices() http.HandlerFunc {
+func (n *Notice) TeacherCreate() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		title, description, ok := n.content(w, r)
+		if !ok {
+			return
+		}
+		batch, err := validate.Batch("Batch", r.FormValue(fieldBatch))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		section := ""
+		if raw := strings.TrimSpace(r.FormValue(fieldSection)); raw != "" {
+			section, err = validate.Section("Section", raw)
+			if err != nil {
+				httpx.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
+		n.create(w, r, store.NewNotice{
+			Source:      store.SourceTeacher,
+			Title:       title,
+			Description: description,
+			Batch:       batch,
+			Section:     section,
+			CreatedBy:   current.ID,
+		})
+	}
+}
+
+func (n *Notice) TeacherList() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		notices, err := n.notices.ListTeacherNotices(r.Context(), current.ID)
+		n.write(w, notices, err)
+	}
+}
+
+func (n *Notice) TeacherDelete() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		noticeID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		filePath, err := n.notices.DeleteOwnNotice(r.Context(), noticeID, store.SourceTeacher, current.ID)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageNoticeUnknown)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not delete a notice: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		n.removeFile(filePath)
+		httpx.WriteJSON(w, http.StatusNoContent, nil)
+	}
+}
+
+func (n *Notice) StudentNotices() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		profile, ok := n.studentProfile(w, r)
 		if !ok {
 			return
 		}
+		query := r.URL.Query()
+		source := store.NoticeAll
+		if raw := strings.TrimSpace(query.Get("source")); raw != "" {
+			valid, err := validate.NoticeSource("source", raw)
+			if err != nil {
+				httpx.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			source = valid
+		}
 		scope := validate.NoticeScopeMine
-		if raw := strings.TrimSpace(r.URL.Query().Get("scope")); raw != "" {
+		if raw := strings.TrimSpace(query.Get("scope")); raw != "" {
 			valid, err := validate.NoticeScope("scope", raw)
 			if err != nil {
 				httpx.WriteError(w, http.StatusBadRequest, err.Error())
@@ -199,36 +287,30 @@ func (n *Notice) StudentCRNotices() http.HandlerFunc {
 			}
 			scope = valid
 		}
-		notices, err := n.notices.ListBatchCRNotices(r.Context(), profile.Batch, scope == validate.NoticeScopeOthers)
-		n.write(w, notices, err)
-	}
-}
-
-func (n *Notice) StudentAdminNotices() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		profile, ok := n.studentProfile(w, r)
-		if !ok {
-			return
-		}
-		notices, err := n.notices.ListStudentAdminNotices(r.Context(), profile.Batch)
+		notices, err := n.notices.ListStudentNotices(r.Context(), profile.Batch, profile.Section, source, scope)
 		n.write(w, notices, err)
 	}
 }
 
 func (n *Notice) create(w http.ResponseWriter, r *http.Request, notice store.NewNotice) {
-	filePath, err := n.files.Save(r)
+	link, err := validate.OptionalLink("Link", r.FormValue(fieldLink))
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	attachment, err := n.files.Save(r)
 	if err != nil {
 		writeFileError(w, err)
 		return
 	}
-	notice.FilePath = filePath
+	notice.LinkURL = link
+	notice.FilePath = attachment.Path
+	notice.FileName = attachment.Name
+	notice.FileMime = attachment.Mime
+	notice.FileSize = attachment.Size
 	created, err := n.notices.CreateNotice(r.Context(), notice)
 	if err != nil {
-		if filePath != "" {
-			if removeErr := n.files.Delete(filePath); removeErr != nil {
-				log.Printf("handler: could not delete the file of a rejected notice: %v", removeErr)
-			}
-		}
+		n.removeFile(attachment.Path)
 		log.Printf("handler: could not create a notice: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 		return
@@ -284,28 +366,30 @@ func (n *Notice) write(w http.ResponseWriter, notices []store.NoticeRow, err err
 }
 
 func newNoticeItem(notice store.NoticeRow) noticeItem {
-	item := noticeItem{
+	return noticeItem{
 		ID:            notice.ID,
 		Source:        notice.Source,
 		Title:         notice.Title,
 		Description:   notice.Description,
 		Batch:         notice.Batch,
+		Section:       notice.Section,
+		LinkURL:       notice.LinkURL,
+		FileURL:       upload.AttachmentURL(notice.FilePath, notice.FileName),
+		FileName:      notice.FileName,
+		FileMime:      notice.FileMime,
+		FileSize:      notice.FileSize,
 		CreatedByName: notice.CreatedByName,
+		PostedByPhoto: notice.CreatedByPhoto,
 		CreatedAt:     notice.CreatedAt.Format(time.RFC3339),
 	}
-	if notice.FilePath != "" {
-		link := notice.FilePath
-		item.FileURL = &link
-	}
-	return item
 }
 
 func writeFileError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, upload.ErrTooLarge):
 		httpx.WriteError(w, http.StatusRequestEntityTooLarge, MessageFileTooLarge)
-	case errors.Is(err, upload.ErrNotPDF):
-		httpx.WriteError(w, http.StatusBadRequest, MessageFileNotPDF)
+	case errors.Is(err, upload.ErrNotAllowedType):
+		httpx.WriteError(w, http.StatusBadRequest, MessageFileNotAllowed)
 	case errors.Is(err, upload.ErrBadForm):
 		httpx.WriteError(w, http.StatusBadRequest, httpx.MessageInvalidBody)
 	default:
