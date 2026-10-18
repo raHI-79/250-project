@@ -4,5 +4,5 @@ import { navForRole } from '../../lib/nav'
 
 export default function AppLayout() {
   const { role } = useAuth()
-  return <AppShell items={navForRole(role)} />
+  return <AppShell items={navForRole(role)} showBell={role !== 'admin'} />
 }

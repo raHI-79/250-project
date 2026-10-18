@@ -1,5 +1,5 @@
 import { readJson, remove } from './storage'
-import { paths } from './paths'
+import { loginFor } from './paths'
 
 export const SESSION_KEY = 'sustcse.session'
 
@@ -11,25 +11,31 @@ export class ApiError extends Error {
   }
 }
 
-const LOGIN_ENDPOINTS = [
+const PUBLIC_ENDPOINTS = [
+  '/api/auth/config',
   '/api/auth/login',
   '/api/auth/admin/login',
   '/api/auth/register',
+  '/api/auth/verify-email',
+  '/api/auth/resend-verification',
+  '/api/auth/drop-course-options',
+  '/api/auth/google/verify-email',
+  '/api/auth/invite',
+  '/api/auth/activate',
   '/api/auth/forgot-password',
   '/api/auth/verify-reset-code',
   '/api/auth/reset-password',
 ]
 
-const isLoginEndpoint = (path) => LOGIN_ENDPOINTS.some((entry) => path.startsWith(entry))
+const isPublicEndpoint = (path) => PUBLIC_ENDPOINTS.some((entry) => path.startsWith(entry))
 
 const currentToken = () => readJson(SESSION_KEY)?.token || null
 
 const currentRole = () => readJson(SESSION_KEY)?.user?.role || null
 
 const expireSession = () => {
-  const role = currentRole()
+  const target = loginFor(currentRole())
   remove(SESSION_KEY)
-  const target = role === 'admin' ? paths.adminLogin() : paths.login()
   if (window.location.pathname !== target) {
     window.location.assign(target)
   }
@@ -83,7 +89,7 @@ const request = async (method, path, { body, query, signal, auth = true } = {}) 
   }
   const data = await parseBody(response)
   if (response.ok) return data
-  if (response.status === 401 && !isLoginEndpoint(path)) {
+  if (response.status === 401 && !isPublicEndpoint(path)) {
     expireSession()
   }
   const message =

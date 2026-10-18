@@ -1,11 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import AdminLayout from './components/layout/AdminLayout'
-import RequireRole from './components/RequireRole'
+import RequireRole, { RequireAuth } from './components/RequireRole'
 import LoginPage from './pages/auth/LoginPage'
 import AdminLoginPage from './pages/auth/AdminLoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import ActivatePage from './pages/auth/ActivatePage'
+import ProfilePage from './pages/ProfilePage'
+import PersonPage from './pages/PersonPage'
 import UpcomingRoutinePage from './pages/student/UpcomingRoutinePage'
 import DropCourseRoutinePage from './pages/student/DropCourseRoutinePage'
 import ExamsPage from './pages/student/ExamsPage'
@@ -42,22 +45,40 @@ import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
 import AdminMaterialsPage from './pages/admin/AdminMaterialsPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { useAuth } from './context/auth'
-import { homeFor, paths } from './lib/paths'
+import { PORTAL_ADMIN, PORTAL_STUDENT, PORTAL_TEACHER, homeFor, paths } from './lib/paths'
 
 function RootRedirect() {
   const { isAuthenticated, role } = useAuth()
-  return <Navigate to={isAuthenticated ? homeFor(role) : paths.login()} replace />
+  return <Navigate to={isAuthenticated ? homeFor(role) : paths.studentLogin()} replace />
 }
 
 export default function Router() {
   return (
     <Routes>
       <Route path={paths.root()} element={<RootRedirect />} />
-      <Route path={paths.login()} element={<LoginPage />} />
-      <Route path={paths.register()} element={<RegisterPage />} />
-      <Route path={paths.forgotPassword()} element={<ForgotPasswordPage />} />
+      <Route path={paths.studentLogin()} element={<LoginPage portal={PORTAL_STUDENT} />} />
+      <Route path={paths.studentRegister()} element={<RegisterPage />} />
+      <Route
+        path={paths.studentForgotPassword()}
+        element={<ForgotPasswordPage portal={PORTAL_STUDENT} />}
+      />
+      <Route path={paths.teacherLogin()} element={<LoginPage portal={PORTAL_TEACHER} />} />
+      <Route
+        path={paths.teacherForgotPassword()}
+        element={<ForgotPasswordPage portal={PORTAL_TEACHER} />}
+      />
+      <Route path={paths.teacherActivate()} element={<ActivatePage />} />
       <Route path={paths.adminLogin()} element={<AdminLoginPage />} />
-      <Route path={paths.adminForgotPassword()} element={<ForgotPasswordPage admin />} />
+      <Route
+        path={paths.adminForgotPassword()}
+        element={<ForgotPasswordPage portal={PORTAL_ADMIN} />}
+      />
+      <Route element={<RequireAuth />}>
+        <Route element={<AppLayout />}>
+          <Route path={paths.profile()} element={<ProfilePage />} />
+          <Route path={paths.personPattern()} element={<PersonPage />} />
+        </Route>
+      </Route>
       <Route element={<RequireRole roles="student" />}>
         <Route element={<AppLayout />}>
           <Route
