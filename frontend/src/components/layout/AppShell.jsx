@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import CampusBanner from './CampusBanner'
+import PhotoReminder from './PhotoReminder'
 
 export default function AppShell({ items, showBell = true }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -15,6 +16,7 @@ export default function AppShell({ items, showBell = true }) {
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div key={location.pathname} className="animate-fade-in-up mx-auto max-w-6xl">
             <CampusBanner />
+            <PhotoReminder />
             <Outlet />
           </div>
         </main>

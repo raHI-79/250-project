@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { GraduationCap } from 'lucide-react'
 import {
   Alert,
+  Avatar,
   Card,
   DataTable,
   EmptyState,
@@ -10,8 +12,9 @@ import {
   SkeletonTable,
 } from '../../components/ui'
 import { useDebounced, useResource } from '../../lib/hooks'
+import { paths } from '../../lib/paths'
 
-const HEADINGS = ['Name', 'Phone', 'Email']
+const HEADINGS = ['Name', 'Designation', 'Office', 'Phone', 'Email']
 
 export default function TeachersPage() {
   const [search, setSearch] = useState('')
@@ -35,7 +38,7 @@ export default function TeachersPage() {
       </Card>
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
       {loading ? (
-        <SkeletonTable columns={3} />
+        <SkeletonTable columns={5} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={GraduationCap}
@@ -56,7 +59,19 @@ export default function TeachersPage() {
           <tbody>
             {items.map((item) => (
               <tr key={item.email} className="border-b border-brand-50 last:border-b-0">
-                <td className="px-4 py-3 font-medium text-brand-900">{item.name}</td>
+                <td className="px-4 py-3 text-brand-900">
+                  <span className="flex items-center gap-2.5">
+                    <Avatar src={item.photo_url} name={item.name} size="sm" />
+                    <Link
+                      to={paths.person(item.user_id)}
+                      className="font-medium text-brand-900 hover:text-brand-600 hover:underline"
+                    >
+                      {item.name}
+                    </Link>
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-brand-700">{item.designation || '—'}</td>
+                <td className="px-4 py-3 text-brand-700">{item.office_room || '—'}</td>
                 <td className="px-4 py-3">
                   <a href={`tel:${item.phone}`} className="text-brand-600 hover:underline">
                     {item.phone}
