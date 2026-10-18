@@ -23,6 +23,8 @@ import (
 	"time"
 )
 
+const flowRateLimit = 200
+
 const flowRegistration = `{"full_name":"Flow Student","reg_no":"2023331500","batch":"CSE-23","section":"A",
 "email":"flow@student.sust.edu","phone":"01712345678","blood_group":"B+",
 "password":"first-password","confirm_password":"first-password","has_drop_course":false}`
@@ -35,6 +37,11 @@ func TestMain(m *testing.M) {
 }
 
 func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) {
+	t.Helper()
+	return newFlowRouterWithLimit(t, flowRateLimit)
+}
+
+func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxpool.Pool, http.Handler) {
 	t.Helper()
 	ctx, pool := dbtest.Pool(t)
 	if err := db.Migrate(ctx, pool); err != nil {
@@ -50,17 +57,27 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 	}
 	userStore := store.New(pool)
 	alerts := notify.New(userStore)
+	proofs, err := auth.NewProofs(testSecret, auth.ProofTTL)
+	if err != nil {
+		t.Fatalf("auth.NewProofs() returned an unexpected error: %v", err)
+	}
 	log.SetOutput(io.Discard)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	return ctx, pool, NewRouter(Dependencies{
+		RateLimit: rateLimit,
 		Config: &config.Config{
 			AppEnv:         "test",
 			Timezone:       "Asia/Dhaka",
 			Location:       loc,
 			FrontendOrigin: testFrontend,
+			StudentDomain:  "student.sust.edu",
+			TeacherDomain:  "sust.edu",
 		},
 		Database: stubPinger{},
 		Tokens:   tokens,
+		Proofs:   proofs,
+		Photos:   upload.NewPhotos(t.TempDir()),
+		Accounts: userStore,
 		Users:    userStore,
 		Auth:     userStore,
 		People:   userStore,
@@ -118,16 +135,25 @@ func field(t *testing.T, rec *httptest.ResponseRecorder, name string) string {
 
 func TestAuthenticationFlow(t *testing.T) {
 	ctx, pool, router := newFlowRouter(t)
-	registered := call(t, router, http.MethodPost, "/api/auth/register", flowRegistration, "")
+	registered := registerStudent(t, router, flowRegistration)
 	if registered.Code != http.StatusCreated {
 		t.Fatalf("register status = %d, want 201 (body = %q)", registered.Code, registered.Body.String())
 	}
-	if got := field(t, registered, "message"); got != handler.MessageRegistrationDone {
-		t.Errorf("register message = %q, want %q", got, handler.MessageRegistrationDone)
+	if got := field(t, registered, "message"); got != handler.MessageVerifyEmailSent {
+		t.Errorf("register message = %q, want %q", got, handler.MessageVerifyEmailSent)
 	}
-	duplicate := call(t, router, http.MethodPost, "/api/auth/register", flowRegistration, "")
+	unverified := call(t, router, http.MethodPost, "/api/auth/login",
+		`{"identifier":"2023331500","password":"first-password"}`, "")
+	if unverified.Code != http.StatusForbidden {
+		t.Fatalf("unverified login status = %d, want 403 (body = %q)", unverified.Code, unverified.Body.String())
+	}
+	if got := field(t, unverified, "error"); got != handler.MessageUnverifiedAccount {
+		t.Errorf("unverified login error = %q, want %q", got, handler.MessageUnverifiedAccount)
+	}
+	verifyStudentEmail(t, router, registered, "2023331500")
+	duplicate := registerStudent(t, router, flowRegistration)
 	if duplicate.Code != http.StatusConflict {
-		t.Fatalf("duplicate register status = %d, want 409", duplicate.Code)
+		t.Fatalf("duplicate register status = %d, want 409 (body = %q)", duplicate.Code, duplicate.Body.String())
 	}
 	if got := field(t, duplicate, "error"); got != handler.MessageDuplicateAccount {
 		t.Errorf("duplicate error = %q, want %q", got, handler.MessageDuplicateAccount)
@@ -176,15 +202,20 @@ func TestAuthenticationFlow(t *testing.T) {
 		t.Errorf("me after logout error = %q, want %q", got, middleware.MessageSessionExpired)
 	}
 	mismatch := call(t, router, http.MethodPost, "/api/auth/forgot-password",
-		`{"identifier":"2023331500","phone":"01799999999"}`, "")
+		`{"identifier":"2023331500","date_of_birth":"2001-01-01"}`, "")
 	if mismatch.Code != http.StatusBadRequest {
-		t.Fatalf("forgot password with a wrong phone status = %d, want 400", mismatch.Code)
+		t.Fatalf("forgot password with a wrong birth date status = %d, want 400", mismatch.Code)
 	}
-	if got := field(t, mismatch, "error"); got != handler.MessageResetMismatch {
-		t.Errorf("forgot password error = %q, want %q", got, handler.MessageResetMismatch)
+	if got := field(t, mismatch, "error"); got != handler.MessageResetBirthMismatch {
+		t.Errorf("forgot password error = %q, want %q", got, handler.MessageResetBirthMismatch)
+	}
+	byPhone := call(t, router, http.MethodPost, "/api/auth/forgot-password",
+		`{"identifier":"2023331500","phone":"01712345678"}`, "")
+	if byPhone.Code != http.StatusBadRequest {
+		t.Fatalf("forgot password by phone status = %d, want 400 (body = %q)", byPhone.Code, byPhone.Body.String())
 	}
 	forgot := call(t, router, http.MethodPost, "/api/auth/forgot-password",
-		`{"identifier":"2023331500","phone":"+8801712345678"}`, "")
+		`{"identifier":"2023331500","date_of_birth":"`+flowBirthDate+`"}`, "")
 	if forgot.Code != http.StatusOK {
 		t.Fatalf("forgot password status = %d, want 200 (body = %q)", forgot.Code, forgot.Body.String())
 	}
@@ -207,7 +238,7 @@ func TestAuthenticationFlow(t *testing.T) {
 		t.Errorf("stored stage = %q, want %q", storedStage, store.ResetStageCode)
 	}
 	tooSoon := call(t, router, http.MethodPost, "/api/auth/forgot-password",
-		`{"identifier":"2023331500","phone":"01712345678"}`, "")
+		`{"identifier":"2023331500","date_of_birth":"`+flowBirthDate+`"}`, "")
 	if tooSoon.Code != http.StatusTooManyRequests {
 		t.Fatalf("second forgot password status = %d, want 429", tooSoon.Code)
 	}
@@ -281,7 +312,7 @@ func TestAuthenticationFlow(t *testing.T) {
 
 func TestPasswordResetStopsAfterFiveWrongCodes(t *testing.T) {
 	ctx, pool, router := newFlowRouter(t)
-	registered := call(t, router, http.MethodPost, "/api/auth/register", flowRegistration, "")
+	registered := registerStudent(t, router, flowRegistration)
 	if registered.Code != http.StatusCreated {
 		t.Fatalf("register status = %d, want 201 (body = %q)", registered.Code, registered.Body.String())
 	}
@@ -289,7 +320,7 @@ func TestPasswordResetStopsAfterFiveWrongCodes(t *testing.T) {
 		t.Fatalf("could not activate the account: %v", err)
 	}
 	forgot := call(t, router, http.MethodPost, "/api/auth/forgot-password",
-		`{"identifier":"2023331500","phone":"01712345678"}`, "")
+		`{"identifier":"2023331500","date_of_birth":"`+flowBirthDate+`"}`, "")
 	if forgot.Code != http.StatusOK {
 		t.Fatalf("forgot password status = %d, want 200 (body = %q)", forgot.Code, forgot.Body.String())
 	}
@@ -371,7 +402,7 @@ func TestAdminPasswordResetFlow(t *testing.T) {
 }
 
 func TestLoginRateLimitOnTheRealRouter(t *testing.T) {
-	_, _, router := newFlowRouter(t)
+	_, _, router := newFlowRouterWithLimit(t, middleware.DefaultRateLimit)
 	body := `{"identifier":"2023339999","password":"whatever-password"}`
 	for i := 1; i <= middleware.DefaultRateLimit; i++ {
 		rec := call(t, router, http.MethodPost, "/api/auth/login", body, "")

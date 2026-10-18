@@ -56,6 +56,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	proofs, err := auth.NewProofs(cfg.JWTSecret, auth.ProofTTL)
+	if err != nil {
+		return err
+	}
 	userStore := store.New(pool)
 	alerts := notify.New(userStore)
 	if cfg.HasAdminSeed() {
@@ -70,6 +74,9 @@ func run() error {
 			Config:   cfg,
 			Database: pool,
 			Tokens:   tokens,
+			Proofs:   proofs,
+			Photos:   upload.NewPhotos(cfg.UploadDir),
+			Accounts: userStore,
 			Users:    userStore,
 			Auth:     userStore,
 			People:   userStore,

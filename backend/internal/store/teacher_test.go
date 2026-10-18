@@ -194,7 +194,7 @@ func TestRoutineCancellationsAndSchedule(t *testing.T) {
 	if len(schedule) != 1 || !schedule[0].Cancelled {
 		t.Errorf("schedule = %+v, want the entry marked as cancelled", schedule)
 	}
-	plan, err := store.ListDayPlan(ctx, "CSE-23", date)
+	plan, err := store.ListDayPlan(ctx, "CSE-23", date, nil)
 	if err != nil {
 		t.Fatalf("ListDayPlan() returned an unexpected error: %v", err)
 	}

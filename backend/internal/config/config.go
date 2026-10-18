@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 	_ "time/tzdata"
 )
@@ -19,6 +20,8 @@ const (
 	defaultUploadDir      = "uploads"
 	defaultMaxUploadMB    = 10
 	defaultSMTPPort       = 587
+	defaultStudentDomain  = "student.sust.edu"
+	defaultTeacherDomain  = "sust.edu"
 	minJWTSecretLength    = 32
 )
 
@@ -50,6 +53,9 @@ type Config struct {
 	SMTPUsername    string
 	SMTPPassword    string
 	MailFrom        string
+	StudentDomain   string
+	TeacherDomain   string
+	GoogleClientID  string
 }
 
 func Load() (*Config, error) {
@@ -73,6 +79,9 @@ func Load() (*Config, error) {
 		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
 		MailFrom:        os.Getenv("MAIL_FROM"),
+		StudentDomain:   strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
+		TeacherDomain:   strings.ToLower(getEnv("TEACHER_EMAIL_DOMAIN", defaultTeacherDomain)),
+		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL
@@ -141,6 +150,18 @@ func (c *Config) HasMailer() bool {
 
 func (c *Config) IsProduction() bool {
 	return c.AppEnv == "production"
+}
+
+func (c *Config) GoogleEnabled() bool {
+	return strings.TrimSpace(c.GoogleClientID) != ""
+}
+
+func (c *Config) StudentEmailSuffix() string {
+	return "@" + c.StudentDomain
+}
+
+func (c *Config) TeacherEmailSuffix() string {
+	return "@" + c.TeacherDomain
 }
 
 func getEnv(key, fallback string) string {

@@ -15,18 +15,21 @@ const (
 func setEnv(t *testing.T, overrides map[string]string) {
 	t.Helper()
 	env := map[string]string{
-		"PORT":              "",
-		"APP_ENV":           "",
-		"APP_TIMEZONE":      "",
-		"DATABASE_URL":      testDatabaseURL,
-		"TEST_DATABASE_URL": "",
-		"JWT_SECRET":        testJWTSecret,
-		"JWT_TTL":           "",
-		"FRONTEND_ORIGIN":   "",
-		"UPLOAD_DIR":        "",
-		"MAX_UPLOAD_MB":     "",
-		"ADMIN_IDENTIFIER":  "",
-		"ADMIN_PASSWORD":    "",
+		"PORT":                 "",
+		"APP_ENV":              "",
+		"APP_TIMEZONE":         "",
+		"DATABASE_URL":         testDatabaseURL,
+		"TEST_DATABASE_URL":    "",
+		"JWT_SECRET":           testJWTSecret,
+		"JWT_TTL":              "",
+		"FRONTEND_ORIGIN":      "",
+		"UPLOAD_DIR":           "",
+		"MAX_UPLOAD_MB":        "",
+		"ADMIN_IDENTIFIER":     "",
+		"ADMIN_PASSWORD":       "",
+		"STUDENT_EMAIL_DOMAIN": "",
+		"TEACHER_EMAIL_DOMAIN": "",
+		"GOOGLE_CLIENT_ID":     "",
 	}
 	for key, value := range overrides {
 		env[key] = value
@@ -59,6 +62,12 @@ func TestLoadDefaults(t *testing.T) {
 		{name: "MaxUploadMB", got: cfg.MaxUploadMB, want: 10},
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: ""},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: ""},
+		{name: "StudentDomain", got: cfg.StudentDomain, want: "student.sust.edu"},
+		{name: "TeacherDomain", got: cfg.TeacherDomain, want: "sust.edu"},
+		{name: "GoogleClientID", got: cfg.GoogleClientID, want: ""},
+		{name: "GoogleEnabled", got: cfg.GoogleEnabled(), want: false},
+		{name: "StudentEmailSuffix", got: cfg.StudentEmailSuffix(), want: "@student.sust.edu"},
+		{name: "TeacherEmailSuffix", got: cfg.TeacherEmailSuffix(), want: "@sust.edu"},
 	}
 	for _, check := range checks {
 		if check.got != check.want {
@@ -76,16 +85,19 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	testTimeout := "90m"
 	setEnv(t, map[string]string{
-		"PORT":              "9090",
-		"APP_ENV":           "production",
-		"APP_TIMEZONE":      "UTC",
-		"TEST_DATABASE_URL": "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
-		"JWT_TTL":           testTimeout,
-		"FRONTEND_ORIGIN":   "https://coordination.sust.edu",
-		"UPLOAD_DIR":        "files",
-		"MAX_UPLOAD_MB":     "25",
-		"ADMIN_IDENTIFIER":  "admin",
-		"ADMIN_PASSWORD":    "a-long-enough-password",
+		"PORT":                 "9090",
+		"APP_ENV":              "production",
+		"APP_TIMEZONE":         "UTC",
+		"TEST_DATABASE_URL":    "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
+		"JWT_TTL":              testTimeout,
+		"FRONTEND_ORIGIN":      "https://coordination.sust.edu",
+		"UPLOAD_DIR":           "files",
+		"MAX_UPLOAD_MB":        "25",
+		"ADMIN_IDENTIFIER":     "admin",
+		"ADMIN_PASSWORD":       "a-long-enough-password",
+		"STUDENT_EMAIL_DOMAIN": "Student.CSE.SUST.edu",
+		"TEACHER_EMAIL_DOMAIN": "CSE.SUST.edu",
+		"GOOGLE_CLIENT_ID":     "client-id.apps.googleusercontent.com",
 	})
 	cfg, err := Load()
 	if err != nil {
@@ -105,6 +117,10 @@ func TestLoadOverrides(t *testing.T) {
 		{name: "MaxUploadMB", got: cfg.MaxUploadMB, want: 25},
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: "admin"},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: "a-long-enough-password"},
+		{name: "StudentDomain", got: cfg.StudentDomain, want: "student.cse.sust.edu"},
+		{name: "TeacherDomain", got: cfg.TeacherDomain, want: "cse.sust.edu"},
+		{name: "GoogleEnabled", got: cfg.GoogleEnabled(), want: true},
+		{name: "StudentEmailSuffix", got: cfg.StudentEmailSuffix(), want: "@student.cse.sust.edu"},
 	}
 	for _, check := range checks {
 		if check.got != check.want {
@@ -243,5 +259,29 @@ func TestNow(t *testing.T) {
 	wantOffset := int((6 * time.Hour).Seconds())
 	if offset != wantOffset {
 		t.Errorf("Now() offset = %d seconds, want %d seconds (UTC+6)", offset, wantOffset)
+	}
+}
+
+func TestGoogleEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		clientID string
+		want     bool
+	}{
+		{name: "unset", clientID: "", want: false},
+		{name: "spaces", clientID: "   ", want: false},
+		{name: "a client id", clientID: "client-id.apps.googleusercontent.com", want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, map[string]string{"GOOGLE_CLIENT_ID": tc.clientID})
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() returned an unexpected error: %v", err)
+			}
+			if cfg.GoogleEnabled() != tc.want {
+				t.Errorf("GoogleEnabled() = %v, want %v", cfg.GoogleEnabled(), tc.want)
+			}
+		})
 	}
 }

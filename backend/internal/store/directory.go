@@ -14,6 +14,8 @@ type DirectoryFilter struct {
 }
 
 type DirectoryRow struct {
+	UserID     int64
+	PhotoPath  string
 	FullName   string
 	RegNo      string
 	Batch      string
@@ -25,13 +27,18 @@ type DirectoryRow struct {
 }
 
 type TeacherInfoRow struct {
-	Name  string
-	Phone string
-	Email string
+	UserID      int64
+	Name        string
+	Designation string
+	OfficeRoom  string
+	Phone       string
+	Email       string
+	PhotoPath   string
 }
 
 const (
-	listDirectorySQL = `SELECT s.full_name, s.reg_no, s.batch, s.section, s.phone, s.email, s.blood_group, s.is_cr
+	listDirectorySQL = `SELECT u.id, COALESCE(u.photo_path, ''), s.full_name, s.reg_no, s.batch, s.section,
+s.phone, s.email, s.blood_group, s.is_cr
 FROM students s
 JOIN users u ON u.id = s.user_id
 WHERE u.status = 'active'
@@ -40,7 +47,8 @@ WHERE u.status = 'active'
   AND ($3::text = '' OR s.full_name ILIKE '%' || $3::text || '%' OR s.reg_no ILIKE '%' || $3::text || '%')
 ORDER BY s.batch, s.section, s.reg_no
 LIMIT $4`
-	listTeacherInfoSQL = `SELECT t.name, t.phone, t.email
+	listTeacherInfoSQL = `SELECT u.id, t.name, t.designation, t.office_room, t.phone, t.email,
+COALESCE(u.photo_path, '')
 FROM teachers t
 JOIN users u ON u.id = t.user_id
 WHERE u.status = 'active'
@@ -58,6 +66,8 @@ func (s *Store) ListDirectory(ctx context.Context, filter DirectoryFilter) ([]Di
 	for rows.Next() {
 		var row DirectoryRow
 		err := rows.Scan(
+			&row.UserID,
+			&row.PhotoPath,
 			&row.FullName,
 			&row.RegNo,
 			&row.Batch,
@@ -87,7 +97,9 @@ func (s *Store) ListTeacherInfo(ctx context.Context, search string) ([]TeacherIn
 	teachers := make([]TeacherInfoRow, 0)
 	for rows.Next() {
 		var row TeacherInfoRow
-		if err := rows.Scan(&row.Name, &row.Phone, &row.Email); err != nil {
+		err := rows.Scan(&row.UserID, &row.Name, &row.Designation, &row.OfficeRoom,
+			&row.Phone, &row.Email, &row.PhotoPath)
+		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a teacher: %w", err)
 		}
 		teachers = append(teachers, row)

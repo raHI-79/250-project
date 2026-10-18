@@ -31,6 +31,7 @@ var expectedTables = []string{
 	"routine_cancellations",
 	"routines",
 	"schema_migrations",
+	"student_drop_courses",
 	"students",
 	"teachers",
 	"users",
@@ -285,9 +286,14 @@ VALUES (999999, 'Odd Blood', '2023331005', 'CSE-23', 'A', 'odd@example.com', '01
 			wantCode: checkViolationCode,
 		},
 		{
-			name: "drop course without a course code",
-			query: `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group, has_drop_course)
-VALUES (999999, 'No Code', '2023331010', 'CSE-23', 'A', 'nocode@example.com', '01900000003', 'A+', TRUE)`,
+			name:     "drop course for an unknown student",
+			query:    "INSERT INTO student_drop_courses (student_id, course_id) VALUES (999999, 999998)",
+			wantCode: foreignKeyViolationCode,
+		},
+		{
+			name: "invalid teacher blood group",
+			query: `INSERT INTO teachers (user_id, teacher_id, name, email, phone, blood_group)
+VALUES (999999, 'T-900', 'Odd Teacher', 'odd@sust.edu', '01900000004', 'C+')`,
 			wantCode: checkViolationCode,
 		},
 		{

@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/googleauth"
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
@@ -17,27 +18,32 @@ type TokenService interface {
 }
 
 type Dependencies struct {
-	Config   *config.Config
-	Database handler.DatabasePinger
-	Tokens   TokenService
-	Users    middleware.UserStore
-	Auth     handler.AuthStore
-	People   handler.AdminStore
-	Catalog  handler.CatalogStore
-	Lookups  handler.LookupStore
-	Alerts   handler.NotificationService
-	Classes  handler.CRStore
-	Notifier handler.Notifier
-	Teachers handler.TeacherStore
-	Students handler.StudentStore
-	Alarms   handler.BroadcastNotifier
-	Notices  handler.NoticeStore
-	Library  handler.MaterialStore
-	Contacts handler.DirectoryStore
-	Files    *upload.Saver
-	Mailer   mailer.Sender
-	Mail     handler.MessageStore
-	Votes    handler.PollStore
+	Config    *config.Config
+	RateLimit int
+	Proofs    handler.ProofIssuer
+	Google    googleauth.Validator
+	Photos    *upload.Photos
+	Accounts  handler.ProfileStore
+	Database  handler.DatabasePinger
+	Tokens    TokenService
+	Users     middleware.UserStore
+	Auth      handler.AuthStore
+	People    handler.AdminStore
+	Catalog   handler.CatalogStore
+	Lookups   handler.LookupStore
+	Alerts    handler.NotificationService
+	Classes   handler.CRStore
+	Notifier  handler.Notifier
+	Teachers  handler.TeacherStore
+	Students  handler.StudentStore
+	Alarms    handler.BroadcastNotifier
+	Notices   handler.NoticeStore
+	Library   handler.MaterialStore
+	Contacts  handler.DirectoryStore
+	Files     *upload.Saver
+	Mailer    mailer.Sender
+	Mail      handler.MessageStore
+	Votes     handler.PollStore
 }
 
 type RouteGroup struct {
@@ -59,12 +65,32 @@ func NewRouter(deps Dependencies) http.Handler {
 	if mail == nil {
 		mail = mailer.NewSMTP(mailer.Options{})
 	}
-	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail)
-	limiter := middleware.NewRateLimiter(middleware.DefaultRateLimit, middleware.DefaultRateWindow)
+	photos := deps.Photos
+	if photos == nil {
+		photos = upload.NewPhotos(deps.Config.UploadDir)
+	}
+	proofs := deps.Proofs
+	google := deps.Google
+	if google == nil && deps.Config.GoogleEnabled() {
+		google = googleauth.New()
+	}
+	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail, proofs, google, photos)
+	rateLimit := deps.RateLimit
+	if rateLimit <= 0 {
+		rateLimit = middleware.DefaultRateLimit
+	}
+	limiter := middleware.NewRateLimiter(rateLimit, middleware.DefaultRateWindow)
 	throttled := RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{limiter.Middleware}}
 	authenticated := AuthenticatedGroup(mux, deps)
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
+	mux.HandleFunc("GET /api/auth/config", authHandler.Config())
 	mux.HandleFunc("POST /api/auth/register", authHandler.Register())
+	throttled.Handle("GET /api/auth/drop-course-options", authHandler.DropCourseOptions())
+	throttled.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())
+	throttled.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
+	throttled.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())
+	mux.HandleFunc("GET /api/auth/invite", authHandler.Invite())
+	throttled.Handle("POST /api/auth/activate", authHandler.Activate())
 	throttled.Handle("POST /api/auth/login", authHandler.Login())
 	throttled.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
 	throttled.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
@@ -72,7 +98,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
 	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
 	authenticated.Handle("GET /api/me", handler.Me())
-	registerAdminRoutes(AdminGroup(mux, deps), handler.NewAdmin(deps.People), handler.NewCatalog(deps.Catalog))
+	registerProfileRoutes(authenticated, handler.NewProfile(deps.Config, deps.Accounts, photos))
+	admin := handler.NewAdmin(deps.Config, deps.People, deps.Notifier, mail, photos)
+	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Notifier))
@@ -93,6 +121,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerMessageRoutes(mux, deps, messages)
 	registerPollRoutes(mux, deps, polls)
 	mux.HandleFunc("GET "+upload.URLPrefix+"{"+upload.PathValueName+"}", files.Serve())
+	mux.HandleFunc("GET "+upload.PhotoURLPrefix+"{"+upload.PathValueName+"}", photos.Serve())
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
@@ -234,6 +263,13 @@ func registerBoardRoutes(group RouteGroup, notices *handler.Notice, materials *h
 	group.Handle("GET /api/students/directory", contacts.Students())
 }
 
+func registerProfileRoutes(group RouteGroup, profile *handler.Profile) {
+	group.Handle("GET /api/profile", profile.Get())
+	group.Handle("PATCH /api/profile", profile.Patch())
+	group.Handle("POST /api/profile/password", profile.ChangePassword())
+	group.Handle("GET /api/people/{user_id}", profile.Person())
+}
+
 func registerLookupRoutes(group RouteGroup, lookups *handler.Lookups) {
 	group.Handle("GET /api/lookups/batches", lookups.Batches())
 	group.Handle("GET /api/lookups/sections", lookups.Sections())
@@ -252,12 +288,14 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("POST /api/admin/registrations/{id}/reject", admin.RejectRegistration())
 	group.Handle("GET /api/admin/students", admin.Students())
 	group.Handle("POST /api/admin/students/{id}/remove", admin.RemoveStudent())
-	group.Handle("POST /api/admin/crs", admin.CreateCR())
+	group.Handle("POST /api/admin/crs/promote", admin.PromoteCR())
 	group.Handle("GET /api/admin/crs", admin.CRs())
 	group.Handle("POST /api/admin/crs/{id}/demote", admin.DemoteCR())
 	group.Handle("POST /api/admin/crs/{id}/deactivate", admin.DeactivateCR())
 	group.Handle("POST /api/admin/teachers", admin.CreateTeacher())
 	group.Handle("GET /api/admin/teachers", admin.Teachers())
+	group.Handle("PATCH /api/admin/teachers/{id}", admin.UpdateTeacher())
+	group.Handle("POST /api/admin/teachers/{id}/resend-invite", admin.ResendInvite())
 	group.Handle("POST /api/admin/teachers/{id}/deactivate", admin.DeactivateTeacher())
 	group.Handle("GET /api/admin/stats", admin.Stats())
 	group.Handle("POST /api/admin/courses", catalog.CreateCourse())

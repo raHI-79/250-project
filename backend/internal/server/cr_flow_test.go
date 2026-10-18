@@ -45,7 +45,7 @@ func TestCRClassRequestFlow(t *testing.T) {
 		t.Fatalf("create course status = %d, want 201 (body = %q)", course.Code, course.Body.String())
 	}
 	courseID := int64(number(t, course, "id"))
-	createdTeacher := call(t, router, http.MethodPost, "/api/admin/teachers", crFlowTeacher, adminToken)
+	createdTeacher := teacherInviteCall(t, router, adminToken, crFlowTeacher)
 	if createdTeacher.Code != http.StatusCreated {
 		t.Fatalf("create teacher status = %d, want 201 (body = %q)", createdTeacher.Code, createdTeacher.Body.String())
 	}
@@ -60,10 +60,7 @@ func TestCRClassRequestFlow(t *testing.T) {
 		t.Fatal("the new teacher is missing from the teacher lookup")
 	}
 	for _, body := range []string{crFlowFirstCR, crFlowSecondCR} {
-		rec := call(t, router, http.MethodPost, "/api/admin/crs", body, adminToken)
-		if rec.Code != http.StatusCreated {
-			t.Fatalf("create class representative status = %d, want 201 (body = %q)", rec.Code, rec.Body.String())
-		}
+		onboardCR(t, router, adminToken, body)
 	}
 	fixed := call(t, router, http.MethodPost, "/api/admin/routines",
 		routineBody("A", courseID, teacherID, weekday, "08:00", "09:00", "1003", "class"), adminToken)

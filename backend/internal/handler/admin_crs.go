@@ -2,9 +2,9 @@ package handler
 
 import (
 	"errors"
-	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -12,16 +12,8 @@ import (
 	"strings"
 )
 
-type createCRRequest struct {
-	FullName        string `json:"full_name"`
-	RegNo           string `json:"reg_no"`
-	Batch           string `json:"batch"`
-	Section         string `json:"section"`
-	Email           string `json:"email"`
-	Phone           string `json:"phone"`
-	BloodGroup      string `json:"blood_group"`
-	Password        string `json:"password"`
-	ConfirmPassword string `json:"confirm_password"`
+type promoteCRRequest struct {
+	UserID int64 `json:"user_id"`
 }
 
 type createdResponse struct {
@@ -33,65 +25,35 @@ type crsResponse struct {
 	Items []studentItem `json:"items"`
 }
 
-func (a *Admin) CreateCR() http.HandlerFunc {
+func (a *Admin) PromoteCR() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request createCRRequest
+		var request promoteCRRequest
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		cr, err := request.toNewCR()
-		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		if request.UserID <= 0 {
+			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidUserID)
 			return
 		}
-		hash, err := auth.HashPassword(request.Password)
-		if err != nil {
-			log.Printf("handler: could not hash a class representative password: %v", err)
+		promoted, err := a.people.PromoteCR(r.Context(), request.UserID)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessageActiveStudentNotFound)
+			return
+		case errors.Is(err, store.ErrAlreadyCR):
+			httpx.WriteError(w, http.StatusConflict, MessageAlreadyCR)
+			return
+		case err != nil:
+			log.Printf("handler: could not promote a class representative: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		cr.PasswordHash = hash
-		userID, err := a.people.CreateCR(r.Context(), cr)
-		if err != nil {
-			if errors.Is(err, store.ErrDuplicateAccount) {
-				httpx.WriteError(w, http.StatusConflict, MessageDuplicateAccount)
-				return
-			}
-			log.Printf("handler: could not create a class representative: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
+		title := "You are now the Class Representative of " + promoted.Batch + " section " + promoted.Section
+		if err := a.alerts.NotifyUser(r.Context(), promoted.UserID, notify.TypeDecision, title, ""); err != nil {
+			log.Printf("handler: could not notify a new class representative: %v", err)
 		}
-		httpx.WriteJSON(w, http.StatusCreated, createdResponse{ID: userID, Message: MessageCRCreated})
+		httpx.WriteJSON(w, http.StatusOK, createdResponse{ID: promoted.UserID, Message: MessageCRPromoted})
 	}
-}
-
-func (request createCRRequest) toNewCR() (store.NewCR, error) {
-	var cr store.NewCR
-	fields := []struct {
-		target *string
-		value  string
-		label  string
-		check  func(string, string) (string, error)
-	}{
-		{target: &cr.FullName, value: request.FullName, label: "Full name", check: validate.Required},
-		{target: &cr.RegNo, value: request.RegNo, label: "Registration number", check: validate.Required},
-		{target: &cr.Batch, value: request.Batch, label: "Batch", check: validate.Batch},
-		{target: &cr.Section, value: request.Section, label: "Section", check: validate.Section},
-		{target: &cr.Email, value: request.Email, label: "Email", check: validate.Email},
-		{target: &cr.Phone, value: request.Phone, label: "Phone", check: validate.Phone},
-		{target: &cr.BloodGroup, value: request.BloodGroup, label: "Blood group", check: validate.BloodGroup},
-	}
-	for _, field := range fields {
-		value, err := field.check(field.label, field.value)
-		if err != nil {
-			return store.NewCR{}, err
-		}
-		*field.target = value
-	}
-	if err := validate.Password("Password", request.Password, request.ConfirmPassword); err != nil {
-		return store.NewCR{}, err
-	}
-	return cr, nil
 }
 
 func (a *Admin) CRs() http.HandlerFunc {

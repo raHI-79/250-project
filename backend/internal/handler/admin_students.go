@@ -14,19 +14,20 @@ import (
 )
 
 type studentItem struct {
-	ID             int64  `json:"id"`
-	FullName       string `json:"full_name"`
-	RegNo          string `json:"reg_no"`
-	Batch          string `json:"batch"`
-	Section        string `json:"section"`
-	Email          string `json:"email"`
-	Phone          string `json:"phone"`
-	BloodGroup     string `json:"blood_group"`
-	HasDropCourse  bool   `json:"has_drop_course"`
-	DropCourseCode string `json:"drop_course_code"`
-	IsCR           bool   `json:"is_cr"`
-	Status         string `json:"status"`
-	CreatedAt      string `json:"created_at"`
+	ID          int64  `json:"id"`
+	UserID      int64  `json:"user_id"`
+	FullName    string `json:"full_name"`
+	RegNo       string `json:"reg_no"`
+	Batch       string `json:"batch"`
+	Section     string `json:"section"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	BloodGroup  string `json:"blood_group"`
+	DateOfBirth string `json:"date_of_birth,omitempty"`
+	PhotoURL    string `json:"photo_url,omitempty"`
+	IsCR        bool   `json:"is_cr"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type studentsResponse struct {
@@ -55,19 +56,20 @@ func studentItems(students []store.StudentRow) []studentItem {
 	items := make([]studentItem, 0, len(students))
 	for _, student := range students {
 		items = append(items, studentItem{
-			ID:             student.ID,
-			FullName:       student.FullName,
-			RegNo:          student.RegNo,
-			Batch:          student.Batch,
-			Section:        student.Section,
-			Email:          student.Email,
-			Phone:          student.Phone,
-			BloodGroup:     student.BloodGroup,
-			HasDropCourse:  student.HasDropCourse,
-			DropCourseCode: student.DropCourseCode,
-			IsCR:           student.IsCR,
-			Status:         student.Status,
-			CreatedAt:      timestamp(student.CreatedAt),
+			ID:          student.ID,
+			UserID:      student.ID,
+			FullName:    student.FullName,
+			RegNo:       student.RegNo,
+			Batch:       student.Batch,
+			Section:     student.Section,
+			Email:       student.Email,
+			Phone:       student.Phone,
+			BloodGroup:  student.BloodGroup,
+			DateOfBirth: student.DateOfBirth,
+			PhotoURL:    student.PhotoPath,
+			IsCR:        student.IsCR,
+			Status:      student.Status,
+			CreatedAt:   timestamp(student.CreatedAt),
 		})
 	}
 	return items
@@ -117,7 +119,8 @@ func studentFilter(query url.Values) (store.StudentFilter, error) {
 func statusFilter(raw string) (string, error) {
 	status := strings.ToLower(strings.TrimSpace(raw))
 	switch status {
-	case "", store.StatusFilterAll, store.StatusActive, store.StatusPending, store.StatusRejected, store.StatusRemoved:
+	case "", store.StatusFilterAll, store.StatusActive, store.StatusPending, store.StatusRejected,
+		store.StatusRemoved, store.StatusUnverified, store.StatusInvited:
 		return status, nil
 	default:
 		return "", errors.New(MessageInvalidStatus)

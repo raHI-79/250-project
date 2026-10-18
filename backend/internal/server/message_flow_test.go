@@ -57,7 +57,7 @@ func pollsOf(t *testing.T, rec *httptest.ResponseRecorder) []pollPayload {
 func TestMessageAndPollFlow(t *testing.T) {
 	ctx, pool, router := newFlowRouter(t)
 	adminToken := seedAdmin(t, ctx, pool, router)
-	createdTeacher := call(t, router, http.MethodPost, "/api/admin/teachers", flowTeacherAccount, adminToken)
+	createdTeacher := teacherInviteCall(t, router, adminToken, flowTeacherAccount)
 	if createdTeacher.Code != http.StatusCreated {
 		t.Fatalf("create teacher status = %d, want 201 (body = %q)", createdTeacher.Code, createdTeacher.Body.String())
 	}
@@ -71,13 +71,13 @@ func TestMessageAndPollFlow(t *testing.T) {
 	if teacherRow == 0 {
 		t.Fatal("the new teacher is missing from the teacher lookup")
 	}
-	if created := call(t, router, http.MethodPost, "/api/admin/crs", flowCRAccount, adminToken); created.Code != http.StatusCreated {
-		t.Fatalf("create class representative status = %d, want 201 (body = %q)", created.Code, created.Body.String())
-	}
+	onboardCR(t, router, adminToken, flowCRAccount)
 	for _, registration := range []string{flowSectionStudent, flowOtherStudent} {
-		if registered := call(t, router, http.MethodPost, "/api/auth/register", registration, ""); registered.Code != http.StatusCreated {
+		registered := registerStudent(t, router, registration)
+		if registered.Code != http.StatusCreated {
 			t.Fatalf("register status = %d, want 201 (body = %q)", registered.Code, registered.Body.String())
 		}
+		verifyStudentEmail(t, router, registered, regNoOf(t, registration))
 	}
 	approveStudent(t, router, adminToken, "2023331921")
 	approveStudent(t, router, adminToken, "2023331922")

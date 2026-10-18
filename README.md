@@ -26,7 +26,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 | Database | PostgreSQL 14+ via `pgx/v5` with a `pgxpool` connection pool |
 | Authentication | bcrypt password hashing + JWT (HS256) via `golang-jwt/jwt/v5` |
 | Frontend | React 19 + Vite 7 + React Router + Tailwind CSS v4 |
-| File uploads | PDFs on disk in `backend/uploads/` (`UPLOAD_DIR`), path saved in the database |
+| File uploads | PDFs in `backend/uploads/` and profile photos in `backend/uploads/photos/` (`UPLOAD_DIR`), path saved in the database |
 
 ## Folder structure
 
@@ -106,7 +106,10 @@ all you have to do is create two empty databases and set your password.
      ```
 
    - set `ADMIN_IDENTIFIER` and `ADMIN_PASSWORD` if you want the hidden admin
-     account created for you at startup.
+     account created for you at startup,
+   - leave `STUDENT_EMAIL_DOMAIN` and `TEACHER_EMAIL_DOMAIN` alone unless your
+     university uses other domains, and set `GOOGLE_CLIENT_ID` only if you want
+     the Google Sign-In shortcut on the registration page.
 
    `backend/.env` is listed in `.gitignore`, so your password is never
    committed. Only `backend/.env.example` is tracked.
@@ -207,8 +210,11 @@ go run ./cmd/server
 | `JWT_SECRET` | none — **required** | Key that signs the login tokens, at least 32 characters |
 | `JWT_TTL` | `24h` | How long a login token stays valid, as a Go duration (`24h`, `90m`) |
 | `AUTO_CANCEL_INTERVAL` | `5m` | How often the auto-cancel job looks for requests nobody approved in time |
-| `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs are saved, created when it is missing |
+| `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs and profile photos are saved, created when it is missing |
 | `MAX_UPLOAD_MB` | `10` | Largest accepted PDF in megabytes; a bigger file gets `413` |
+| `STUDENT_EMAIL_DOMAIN` | `student.sust.edu` | Domain every student email address must end with |
+| `TEACHER_EMAIL_DOMAIN` | `sust.edu` | Domain every teacher email address must end with |
+| `GOOGLE_CLIENT_ID` | none — optional | Google Sign-In client id; empty turns `google_enabled` off |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only browser origin allowed to call the API |
 | `ADMIN_IDENTIFIER` | none — optional | Login id of the admin account created at startup |
 | `ADMIN_PASSWORD` | none — optional | Password of that admin account, at least 8 characters |
@@ -312,25 +318,38 @@ Every route lives under `/api`. Errors always use the same shape:
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/health` | public | `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
-| `POST` | `/api/auth/register` | public | Student registration. Creates a `pending` account; `201` on success |
+| `GET` | `/api/auth/config` | public | `student_email_domain`, `teacher_email_domain` and `google_enabled` |
+| `POST` | `/api/auth/register` | public | `multipart/form-data` student registration with a required photo; `201` on success |
+| `POST` | `/api/auth/verify-email` | public, rate limited | `{reg_no, code}` turns an `unverified` account into `pending` |
+| `POST` | `/api/auth/resend-verification` | public, rate limited | `{reg_no}` sends a new 6-digit code; `429` inside the 60 second cooldown |
+| `GET` | `/api/auth/drop-course-options` | public, rate limited | Up to 20 courses that appear in a fixed routine, matched by `search` |
+| `POST` | `/api/auth/google/verify-email` | public, rate limited | `{credential}` from Google Sign-In; answers `{email, email_proof}` |
+| `GET` | `/api/auth/invite` | public | `token=` answers `{name, designation, masked_email}` of a teacher invitation |
+| `POST` | `/api/auth/activate` | public, rate limited | `multipart/form-data`; a teacher sets their own password from the invitation |
 | `POST` | `/api/auth/login` | public, rate limited | Student, CR and teacher login. Returns a token and the user |
 | `POST` | `/api/auth/admin/login` | public, rate limited | Admin login only. Returns a token and the admin user |
 | `POST` | `/api/auth/forgot-password` | public, rate limited | Emails a 6-digit reset code valid for 10 minutes |
 | `POST` | `/api/auth/verify-reset-code` | public, rate limited | Exchanges that code for a reset token valid for 10 minutes |
 | `POST` | `/api/auth/reset-password` | public | Sets a new password with that reset token |
 | `POST` | `/api/auth/logout` | any signed-in role | Invalidates **every** token of the account |
-| `GET` | `/api/me` | any signed-in role | The signed-in user: `id`, `identifier`, `role` |
+| `GET` | `/api/me` | any signed-in role | The signed-in user: `id`, `user_id`, `identifier`, `role`, `photo_url` |
+| `GET` | `/api/profile` | any signed-in role | The caller's own profile, shaped by their role |
+| `PATCH` | `/api/profile` | any signed-in role | `multipart/form-data`; only the fields that role may change |
+| `POST` | `/api/profile/password` | any signed-in role | `{current_password, new_password, confirm_password}`; logs every session out |
+| `GET` | `/api/people/{user_id}` | any signed-in role | Public card of an active student, CR or teacher; `404` otherwise |
 | `GET` | `/api/admin/registrations` | admin | Pending student registrations, oldest first, with their drop course |
 | `POST` | `/api/admin/registrations/{id}/approve` | admin | Turns a pending account into `active`; `404` unknown, `409` already decided |
 | `POST` | `/api/admin/registrations/{id}/reject` | admin | Turns a pending account into `rejected`; `404` unknown, `409` already decided |
 | `GET` | `/api/admin/students` | admin | `{items, total}` with `search`, `batch`, `section`, `status`, `limit`, `offset` |
 | `POST` | `/api/admin/students/{id}/remove` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
-| `POST` | `/api/admin/crs` | admin | Creates a CR account in one transaction; `409` on a duplicate |
+| `POST` | `/api/admin/crs/promote` | admin | `{user_id}` makes an active student a CR; `404` unknown, `409` already a CR |
 | `GET` | `/api/admin/crs` | admin | CR list with `search` and `batch` |
 | `POST` | `/api/admin/crs/{id}/demote` | admin | Clears `is_cr` and invalidates the tokens; `409` if not a CR |
 | `POST` | `/api/admin/crs/{id}/deactivate` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
-| `POST` | `/api/admin/teachers` | admin | Creates a teacher account in one transaction; `409` on a duplicate |
+| `POST` | `/api/admin/teachers` | admin | `multipart/form-data` or JSON; invites a teacher, no password; `409` on a duplicate |
 | `GET` | `/api/admin/teachers` | admin | Teacher list with `search` and `status` |
+| `PATCH` | `/api/admin/teachers/{id}` | admin | Changes the admin-owned teacher fields; `409` on a duplicate |
+| `POST` | `/api/admin/teachers/{id}/resend-invite` | admin | New invitation link, old one dead; `409` once the teacher is active |
 | `POST` | `/api/admin/teachers/{id}/deactivate` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
 | `POST` | `/api/admin/courses` | admin | Adds a course; the code is stored in upper case, `409` on a duplicate |
@@ -389,12 +408,16 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/students/polls` | student, CR | Polls for the own batch and section with `options`, `total_votes` and `my_option_id` |
 | `POST` | `/api/students/polls/{id}/vote` | student, CR | `{option_id}`; `409` when the poll is closed or the student already voted |
 | `GET` | `/uploads/{name}` | public | Serves one uploaded PDF inline; only the generated file names resolve, anything else is `404` |
+| `GET` | `/uploads/photos/{name}` | public | Serves one profile photo inline with `nosniff`; only the generated names resolve |
 
 ### Access rules
 
 - Every `/api/...` route except `/api/health`, the `/api/auth/...` entry points and
-  `GET /uploads/{name}` needs a `Bearer` token; a missing or stale token answers
-  `401`.
+  `GET /uploads/{name}` and `GET /uploads/photos/{name}` needs a `Bearer` token; a
+  missing or stale token answers `401`.
+- **Nobody ever sets a password for somebody else.** A student picks their own
+  password while registering and a teacher picks theirs from the invitation link,
+  so no endpoint accepts a password for another account.
 - A token carries the **effective role**: `student`, `cr`, `teacher` or `admin`. A
   route refuses every other role with `403` and
   `{"error":"403 Access Denied / Unauthorized Access"}`.
@@ -414,50 +437,99 @@ minute."}`.
 
 `POST /api/auth/register`
 
+It is **`multipart/form-data`**, not JSON, because the profile photo is
+required. The fields are `full_name`, `reg_no`, `batch`, `section`, `email`,
+`phone`, `blood_group`, `date_of_birth`, `password`, `confirm_password`, the
+file field `photo`, and optionally `email_proof` and `drop_course_ids` repeated
+once per course.
+
+`batch` must look like `CSE-23`, `section` is a single letter, `blood_group` is
+one of `A+ A- B+ B- AB+ AB- O+ O-`, `phone` is exactly 11 digits matching
+`^01[3-9][0-9]{8}$`, `date_of_birth` is `YYYY-MM-DD` and belongs to somebody
+between 15 and 60 years old, `email` must end with `@` plus
+`STUDENT_EMAIL_DOMAIN`, and every `drop_course_ids` entry must be one of the
+courses from `GET /api/auth/drop-course-options`. A rejected field answers `400`
+with a message naming it, for example `{"error":"Batch must look like
+CSE-23."}`, and a rejected phone always answers `{"error":"Phone number must be
+11 digits, for example 01712345678."}`.
+
+`photo` must be a JPG, PNG or WEBP **by content** (`http.DetectContentType`, so
+renaming a PDF does not help), at most **2 MB** (`413` otherwise) and at least
+**200 by 200 pixels**. It is stored under a random name in
+`UPLOAD_DIR/photos` and served at `GET /uploads/photos/{name}`. A failed
+registration never leaves a photo behind.
+
+With a valid `email_proof` for the same address the account is created as
+`pending` with `email_verified_at` set. Without one it is created as
+`unverified` and a 6-digit code is emailed; only the **SHA-256 hash** of that
+code is stored and it lasts 15 minutes:
+
 ```json
 {
-  "full_name": "Ratul Islam",
-  "reg_no": "2023331079",
-  "batch": "CSE-23",
-  "section": "A",
-  "email": "ratul@student.sust.edu",
-  "phone": "01712345678",
-  "blood_group": "O+",
-  "password": "sust-250-project",
-  "confirm_password": "sust-250-project",
-  "has_drop_course": false,
-  "drop_course_code": ""
+  "message": "We sent a 6-digit code to your university email address. Enter it to finish your registration.",
+  "email_hint": "2***@student.sust.edu",
+  "expires_at": "2026-10-18T14:15:00+06:00"
 }
 ```
 
-`batch` must look like `CSE-23`, `section` is a single letter, `blood_group` is
-one of `A+ A- B+ B- AB+ AB- O+ O-`, `phone` is 10 to 15 digits with an optional
-leading `+`, and `drop_course_code` (like `CSE-233` or `CSE233`) is required
-only when `has_drop_course` is `true`. A rejected field answers `400` with a
-message naming it, for example `{"error":"Batch must look like CSE-23."}`.
+`POST /api/auth/verify-email` takes `{"reg_no", "code"}` and moves the account
+to `pending`. Five wrong codes clear it with `{"error":"Too many wrong codes.
+Request a new code."}` and the student has to ask for a new one through
+`POST /api/auth/resend-verification`, which keeps a 60 second cooldown.
 
-`POST /api/auth/login` takes `{"identifier":"2023331079","password":"..."}` and
-answers:
+If the registration number or the email still belongs to an **`unverified`**
+account, registering again **replaces** it and deletes its photo. Any other
+existing account answers `409`.
+
+`POST /api/auth/google/verify-email` takes `{"credential"}` from Google
+Sign-In, checks it with `google.golang.org/api/idtoken` against
+`GOOGLE_CLIENT_ID`, and requires `email_verified`, a hosted domain equal to
+`STUDENT_EMAIL_DOMAIN` and an address ending with it. Anything else answers
+`400` with `{"error":"Use your @student.sust.edu Google account."}`. On success
+it answers `{"email", "email_proof"}`, where `email_proof` is a JWT signed with
+`JWT_SECRET`, carrying the purpose `email_proof`, and valid for 15 minutes.
+
+`POST /api/auth/login` takes `{"identifier":"2023331079","password":"...",
+"portal":"student"}` and answers:
 
 ```json
 {
   "token": "<jwt>",
-  "user": {"id": 1, "identifier": "2023331079", "role": "cr", "name": "Ratul Islam", "batch": "CSE-23", "section": "A"}
+  "user": {"id": 1, "user_id": 1, "identifier": "2023331079", "role": "cr", "name": "Ratul Islam", "batch": "CSE-23", "section": "A", "photo_url": "/uploads/photos/<name>.png"}
 }
 ```
 
-`role` is the **effective** role (`student`, `cr`, `teacher`), and `batch` and
-`section` appear only for students and CRs. Send the token on later requests as
-`Authorization: Bearer <token>`.
+`portal` is optional and is `student` or `teacher`. A student or CR on the
+teacher portal answers `401` with `{"error":"Use the student login page."}`, and
+a teacher on the student portal answers `{"error":"Use the teacher login
+page."}`. `role` is the **effective** role (`student`, `cr`, `teacher`), and
+`batch` and `section` appear only for students and CRs. Send the token on later
+requests as `Authorization: Bearer <token>`.
+
+Teachers are **invited**, never created with a password.
+`POST /api/admin/teachers` takes `name`, `teacher_id`, `designation`, `email`
+(ending with `@` plus `TEACHER_EMAIL_DOMAIN`), `phone`, `date_of_birth`,
+`blood_group`, `office_room`, an optional `joining_date` and an optional
+`photo`. The account is stored as `invited` with a random 32-byte invitation
+token, hashed, valid for **72 hours**, and the teacher gets an email with
+`FRONTEND_ORIGIN` + `/teacher/activate?token=<token>`. The response carries
+`invite_link` only when no mailer is configured outside production.
+
+`GET /api/auth/invite?token=` answers `{name, designation, masked_email}` and
+never the birth date. `POST /api/auth/activate` takes `token`, `teacher_id`,
+`date_of_birth`, `password`, `confirm_password` and an optional `photo`; the
+teacher ID and birth date must match the invitation, five wrong answers kill it,
+and success makes the account `active`.
 
 The password reset runs in three steps and works for students, CRs, teachers
 and the admin.
 
-`POST /api/auth/forgot-password` takes `{"identifier", "phone"}`. The account
-must be **active** and the phone must match the number registered with it —
-`students.phone`, `teachers.phone` or `users.contact_phone` for the admin,
-compared on digits only so a leading `+88` makes no difference. It emails a
-6-digit code and answers:
+`POST /api/auth/forgot-password` takes `{"identifier", "date_of_birth"}` for
+students, CRs and teachers and `{"identifier", "phone"}` for the admin. The
+account must be **active**. A student, CR or teacher whose birth date does not
+match answers `{"error":"The ID and date of birth do not match an active
+account."}`; the admin phone is compared on digits only, so a leading `+88`
+makes no difference. It emails a 6-digit code and answers:
 
 ```json
 {
@@ -498,13 +570,17 @@ defaults to **50** and may not exceed **200**, and the answer looks like
 `{"items": [...], "total": 128}` where `total` counts every match, not just
 the current page. Each item carries `is_cr` and `status`.
 
-`POST /api/admin/crs` takes the registration fields plus `password` and
-`confirm_password`, and writes the `users` row (role `student`, identifier the
-registration number, status `active`) and the `students` row (`is_cr = true`)
-in **one transaction**. `POST /api/admin/teachers` takes `name`, `teacher_id`,
-`email`, `phone`, `password` and `confirm_password` the same way;
-`teacher_id` is 3 to 20 letters, digits or hyphens. Both answer
-`{"id": 12, "message": "..."}` with `201`.
+CRs are **promoted**, not created. `POST /api/admin/crs/promote` takes
+`{"user_id"}`, sets `is_cr` on an active student, raises `token_version` and
+sends that student the notification `You are now the Class Representative of
+<batch> section <section>`. It answers `404` when the id is not an active
+student and `409` when they already are a CR.
+
+`PATCH /api/admin/teachers/{id}` changes only the fields the administration
+owns: `name`, `teacher_id`, `designation`, `email`, `date_of_birth`,
+`blood_group`, `joining_date` and `office_room`. Anything else answers `400`.
+`POST /api/admin/teachers/{id}/resend-invite` issues a new link and kills the
+old one; it answers `409` once the teacher has activated the account.
 
 Removing, deactivating or demoting an account also raises its
 `token_version`, so **every token that account already holds stops working at
@@ -622,16 +698,21 @@ Batch, section and the drop course come from the caller's own student row.
 `room`, `teacher_name` and `status`, which is `cancelled` for a cancelled class
 or a cancelled routine occurrence and `scheduled` otherwise.
 
+A student may carry **several** drop courses, kept in `student_drop_courses`.
 `GET /api/students/drop-course-routine` answers
-`{"has_drop_course": false, "items": []}` for a student without a drop course.
-Otherwise it lists that course's fixed routine and its approved classes and
-exams from today onward **in the other batches**, both as a flat `items` list
-and grouped by batch.
+`{"has_drop_course": false, "courses": [], "items": []}` for a student without
+one. Otherwise it lists those courses' fixed routine and their approved classes
+and exams from today onward **in the other batches**, both as a flat `items`
+list and grouped by batch. `GET /api/students/upcoming-routine` adds the
+drop-course classes of the other batches as their own groups, marked with
+`drop_course: true`.
 
 ### Account status messages
 
 Login checks the password **before** the account status, so a wrong password
-never reveals whether an account exists or what state it is in.
+never reveals whether an account exists or what state it is in. An `invited`
+teacher has no password at all, so that one case is answered before the
+password check.
 
 | Case | Status | Body |
 |---|---|---|
@@ -640,9 +721,20 @@ never reveals whether an account exists or what state it is in.
 | Correct password, account still waiting for approval | `403` | `{"error":"Your registration is pending approval by the administration."}` |
 | Correct password, registration rejected | `403` | `{"error":"Your registration was rejected. Please contact the department office."}` |
 | Correct password, account removed | `403` | `{"error":"Your account has been removed. Please contact the department office."}` |
+| Correct password, email not confirmed yet | `403` | `{"error":"Please verify your email first."}` |
+| A teacher who has not used the invitation link | `403` | `{"error":"Your account is not activated yet. Use the link in your invitation email."}` |
+| A student or CR on the teacher login page | `401` | `{"error":"Use the student login page."}` |
+| A teacher on the student login page | `401` | `{"error":"Use the teacher login page."}` |
 | Duplicate registration number or email | `409` | `{"error":"An account with this registration number or email already exists."}` |
 | Wrong or expired reset token | `400` | `{"error":"Invalid or expired reset token."}` |
-| ID and phone do not match an active account | `400` | `{"error":"The ID and phone number do not match an active account."}` |
+| ID and date of birth do not match an active account | `400` | `{"error":"The ID and date of birth do not match an active account."}` |
+| Admin ID and phone do not match an active account | `400` | `{"error":"The ID and phone number do not match an active account."}` |
+| Wrong or expired email confirmation code | `400` | `{"error":"Invalid or expired code."}` |
+| Five wrong email confirmation codes | `400` | `{"error":"Too many wrong codes. Request a new code."}` |
+| A dead or expired teacher invitation link | `400` | `{"error":"This invitation link is invalid or has expired."}` |
+| Teacher ID or birth date wrong on an invitation | `400` | `{"error":"The teacher ID and date of birth do not match this invitation."}` |
+| A phone number that is not 11 Bangladeshi digits | `400` | `{"error":"Phone number must be 11 digits, for example 01712345678."}` |
+| A profile photo over 2 MB | `413` | `{"error":"The profile photo must be 2 MB or smaller."}` |
 | A new reset code asked for within 60 seconds | `429` | `{"error":"Please wait a minute before requesting a new code."}` |
 | Wrong or expired reset code | `400` | `{"error":"Invalid or expired code."}` |
 | Five wrong reset codes | `400` | `{"error":"Too many wrong codes. Please request a new code."}` |
@@ -660,7 +752,7 @@ protected route then runs `VerifyToken` and, where a role is required,
 |---|---|---|
 | No `Authorization` header, or not `Bearer <token>` | `401` | `{"error":"Unauthorized"}` |
 | Token is malformed, expired, signed with another key, or not HS256 | `401` | `{"error":"Unauthorized"}` |
-| Token is valid but the user was deleted, is `pending`, `rejected` or `removed` | `401` | `{"error":"Session expired. Please log in again."}` |
+| Token is valid but the user was deleted or is not `active` (`pending`, `rejected`, `removed`, `unverified`, `invited`) | `401` | `{"error":"Session expired. Please log in again."}` |
 | Token is valid but the user logged out everywhere (`token_version` moved on) | `401` | `{"error":"Session expired. Please log in again."}` |
 | Token is valid but the user's role changed (a CR was demoted) | `401` | `{"error":"Session expired. Please log in again."}` |
 | Signed in, but the route needs another role | `403` | `{"error":"403 Access Denied / Unauthorized Access"}` |

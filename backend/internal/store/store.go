@@ -9,10 +9,12 @@ import (
 )
 
 const (
-	StatusActive   = "active"
-	StatusPending  = "pending"
-	StatusRejected = "rejected"
-	StatusRemoved  = "removed"
+	StatusActive     = "active"
+	StatusPending    = "pending"
+	StatusRejected   = "rejected"
+	StatusRemoved    = "removed"
+	StatusUnverified = "unverified"
+	StatusInvited    = "invited"
 )
 
 var (
@@ -28,6 +30,7 @@ type AuthUser struct {
 	Status       string
 	TokenVersion int
 	IsCR         bool
+	PhotoPath    string
 }
 
 func (u AuthUser) IsActive() bool {
@@ -42,7 +45,8 @@ func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-const getAuthUserSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version, COALESCE(s.is_cr, FALSE)
+const getAuthUserSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version, COALESCE(s.is_cr, FALSE),
+COALESCE(u.photo_path, '')
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 WHERE u.id = $1`
@@ -56,6 +60,7 @@ func (s *Store) GetAuthUser(ctx context.Context, userID int64) (AuthUser, error)
 		&user.Status,
 		&user.TokenVersion,
 		&user.IsCR,
+		&user.PhotoPath,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AuthUser{}, ErrNotFound

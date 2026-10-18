@@ -69,7 +69,7 @@ func TestScheduleFlow(t *testing.T) {
 		t.Fatalf("create course status = %d, want 201 (body = %q)", course.Code, course.Body.String())
 	}
 	courseID := int64(number(t, course, "id"))
-	createdTeacher := call(t, router, http.MethodPost, "/api/admin/teachers", scheduleTeacher, adminToken)
+	createdTeacher := teacherInviteCall(t, router, adminToken, scheduleTeacher)
 	if createdTeacher.Code != http.StatusCreated {
 		t.Fatalf("create teacher status = %d, want 201 (body = %q)", createdTeacher.Code, createdTeacher.Body.String())
 	}
@@ -83,13 +83,12 @@ func TestScheduleFlow(t *testing.T) {
 	if teacherID == 0 {
 		t.Fatal("the new teacher is missing from the teacher lookup")
 	}
-	createdCR := call(t, router, http.MethodPost, "/api/admin/crs", scheduleCR, adminToken)
-	if createdCR.Code != http.StatusCreated {
-		t.Fatalf("create class representative status = %d, want 201 (body = %q)", createdCR.Code, createdCR.Body.String())
+	onboardCR(t, router, adminToken, scheduleCR)
+	registeredStudent := registerStudent(t, router, scheduleStudent)
+	if registeredStudent.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want 201 (body = %q)", registeredStudent.Code, registeredStudent.Body.String())
 	}
-	if registered := call(t, router, http.MethodPost, "/api/auth/register", scheduleStudent, ""); registered.Code != http.StatusCreated {
-		t.Fatalf("register status = %d, want 201 (body = %q)", registered.Code, registered.Body.String())
-	}
+	verifyStudentEmail(t, router, registeredStudent, "2023331901")
 	approveStudent(t, router, adminToken, "2023331901")
 	crToken := loginToken(t, router, "2023331900")
 	teacherToken := loginToken(t, router, "T-900")
@@ -192,8 +191,8 @@ func TestScheduleFlow(t *testing.T) {
 		t.Fatalf("auto cancelled requests = %v, want the exam in room 1102", mine)
 	}
 	crAlerts := listItems(t, call(t, router, http.MethodGet, "/api/notifications", "", crToken))
-	if len(crAlerts) != 5 {
-		t.Fatalf("the class representative has %d notifications, want the three decisions plus the two batch broadcasts", len(crAlerts))
+	if len(crAlerts) != 6 {
+		t.Fatalf("the class representative has %d notifications, want the promotion, the three decisions and the two batch broadcasts", len(crAlerts))
 	}
 	if crAlerts[0]["title"] != jobs.NotificationTitle {
 		t.Errorf("the newest notification = %v, want %q", crAlerts[0], jobs.NotificationTitle)

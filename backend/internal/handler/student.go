@@ -24,8 +24,9 @@ const (
 
 type StudentStore interface {
 	GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error)
-	ListDayPlan(ctx context.Context, batch, date string) ([]store.PlanItem, error)
-	ListDropCourseSchedule(ctx context.Context, courseCode, ownBatch string, now time.Time) ([]store.DropCourseItem, error)
+	ListStudentDropCourses(ctx context.Context, studentID int64) ([]store.Course, error)
+	ListDayPlan(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error)
+	ListDropCourseSchedule(ctx context.Context, courseCodes []string, ownBatch string, now time.Time) ([]store.DropCourseItem, error)
 	ListExams(ctx context.Context, batch, section string, now time.Time) ([]store.ExamRow, error)
 	ListFilteredRoutines(ctx context.Context, filter store.RoutineFilter) ([]store.RoutineRow, error)
 }
@@ -40,6 +41,7 @@ func NewStudent(cfg *config.Config, students StudentStore) *Student {
 }
 
 type planItem struct {
+	Batch       string `json:"batch"`
 	StartTime   string `json:"start_time"`
 	EndTime     string `json:"end_time"`
 	CourseCode  string `json:"course_code"`
@@ -51,8 +53,10 @@ type planItem struct {
 }
 
 type planGroup struct {
+	Batch        string     `json:"batch"`
 	Section      string     `json:"section"`
 	SectionLabel string     `json:"section_label"`
+	DropCourse   bool       `json:"drop_course"`
 	Items        []planItem `json:"items"`
 }
 
@@ -99,7 +103,11 @@ func (s *Student) UpcomingRoutine() http.HandlerFunc {
 			date = parsed
 		}
 		day := validate.DateString(date)
-		items, err := s.students.ListDayPlan(r.Context(), profile.Batch, day)
+		codes, ok := s.dropCourseCodes(w, r, profile.StudentID)
+		if !ok {
+			return
+		}
+		items, err := s.students.ListDayPlan(r.Context(), profile.Batch, day, codes)
 		if err != nil {
 			log.Printf("handler: could not list the upcoming routine of a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -110,19 +118,40 @@ func (s *Student) UpcomingRoutine() http.HandlerFunc {
 			DateLabel: date.Format(dateLabelLayout),
 			Weekday:   validate.DayName(int(date.Weekday())),
 			Batch:     profile.Batch,
-			Groups:    groupPlan(items),
+			Groups:    groupPlan(items, profile.Batch),
 		})
 	}
 }
 
-func groupPlan(items []store.PlanItem) []planGroup {
-	bySection := make(map[string][]planItem)
-	sections := make([]string, 0)
+func (s *Student) dropCourseCodes(w http.ResponseWriter, r *http.Request, studentID int64) ([]string, bool) {
+	courses, err := s.students.ListStudentDropCourses(r.Context(), studentID)
+	if err != nil {
+		log.Printf("handler: could not list the drop courses of a student: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return nil, false
+	}
+	codes := make([]string, 0, len(courses))
+	for _, course := range courses {
+		codes = append(codes, course.Code)
+	}
+	return codes, true
+}
+
+func groupPlan(items []store.PlanItem, ownBatch string) []planGroup {
+	byKey := make(map[string][]planItem)
+	keys := make([]string, 0)
+	owners := make(map[string]store.PlanItem)
 	for _, item := range items {
-		if _, seen := bySection[item.Section]; !seen {
-			sections = append(sections, item.Section)
+		key := item.Section
+		if item.Batch != ownBatch {
+			key = item.Batch + " " + item.Section
 		}
-		bySection[item.Section] = append(bySection[item.Section], planItem{
+		if _, seen := byKey[key]; !seen {
+			keys = append(keys, key)
+			owners[key] = item
+		}
+		byKey[key] = append(byKey[key], planItem{
+			Batch:       item.Batch,
 			StartTime:   item.StartTime,
 			EndTime:     item.EndTime,
 			CourseCode:  item.CourseCode,
@@ -133,24 +162,41 @@ func groupPlan(items []store.PlanItem) []planGroup {
 			Status:      planStatus(item.Cancelled),
 		})
 	}
-	sort.Slice(sections, func(i, j int) bool {
-		left, right := sections[i], sections[j]
-		if (left == validate.SectionAll) != (right == validate.SectionAll) {
-			return right == validate.SectionAll
+	sort.Slice(keys, func(i, j int) bool {
+		left, right := owners[keys[i]], owners[keys[j]]
+		if (left.Batch == ownBatch) != (right.Batch == ownBatch) {
+			return left.Batch == ownBatch
 		}
-		return left < right
+		if left.Batch != right.Batch {
+			return left.Batch < right.Batch
+		}
+		if (left.Section == validate.SectionAll) != (right.Section == validate.SectionAll) {
+			return right.Section == validate.SectionAll
+		}
+		return left.Section < right.Section
 	})
-	groups := make([]planGroup, 0, len(sections))
-	for _, section := range sections {
-		entries := bySection[section]
+	groups := make([]planGroup, 0, len(keys))
+	for _, key := range keys {
+		entries := byKey[key]
 		sort.SliceStable(entries, func(i, j int) bool { return entries[i].StartTime < entries[j].StartTime })
+		owner := owners[key]
+		dropCourse := owner.Batch != ownBatch
 		groups = append(groups, planGroup{
-			Section:      section,
-			SectionLabel: sectionLabel(section),
+			Batch:        owner.Batch,
+			Section:      owner.Section,
+			SectionLabel: planSectionLabel(owner.Batch, owner.Section, dropCourse),
+			DropCourse:   dropCourse,
 			Items:        entries,
 		})
 	}
 	return groups
+}
+
+func planSectionLabel(batch, section string, dropCourse bool) string {
+	if !dropCourse {
+		return sectionLabel(section)
+	}
+	return batch + " " + sectionLabel(section) + " (drop course)"
 }
 
 func planStatus(cancelled bool) string {

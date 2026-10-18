@@ -1,20 +1,25 @@
 package validate
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const (
 	MaxFieldLength    = 120
 	MaxEmailLength    = 254
 	MinPasswordLength = 8
+	MinAge            = 15
+	MaxAge            = 60
+	MessagePhone      = "Phone number must be 11 digits, for example 01712345678."
 )
 
 var (
 	emailPattern      = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s.]{2,}$`)
-	phonePattern      = regexp.MustCompile(`^\+?[0-9]{10,15}$`)
+	phonePattern      = regexp.MustCompile(`^01[3-9][0-9]{8}$`)
 	batchPattern      = regexp.MustCompile(`^[A-Z]{2,6}-[0-9]{2}$`)
 	sectionPattern    = regexp.MustCompile(`^[A-Z]$`)
 	courseCodePattern = regexp.MustCompile(`^[A-Z]{2,6}-?[0-9]{3}$`)
@@ -51,9 +56,50 @@ func Phone(label, value string) (string, error) {
 		return "", err
 	}
 	if !phonePattern.MatchString(trimmed) {
-		return "", fmt.Errorf("%s must be 10 to 15 digits, with an optional leading +.", label)
+		return "", errors.New(MessagePhone)
 	}
 	return trimmed, nil
+}
+
+func EmailInDomain(label, value, domain string) (string, error) {
+	trimmed, err := Email(label, value)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasSuffix(trimmed, "@"+strings.ToLower(domain)) {
+		return "", fmt.Errorf("%s must end with @%s.", label, strings.ToLower(domain))
+	}
+	return trimmed, nil
+}
+
+func BirthDate(label, value string, now time.Time) (string, error) {
+	trimmed, err := Required(label, value)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := time.ParseInLocation(DateLayout, trimmed, now.Location())
+	if err != nil {
+		return "", fmt.Errorf("%s must be a date in the YYYY-MM-DD format.", label)
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	oldest := today.AddDate(-MaxAge-1, 0, 1)
+	youngest := today.AddDate(-MinAge, 0, 0)
+	if parsed.Before(oldest) || parsed.After(youngest) {
+		return "", fmt.Errorf("%s must belong to a person between %d and %d years old.", label, MinAge, MaxAge)
+	}
+	return parsed.Format(DateLayout), nil
+}
+
+func PlainDate(label, value string) (string, error) {
+	trimmed, err := Required(label, value)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := time.Parse(DateLayout, trimmed)
+	if err != nil {
+		return "", fmt.Errorf("%s must be a date in the YYYY-MM-DD format.", label)
+	}
+	return parsed.Format(DateLayout), nil
 }
 
 func PhoneDigits(value string) string {
