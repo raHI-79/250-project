@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, Megaphone } from 'lucide-react'
+import { Megaphone } from 'lucide-react'
 import {
   Alert,
   Button,
@@ -14,8 +14,12 @@ import {
   useConfirm,
   useToast,
 } from '../../components/ui'
-import PdfInput from '../../components/forms/PdfInput'
+import AttachmentView from '../../components/AttachmentView'
+import FileInput from '../../components/forms/FileInput'
+import LinkInput from '../../components/forms/LinkInput'
+import { appendIf } from '../../lib/account'
 import api from '../../lib/api'
+import { linkError } from '../../lib/files'
 import { useResource } from '../../lib/hooks'
 import { formatDateTime } from '../../lib/time'
 
@@ -25,6 +29,7 @@ export default function AdminPostNoticesPage() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [batch, setBatch] = useState('')
+  const [link, setLink] = useState('')
   const [file, setFile] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -33,11 +38,17 @@ export default function AdminPostNoticesPage() {
   const notices = useResource('/api/admin/notices')
   const publish = async (event) => {
     event.preventDefault()
+    const problem = linkError(link)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setError('')
     const payload = new FormData()
     payload.set('title', title.trim())
-    payload.set('description', description.trim())
     payload.set('batch', batch)
+    appendIf(payload, 'description', description.trim())
+    appendIf(payload, 'link', link.trim())
     if (file) payload.set('file', file)
     setSaving(true)
     try {
@@ -45,6 +56,7 @@ export default function AdminPostNoticesPage() {
       toast.success('Notice published')
       setTitle('')
       setDescription('')
+      setLink('')
       setFile(null)
       notices.reload()
     } catch (failure) {
@@ -56,7 +68,7 @@ export default function AdminPostNoticesPage() {
   const remove = async (item) => {
     const ok = await confirm({
       title: 'Delete this notice?',
-      message: `"${item.title}" and its PDF will be removed for everyone.`,
+      message: `"${item.title}" and its attachment will be removed for everyone.`,
       confirmLabel: 'Delete',
     })
     if (!ok) return
@@ -98,7 +110,8 @@ export default function AdminPostNoticesPage() {
               </option>
             ))}
           </Select>
-          <PdfInput file={file} onChange={setFile} />
+          <LinkInput value={link} onChange={setLink} />
+          <FileInput file={file} onChange={setFile} />
           <Button type="submit" loading={saving} className="w-full sm:w-auto sm:self-end">
             Publish the notice
           </Button>
@@ -134,19 +147,13 @@ export default function AdminPostNoticesPage() {
                 </p>
               )}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                {item.file_url ? (
-                  <a
-                    href={item.file_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
-                  >
-                    <FileText size={15} />
-                    Open the PDF
-                  </a>
-                ) : (
-                  <span className="text-xs text-brand-400">No attachment</span>
-                )}
+                <AttachmentView
+                  fileUrl={item.file_url}
+                  fileName={item.file_name}
+                  fileMime={item.file_mime}
+                  fileSize={item.file_size}
+                  linkUrl={item.link_url}
+                />
                 <Button
                   size="sm"
                   variant="danger"
