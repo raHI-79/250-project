@@ -62,16 +62,28 @@ func (emptyStudentStore) ListDayPlan(ctx context.Context, batch, date string, dr
 	return nil, nil
 }
 
-func (emptyStudentStore) ListDropCourseSchedule(ctx context.Context, courseCodes []string, ownBatch string, now time.Time) ([]store.DropCourseItem, error) {
-	return nil, nil
-}
-
 func (emptyStudentStore) ListExams(ctx context.Context, batch, section string, now time.Time) ([]store.ExamRow, error) {
 	return nil, nil
 }
 
 func (emptyStudentStore) ListFilteredRoutines(ctx context.Context, filter store.RoutineFilter) ([]store.RoutineRow, error) {
 	return nil, nil
+}
+
+func (emptyStudentStore) ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error) {
+	return nil, nil
+}
+
+func (emptyStudentStore) ListStudentPolls(ctx context.Context, viewerUserID int64, batch, section string) ([]store.PollRow, error) {
+	return nil, nil
+}
+
+func (emptyStudentStore) GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error) {
+	return store.MessageViewer{UserID: userID, Role: "student", Batch: "CSE-23", Section: "A"}, nil
+}
+
+func (emptyStudentStore) CountUnreadMessages(ctx context.Context, viewer store.MessageViewer) (int, error) {
+	return 0, nil
 }
 
 type silentAlerts struct{}
@@ -105,8 +117,8 @@ func teacherRoutes() []scheduleRoute {
 
 func studentRoutes() []scheduleRoute {
 	return []scheduleRoute{
+		{method: http.MethodGet, path: "/api/students/today", wantForOwn: http.StatusOK},
 		{method: http.MethodGet, path: "/api/students/upcoming-routine", wantForOwn: http.StatusOK},
-		{method: http.MethodGet, path: "/api/students/drop-course-routine", wantForOwn: http.StatusOK},
 		{method: http.MethodGet, path: "/api/students/exams", wantForOwn: http.StatusOK},
 		{method: http.MethodGet, path: "/api/students/routine", wantForOwn: http.StatusOK},
 	}

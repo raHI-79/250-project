@@ -25,10 +25,14 @@ const (
 )
 
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	return migrate(ctx, pool, migrationFiles)
+	return migrate(ctx, pool, migrationFiles, "")
 }
 
-func migrate(ctx context.Context, pool *pgxpool.Pool, files fs.FS) error {
+func MigrateUpTo(ctx context.Context, pool *pgxpool.Pool, last string) error {
+	return migrate(ctx, pool, migrationFiles, last)
+}
+
+func migrate(ctx context.Context, pool *pgxpool.Pool, files fs.FS, last string) error {
 	if _, err := pool.Exec(ctx, createMigrationsTableSQL); err != nil {
 		return fmt.Errorf("db: could not create the schema_migrations table: %w", err)
 	}
@@ -54,6 +58,9 @@ func migrate(ctx context.Context, pool *pgxpool.Pool, files fs.FS) error {
 		}
 		log.Printf("db: applied migration %s", version)
 		pending++
+		if version == last {
+			break
+		}
 	}
 	if pending == 0 {
 		log.Println("db: schema is up to date")

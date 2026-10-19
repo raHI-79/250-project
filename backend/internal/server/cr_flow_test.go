@@ -80,6 +80,32 @@ func TestCRClassRequestFlow(t *testing.T) {
 	if entries := listItems(t, otherRoutine); len(entries) != 0 {
 		t.Errorf("the class representative of CSE-22 sees %v, want nothing", entries)
 	}
+	courses := listItems(t, call(t, router, http.MethodGet, "/api/cr/courses", "", firstToken))
+	if len(courses) != 1 || courses[0]["code"] != "CSE233" {
+		t.Fatalf("the running courses are %v, want the one course of the fixed routine", courses)
+	}
+	teacherCard, ok := courses[0]["teacher"].(map[string]any)
+	if !ok || int64(teacherCard["id"].(float64)) != teacherID || teacherCard["name"] != "Request Teacher" {
+		t.Errorf("the course teacher = %v, want the teacher of the fixed routine", courses[0]["teacher"])
+	}
+	slots, ok := courses[0]["slots"].([]any)
+	if !ok || len(slots) != 1 {
+		t.Fatalf("the course slots are %v, want the one weekly slot", courses[0]["slots"])
+	}
+	slot := slots[0].(map[string]any)
+	if int(slot["day_of_week"].(float64)) != weekday || slot["start_time"] != "08:00" || slot["room"] != "1003" {
+		t.Errorf("the slot = %v, want the fixed routine slot", slot)
+	}
+	if empty := listItems(t, call(t, router, http.MethodGet, "/api/cr/courses", "", secondToken)); len(empty) != 0 {
+		t.Errorf("the class representative of CSE-22 sees %v courses, want none", empty)
+	}
+	day := call(t, router, http.MethodGet, "/api/cr/day?date="+date, "", firstToken)
+	if day.Code != http.StatusOK {
+		t.Fatalf("day status = %d, want 200 (body = %q)", day.Code, day.Body.String())
+	}
+	if onThatDay := listItems(t, day); len(onThatDay) != 1 || onThatDay[0]["source"] != "fixed" {
+		t.Fatalf("the day panel shows %v, want the fixed routine entry", onThatDay)
+	}
 	booked := call(t, router, http.MethodPost, "/api/cr/class-requests",
 		classRequestBody("extra", date, "10:30", "12:45", "1004", courseID, teacherID), firstToken)
 	if booked.Code != http.StatusCreated {

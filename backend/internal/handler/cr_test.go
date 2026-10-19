@@ -52,6 +52,8 @@ type fakeCRStore struct {
 	askedRoom    string
 	askedUser    int64
 	askedStatus  string
+	slots        []store.CourseSlotRow
+	day          []store.DayEntryRow
 }
 
 func (f *fakeCRStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {
@@ -99,6 +101,22 @@ func (f *fakeCRStore) ListClassRequests(ctx context.Context, createdBy int64, st
 		return nil, f.err
 	}
 	return f.requests, nil
+}
+
+func (f *fakeCRStore) ListBatchCourseSlots(ctx context.Context, batch, section string) ([]store.CourseSlotRow, error) {
+	f.askedBatch, f.askedSection = batch, section
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.slots, nil
+}
+
+func (f *fakeCRStore) ListBatchDay(ctx context.Context, batch, date string) ([]store.DayEntryRow, error) {
+	f.askedBatch, f.askedDate = batch, date
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.day, nil
 }
 
 type fakeNotifier struct {

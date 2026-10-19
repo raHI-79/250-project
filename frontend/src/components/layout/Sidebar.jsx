@@ -3,31 +3,43 @@ import { X } from 'lucide-react'
 import ProfileNavLink from './ProfileNavLink'
 import cx from '../../lib/cx'
 
-export default function Sidebar({ items, open, onClose }) {
+export default function Sidebar({ groups, open, onClose }) {
   const links = (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
-      {items.map((item) => (
-        <NavLink
-          key={item.label}
-          to={item.to()}
-          onClick={onClose}
-          className={({ isActive }) =>
-            cx(
-              'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-              isActive
-                ? 'bg-sidebar-active text-white shadow-sm'
-                : 'text-brand-100/80 hover:translate-x-1 hover:bg-sidebar-hover hover:text-white',
-            )
-          }
-        >
-          <item.icon size={17} className="shrink-0 transition-transform group-hover:scale-110" />
-          <span className="truncate">{item.label}</span>
-          {item.count > 0 && (
-            <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[11px] font-semibold text-white">
-              {item.count > 9 ? '9+' : item.count}
-            </span>
+      {groups.map((group, index) => (
+        <div key={group.label || index} className={cx('flex flex-col gap-1', index > 0 && 'mt-4')}>
+          {group.label && (
+            <p className="px-3 pb-1 text-[11px] font-semibold tracking-wider text-brand-200/70 uppercase">
+              {group.label}
+            </p>
           )}
-        </NavLink>
+          {group.items.map((item) => (
+            <NavLink
+              key={item.to()}
+              to={item.to()}
+              onClick={onClose}
+              className={({ isActive }) =>
+                cx(
+                  'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                  isActive
+                    ? 'bg-sidebar-active text-white shadow-sm'
+                    : 'text-brand-100/80 hover:translate-x-1 hover:bg-sidebar-hover hover:text-white',
+                )
+              }
+            >
+              <item.icon
+                size={17}
+                className="shrink-0 transition-transform group-hover:scale-110"
+              />
+              <span className="truncate">{item.label}</span>
+              {item.count > 0 && (
+                <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[11px] font-semibold text-white">
+                  {item.count > 9 ? '9+' : item.count}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </div>
       ))}
     </nav>
   )

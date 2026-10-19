@@ -19,14 +19,15 @@ type fakeStudentStore struct {
 	profile    store.StudentProfile
 	profileErr error
 	plan       []store.PlanItem
-	drops      []store.DropCourseItem
 	exams      []store.ExamRow
 	entries    []store.RoutineRow
+	notices    []store.NoticeRow
+	polls      []store.PollRow
+	unread     int
 	err        error
 	askedBatch string
 	askedDate  string
 	askedCodes []string
-	askedOwn   string
 	courses    []store.Course
 	courseErr  error
 	askedExam  string
@@ -55,14 +56,6 @@ func (f *fakeStudentStore) ListDayPlan(ctx context.Context, batch, date string, 
 	return f.plan, nil
 }
 
-func (f *fakeStudentStore) ListDropCourseSchedule(ctx context.Context, courseCodes []string, ownBatch string, now time.Time) ([]store.DropCourseItem, error) {
-	f.askedCodes, f.askedOwn = courseCodes, ownBatch
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.drops, nil
-}
-
 func (f *fakeStudentStore) ListExams(ctx context.Context, batch, section string, now time.Time) ([]store.ExamRow, error) {
 	f.askedBatch, f.askedExam = batch, section
 	if f.err != nil {
@@ -77,6 +70,31 @@ func (f *fakeStudentStore) ListFilteredRoutines(ctx context.Context, filter stor
 		return nil, f.err
 	}
 	return f.entries, nil
+}
+
+func (f *fakeStudentStore) ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.notices, nil
+}
+
+func (f *fakeStudentStore) ListStudentPolls(ctx context.Context, viewerUserID int64, batch, section string) ([]store.PollRow, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.polls, nil
+}
+
+func (f *fakeStudentStore) GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error) {
+	return store.MessageViewer{UserID: userID, Role: "student", Batch: f.profile.Batch, Section: f.profile.Section}, nil
+}
+
+func (f *fakeStudentStore) CountUnreadMessages(ctx context.Context, viewer store.MessageViewer) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	return f.unread, nil
 }
 
 func newStudentStore() *fakeStudentStore {
@@ -101,55 +119,117 @@ func studentCall(t *testing.T, handlerFunc http.HandlerFunc, target string) *htt
 	return roleCall(t, handlerFunc, user, http.MethodGet, target, "", "")
 }
 
-func tomorrowInDhaka(t *testing.T) time.Time {
+func todayInDhaka(t *testing.T) time.Time {
 	t.Helper()
 	loc, err := time.LoadLocation("Asia/Dhaka")
 	if err != nil {
 		t.Fatalf("could not load the timezone: %v", err)
 	}
-	return time.Now().In(loc).AddDate(0, 0, 1)
+	return time.Now().In(loc)
 }
 
-func TestStudentUpcomingRoutine(t *testing.T) {
-	silenceLog(t)
-	tomorrow := tomorrowInDhaka(t)
-	students := newStudentStore()
-	students.plan = []store.PlanItem{
+func ownBatchPlan() []store.PlanItem {
+	return []store.PlanItem{
 		{Batch: "CSE-23", Section: "A", StartTime: "10:30", EndTime: "12:45", CourseCode: "CSE-233", CourseTitle: "Digital Logic Design", Kind: "lab", Room: "1003", TeacherName: "First Teacher"},
 		{Batch: "CSE-23", Section: "A", StartTime: "08:00", EndTime: "09:00", CourseCode: "CSE-250", CourseTitle: "Software Engineering", Kind: "class", Room: "1004", TeacherName: "Second Teacher", Cancelled: true},
 		{Batch: "CSE-23", Section: "ALL", StartTime: "13:00", EndTime: "14:00", CourseCode: "CSE-233", CourseTitle: "Digital Logic Design", Kind: "exam", Room: "2001", TeacherName: "First Teacher"},
 		{Batch: "CSE-23", Section: "B", StartTime: "09:00", EndTime: "10:00", CourseCode: "CSE-250", CourseTitle: "Software Engineering", Kind: "class", Room: "1005", TeacherName: "Second Teacher"},
 	}
+}
+
+func dropCoursePlan() []store.PlanItem {
+	return []store.PlanItem{
+		{Batch: "CSE-24", Section: "B", StartTime: "14:00", EndTime: "15:00", CourseCode: "CSE-211", CourseTitle: "Data Structures", Kind: "class", Room: "1006", TeacherName: "Third Teacher"},
+		{Batch: "CSE-22", Section: "A", StartTime: "11:00", EndTime: "12:00", CourseCode: "CSE-211", CourseTitle: "Data Structures", Kind: "exam", Room: "2002", TeacherName: "Third Teacher"},
+	}
+}
+
+func TestStudentUpcomingRoutineGroups(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name       string
+		plan       []store.PlanItem
+		wantKeys   []string
+		wantLabels []string
+	}{
+		{
+			name:       "the own batch only",
+			plan:       ownBatchPlan(),
+			wantKeys:   []string{"A", "B", "ALL"},
+			wantLabels: []string{"Section A", "Section B", "Both sections"},
+		},
+		{
+			name:       "with the drop courses last",
+			plan:       append(ownBatchPlan(), dropCoursePlan()...),
+			wantKeys:   []string{"A", "B", "ALL", GroupDropCourses},
+			wantLabels: []string{"Section A", "Section B", "Both sections", LabelDropCourses},
+		},
+		{
+			name:       "the drop courses alone",
+			plan:       dropCoursePlan(),
+			wantKeys:   []string{GroupDropCourses},
+			wantLabels: []string{LabelDropCourses},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			students := newStudentStore()
+			students.plan = test.plan
+			rec := studentCall(t, newStudentHandler(t, students).UpcomingRoutine(), "/api/students/upcoming-routine")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+			}
+			groups, ok := decodeBody(t, rec)["groups"].([]any)
+			if !ok || len(groups) != len(test.wantKeys) {
+				t.Fatalf("groups = %v, want %d of them", groups, len(test.wantKeys))
+			}
+			for i, group := range groups {
+				entry := group.(map[string]any)
+				if entry["key"] != test.wantKeys[i] || entry["section_label"] != test.wantLabels[i] {
+					t.Errorf("group %d = %v, want %q labelled %q", i, entry, test.wantKeys[i], test.wantLabels[i])
+				}
+			}
+			last := groups[len(groups)-1].(map[string]any)
+			if last["key"] != GroupDropCourses {
+				return
+			}
+			if last["drop_course"] != true {
+				t.Errorf("the drop course group = %v, want drop_course true", last)
+			}
+			dropped := last["items"].([]any)
+			if len(dropped) != 2 {
+				t.Fatalf("the drop course group has %d items, want 2", len(dropped))
+			}
+			if first := dropped[0].(map[string]any); first["batch"] != "CSE-22" || first["start_time"] != "11:00" {
+				t.Errorf("first drop course item = %v, want the CSE-22 entry at 11:00", first)
+			}
+		})
+	}
+}
+
+func TestStudentUpcomingRoutineDate(t *testing.T) {
+	silenceLog(t)
+	today := todayInDhaka(t)
+	students := newStudentStore()
+	students.plan = ownBatchPlan()
 	rec := studentCall(t, newStudentHandler(t, students).UpcomingRoutine(), "/api/students/upcoming-routine")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 	}
-	if students.askedBatch != "CSE-23" || students.askedDate != tomorrow.Format(validate.DateLayout) {
-		t.Errorf("the store was asked for %q on %q, want CSE-23 tomorrow", students.askedBatch, students.askedDate)
+	if students.askedBatch != "CSE-23" || students.askedDate != today.Format(validate.DateLayout) {
+		t.Errorf("the store was asked for %q on %q, want CSE-23 today", students.askedBatch, students.askedDate)
 	}
 	payload := decodeBody(t, rec)
-	if payload["date"] != tomorrow.Format(validate.DateLayout) {
-		t.Errorf("date = %v, want tomorrow", payload["date"])
+	if payload["date"] != today.Format(validate.DateLayout) {
+		t.Errorf("date = %v, want today", payload["date"])
 	}
-	if payload["date_label"] != tomorrow.Format("02.01.06") {
-		t.Errorf("date_label = %v, want %q", payload["date_label"], tomorrow.Format("02.01.06"))
+	if payload["date_label"] != today.Format(dateLabelLayout) {
+		t.Errorf("date_label = %v, want %q", payload["date_label"], today.Format(dateLabelLayout))
 	}
-	if payload["weekday"] != validate.DayName(int(tomorrow.Weekday())) || payload["batch"] != "CSE-23" {
+	if payload["weekday"] != validate.DayName(int(today.Weekday())) || payload["batch"] != "CSE-23" {
 		t.Errorf("payload = %v, want the weekday and batch", payload)
 	}
-	groups, ok := payload["groups"].([]any)
-	if !ok || len(groups) != 3 {
-		t.Fatalf("groups = %v, want three of them", payload["groups"])
-	}
-	wantSections := []string{"A", "B", "ALL"}
-	wantLabels := []string{"Section A", "Section B", "Both Sections"}
-	for i, group := range groups {
-		entry := group.(map[string]any)
-		if entry["section"] != wantSections[i] || entry["section_label"] != wantLabels[i] {
-			t.Errorf("group %d = %v, want %q", i, entry, wantSections[i])
-		}
-	}
-	first := groups[0].(map[string]any)["items"].([]any)
+	first := payload["groups"].([]any)[0].(map[string]any)["items"].([]any)
 	if len(first) != 2 {
 		t.Fatalf("section A has %d items, want 2", len(first))
 	}
@@ -188,61 +268,78 @@ func TestStudentUpcomingRoutine(t *testing.T) {
 	}
 }
 
-func TestStudentDropCourseRoutine(t *testing.T) {
+func TestStudentUpcomingRoutineCarriesTheDropCourseCodes(t *testing.T) {
 	silenceLog(t)
-	without := newStudentStore()
-	rec := studentCall(t, newStudentHandler(t, without).DropCourseRoutine(), "/api/students/drop-course-routine")
+	students := newStudentStore()
+	students.courses = []store.Course{{ID: 9, Code: "CSE-211", Title: "Data Structures"}}
+	rec := studentCall(t, newStudentHandler(t, students).UpcomingRoutine(), "/api/students/upcoming-routine")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if len(students.askedCodes) != 1 || students.askedCodes[0] != "CSE-211" {
+		t.Errorf("the store was asked for %v, want CSE-211", students.askedCodes)
+	}
+}
+
+func TestStudentToday(t *testing.T) {
+	silenceLog(t)
+	today := todayInDhaka(t)
+	students := newStudentStore()
+	students.plan = append(ownBatchPlan(), dropCoursePlan()...)
+	students.exams = []store.ExamRow{
+		{ID: 5, EventDate: "2026-10-20", CourseCode: "CSE-233"},
+		{ID: 6, EventDate: "2026-10-27", CourseCode: "CSE-250"},
+	}
+	students.polls = []store.PollRow{
+		{ID: 1, Status: store.PollOpen},
+		{ID: 2, Status: store.PollClosed},
+		{ID: 3, Status: store.PollOpen},
+	}
+	students.notices = []store.NoticeRow{
+		{ID: 1, Title: "First"}, {ID: 2, Title: "Second"}, {ID: 3, Title: "Third"}, {ID: 4, Title: "Fourth"},
+	}
+	students.unread = 4
+	rec := studentCall(t, newStudentHandler(t, students).Today(), "/api/students/today")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 	}
 	payload := decodeBody(t, rec)
-	if payload["has_drop_course"] != false {
-		t.Errorf("has_drop_course = %v, want false", payload["has_drop_course"])
+	if payload["date"] != today.Format(validate.DateLayout) || students.askedDate != today.Format(validate.DateLayout) {
+		t.Errorf("date = %v, want today", payload["date"])
 	}
-	if list, ok := payload["items"].([]any); !ok || len(list) != 0 {
-		t.Errorf("items = %v, want an empty list", payload["items"])
+	if payload["classes_today"] != float64(5) {
+		t.Errorf("classes_today = %v, want the five scheduled items", payload["classes_today"])
 	}
-	if len(without.askedCodes) != 0 {
-		t.Error("the store was asked for a drop course although the student has none")
+	if payload["upcoming_exams"] != float64(2) || payload["open_polls"] != float64(2) {
+		t.Errorf("payload = %v, want two exams and two open polls", payload)
 	}
-	students := newStudentStore()
-	students.courses = []store.Course{{ID: 9, Code: "CSE-211", Title: "Data Structures"}}
-	students.drops = []store.DropCourseItem{
-		{Source: "fixed", Batch: "CSE-22", Section: "A", CourseCode: "CSE-211", CourseTitle: "Data Structures", Kind: "class", DayOfWeek: 1, StartTime: "08:00", EndTime: "09:00", Room: "1003", TeacherName: "First Teacher"},
-		{Source: "dated", Batch: "CSE-22", Section: "ALL", CourseCode: "CSE-211", CourseTitle: "Data Structures", Kind: "exam", DayOfWeek: 2, EventDate: "2026-10-20", StartTime: "10:30", EndTime: "12:45", Room: "2001", TeacherName: "First Teacher"},
-		{Source: "fixed", Batch: "CSE-24", Section: "B", CourseCode: "CSE-211", CourseTitle: "Data Structures", Kind: "lab", DayOfWeek: 3, StartTime: "13:00", EndTime: "14:00", Room: "1004", TeacherName: "Second Teacher"},
+	if payload["unread_messages"] != float64(4) {
+		t.Errorf("unread_messages = %v, want 4", payload["unread_messages"])
 	}
-	full := studentCall(t, newStudentHandler(t, students).DropCourseRoutine(), "/api/students/drop-course-routine")
-	if full.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body = %q)", full.Code, full.Body.String())
+	next, ok := payload["next_exam"].(map[string]any)
+	if !ok || next["date"] != "2026-10-20" || next["course"] != "CSE-233" {
+		t.Errorf("next_exam = %v, want the first exam", payload["next_exam"])
 	}
-	if len(students.askedCodes) != 1 || students.askedCodes[0] != "CSE-211" || students.askedOwn != "CSE-23" {
-		t.Errorf("the store was asked for %v excluding %q, want CSE-211 excluding CSE-23", students.askedCodes, students.askedOwn)
+	latest, ok := payload["latest_notices"].([]any)
+	if !ok || len(latest) != latestNoticeCount {
+		t.Fatalf("latest_notices = %v, want %d of them", payload["latest_notices"], latestNoticeCount)
 	}
-	body := decodeBody(t, full)
-	if body["has_drop_course"] != true {
-		t.Errorf("payload = %v, want the drop course flag", body)
+	if latest[0].(map[string]any)["title"] != "First" {
+		t.Errorf("the newest notice = %v, want the first one", latest[0])
 	}
-	chosen, ok := body["courses"].([]any)
-	if !ok || len(chosen) != 1 {
-		t.Fatalf("courses = %v, want one course", body["courses"])
+	empty := newStudentStore()
+	none := studentCall(t, newStudentHandler(t, empty).Today(), "/api/students/today")
+	if none.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body = %q)", none.Code, none.Body.String())
 	}
-	if course, ok := chosen[0].(map[string]any); !ok || course["code"] != "CSE-211" {
-		t.Errorf("course = %v, want CSE-211", chosen[0])
+	if body := decodeBody(t, none); body["next_exam"] != nil || body["classes_today"] != float64(0) {
+		t.Errorf("payload = %v, want no exam and no class", body)
 	}
-	if list := items(t, full); len(list) != 3 || list[0]["day"] != "Monday" || list[1]["event_date"] != "2026-10-20" {
-		t.Errorf("items = %v, want the three entries with day names", list)
-	}
-	groups, ok := body["groups"].([]any)
-	if !ok || len(groups) != 2 {
-		t.Fatalf("groups = %v, want one per batch", body["groups"])
-	}
-	first := groups[0].(map[string]any)
-	if first["batch"] != "CSE-22" || len(first["items"].([]any)) != 2 {
-		t.Errorf("first group = %v, want the two entries of CSE-22", first)
-	}
-	if second := groups[1].(map[string]any); second["batch"] != "CSE-24" {
-		t.Errorf("second group = %v, want CSE-24", second)
+	failing := newStudentStore()
+	failing.err = errors.New("database is down")
+	broken := studentCall(t, newStudentHandler(t, failing).Today(), "/api/students/today")
+	if broken.Code != http.StatusInternalServerError {
+		t.Errorf("failing store status = %d, want 500", broken.Code)
 	}
 }
 

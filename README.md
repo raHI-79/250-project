@@ -364,6 +364,8 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/notifications` | student, CR, teacher | Newest first; `limit` defaults to 30 and may not exceed 100 |
 | `GET` | `/api/notifications/unread-count` | student, CR, teacher | How many matching notifications arrived after `since` |
 | `GET` | `/api/cr/routine` | CR | Fixed routine of the CR's own batch and section, including the `ALL` entries |
+| `GET` | `/api/cr/courses` | CR | Running-semester courses of the CR's batch with their teacher and weekly `slots` |
+| `GET` | `/api/cr/day` | CR | Everything already on a `date` for the CR's batch: the fixed routine of that weekday and the pending or approved events |
 | `POST` | `/api/cr/class-requests` | CR | Asks the chosen teacher for a class, exam or extra class; `201` with a pending request |
 | `GET` | `/api/cr/room-availability` | CR | Everything booked on a `date`, optionally narrowed to one `room` |
 | `GET` | `/api/cr/requests` | CR | The CR's own requests, newest first, with an optional `status` filter |
@@ -374,25 +376,23 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/teacher/classes/upcoming` | teacher | Approved classes from today onward, or only those of one `date` |
 | `POST` | `/api/teacher/classes/{id}/cancel` | teacher | Cancels one approved class of this teacher |
 | `POST` | `/api/teacher/routines/{id}/cancel` | teacher | Cancels one `date` of this teacher's fixed routine entry |
-| `GET` | `/api/students/upcoming-routine` | student, CR | The batch's plan for `date` (tomorrow by default), grouped by section |
-| `GET` | `/api/students/drop-course-routine` | student, CR | The drop course's classes and exams in the other batches |
+| `GET` | `/api/students/today` | student, CR | Today's summary: counts, the next exam and the three newest notices |
+| `GET` | `/api/students/upcoming-routine` | student, CR | The batch's plan for `date` (today by default), grouped by section plus `drop_courses` |
 | `GET` | `/api/students/exams` | student, CR | Approved exams of the own batch and section from today onward |
 | `GET` | `/api/students/routine` | student, CR | Fixed routine browser with `batch`, `section`, `day` and `course` filters |
 | `POST` | `/api/admin/notices` | admin | `multipart/form-data` with `title`, optional `description`, optional `batch`, optional `link` and optional `file`; an empty `batch` means every batch |
 | `GET` | `/api/admin/notices` | admin | Every administration notice, newest first |
 | `DELETE` | `/api/admin/notices/{id}` | admin | Deletes one administration notice and its attachment; `204` on success, `404` if it does not exist |
-| `POST` | `/api/admin/materials` | admin | `{batch, title, link}`; `batch` is a code or `ALL`, `link` must start with `http://` or `https://` |
-| `GET` | `/api/admin/materials` | admin | Materials, newest first, with the optional `batch` filter |
 | `POST` | `/api/cr/notices` | CR | `multipart/form-data` with `title`, optional `description`, `target` (`own` or another batch code), optional `link` and optional `file` |
 | `GET` | `/api/cr/notices` | CR | The notices this CR posted, newest first |
-| `POST` | `/api/cr/materials` | CR | `{title, link, visibility, batch}`; `visibility` is `mine`, `batch` (needs another `batch`) or `all` |
-| `GET` | `/api/cr/materials` | CR | The materials this CR added, newest first |
-| `DELETE` | `/api/cr/materials/{id}` | CR | Removes one of this CR's own materials; `204` on success, `404` otherwise |
+| `GET` | `/api/cr/drive-link` | CR | The Drive link of the CR's own batch; an empty `link` when there is none yet |
+| `PUT` | `/api/cr/drive-link` | CR | `{link}` saves the Drive link of the CR's own batch; the title is always the batch code |
+| `DELETE` | `/api/cr/drive-link` | CR | Removes the Drive link of the CR's own batch; `204` on success, `404` if there is none |
 | `POST` | `/api/teacher/notices` | teacher | `multipart/form-data` with `title`, optional `description`, `batch`, optional `section`, optional `link` and optional `file` |
 | `GET` | `/api/teacher/notices` | teacher | The notices this teacher posted, newest first |
 | `DELETE` | `/api/teacher/notices/{id}` | teacher | Deletes one of this teacher's own notices; `204` on success, `404` otherwise |
 | `GET` | `/api/students/notices` | student, CR | One list for every source, filtered with `source` (`all`, `admin`, `teacher`, `cr`) and `scope` (`my`, `other`) |
-| `GET` | `/api/students/materials` | student, CR | Materials of the own batch and the ones marked `ALL`, newest first |
+| `GET` | `/api/students/drive-links` | student, CR | Every batch that has a Drive link, sorted by batch, each with `is_mine` |
 | `GET` | `/api/students/directory` | student, CR | Active students with the `batch`, `blood_group` and `search` filters; at most 200 rows |
 | `GET` | `/api/teachers-info` | student, CR, teacher | Active teachers (`name`, `phone`, `email`) with the optional `search` filter |
 | `GET` | `/api/messages/contacts` | any signed-in role | Up to 20 active people matched by `search`, narrowed with `role`; carries `photo_url` |
@@ -739,23 +739,31 @@ with the server's graceful shutdown.
 
 ### What a student sees
 
-Batch, section and the drop course come from the caller's own student row.
-`GET /api/students/upcoming-routine` defaults to **tomorrow** in
-`APP_TIMEZONE` and answers `date`, `date_label` (`DD.MM.YY`), `weekday`,
-`batch` and `groups`: one group per section, the lettered sections first and
-`ALL` (`Both Sections`) last, each item carrying `start_time`, `end_time`,
+Batch, section and the drop courses come from the caller's own student row.
+`GET /api/students/upcoming-routine` defaults to **today** in `APP_TIMEZONE`
+and answers `date`, `date_label` (`DD.MM.YY`), `weekday`, `batch` and `groups`:
+one group per section of the caller's own batch, the lettered sections first
+and `ALL` (`Both sections`) last, each item carrying `start_time`, `end_time`,
 `course_code`, `course_title`, `kind` (`class`, `lab`, `exam` or `extra`),
-`room`, `teacher_name` and `status`, which is `cancelled` for a cancelled class
-or a cancelled routine occurrence and `scheduled` otherwise.
+`room`, `teacher_name`, `status`, which is `cancelled` for a cancelled class or
+a cancelled routine occurrence and `scheduled` otherwise, and the `note` when
+its audience allows it.
 
 A student may carry **several** drop courses, kept in `student_drop_courses`.
-`GET /api/students/drop-course-routine` answers
-`{"has_drop_course": false, "courses": [], "items": []}` for a student without
-one. Otherwise it lists those courses' fixed routine and their approved classes
-and exams from today onward **in the other batches**, both as a flat `items`
-list and grouped by batch. `GET /api/students/upcoming-routine` adds the
-drop-course classes of the other batches as their own groups, marked with
-`drop_course: true`.
+When they do, the same answer carries one more group, keyed `drop_courses` and
+marked `drop_course: true`, holding the fixed classes and the approved class and
+exam events of those courses **in the other batches** on that date. Every item
+of that group names its own `batch`.
+
+`GET /api/students/today` answers `date`, `classes_today` (the scheduled items
+of that day), `upcoming_exams`, `next_exam` (`date` and `course`, or `null`),
+`unread_messages`, `open_polls` and `latest_notices`, which holds the three
+newest notices in the same shape as the notices list.
+
+Materials are **one Drive link per batch**. The class representative of a batch
+owns that link through `/api/cr/drive-link`, its title is always their batch
+code, and every student sees every batch's link through
+`GET /api/students/drive-links`, where `is_mine` marks their own batch.
 
 ### Account status messages
 

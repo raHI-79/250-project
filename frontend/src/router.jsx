@@ -9,8 +9,8 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ActivatePage from './pages/auth/ActivatePage'
 import ProfilePage from './pages/ProfilePage'
 import PersonPage from './pages/PersonPage'
+import TodayPage from './pages/student/TodayPage'
 import UpcomingRoutinePage from './pages/student/UpcomingRoutinePage'
-import DropCourseRoutinePage from './pages/student/DropCourseRoutinePage'
 import ExamsPage from './pages/student/ExamsPage'
 import FixedRoutinePage from './pages/student/FixedRoutinePage'
 import NoticesPage from './pages/NoticesPage'
@@ -19,12 +19,10 @@ import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
 import TeachersPage from './pages/student/TeachersPage'
 import MessagesPage from './pages/MessagesPage'
-import CRFixedRoutinePage from './pages/cr/CRFixedRoutinePage'
 import CreateClassPage from './pages/cr/CreateClassPage'
 import ExtraClassPage from './pages/cr/ExtraClassPage'
-import MyRequestsPage from './pages/cr/MyRequestsPage'
 import CRPostNoticesPage from './pages/cr/CRNoticesPage'
-import CRMaterialsPage from './pages/cr/CRMaterialsPage'
+import CRDriveLinkPage from './pages/cr/CRDriveLinkPage'
 import CRPollsPage from './pages/cr/CRPollsPage'
 import DailySchedulePage from './pages/teacher/DailySchedulePage'
 import ApprovalRequestsPage from './pages/teacher/ApprovalRequestsPage'
@@ -38,10 +36,11 @@ import AdminTeachersPage from './pages/admin/AdminTeachersPage'
 import CoursesPage from './pages/admin/CoursesPage'
 import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
 import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
-import AdminMaterialsPage from './pages/admin/AdminMaterialsPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { useAuth } from './context/auth'
 import { PORTAL_ADMIN, PORTAL_STUDENT, PORTAL_TEACHER, homeFor, paths } from './lib/paths'
+
+const STUDENT_ROLES = ['student', 'cr']
 
 function RootRedirect() {
   const { isAuthenticated, role } = useAuth()
@@ -75,14 +74,14 @@ export default function Router() {
           <Route path={paths.personPattern()} element={<PersonPage />} />
         </Route>
       </Route>
-      <Route element={<RequireRole roles="student" />}>
+      <Route element={<RequireRole roles={STUDENT_ROLES} />}>
         <Route element={<AppLayout />}>
           <Route
             path={paths.student.home()}
-            element={<Navigate to={paths.student.upcomingRoutine()} replace />}
+            element={<Navigate to={paths.student.today()} replace />}
           />
+          <Route path={paths.student.today()} element={<TodayPage />} />
           <Route path={paths.student.upcomingRoutine()} element={<UpcomingRoutinePage />} />
-          <Route path={paths.student.dropCourseRoutine()} element={<DropCourseRoutinePage />} />
           <Route path={paths.student.exams()} element={<ExamsPage />} />
           <Route path={paths.student.fixedRoutine()} element={<FixedRoutinePage />} />
           <Route path={paths.student.notices()} element={<NoticesPage />} />
@@ -97,18 +96,13 @@ export default function Router() {
         <Route element={<AppLayout />}>
           <Route
             path={paths.cr.home()}
-            element={<Navigate to={paths.cr.fixedRoutine()} replace />}
+            element={<Navigate to={paths.student.today()} replace />}
           />
-          <Route path={paths.cr.fixedRoutine()} element={<CRFixedRoutinePage />} />
           <Route path={paths.cr.createClass()} element={<CreateClassPage />} />
           <Route path={paths.cr.extraClass()} element={<ExtraClassPage />} />
-          <Route path={paths.cr.requests()} element={<MyRequestsPage />} />
-          <Route path={paths.cr.messages()} element={<MessagesPage />} />
-          <Route path={paths.cr.notices()} element={<NoticesPage />} />
           <Route path={paths.cr.postNotices()} element={<CRPostNoticesPage />} />
-          <Route path={paths.cr.materials()} element={<CRMaterialsPage />} />
+          <Route path={paths.cr.driveLink()} element={<CRDriveLinkPage />} />
           <Route path={paths.cr.polls()} element={<CRPollsPage />} />
-          <Route path={paths.cr.teachers()} element={<TeachersPage />} />
         </Route>
       </Route>
       <Route element={<RequireRole roles="teacher" />}>
@@ -134,7 +128,6 @@ export default function Router() {
           <Route path={paths.admin.courses()} element={<CoursesPage />} />
           <Route path={paths.admin.routines()} element={<AdminRoutinesPage />} />
           <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />
-          <Route path={paths.admin.materials()} element={<AdminMaterialsPage />} />
           <Route path={paths.admin.messages()} element={<MessagesPage />} />
         </Route>
       </Route>

@@ -165,7 +165,7 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps.Students = emptyStudentStore{}
 	deps.Alarms = silentAlerts{}
 	deps.Notices = emptyNoticeStore{}
-	deps.Library = emptyMaterialStore{}
+	deps.Drives = emptyDriveLinkStore{}
 	deps.Contacts = emptyDirectoryStore{}
 	deps.Files = upload.NewSaver(t.TempDir(), 1)
 	deps.Photos = upload.NewPhotos(t.TempDir())

@@ -91,7 +91,7 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 		Students: userStore,
 		Alarms:   alerts,
 		Notices:  userStore,
-		Library:  userStore,
+		Drives:   userStore,
 		Contacts: userStore,
 		Files:    upload.NewSaver(t.TempDir(), 1),
 		Chats:    userStore,

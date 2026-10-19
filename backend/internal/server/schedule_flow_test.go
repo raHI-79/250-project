@@ -133,7 +133,8 @@ func TestScheduleFlow(t *testing.T) {
 		t.Fatalf("upcoming classes = %v, want the class of tomorrow", classes)
 	}
 	classID := int64(classes[0]["id"].(float64))
-	routine := call(t, router, http.MethodGet, "/api/students/upcoming-routine", "", studentToken)
+	routinePath := "/api/students/upcoming-routine?date=" + date
+	routine := call(t, router, http.MethodGet, routinePath, "", studentToken)
 	if routine.Code != http.StatusOK {
 		t.Fatalf("upcoming routine status = %d, want 200 (body = %q)", routine.Code, routine.Body.String())
 	}
@@ -141,7 +142,7 @@ func TestScheduleFlow(t *testing.T) {
 		t.Errorf("date = %q, want tomorrow %q", got, date)
 	}
 	groups := groupsOf(t, routine)
-	if len(groups) != 1 || groups[0]["section"] != "A" {
+	if len(groups) != 1 || groups[0]["key"] != "A" || groups[0]["section_label"] != "Section A" {
 		t.Fatalf("groups = %v, want one for section A", groups)
 	}
 	planned := groupItems(t, groups[0])
@@ -151,12 +152,27 @@ func TestScheduleFlow(t *testing.T) {
 	if planned[0]["teacher_name"] != "Schedule Teacher" || planned[0]["room"] != "1101" {
 		t.Errorf("item = %v, want the teacher and room", planned[0])
 	}
+	crDay := call(t, router, http.MethodGet, "/api/cr/day?date="+date, "", crToken)
+	if crDay.Code != http.StatusOK {
+		t.Fatalf("cr day status = %d, want 200 (body = %q)", crDay.Code, crDay.Body.String())
+	}
+	onThatDay := listItems(t, crDay)
+	if len(onThatDay) != 1 || onThatDay[0]["source"] != "event" || onThatDay[0]["status"] != store.EventStatusApproved {
+		t.Fatalf("the day panel shows %v, want the approved event", onThatDay)
+	}
 	cancelled := call(t, router, http.MethodPost,
 		"/api/teacher/classes/"+strconv.FormatInt(classID, 10)+"/cancel", "", teacherToken)
 	if cancelled.Code != http.StatusOK {
 		t.Fatalf("cancel status = %d, want 200 (body = %q)", cancelled.Code, cancelled.Body.String())
 	}
-	afterCancel := call(t, router, http.MethodGet, "/api/students/upcoming-routine", "", studentToken)
+	today := call(t, router, http.MethodGet, "/api/students/today", "", studentToken)
+	if today.Code != http.StatusOK {
+		t.Fatalf("today status = %d, want 200 (body = %q)", today.Code, today.Body.String())
+	}
+	if got := field(t, today, "date"); got != now.Format(validate.DateLayout) {
+		t.Errorf("today date = %q, want %q", got, now.Format(validate.DateLayout))
+	}
+	afterCancel := call(t, router, http.MethodGet, routinePath, "", studentToken)
 	cancelledGroups := groupsOf(t, afterCancel)
 	if len(cancelledGroups) != 1 {
 		t.Fatalf("groups after the cancellation = %v, want one", cancelledGroups)
