@@ -202,38 +202,38 @@ func TestBoardFlow(t *testing.T) {
 	if again := call(t, router, http.MethodDelete, deletePath, "", adminToken); again.Code != http.StatusNotFound {
 		t.Errorf("deleting the notice twice returned %d, want 404", again.Code)
 	}
-	adminMaterial := `{"batch":"ALL","title":"Handbook","link":"` + boardLink + `"}`
-	if added := call(t, router, http.MethodPost, "/api/admin/materials", adminMaterial, adminToken); added.Code != http.StatusCreated {
-		t.Fatalf("admin material status = %d, want 201 (body = %q)", added.Code, added.Body.String())
+	if saved := call(t, router, http.MethodPut, "/api/cr/drive-link",
+		`{"link":"`+boardLink+`"}`, crToken); saved.Code != http.StatusOK {
+		t.Fatalf("save drive link status = %d, want 200 (body = %q)", saved.Code, saved.Body.String())
 	}
-	mineMaterial := call(t, router, http.MethodPost, "/api/cr/materials",
-		`{"title":"Own slides","link":"`+boardLink+`","visibility":"mine"}`, crToken)
-	if mineMaterial.Code != http.StatusCreated {
-		t.Fatalf("own batch material status = %d, want 201 (body = %q)", mineMaterial.Code, mineMaterial.Body.String())
+	current := call(t, router, http.MethodGet, "/api/cr/drive-link", "", crToken)
+	if current.Code != http.StatusOK {
+		t.Fatalf("drive link status = %d, want 200 (body = %q)", current.Code, current.Body.String())
 	}
-	if got := firstItem(t, call(t, router, http.MethodGet, "/api/cr/materials", "", crToken))["batch"]; got != "CSE-23" {
-		t.Errorf("the own batch material is stored for %v, want CSE-23", got)
+	if got := field(t, current, "title"); got != "CSE-23" {
+		t.Errorf("title = %q, want the batch code", got)
 	}
-	batchMaterial := call(t, router, http.MethodPost, "/api/cr/materials",
-		`{"title":"Shared notes","link":"`+boardLink+`","visibility":"batch","batch":"CSE-22"}`, crToken)
-	if batchMaterial.Code != http.StatusCreated {
-		t.Fatalf("other batch material status = %d, want 201 (body = %q)", batchMaterial.Code, batchMaterial.Body.String())
-	}
-	if refused := call(t, router, http.MethodPost, "/api/cr/materials",
-		`{"title":"Broken","link":"drive.google.com","visibility":"all"}`, crToken); refused.Code != http.StatusBadRequest {
+	if refused := call(t, router, http.MethodPut, "/api/cr/drive-link",
+		`{"link":"drive.google.com"}`, crToken); refused.Code != http.StatusBadRequest {
 		t.Fatalf("a link without a scheme returned %d, want 400 (body = %q)", refused.Code, refused.Body.String())
 	}
-	studentMaterials := titlesOf(t, call(t, router, http.MethodGet, "/api/students/materials", "", studentToken))
-	if !hasTitle(studentMaterials, "Handbook") || !hasTitle(studentMaterials, "Own slides") || hasTitle(studentMaterials, "Shared notes") {
-		t.Errorf("the student sees %v, want the own batch materials and the ALL ones", studentMaterials)
+	if blocked := call(t, router, http.MethodPut, "/api/cr/drive-link",
+		`{"link":"`+boardLink+`"}`, studentToken); blocked.Code != http.StatusForbidden {
+		t.Fatalf("a student writing a drive link returned %d, want 403 (body = %q)", blocked.Code, blocked.Body.String())
 	}
-	materialID := int64(number(t, batchMaterial, "id"))
-	materialPath := "/api/cr/materials/" + strconv.FormatInt(materialID, 10)
-	if removed := call(t, router, http.MethodDelete, materialPath, "", crToken); removed.Code != http.StatusNoContent {
-		t.Fatalf("delete material status = %d, want 204 (body = %q)", removed.Code, removed.Body.String())
+	cards := listItems(t, call(t, router, http.MethodGet, "/api/students/drive-links", "", studentToken))
+	if len(cards) != 1 || cards[0]["batch"] != "CSE-23" || cards[0]["is_mine"] != true {
+		t.Fatalf("the drive links are %v, want the own batch card", cards)
 	}
-	if again := call(t, router, http.MethodDelete, materialPath, "", crToken); again.Code != http.StatusNotFound {
-		t.Errorf("deleting the material twice returned %d, want 404", again.Code)
+	outsiderCards := listItems(t, call(t, router, http.MethodGet, "/api/students/drive-links", "", outsiderToken))
+	if len(outsiderCards) != 1 || outsiderCards[0]["is_mine"] != false {
+		t.Errorf("the CSE-22 student sees %v, want the CSE-23 card that is not theirs", outsiderCards)
+	}
+	if removed := call(t, router, http.MethodDelete, "/api/cr/drive-link", "", crToken); removed.Code != http.StatusNoContent {
+		t.Fatalf("delete drive link status = %d, want 204 (body = %q)", removed.Code, removed.Body.String())
+	}
+	if again := call(t, router, http.MethodDelete, "/api/cr/drive-link", "", crToken); again.Code != http.StatusNotFound {
+		t.Errorf("deleting the drive link twice returned %d, want 404", again.Code)
 	}
 	people := listItems(t, call(t, router, http.MethodGet, "/api/students/directory", "", studentToken))
 	if len(people) != 3 {

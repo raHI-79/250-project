@@ -25,6 +25,18 @@ const (
 	savedName     = "0123456789abcdef0123456789abcdef.pdf"
 )
 
+func jsonRequest(t *testing.T, method, path, body string, userID int64, role string) *http.Request {
+	t.Helper()
+	var req *http.Request
+	if body == "" {
+		req = httptest.NewRequest(method, path, nil)
+	} else {
+		req = httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req.WithContext(middleware.WithUser(req.Context(), middleware.User{ID: userID, Role: role}))
+}
+
 type fakeNoticeStore struct {
 	profile      store.StudentProfile
 	profileErr   error

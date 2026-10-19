@@ -51,30 +51,26 @@ func (emptyNoticeStore) DeleteAdminNotice(ctx context.Context, noticeID int64) (
 	return "", store.ErrNotFound
 }
 
-type emptyMaterialStore struct{}
+type emptyDriveLinkStore struct{}
 
-func (emptyMaterialStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {
+func (emptyDriveLinkStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {
 	return store.StudentProfile{UserID: userID, Batch: "CSE-23", Section: "A", IsCR: userID == accessCRID}, nil
 }
 
-func (emptyMaterialStore) CreateMaterial(ctx context.Context, material store.NewMaterial) (store.MaterialRow, error) {
-	return store.MaterialRow{}, store.ErrNotFound
+func (emptyDriveLinkStore) GetBatchDriveLink(ctx context.Context, batch string) (store.DriveLinkRow, error) {
+	return store.DriveLinkRow{}, store.ErrNotFound
 }
 
-func (emptyMaterialStore) ListMaterials(ctx context.Context, batch string) ([]store.MaterialRow, error) {
-	return nil, nil
+func (emptyDriveLinkStore) SaveBatchDriveLink(ctx context.Context, link store.NewDriveLink) (store.DriveLinkRow, error) {
+	return store.DriveLinkRow{}, store.ErrNotFound
 }
 
-func (emptyMaterialStore) ListCreatorMaterials(ctx context.Context, createdBy int64) ([]store.MaterialRow, error) {
-	return nil, nil
-}
-
-func (emptyMaterialStore) ListStudentMaterials(ctx context.Context, batch string) ([]store.MaterialRow, error) {
-	return nil, nil
-}
-
-func (emptyMaterialStore) DeleteMaterial(ctx context.Context, materialID, createdBy int64) error {
+func (emptyDriveLinkStore) DeleteBatchDriveLink(ctx context.Context, batch string) error {
 	return store.ErrNotFound
+}
+
+func (emptyDriveLinkStore) ListBatchDriveLinks(ctx context.Context) ([]store.DriveLinkRow, error) {
+	return nil, nil
 }
 
 type emptyDirectoryStore struct{}
@@ -92,8 +88,6 @@ func boardAdminRoutes() []scheduleRoute {
 		{method: http.MethodPost, path: "/api/admin/notices", wantForOwn: http.StatusBadRequest},
 		{method: http.MethodGet, path: "/api/admin/notices", wantForOwn: http.StatusOK},
 		{method: http.MethodDelete, path: "/api/admin/notices/1", wantForOwn: http.StatusNotFound},
-		{method: http.MethodPost, path: "/api/admin/materials", body: `{`, wantForOwn: http.StatusBadRequest},
-		{method: http.MethodGet, path: "/api/admin/materials", wantForOwn: http.StatusOK},
 	}
 }
 
@@ -101,16 +95,16 @@ func boardCRRoutes() []scheduleRoute {
 	return []scheduleRoute{
 		{method: http.MethodPost, path: "/api/cr/notices", wantForOwn: http.StatusBadRequest},
 		{method: http.MethodGet, path: "/api/cr/notices", wantForOwn: http.StatusOK},
-		{method: http.MethodPost, path: "/api/cr/materials", body: `{`, wantForOwn: http.StatusBadRequest},
-		{method: http.MethodGet, path: "/api/cr/materials", wantForOwn: http.StatusOK},
-		{method: http.MethodDelete, path: "/api/cr/materials/1", wantForOwn: http.StatusNotFound},
+		{method: http.MethodGet, path: "/api/cr/drive-link", wantForOwn: http.StatusOK},
+		{method: http.MethodPut, path: "/api/cr/drive-link", body: `{`, wantForOwn: http.StatusBadRequest},
+		{method: http.MethodDelete, path: "/api/cr/drive-link", wantForOwn: http.StatusNotFound},
 	}
 }
 
 func boardStudentRoutes() []scheduleRoute {
 	return []scheduleRoute{
 		{method: http.MethodGet, path: "/api/students/notices", wantForOwn: http.StatusOK},
-		{method: http.MethodGet, path: "/api/students/materials", wantForOwn: http.StatusOK},
+		{method: http.MethodGet, path: "/api/students/drive-links", wantForOwn: http.StatusOK},
 		{method: http.MethodGet, path: "/api/students/directory", wantForOwn: http.StatusOK},
 	}
 }

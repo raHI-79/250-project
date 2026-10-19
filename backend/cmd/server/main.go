@@ -89,7 +89,7 @@ func run() error {
 			Students: userStore,
 			Alarms:   alerts,
 			Notices:  userStore,
-			Library:  userStore,
+			Drives:   userStore,
 			Contacts: userStore,
 			Chats:    userStore,
 			Shared:   upload.NewAttachments(cfg.UploadDir, cfg.MaxUploadMB),

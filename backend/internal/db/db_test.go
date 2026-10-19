@@ -19,9 +19,9 @@ const (
 )
 
 var expectedTables = []string{
+	"batch_drive_links",
 	"class_events",
 	"courses",
-	"materials",
 	"messages",
 	"notices",
 	"notifications",
