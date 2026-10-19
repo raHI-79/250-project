@@ -1,5 +1,7 @@
+import { Fragment } from 'react'
 import { ClipboardList } from 'lucide-react'
 import { Alert, DataTable, EmptyState, PageHeader, SkeletonTable } from '../../components/ui'
+import NoteLine from '../../components/NoteLine'
 import { useResource } from '../../lib/hooks'
 import { formatDate, formatTimeRange } from '../../lib/time'
 
@@ -36,25 +38,34 @@ export default function ExamsPage() {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
-                <td className="px-4 py-3 whitespace-nowrap text-brand-700">
-                  {formatDate(item.event_date)}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap tabular-nums text-brand-600">
-                  {formatTimeRange(item.start_time, item.end_time)}
-                </td>
-                <td className="px-4 py-3 text-brand-900">
-                  <span className="font-medium">{item.course_code}</span>
-                  {item.course_title && (
-                    <span className="text-brand-500"> {item.course_title}</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-brand-700">{item.batch}</td>
-                <td className="px-4 py-3 text-brand-700">
-                  {item.section === 'ALL' ? 'Both' : item.section}
-                </td>
-                <td className="px-4 py-3 text-brand-700">{item.room}</td>
-              </tr>
+              <Fragment key={item.id}>
+                <tr className="border-b border-brand-50 last:border-b-0">
+                  <td className="px-4 py-3 whitespace-nowrap text-brand-700">
+                    {formatDate(item.event_date)}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap tabular-nums text-brand-600">
+                    {formatTimeRange(item.start_time, item.end_time)}
+                  </td>
+                  <td className="px-4 py-3 text-brand-900">
+                    <span className="font-medium">{item.course_code}</span>
+                    {item.course_title && (
+                      <span className="text-brand-500"> {item.course_title}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-brand-700">{item.batch}</td>
+                  <td className="px-4 py-3 text-brand-700">
+                    {item.section === 'ALL' ? 'Both' : item.section}
+                  </td>
+                  <td className="px-4 py-3 text-brand-700">{item.room}</td>
+                </tr>
+                {item.note && (
+                  <tr className="border-b border-brand-50 last:border-b-0">
+                    <td colSpan={HEADINGS.length} className="px-4 pb-3">
+                      <NoteLine text={item.note} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </DataTable>

@@ -9,6 +9,7 @@ import {
   SkeletonCard,
   StatusBadge,
 } from '../../components/ui'
+import NoteLine from '../../components/NoteLine'
 import { useResource } from '../../lib/hooks'
 import { formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
@@ -35,6 +36,7 @@ function PlanLine({ item }) {
         </span>
       )}
       {cancelled && <StatusBadge status="cancelled" />}
+      <NoteLine text={item.note} className="w-full" />
     </li>
   )
 }

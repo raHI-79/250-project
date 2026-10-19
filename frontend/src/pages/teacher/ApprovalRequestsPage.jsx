@@ -11,6 +11,7 @@ import {
   useConfirm,
   useToast,
 } from '../../components/ui'
+import NoteLine from '../../components/NoteLine'
 import api from '../../lib/api'
 import { useResource } from '../../lib/hooks'
 import { formatDate, formatDateTime, formatTimeRange } from '../../lib/time'
@@ -101,6 +102,7 @@ export default function ApprovalRequestsPage() {
                   {item.requested_by} ({item.requested_by_reg_no})
                 </p>
               </div>
+              <NoteLine text={item.note} className="mt-3" />
               <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <Button loading={busy === item.id} onClick={() => decide(item, 'approve')}>
                   Approve

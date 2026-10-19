@@ -10,6 +10,7 @@ import {
   SkeletonCard,
   StatusBadge,
 } from '../../components/ui'
+import NoteLine from '../../components/NoteLine'
 import { useResource } from '../../lib/hooks'
 import { formatTimeRange, shiftDate, today } from '../../lib/time'
 import cx from '../../lib/cx'
@@ -92,6 +93,7 @@ export default function DailySchedulePage() {
                   label={KIND_LABELS[item.kind] || item.kind}
                 />
                 {item.cancelled && <StatusBadge status="cancelled" />}
+                <NoteLine text={item.note} className="w-full" />
               </li>
             ))}
           </ul>
