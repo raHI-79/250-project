@@ -26,8 +26,8 @@ export const paths = {
   adminForgotPassword: () => build('portal-admin', 'forgot-password'),
   student: {
     home: () => build('student'),
+    today: () => build('student', 'today'),
     upcomingRoutine: () => build('student', 'upcoming-routine'),
-    dropCourseRoutine: () => build('student', 'drop-course-routine'),
     exams: () => build('student', 'exams'),
     fixedRoutine: () => build('student', 'fixed-routine'),
     notices: () => build('student', 'notices'),
@@ -39,16 +39,11 @@ export const paths = {
   },
   cr: {
     home: () => build('cr'),
-    fixedRoutine: () => build('cr', 'fixed-routine'),
     createClass: () => build('cr', 'create-class'),
     extraClass: () => build('cr', 'extra-class'),
-    requests: () => build('cr', 'requests'),
-    messages: () => build('cr', 'messages'),
-    notices: () => build('cr', 'notices'),
     postNotices: () => build('cr', 'post-notices'),
-    materials: () => build('cr', 'materials'),
+    driveLink: () => build('cr', 'drive-link'),
     polls: () => build('cr', 'polls'),
-    teachers: () => build('cr', 'teachers'),
   },
   teacher: {
     home: () => build('teacher'),
@@ -68,7 +63,6 @@ export const paths = {
     courses: () => build('portal-admin', 'courses'),
     routines: () => build('portal-admin', 'routines'),
     notices: () => build('portal-admin', 'notices'),
-    materials: () => build('portal-admin', 'materials'),
     messages: () => build('portal-admin', 'messages'),
   },
 }
@@ -107,8 +101,7 @@ export const forgotPasswordForPortal = (portal) => {
 export const homeFor = (role) => {
   if (role === 'admin') return paths.admin.home()
   if (role === 'teacher') return paths.teacher.home()
-  if (role === 'cr') return paths.cr.home()
-  if (role === 'student') return paths.student.home()
+  if (role === 'cr' || role === 'student') return paths.student.today()
   return paths.studentLogin()
 }
 
