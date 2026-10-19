@@ -22,21 +22,6 @@ type PlanItem struct {
 	Note        string
 }
 
-type DropCourseItem struct {
-	Source      string
-	Batch       string
-	Section     string
-	CourseCode  string
-	CourseTitle string
-	Kind        string
-	DayOfWeek   int
-	EventDate   string
-	StartTime   string
-	EndTime     string
-	Room        string
-	TeacherName string
-}
-
 type ExamRow struct {
 	ID          int64
 	EventDate   string
@@ -77,22 +62,6 @@ JOIN teachers t ON t.id = e.teacher_id
 WHERE e.event_date = $2::date AND e.status IN ('approved', 'cancelled')
   AND (e.batch = $1 OR (e.batch <> $1 AND c.code = ANY($3::text[])))
 ORDER BY 1, 2, 3`
-	listDropCourseSQL = `SELECT 'fixed' AS source, r.batch, r.section, c.code, c.title, r.type,
-r.day_of_week, '' AS event_date, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, t.name
-FROM routines r
-JOIN courses c ON c.id = r.course_id
-JOIN teachers t ON t.id = r.teacher_id
-WHERE c.code = ANY($1::text[]) AND r.batch <> $2
-UNION ALL
-SELECT 'dated' AS source, e.batch, e.section, c.code, c.title, e.event_type,
-EXTRACT(DOW FROM e.event_date)::int, to_char(e.event_date, 'YYYY-MM-DD'),
-to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'), e.room, t.name
-FROM class_events e
-JOIN courses c ON c.id = e.course_id
-JOIN teachers t ON t.id = e.teacher_id
-WHERE c.code = ANY($1::text[]) AND e.batch <> $2 AND e.status = 'approved'
-  AND e.event_type IN ('class', 'exam') AND e.event_date >= $3::date
-ORDER BY 4, 2, 7, 9`
 	listExamsSQL = `SELECT e.id, to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'),
 to_char(e.end_time, 'HH24:MI'), c.code, c.title, e.batch, e.section, e.room,
 CASE WHEN e.status = 'approved' AND e.note_audience IN ('students', 'both') THEN COALESCE(e.note, '') ELSE '' END
@@ -142,40 +111,6 @@ func (s *Store) ListDayPlan(ctx context.Context, batch, date string, dropCourseC
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("store: could not read the plan: %w", err)
-	}
-	return items, nil
-}
-
-func (s *Store) ListDropCourseSchedule(ctx context.Context, courseCodes []string, ownBatch string, now time.Time) ([]DropCourseItem, error) {
-	rows, err := s.pool.Query(ctx, listDropCourseSQL, courseCodes, ownBatch, now.Format(dateLayout))
-	if err != nil {
-		return nil, fmt.Errorf("store: could not list the schedule of the drop courses: %w", err)
-	}
-	defer rows.Close()
-	items := make([]DropCourseItem, 0)
-	for rows.Next() {
-		var item DropCourseItem
-		err := rows.Scan(
-			&item.Source,
-			&item.Batch,
-			&item.Section,
-			&item.CourseCode,
-			&item.CourseTitle,
-			&item.Kind,
-			&item.DayOfWeek,
-			&item.EventDate,
-			&item.StartTime,
-			&item.EndTime,
-			&item.Room,
-			&item.TeacherName,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("store: could not scan a drop course item: %w", err)
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: could not read the drop course schedule: %w", err)
 	}
 	return items, nil
 }

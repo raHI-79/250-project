@@ -211,8 +211,8 @@ func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
 }
 
 func registerStudentRoutes(group RouteGroup, student *handler.Student) {
+	group.Handle("GET /api/students/today", student.Today())
 	group.Handle("GET /api/students/upcoming-routine", student.UpcomingRoutine())
-	group.Handle("GET /api/students/drop-course-routine", student.DropCourseRoutine())
 	group.Handle("GET /api/students/exams", student.Exams())
 	group.Handle("GET /api/students/routine", student.Routine())
 }
