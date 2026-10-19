@@ -378,37 +378,73 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/students/drop-course-routine` | student, CR | The drop course's classes and exams in the other batches |
 | `GET` | `/api/students/exams` | student, CR | Approved exams of the own batch and section from today onward |
 | `GET` | `/api/students/routine` | student, CR | Fixed routine browser with `batch`, `section`, `day` and `course` filters |
-| `POST` | `/api/admin/notices` | admin | `multipart/form-data` with `title`, `description`, optional `batch` and optional PDF `file`; an empty `batch` means every batch |
+| `POST` | `/api/admin/notices` | admin | `multipart/form-data` with `title`, optional `description`, optional `batch`, optional `link` and optional `file`; an empty `batch` means every batch |
 | `GET` | `/api/admin/notices` | admin | Every administration notice, newest first |
-| `DELETE` | `/api/admin/notices/{id}` | admin | Deletes one administration notice and its PDF; `204` on success, `404` if it does not exist |
+| `DELETE` | `/api/admin/notices/{id}` | admin | Deletes one administration notice and its attachment; `204` on success, `404` if it does not exist |
 | `POST` | `/api/admin/materials` | admin | `{batch, title, link}`; `batch` is a code or `ALL`, `link` must start with `http://` or `https://` |
 | `GET` | `/api/admin/materials` | admin | Materials, newest first, with the optional `batch` filter |
-| `POST` | `/api/cr/notices` | CR | `multipart/form-data` with `title`, `description`, `target` (`own` or another batch code) and optional PDF `file` |
+| `POST` | `/api/cr/notices` | CR | `multipart/form-data` with `title`, optional `description`, `target` (`own` or another batch code), optional `link` and optional `file` |
 | `GET` | `/api/cr/notices` | CR | The notices this CR posted, newest first |
 | `POST` | `/api/cr/materials` | CR | `{title, link, visibility, batch}`; `visibility` is `mine`, `batch` (needs another `batch`) or `all` |
 | `GET` | `/api/cr/materials` | CR | The materials this CR added, newest first |
 | `DELETE` | `/api/cr/materials/{id}` | CR | Removes one of this CR's own materials; `204` on success, `404` otherwise |
-| `GET` | `/api/students/notices/cr` | student, CR | CR notices with `scope=my` (own batch, the default) or `scope=other` (every other batch) |
-| `GET` | `/api/students/notices/admin` | student, CR | Administration notices for every batch plus the ones aimed at the own batch |
+| `POST` | `/api/teacher/notices` | teacher | `multipart/form-data` with `title`, optional `description`, `batch`, optional `section`, optional `link` and optional `file` |
+| `GET` | `/api/teacher/notices` | teacher | The notices this teacher posted, newest first |
+| `DELETE` | `/api/teacher/notices/{id}` | teacher | Deletes one of this teacher's own notices; `204` on success, `404` otherwise |
+| `GET` | `/api/students/notices` | student, CR | One list for every source, filtered with `source` (`all`, `admin`, `teacher`, `cr`) and `scope` (`my`, `other`) |
 | `GET` | `/api/students/materials` | student, CR | Materials of the own batch and the ones marked `ALL`, newest first |
 | `GET` | `/api/students/directory` | student, CR | Active students with the `batch`, `blood_group` and `search` filters; at most 200 rows |
 | `GET` | `/api/teachers-info` | student, CR, teacher | Active teachers (`name`, `phone`, `email`) with the optional `search` filter |
-| `POST` | `/api/cr/messages` | CR | `multipart/form-data` with `content`, optional PDF `file` and `target` (`own_batch`, `batch` + another `batch`, or `teacher` + `teacher_user_id`) |
-| `GET` | `/api/cr/messages/inbox` | CR | Messages teachers sent to this CR, newest first |
-| `GET` | `/api/cr/messages/sent` | CR | Messages this CR sent, newest first |
-| `POST` | `/api/teacher/messages` | teacher | `multipart/form-data` with `content`, optional PDF `file`, and `target` (`cr` or `student` + `target_user_id`, or `batch` + `batch` and optional `section`); `reply_to_id` answers a CR instead |
-| `GET` | `/api/teacher/messages/inbox` | teacher | Messages CRs sent to this teacher, with the sender's batch and section |
-| `GET` | `/api/teacher/messages/sent` | teacher | Messages this teacher sent, newest first |
-| `GET` | `/api/teacher/lookups/crs` | teacher | Active CRs (`user_id`, `full_name`, `batch`, `section`) with the optional `batch` filter |
-| `GET` | `/api/teacher/lookups/students` | teacher | Up to 20 active students matched by name or registration number with `search` |
-| `GET` | `/api/students/messages` | student, CR | Read-only inbox: direct, batch and section messages from teachers and CRs |
+| `GET` | `/api/messages/contacts` | any signed-in role | Up to 20 active people matched by `search`, narrowed with `role`; carries `photo_url` |
+| `GET` | `/api/messages/conversations` | any signed-in role | Everything visible to the caller, newest activity first, with `title`, `can_post`, a preview and `unread_count` |
+| `POST` | `/api/messages/direct` | any signed-in role | `{user_id}` opens or reuses the one-to-one conversation with that person |
+| `POST` | `/api/messages/groups` | any signed-in role | `{scope, batch?, section?}` opens or reuses a group the caller's role may start |
+| `GET` | `/api/messages/conversations/{id}/messages` | any signed-in role | Newest first with `before` and `limit`; marks the conversation read |
+| `POST` | `/api/messages/conversations/{id}/messages` | any signed-in role | `multipart/form-data` with `body`, `link` and `file`; at least one is required |
+| `GET` | `/api/messages/unread-count` | any signed-in role | How many unread messages the caller has across every conversation |
 | `POST` | `/api/cr/polls` | CR | `{question, options, scope}`; 2 to 10 unique options, `scope` is `section` or `batch` |
 | `POST` | `/api/cr/polls/{id}/close` | CR | Closes one of this CR's own polls; `404` otherwise, `409` if it is already closed |
 | `GET` | `/api/cr/polls` | CR | The polls this CR made, with the counted results |
 | `GET` | `/api/students/polls` | student, CR | Polls for the own batch and section with `options`, `total_votes` and `my_option_id` |
 | `POST` | `/api/students/polls/{id}/vote` | student, CR | `{option_id}`; `409` when the poll is closed or the student already voted |
-| `GET` | `/uploads/{name}` | public | Serves one uploaded PDF inline; only the generated file names resolve, anything else is `404` |
+| `GET` | `/uploads/{name}` | public | Serves one older uploaded PDF inline; only the generated file names resolve, anything else is `404` |
+| `GET` | `/uploads/files/{name}` | public | Serves one attachment with its real type and `nosniff`; images and PDFs inline, everything else as a download |
 | `GET` | `/uploads/photos/{name}` | public | Serves one profile photo inline with `nosniff`; only the generated names resolve |
+
+### Attachments
+
+Every notice and every message takes **one optional `file`** field. The
+extension and the content have to agree, so renaming a file does not help, and
+only these types are accepted: `pdf`, `jpg`, `jpeg`, `png`, `webp`, `gif`,
+`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `csv`, `txt` and `zip`. Anything
+else answers `400` with `{"error":"This file type is not allowed."}`, and a file
+over **10 MB** answers `413`.
+
+The file is written under a random name in `UPLOAD_DIR/files` and the database
+keeps the original name, the type and the size, which the API returns as
+`file_url`, `file_name`, `file_mime` and `file_size`. `GET
+/uploads/files/{name}` serves it with the right `Content-Type` and `nosniff`:
+images and PDFs open inline, everything else downloads under its original name.
+
+A `link` may be sent beside or instead of a file. It has to be a full
+`http://` or `https://` address.
+
+### Messaging
+
+A conversation is either **direct** between exactly two people or a **group**
+with a scope. Groups are reused, so asking twice for the same `batch`, `section`,
+`all_students` or `all_teachers` group returns the one that already exists.
+
+| Scope | Who sees it |
+|---|---|
+| `batch` | The active students and CRs of that batch |
+| `section` | That batch and section |
+| `all_students` | Every active student and CR |
+| `all_teachers` | Every active teacher |
+
+The creator always sees their own group. A new message notifies the other person
+for a direct conversation, or the whole audience for a group, with the sender's
+name in the title.
 
 ### Access rules
 
@@ -424,8 +460,13 @@ Every route lives under `/api`. Errors always use the same shape:
 - `/api/admin/...` is admin only, `/api/cr/...` is CR only, `/api/teacher/...` is
   teacher only, `/api/students/...` is student and CR, and `/api/notifications`,
   `/api/teachers-info` and `/api/lookups/...` are open to the signed-in panels.
-- **Students never send messages.** There is no send endpoint for them, so
-  `POST /api/students/messages` answers `404`.
+- **Every role messages people.** A student, CR, teacher or admin can open a
+  direct conversation with any other active account. Groups are limited by role:
+  a teacher reaches a batch or one section, a CR reaches any batch or a section,
+  the admin also reaches every student or every teacher, and a student only
+  reaches their own batch. **Only the person who created a group posts in it**;
+  everybody else replies privately, which opens a direct conversation with the
+  creator.
 - Batch and section always come from the caller's own student row, never from the
   request, and a CR can only close or delete what they created themselves.
 
@@ -660,6 +701,15 @@ that date, sorted by room and then start time. Each item carries `room`,
 `class`, `exam` or `extra`), `status` (`fixed`, `pending` or `approved`) and
 `label`, which is **`yours`** for the fixed entries of the CR's own batch and
 **`unavailable`** for everything else.
+
+`POST /api/cr/class-requests` also takes an optional `note` of at most 500
+characters with a `note_audience` of `teacher`, `students` or `both`, which is
+required as soon as a note is present. The teacher reads it in
+`/api/teacher/requests`, `/api/teacher/schedule` and the upcoming classes when
+the audience is `teacher` or `both`. Students read it in
+`/api/students/upcoming-routine` and `/api/students/exams`, but only once the
+event is **approved** and only when the audience is `students` or `both`. The CR
+always sees their own note. A note never creates a message or a notification.
 
 ### Teacher decisions, cancellations and the auto-cancel rule
 

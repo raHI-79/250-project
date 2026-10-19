@@ -84,7 +84,7 @@ func newPollHandler(t *testing.T, polls PollStore, alerts BroadcastNotifier) *Po
 }
 
 func crPollProfile(isCR bool) store.StudentProfile {
-	return store.StudentProfile{UserID: noticeCRID, Batch: messageBatch, Section: "A", IsCR: isCR}
+	return store.StudentProfile{UserID: noticeCRID, Batch: noticeBatch, Section: "A", IsCR: isCR}
 }
 
 func TestPollCRCreate(t *testing.T) {
@@ -165,7 +165,7 @@ func TestPollCRCreate(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			polls := &fakePollStore{profile: crPollProfile(tc.isCR)}
-			alerts := &mailAlerts{}
+			alerts := &recordingAlerts{}
 			req := jsonRequest(t, http.MethodPost, "/api/cr/polls", tc.body, noticeCRID, auth.RoleCR)
 			rec := httptest.NewRecorder()
 			newPollHandler(t, polls, alerts).CRCreate()(rec, req)
@@ -182,15 +182,15 @@ func TestPollCRCreate(t *testing.T) {
 				return
 			}
 			saved := polls.created[0]
-			if saved.Batch != messageBatch || saved.Section != tc.wantSection || saved.CreatedBy != noticeCRID {
-				t.Errorf("stored poll = %+v, want %q/%q by %d", saved, messageBatch, tc.wantSection, noticeCRID)
+			if saved.Batch != noticeBatch || saved.Section != tc.wantSection || saved.CreatedBy != noticeCRID {
+				t.Errorf("stored poll = %+v, want %q/%q by %d", saved, noticeBatch, tc.wantSection, noticeCRID)
 			}
 			if len(saved.Options) != 2 {
 				t.Errorf("stored %d options, want 2", len(saved.Options))
 			}
-			if alerts.casts != 1 || alerts.batch != messageBatch || alerts.section != tc.wantAlert {
+			if alerts.calls != 1 || alerts.batch != noticeBatch || alerts.section != tc.wantAlert {
 				t.Errorf("broadcast = %d to %q/%q, want one to %q/%q",
-					alerts.casts, alerts.batch, alerts.section, messageBatch, tc.wantAlert)
+					alerts.calls, alerts.batch, alerts.section, noticeBatch, tc.wantAlert)
 			}
 		})
 	}
@@ -227,7 +227,7 @@ func TestPollCRClose(t *testing.T) {
 			req := jsonRequest(t, http.MethodPost, "/api/cr/polls/"+tc.id+"/close", "", noticeCRID, auth.RoleCR)
 			req.SetPathValue("id", tc.id)
 			rec := httptest.NewRecorder()
-			newPollHandler(t, polls, &mailAlerts{}).CRClose()(rec, req)
+			newPollHandler(t, polls, &recordingAlerts{}).CRClose()(rec, req)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, tc.wantStatus, rec.Body.String())
 			}
@@ -251,10 +251,10 @@ func TestPollCRClose(t *testing.T) {
 
 func TestPollLists(t *testing.T) {
 	rows := []store.PollRow{
-		{ID: 3, Question: "Which day?", Batch: messageBatch, Section: "ALL", Status: store.PollOpen,
+		{ID: 3, Question: "Which day?", Batch: noticeBatch, Section: "ALL", Status: store.PollOpen,
 			CreatedByName: "Board CR", CreatedAt: time.Now(), TotalVotes: 1, MyOptionID: 2,
 			Options: []store.PollOptionRow{{ID: 1, Text: "Sunday"}, {ID: 2, Text: "Monday", Votes: 1}}},
-		{ID: 2, Question: "Lab slot?", Batch: messageBatch, Section: "A", Status: store.PollClosed,
+		{ID: 2, Question: "Lab slot?", Batch: noticeBatch, Section: "A", Status: store.PollClosed,
 			CreatedByName: "Board CR", CreatedAt: time.Now(),
 			Options: []store.PollOptionRow{{ID: 3, Text: "Morning"}, {ID: 4, Text: "Evening"}}},
 	}
@@ -279,7 +279,7 @@ func TestPollLists(t *testing.T) {
 			path:        "/api/students/polls",
 			role:        auth.RoleStudent,
 			pick:        func(p *Poll) http.HandlerFunc { return p.StudentList() },
-			wantBatch:   messageBatch,
+			wantBatch:   noticeBatch,
 			wantSection: "A",
 		},
 	}
@@ -288,7 +288,7 @@ func TestPollLists(t *testing.T) {
 			polls := &fakePollStore{profile: crPollProfile(true), polls: rows}
 			req := jsonRequest(t, http.MethodGet, tc.path, "", noticeCRID, tc.role)
 			rec := httptest.NewRecorder()
-			tc.pick(newPollHandler(t, polls, &mailAlerts{}))(rec, req)
+			tc.pick(newPollHandler(t, polls, &recordingAlerts{}))(rec, req)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 			}
@@ -372,7 +372,7 @@ func TestPollStudentVote(t *testing.T) {
 			req := jsonRequest(t, http.MethodPost, "/api/students/polls/3/vote", tc.body, noticeCRID, auth.RoleStudent)
 			req.SetPathValue("id", "3")
 			rec := httptest.NewRecorder()
-			newPollHandler(t, polls, &mailAlerts{}).StudentVote()(rec, req)
+			newPollHandler(t, polls, &recordingAlerts{}).StudentVote()(rec, req)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, tc.wantStatus, rec.Body.String())
 			}
@@ -387,8 +387,8 @@ func TestPollStudentVote(t *testing.T) {
 			if len(polls.voted) != 1 || polls.voted[0] != 2 {
 				t.Errorf("voted for %v, want option 2", polls.voted)
 			}
-			if polls.askedBatch != messageBatch || polls.askedSection != "A" {
-				t.Errorf("voted as %q/%q, want %q/A", polls.askedBatch, polls.askedSection, messageBatch)
+			if polls.askedBatch != noticeBatch || polls.askedSection != "A" {
+				t.Errorf("voted as %q/%q, want %q/A", polls.askedBatch, polls.askedSection, noticeBatch)
 			}
 		})
 	}

@@ -16,32 +16,36 @@ import (
 const MessageInvalidEventStatus = "status must be one of pending, approved, rejected, cancelled, auto_cancelled."
 
 type createClassRequest struct {
-	EventType string `json:"event_type"`
-	CourseID  int64  `json:"course_id"`
-	TeacherID int64  `json:"teacher_id"`
-	EventDate string `json:"event_date"`
-	StartTime string `json:"start_time"`
-	EndTime   string `json:"end_time"`
-	Room      string `json:"room"`
+	EventType    string `json:"event_type"`
+	CourseID     int64  `json:"course_id"`
+	TeacherID    int64  `json:"teacher_id"`
+	EventDate    string `json:"event_date"`
+	StartTime    string `json:"start_time"`
+	EndTime      string `json:"end_time"`
+	Room         string `json:"room"`
+	Note         string `json:"note"`
+	NoteAudience string `json:"note_audience"`
 }
 
 type classRequestItem struct {
-	ID          int64  `json:"id"`
-	EventType   string `json:"event_type"`
-	Batch       string `json:"batch"`
-	Section     string `json:"section"`
-	CourseID    int64  `json:"course_id"`
-	CourseCode  string `json:"course_code"`
-	CourseTitle string `json:"course_title"`
-	TeacherID   int64  `json:"teacher_id"`
-	TeacherName string `json:"teacher_name"`
-	EventDate   string `json:"event_date"`
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	Room        string `json:"room"`
-	Status      string `json:"status"`
-	CreatedAt   string `json:"created_at"`
-	DecidedAt   string `json:"decided_at,omitempty"`
+	ID           int64  `json:"id"`
+	EventType    string `json:"event_type"`
+	Batch        string `json:"batch"`
+	Section      string `json:"section"`
+	CourseID     int64  `json:"course_id"`
+	CourseCode   string `json:"course_code"`
+	CourseTitle  string `json:"course_title"`
+	TeacherID    int64  `json:"teacher_id"`
+	TeacherName  string `json:"teacher_name"`
+	EventDate    string `json:"event_date"`
+	StartTime    string `json:"start_time"`
+	EndTime      string `json:"end_time"`
+	Note         string `json:"note,omitempty"`
+	NoteAudience string `json:"note_audience,omitempty"`
+	Room         string `json:"room"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"created_at"`
+	DecidedAt    string `json:"decided_at,omitempty"`
 }
 
 type classRequestsResponse struct {
@@ -134,6 +138,18 @@ func (request createClassRequest) toNewClassEvent(now time.Time, loc *time.Locat
 		return store.NewClassEvent{}, err
 	}
 	event.Room = room
+	note, err := validate.Note("Note", request.Note)
+	if err != nil {
+		return store.NewClassEvent{}, err
+	}
+	event.Note = note
+	if note != "" {
+		audience, err := validate.NoteAudience("Note audience", request.NoteAudience)
+		if err != nil {
+			return store.NewClassEvent{}, err
+		}
+		event.NoteAudience = audience
+	}
 	return event, nil
 }
 
@@ -176,21 +192,23 @@ func eventTypeWords(eventType string) string {
 
 func newClassRequestItem(event store.ClassEventRow) classRequestItem {
 	item := classRequestItem{
-		ID:          event.ID,
-		EventType:   event.EventType,
-		Batch:       event.Batch,
-		Section:     event.Section,
-		CourseID:    event.CourseID,
-		CourseCode:  event.CourseCode,
-		CourseTitle: event.CourseTitle,
-		TeacherID:   event.TeacherID,
-		TeacherName: event.TeacherName,
-		EventDate:   event.EventDate,
-		StartTime:   event.StartTime,
-		EndTime:     event.EndTime,
-		Room:        event.Room,
-		Status:      event.Status,
-		CreatedAt:   timestamp(event.CreatedAt),
+		ID:           event.ID,
+		EventType:    event.EventType,
+		Batch:        event.Batch,
+		Section:      event.Section,
+		CourseID:     event.CourseID,
+		CourseCode:   event.CourseCode,
+		CourseTitle:  event.CourseTitle,
+		TeacherID:    event.TeacherID,
+		TeacherName:  event.TeacherName,
+		EventDate:    event.EventDate,
+		StartTime:    event.StartTime,
+		EndTime:      event.EndTime,
+		Room:         event.Room,
+		Note:         event.Note,
+		NoteAudience: event.NoteAudience,
+		Status:       event.Status,
+		CreatedAt:    timestamp(event.CreatedAt),
 	}
 	if event.DecidedAt != nil {
 		item.DecidedAt = timestamp(*event.DecidedAt)

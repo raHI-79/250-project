@@ -30,6 +30,9 @@ var expectedTables = []string{
 	"polls",
 	"routine_cancellations",
 	"routines",
+	"conversation_members",
+	"conversation_reads",
+	"conversations",
 	"schema_migrations",
 	"student_drop_courses",
 	"students",
@@ -260,6 +263,16 @@ func TestForeignKeysAndChecksRejectBadRows(t *testing.T) {
 	ctx, pool := migratedTestDB(t)
 	studentUserID := insertUser(t, ctx, pool, "student", "2023331003")
 	insertStudent(t, ctx, pool, studentUserID, "2023331003")
+	teacherUserID := insertUser(t, ctx, pool, "teacher", "T-301")
+	teacherID := insertTeacher(t, ctx, pool, teacherUserID, "T-301")
+	courseID := insertCourse(t, ctx, pool, "CSE-301")
+	var directConversationID int64
+	err := pool.QueryRow(ctx,
+		"INSERT INTO conversations (kind, created_by) VALUES ('direct', $1) RETURNING id",
+		studentUserID).Scan(&directConversationID)
+	if err != nil {
+		t.Fatalf("could not insert a conversation: %v", err)
+	}
 	tests := []struct {
 		name     string
 		query    string
@@ -322,8 +335,53 @@ VALUES (999999, 'T-900', 'Odd Teacher', 'odd@sust.edu', '01900000004', 'C+')`,
 			wantCode: checkViolationCode,
 		},
 		{
-			name:     "message targeting a user without a user id",
-			query:    "INSERT INTO messages (sender_id, sender_role, sender_name, target_type, content) VALUES ($1, 'teacher', 'Test Teacher', 'user', 'Hi')",
+			name:     "message without a body, a link or a file",
+			query:    "INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, '')",
+			args:     []any{directConversationID, studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "message over the body limit",
+			query:    "INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, repeat('a', 4001))",
+			args:     []any{directConversationID, studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name: "message with a file but no name",
+			query: `INSERT INTO messages (conversation_id, sender_id, body, file_path)
+VALUES ($1, $2, 'Here', '/uploads/files/0123456789abcdef0123456789abcdef.pdf')`,
+			args:     []any{directConversationID, studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "group conversation without a scope",
+			query:    "INSERT INTO conversations (kind, created_by) VALUES ('group', $1)",
+			args:     []any{studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "section conversation without a section",
+			query:    "INSERT INTO conversations (kind, scope, batch, created_by) VALUES ('group', 'section', 'CSE-23', $1)",
+			args:     []any{studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "direct conversation with a scope",
+			query:    "INSERT INTO conversations (kind, scope, created_by) VALUES ('direct', 'all_students', $1)",
+			args:     []any{studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name: "class event note without an audience",
+			query: `INSERT INTO class_events
+(batch, section, course_id, teacher_id, event_date, start_time, end_time, room, event_type, created_by, note)
+VALUES ('CSE-23', 'A', $1, $2, CURRENT_DATE + 1, TIME '08:00', TIME '09:00', '1003', 'class', $3, 'Bring the lab sheet')`,
+			args:     []any{courseID, teacherID, studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "teacher notice without a batch",
+			query:    "INSERT INTO notices (source, title, created_by) VALUES ('teacher', 'Hello', $1)",
 			args:     []any{studentUserID},
 			wantCode: checkViolationCode,
 		},

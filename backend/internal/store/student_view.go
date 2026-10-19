@@ -19,6 +19,7 @@ type PlanItem struct {
 	Room        string
 	TeacherName string
 	Cancelled   bool
+	Note        string
 }
 
 type DropCourseItem struct {
@@ -46,6 +47,7 @@ type ExamRow struct {
 	Batch       string
 	Section     string
 	Room        string
+	Note        string
 }
 
 type RoutineFilter struct {
@@ -58,7 +60,8 @@ type RoutineFilter struct {
 const (
 	listDayPlanSQL = `SELECT r.batch, r.section, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'),
 c.code, c.title, r.type, r.room, t.name,
-EXISTS (SELECT 1 FROM routine_cancellations rc WHERE rc.routine_id = r.id AND rc.cancel_date = $2::date) AS cancelled
+EXISTS (SELECT 1 FROM routine_cancellations rc WHERE rc.routine_id = r.id AND rc.cancel_date = $2::date) AS cancelled,
+'' AS note
 FROM routines r
 JOIN courses c ON c.id = r.course_id
 JOIN teachers t ON t.id = r.teacher_id
@@ -66,7 +69,8 @@ WHERE r.day_of_week = EXTRACT(DOW FROM $2::date)::int
   AND (r.batch = $1 OR (r.batch <> $1 AND c.code = ANY($3::text[])))
 UNION ALL
 SELECT e.batch, e.section, to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-c.code, c.title, e.event_type, e.room, t.name, (e.status = 'cancelled') AS cancelled
+c.code, c.title, e.event_type, e.room, t.name, (e.status = 'cancelled') AS cancelled,
+CASE WHEN e.status = 'approved' AND e.note_audience IN ('students', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 JOIN teachers t ON t.id = e.teacher_id
@@ -90,7 +94,8 @@ WHERE c.code = ANY($1::text[]) AND e.batch <> $2 AND e.status = 'approved'
   AND e.event_type IN ('class', 'exam') AND e.event_date >= $3::date
 ORDER BY 4, 2, 7, 9`
 	listExamsSQL = `SELECT e.id, to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'),
-to_char(e.end_time, 'HH24:MI'), c.code, c.title, e.batch, e.section, e.room
+to_char(e.end_time, 'HH24:MI'), c.code, c.title, e.batch, e.section, e.room,
+CASE WHEN e.status = 'approved' AND e.note_audience IN ('students', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 WHERE e.batch = $1 AND (e.section = $2 OR e.section = 'ALL') AND e.status = 'approved'
@@ -128,6 +133,7 @@ func (s *Store) ListDayPlan(ctx context.Context, batch, date string, dropCourseC
 			&item.Room,
 			&item.TeacherName,
 			&item.Cancelled,
+			&item.Note,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a plan item: %w", err)
@@ -193,6 +199,7 @@ func (s *Store) ListExams(ctx context.Context, batch, section string, now time.T
 			&exam.Batch,
 			&exam.Section,
 			&exam.Room,
+			&exam.Note,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan an exam: %w", err)

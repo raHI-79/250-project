@@ -65,6 +65,7 @@ type requestItem struct {
 	Room             string `json:"room"`
 	RequestedBy      string `json:"requested_by"`
 	RequestedByRegNo string `json:"requested_by_reg_no"`
+	Note             string `json:"note,omitempty"`
 	CreatedAt        string `json:"created_at"`
 }
 
@@ -118,6 +119,7 @@ func (t *Teacher) Requests() http.HandlerFunc {
 				Room:             request.Room,
 				RequestedBy:      request.RequestedBy,
 				RequestedByRegNo: request.RequestedByRegNo,
+				Note:             request.Note,
 				CreatedAt:        timestamp(request.CreatedAt),
 			})
 		}

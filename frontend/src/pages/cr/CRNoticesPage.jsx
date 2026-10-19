@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, Megaphone } from 'lucide-react'
+import { Megaphone } from 'lucide-react'
 import {
   Alert,
   Button,
@@ -14,9 +14,13 @@ import {
   Textarea,
   useToast,
 } from '../../components/ui'
-import PdfInput from '../../components/forms/PdfInput'
+import AttachmentView from '../../components/AttachmentView'
+import FileInput from '../../components/forms/FileInput'
+import LinkInput from '../../components/forms/LinkInput'
 import { useAuth } from '../../context/auth'
+import { appendIf } from '../../lib/account'
 import api from '../../lib/api'
+import { linkError } from '../../lib/files'
 import { useResource } from '../../lib/hooks'
 import { formatDateTime } from '../../lib/time'
 
@@ -32,6 +36,7 @@ export default function CRNoticesPage() {
   const [description, setDescription] = useState('')
   const [target, setTarget] = useState('own')
   const [batch, setBatch] = useState('')
+  const [link, setLink] = useState('')
   const [file, setFile] = useState(null)
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
@@ -40,11 +45,17 @@ export default function CRNoticesPage() {
   const otherBatches = (batches.data?.items || []).filter((entry) => entry !== user?.batch)
   const onSubmit = async (event) => {
     event.preventDefault()
+    const problem = linkError(link)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setError('')
     const payload = new FormData()
     payload.set('title', title.trim())
-    payload.set('description', description.trim())
     payload.set('target', target === 'own' ? 'own' : batch)
+    appendIf(payload, 'description', description.trim())
+    appendIf(payload, 'link', link.trim())
     if (file) payload.set('file', file)
     setSending(true)
     try {
@@ -52,6 +63,7 @@ export default function CRNoticesPage() {
       toast.success('Notice posted')
       setTitle('')
       setDescription('')
+      setLink('')
       setFile(null)
       notices.reload()
     } catch (failure) {
@@ -115,7 +127,8 @@ export default function CRNoticesPage() {
               ))}
             </Select>
           )}
-          <PdfInput file={file} onChange={setFile} />
+          <LinkInput value={link} onChange={setLink} />
+          <FileInput file={file} onChange={setFile} />
           <Button type="submit" loading={sending} className="w-full sm:w-auto sm:self-end">
             Post the notice
           </Button>
@@ -147,17 +160,14 @@ export default function CRNoticesPage() {
                   {item.description}
                 </p>
               )}
-              {item.file_url && (
-                <a
-                  href={item.file_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
-                >
-                  <FileText size={15} />
-                  Open the PDF
-                </a>
-              )}
+              <AttachmentView
+                fileUrl={item.file_url}
+                fileName={item.file_name}
+                fileMime={item.file_mime}
+                fileSize={item.file_size}
+                linkUrl={item.link_url}
+                className="mt-3"
+              />
             </Card>
           ))}
         </div>

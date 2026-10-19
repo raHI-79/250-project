@@ -1,12 +1,9 @@
 import { useRef, useState } from 'react'
 import { Paperclip } from 'lucide-react'
 import { Button, Field } from '../ui'
+import { FILE_ACCEPT, MAX_FILE_MB, fileError, formatFileSize } from '../../lib/files'
 
-const MAX_MB = 10
-
-const MAX_BYTES = MAX_MB * 1024 * 1024
-
-export default function PdfInput({ file, onChange, label = 'PDF attachment', className }) {
+export default function FileInput({ file, onChange, label = 'Attachment', hint, className }) {
   const [problem, setProblem] = useState('')
   const control = useRef(null)
   const clearControl = () => {
@@ -14,19 +11,9 @@ export default function PdfInput({ file, onChange, label = 'PDF attachment', cla
   }
   const pick = (event) => {
     const chosen = event.target.files?.[0] || null
-    if (!chosen) {
-      setProblem('')
-      onChange(null)
-      return
-    }
-    if (chosen.type !== 'application/pdf' && !chosen.name.toLowerCase().endsWith('.pdf')) {
-      setProblem('Only a PDF file can be attached.')
-      onChange(null)
-      clearControl()
-      return
-    }
-    if (chosen.size > MAX_BYTES) {
-      setProblem(`The PDF must be at most ${MAX_MB} MB.`)
+    const failure = fileError(chosen)
+    if (failure) {
+      setProblem(failure)
       onChange(null)
       clearControl()
       return
@@ -43,7 +30,7 @@ export default function PdfInput({ file, onChange, label = 'PDF attachment', cla
     <Field
       label={label}
       error={problem}
-      hint={`Optional, PDF only, at most ${MAX_MB} MB`}
+      hint={hint || `Optional, at most ${MAX_FILE_MB} MB`}
       className={className}
     >
       {file ? (
@@ -51,6 +38,7 @@ export default function PdfInput({ file, onChange, label = 'PDF attachment', cla
           <span className="inline-flex min-w-0 items-center gap-2 text-brand-800">
             <Paperclip size={15} className="shrink-0 text-brand-500" />
             <span className="truncate">{file.name}</span>
+            <span className="shrink-0 text-xs text-brand-400">{formatFileSize(file.size)}</span>
           </span>
           <Button variant="ghost" size="sm" onClick={remove}>
             Remove
@@ -60,7 +48,7 @@ export default function PdfInput({ file, onChange, label = 'PDF attachment', cla
         <input
           ref={control}
           type="file"
-          accept="application/pdf,.pdf"
+          accept={FILE_ACCEPT}
           onChange={pick}
           className="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-brand-700 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
         />

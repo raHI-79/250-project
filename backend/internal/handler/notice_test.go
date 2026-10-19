@@ -34,8 +34,12 @@ type fakeNoticeStore struct {
 	deletedFile  string
 	deleteErr    error
 	askedBatch   string
+	askedSection string
+	askedSource  string
+	askedScope   string
 	askedOther   bool
 	askedCreator int64
+	askedUser    int64
 	err          error
 }
 
@@ -68,6 +72,25 @@ func (f *fakeNoticeStore) ListAdminNotices(ctx context.Context) ([]store.NoticeR
 	return f.notices, f.err
 }
 
+func (f *fakeNoticeStore) ListTeacherNotices(ctx context.Context, createdBy int64) ([]store.NoticeRow, error) {
+	f.askedUser = createdBy
+	return f.notices, f.err
+}
+
+func (f *fakeNoticeStore) ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error) {
+	f.askedBatch = batch
+	f.askedSection = section
+	f.askedSource = source
+	f.askedScope = scope
+	return f.notices, f.err
+}
+
+func (f *fakeNoticeStore) DeleteOwnNotice(ctx context.Context, noticeID int64, source string, createdBy int64) (string, error) {
+	f.deletedID = noticeID
+	f.askedUser = createdBy
+	return f.deletedFile, f.deleteErr
+}
+
 func (f *fakeNoticeStore) ListStudentAdminNotices(ctx context.Context, batch string) ([]store.NoticeRow, error) {
 	f.askedBatch = batch
 	return f.notices, f.err
@@ -93,6 +116,9 @@ func (f *fakeNoticeStore) DeleteAdminNotice(ctx context.Context, noticeID int64)
 
 type fakeFileStore struct {
 	path      string
+	name      string
+	mime      string
+	size      int64
 	saveErr   error
 	parseErr  error
 	deleted   []string
@@ -109,11 +135,29 @@ func (f *fakeFileStore) Parse(r *http.Request) error {
 	return nil
 }
 
-func (f *fakeFileStore) Save(r *http.Request) (string, error) {
+func (f *fakeFileStore) Save(r *http.Request) (upload.Attachment, error) {
 	if err := f.Parse(r); err != nil {
-		return "", err
+		return upload.Attachment{}, err
 	}
-	return f.path, f.saveErr
+	if f.saveErr != nil {
+		return upload.Attachment{}, f.saveErr
+	}
+	if f.path == "" {
+		return upload.Attachment{}, nil
+	}
+	name := f.name
+	if name == "" {
+		name = "notice.pdf"
+	}
+	mime := f.mime
+	if mime == "" {
+		mime = "application/pdf"
+	}
+	size := f.size
+	if size == 0 {
+		size = 1024
+	}
+	return upload.Attachment{Path: f.path, Name: name, Mime: mime, Size: size}, nil
 }
 
 func (f *fakeFileStore) Delete(filePath string) error {
@@ -127,9 +171,12 @@ type recordingAlerts struct {
 	section string
 	title   string
 	calls   int
+	users   int
 }
 
 func (r *recordingAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, body string) error {
+	r.title = title
+	r.users++
 	return nil
 }
 
@@ -226,9 +273,9 @@ func TestNoticeAdminCreate(t *testing.T) {
 			name:       "with a file that is not a pdf",
 			fields:     map[string]string{"title": "Exam routine"},
 			filename:   "routine.pdf",
-			files:      &fakeFileStore{saveErr: upload.ErrNotPDF},
+			files:      &fakeFileStore{saveErr: upload.ErrNotAllowedType},
 			wantStatus: http.StatusBadRequest,
-			wantError:  MessageFileNotPDF,
+			wantError:  MessageFileNotAllowed,
 		},
 		{
 			name:       "with a file over the limit",
@@ -403,15 +450,54 @@ func TestNoticeStudentViews(t *testing.T) {
 	}
 	tests := []struct {
 		name       string
-		scope      string
+		query      string
 		wantStatus int
-		wantOther  bool
+		wantSource string
+		wantScope  string
 		wantError  string
 	}{
-		{name: "my batch by default", wantStatus: http.StatusOK},
-		{name: "my batch", scope: "my", wantStatus: http.StatusOK},
-		{name: "the other batches", scope: "other", wantStatus: http.StatusOK, wantOther: true},
-		{name: "a broken scope", scope: "everything", wantStatus: http.StatusBadRequest, wantError: "scope must be one of my, other."},
+		{name: "everything by default", wantStatus: http.StatusOK, wantSource: "all", wantScope: "my"},
+		{name: "my batch", query: "?scope=my", wantStatus: http.StatusOK, wantSource: "all", wantScope: "my"},
+		{
+			name:       "the other batches",
+			query:      "?scope=other",
+			wantStatus: http.StatusOK,
+			wantSource: "all",
+			wantScope:  "other",
+		},
+		{
+			name:       "only the administration",
+			query:      "?source=admin",
+			wantStatus: http.StatusOK,
+			wantSource: "admin",
+			wantScope:  "my",
+		},
+		{
+			name:       "only the teachers",
+			query:      "?source=teacher",
+			wantStatus: http.StatusOK,
+			wantSource: "teacher",
+			wantScope:  "my",
+		},
+		{
+			name:       "only the class representatives of other batches",
+			query:      "?source=cr&scope=other",
+			wantStatus: http.StatusOK,
+			wantSource: "cr",
+			wantScope:  "other",
+		},
+		{
+			name:       "a broken scope",
+			query:      "?scope=everything",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "scope must be one of my, other.",
+		},
+		{
+			name:       "a broken source",
+			query:      "?source=everyone",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "source must be one of all, admin, teacher, cr.",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -419,14 +505,10 @@ func TestNoticeStudentViews(t *testing.T) {
 				profile: store.StudentProfile{UserID: 12, Batch: noticeBatch, Section: "A"},
 				notices: rows,
 			}
-			path := "/api/students/notices/cr"
-			if tc.scope != "" {
-				path += "?scope=" + tc.scope
-			}
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/students/notices"+tc.query, nil)
 			req = req.WithContext(middleware.WithUser(req.Context(), middleware.User{ID: 12, Role: auth.RoleStudent}))
 			rec := httptest.NewRecorder()
-			NewNotice(notices, &fakeFileStore{}, &recordingAlerts{}).StudentCRNotices()(rec, req)
+			NewNotice(notices, &fakeFileStore{}, &recordingAlerts{}).StudentNotices()(rec, req)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, tc.wantStatus, rec.Body.String())
 			}
@@ -436,9 +518,12 @@ func TestNoticeStudentViews(t *testing.T) {
 				}
 				return
 			}
-			if notices.askedBatch != noticeBatch || notices.askedOther != tc.wantOther {
-				t.Errorf("asked for %q with other = %t, want %q with other = %t",
-					notices.askedBatch, notices.askedOther, noticeBatch, tc.wantOther)
+			if notices.askedBatch != noticeBatch || notices.askedSection != "A" {
+				t.Errorf("asked for %q/%q, want %q/A", notices.askedBatch, notices.askedSection, noticeBatch)
+			}
+			if notices.askedSource != tc.wantSource || notices.askedScope != tc.wantScope {
+				t.Errorf("asked for source %q scope %q, want %q and %q",
+					notices.askedSource, notices.askedScope, tc.wantSource, tc.wantScope)
 			}
 			items := noticeItems(t, rec)
 			if len(items) != len(rows) {
@@ -479,7 +564,7 @@ func TestNoticeListsUseTheCallerProfile(t *testing.T) {
 			name:  "the administration notices of a batch",
 			path:  "/api/students/notices/admin",
 			role:  auth.RoleStudent,
-			serve: handler.StudentAdminNotices(),
+			serve: handler.StudentNotices(),
 			verify: func(t *testing.T) {
 				if notices.askedBatch != noticeBatch {
 					t.Errorf("asked for the notices of %q, want %q", notices.askedBatch, noticeBatch)

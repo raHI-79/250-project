@@ -42,7 +42,8 @@ type Dependencies struct {
 	Contacts  handler.DirectoryStore
 	Files     *upload.Saver
 	Mailer    mailer.Sender
-	Mail      handler.MessageStore
+	Chats     handler.ConversationStore
+	Shared    *upload.Attachments
 	Votes     handler.PollStore
 }
 
@@ -110,17 +111,22 @@ func NewRouter(deps Dependencies) http.Handler {
 	if files == nil {
 		files = upload.NewSaver(deps.Config.UploadDir, deps.Config.MaxUploadMB)
 	}
-	notices := handler.NewNotice(deps.Notices, files, deps.Alarms)
+	shared := deps.Shared
+	if shared == nil {
+		shared = upload.NewAttachments(deps.Config.UploadDir, deps.Config.MaxUploadMB)
+	}
+	notices := handler.NewNotice(deps.Notices, shared, deps.Alarms)
 	materials := handler.NewMaterial(deps.Library)
 	contacts := handler.NewDirectory(deps.Contacts)
 	registerNoticeRoutes(mux, deps, notices, materials)
 	registerBoardRoutes(StudentGroup(mux, deps), notices, materials, contacts)
 	ContactGroup(mux, deps).Handle("GET /api/teachers-info", contacts.Teachers())
-	messages := handler.NewMessage(deps.Mail, files, deps.Alarms)
+	messages := handler.NewConversations(deps.Config, deps.Chats, shared, deps.Alarms)
 	polls := handler.NewPoll(deps.Config, deps.Votes, deps.Alarms)
 	registerMessageRoutes(mux, deps, messages)
 	registerPollRoutes(mux, deps, polls)
 	mux.HandleFunc("GET "+upload.URLPrefix+"{"+upload.PathValueName+"}", files.Serve())
+	mux.HandleFunc("GET "+upload.AttachmentURLPrefix+"{"+upload.PathValueName+"}", shared.Serve())
 	mux.HandleFunc("GET "+upload.PhotoURLPrefix+"{"+upload.PathValueName+"}", photos.Serve())
 	mux.HandleFunc("/", notFound)
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
@@ -225,6 +231,10 @@ func registerNoticeRoutes(mux *http.ServeMux, deps Dependencies, notices *handle
 	admin.Handle("POST /api/admin/materials", materials.AdminCreate())
 	admin.Handle("GET /api/admin/materials", materials.AdminList())
 	cr := CRGroup(mux, deps)
+	teacher := TeacherGroup(mux, deps)
+	teacher.Handle("POST /api/teacher/notices", notices.TeacherCreate())
+	teacher.Handle("GET /api/teacher/notices", notices.TeacherList())
+	teacher.Handle("DELETE /api/teacher/notices/{id}", notices.TeacherDelete())
 	cr.Handle("POST /api/cr/notices", notices.CRCreate())
 	cr.Handle("GET /api/cr/notices", notices.CRList())
 	cr.Handle("POST /api/cr/materials", materials.CRCreate())
@@ -232,18 +242,15 @@ func registerNoticeRoutes(mux *http.ServeMux, deps Dependencies, notices *handle
 	cr.Handle("DELETE /api/cr/materials/{id}", materials.CRDelete())
 }
 
-func registerMessageRoutes(mux *http.ServeMux, deps Dependencies, messages *handler.Message) {
-	cr := CRGroup(mux, deps)
-	cr.Handle("POST /api/cr/messages", messages.CRSend())
-	cr.Handle("GET /api/cr/messages/inbox", messages.CRInbox())
-	cr.Handle("GET /api/cr/messages/sent", messages.CRSent())
-	teacher := TeacherGroup(mux, deps)
-	teacher.Handle("POST /api/teacher/messages", messages.TeacherSend())
-	teacher.Handle("GET /api/teacher/messages/inbox", messages.TeacherInbox())
-	teacher.Handle("GET /api/teacher/messages/sent", messages.TeacherSent())
-	teacher.Handle("GET /api/teacher/lookups/crs", messages.CRLookup())
-	teacher.Handle("GET /api/teacher/lookups/students", messages.StudentLookup())
-	StudentGroup(mux, deps).Handle("GET /api/students/messages", messages.StudentInbox())
+func registerMessageRoutes(mux *http.ServeMux, deps Dependencies, messages *handler.Conversations) {
+	group := AuthenticatedGroup(mux, deps)
+	group.Handle("GET /api/messages/contacts", messages.Contacts())
+	group.Handle("GET /api/messages/conversations", messages.List())
+	group.Handle("POST /api/messages/direct", messages.StartDirect())
+	group.Handle("POST /api/messages/groups", messages.StartGroup())
+	group.Handle("GET /api/messages/conversations/{id}/messages", messages.Messages())
+	group.Handle("POST /api/messages/conversations/{id}/messages", messages.Send())
+	group.Handle("GET /api/messages/unread-count", messages.UnreadCount())
 }
 
 func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Poll) {
@@ -257,8 +264,7 @@ func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Po
 }
 
 func registerBoardRoutes(group RouteGroup, notices *handler.Notice, materials *handler.Material, contacts *handler.Directory) {
-	group.Handle("GET /api/students/notices/cr", notices.StudentCRNotices())
-	group.Handle("GET /api/students/notices/admin", notices.StudentAdminNotices())
+	group.Handle("GET /api/students/notices", notices.StudentNotices())
 	group.Handle("GET /api/students/materials", materials.StudentList())
 	group.Handle("GET /api/students/directory", contacts.Students())
 }

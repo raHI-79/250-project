@@ -6,43 +6,14 @@ import (
 )
 
 const (
-	MaxMessageLength  = 2000
 	MaxQuestionLength = 300
 	MinPollOptions    = 2
 	MaxPollOptions    = 10
-	TargetOwnBatch    = "own_batch"
-	TargetBatch       = "batch"
-	TargetTeacher     = "teacher"
-	TargetCR          = "cr"
-	TargetStudent     = "student"
 	PollScopeSection  = "section"
 	PollScopeBatch    = "batch"
 )
 
-var (
-	crTargets      = []string{TargetOwnBatch, TargetBatch, TargetTeacher}
-	teacherTargets = []string{TargetCR, TargetBatch, TargetStudent}
-	pollScopes     = []string{PollScopeSection, PollScopeBatch}
-)
-
-func MessageContent(label, value string, hasFile bool) (string, error) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" && !hasFile {
-		return "", fmt.Errorf("%s is required when no file is attached.", label)
-	}
-	if len(trimmed) > MaxMessageLength {
-		return "", fmt.Errorf("%s must be at most %d characters long.", label, MaxMessageLength)
-	}
-	return trimmed, nil
-}
-
-func CRMessageTarget(label, value string) (string, error) {
-	return oneOf(label, value, crTargets)
-}
-
-func TeacherMessageTarget(label, value string) (string, error) {
-	return oneOf(label, value, teacherTargets)
-}
+var pollScopes = []string{PollScopeSection, PollScopeBatch}
 
 func PollScope(label, value string) (string, error) {
 	return oneOf(label, value, pollScopes)

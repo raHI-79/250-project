@@ -160,19 +160,19 @@ func TestBoardFlow(t *testing.T) {
 		map[string]string{"title": "Wrong target", "target": "CSE-23"}, "", "", crToken); refused.Code != http.StatusBadRequest {
 		t.Fatalf("own batch code as a target returned %d, want 400 (body = %q)", refused.Code, refused.Body.String())
 	}
-	adminForStudent := titlesOf(t, call(t, router, http.MethodGet, "/api/students/notices/admin", "", studentToken))
+	adminForStudent := titlesOf(t, call(t, router, http.MethodGet, "/api/students/notices?source=admin", "", studentToken))
 	if !hasTitle(adminForStudent, "Exam routine") || hasTitle(adminForStudent, "CSE-22 only") {
 		t.Errorf("the student sees %v, want the notice for every batch and not the CSE-22 one", adminForStudent)
 	}
-	adminForOutsider := titlesOf(t, call(t, router, http.MethodGet, "/api/students/notices/admin", "", outsiderToken))
+	adminForOutsider := titlesOf(t, call(t, router, http.MethodGet, "/api/students/notices?source=admin", "", outsiderToken))
 	if !hasTitle(adminForOutsider, "Exam routine") || !hasTitle(adminForOutsider, "CSE-22 only") {
 		t.Errorf("the CSE-22 student sees %v, want both administration notices", adminForOutsider)
 	}
-	mine := titlesOf(t, call(t, router, http.MethodGet, "/api/students/notices/cr?scope=my", "", studentToken))
+	mine := titlesOf(t, call(t, router, http.MethodGet, "/api/students/notices?source=cr&scope=my", "", studentToken))
 	if !hasTitle(mine, "Class cancelled") || hasTitle(mine, "Shared lab") {
 		t.Errorf("my batch shows %v, want only the own batch notice", mine)
 	}
-	otherScope := call(t, router, http.MethodGet, "/api/students/notices/cr?scope=other", "", studentToken)
+	otherScope := call(t, router, http.MethodGet, "/api/students/notices?source=cr&scope=other", "", studentToken)
 	others := listItems(t, otherScope)
 	if len(others) != 1 || others[0]["title"] != "Shared lab" || others[0]["batch"] != "CSE-22" {
 		t.Errorf("the other batches show %v, want the CSE-22 notice with its badge", others)

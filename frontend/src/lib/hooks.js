@@ -109,3 +109,44 @@ export const useCountdown = (initial = 0) => {
   }, [seconds])
   return [seconds, setSeconds]
 }
+
+export const usePolling = (action, interval) => {
+  useEffect(() => {
+    if (!action || !interval) return undefined
+    let timer = window.setInterval(action, interval)
+    const onVisibility = () => {
+      window.clearInterval(timer)
+      if (document.visibilityState === 'visible') {
+        action()
+        timer = window.setInterval(action, interval)
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [action, interval])
+}
+
+const UNREAD_EVENT = 'sustcse.unread'
+
+export const refreshUnread = () => window.dispatchEvent(new Event(UNREAD_EVENT))
+
+export const useUnreadMessages = (enabled = true) => {
+  const [count, setCount] = useState(0)
+  const load = useCallback(() => {
+    if (!enabled) return undefined
+    return api
+      .get('/api/messages/unread-count')
+      .then((data) => setCount(Number(data?.count) || 0))
+      .catch(() => null)
+  }, [enabled])
+  useEffect(() => {
+    load()
+    window.addEventListener(UNREAD_EVENT, load)
+    return () => window.removeEventListener(UNREAD_EVENT, load)
+  }, [load])
+  usePolling(enabled ? load : null, 20000)
+  return count
+}

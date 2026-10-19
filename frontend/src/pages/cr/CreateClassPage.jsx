@@ -8,13 +8,25 @@ import {
   Select,
   useToast,
 } from '../../components/ui'
+import NoteFields from '../../components/forms/NoteFields'
 import RoomAvailabilityPanel from '../../components/forms/RoomAvailabilityPanel'
 import TimeRangeFields from '../../components/forms/TimeRangeFields'
 import api from '../../lib/api'
 import { useResource } from '../../lib/hooks'
+import { noteError } from '../../lib/options'
 import { timeRangeError, tomorrow } from '../../lib/time'
 
-const EMPTY = { eventType: 'class', courseId: '', teacherId: '', date: '', start: '', end: '', room: '' }
+const EMPTY = {
+  eventType: 'class',
+  courseId: '',
+  teacherId: '',
+  date: '',
+  start: '',
+  end: '',
+  room: '',
+  note: '',
+  audience: '',
+}
 
 export default function CreateClassPage() {
   const toast = useToast()
@@ -30,6 +42,11 @@ export default function CreateClassPage() {
   const timeError = timeRangeError(form.start, form.end)
   const onSubmit = async (event) => {
     event.preventDefault()
+    const noteProblem = noteError(form.note, form.audience)
+    if (noteProblem) {
+      setError(noteProblem)
+      return
+    }
     setError('')
     if (timeError) return
     setSending(true)
@@ -42,6 +59,8 @@ export default function CreateClassPage() {
         start_time: form.start,
         end_time: form.end,
         room: form.room.trim(),
+        note: form.note.trim(),
+        note_audience: form.note.trim() ? form.audience : '',
       })
       toast.success('Request sent to the teacher for approval')
       setForm(EMPTY)
@@ -109,6 +128,13 @@ export default function CreateClassPage() {
               onChange={set('room')}
               placeholder="1003"
               required
+            />
+            <NoteFields
+              note={form.note}
+              audience={form.audience}
+              onNoteChange={setValue('note')}
+              onAudienceChange={setValue('audience')}
+              error={noteError(form.note, form.audience)}
             />
             <Button type="submit" loading={sending} className="w-full">
               Send the request

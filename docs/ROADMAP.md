@@ -32,7 +32,7 @@ Full requirements: [SPEC.md](SPEC.md)
 | 15 | B | Teacher panel | done |
 | 16 | B | Account backend: verification, invitations, promotion, profiles | done |
 | 17 | A | Account and profile pages | done |
-| 18 | B | Unified messaging, teacher notices and attachments | todo |
+| 18 | B | Unified messaging, teacher notices and attachments | done |
 | 19 | A | Routine experience, materials by batch and CR student access | todo |
 | 20 | A | Browser push notifications | todo |
 | 21 | B | Maroon academic interface redesign | todo |

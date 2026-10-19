@@ -9,8 +9,12 @@ import (
 )
 
 const (
-	SourceAdmin = "admin"
-	SourceCR    = "cr"
+	SourceAdmin   = "admin"
+	SourceCR      = "cr"
+	SourceTeacher = "teacher"
+	NoticeAll     = "all"
+	NoticeMine    = "my"
+	NoticeOthers  = "other"
 )
 
 type NewNotice struct {
@@ -19,36 +23,50 @@ type NewNotice struct {
 	Description string
 	Batch       string
 	Section     string
+	LinkURL     string
 	FilePath    string
+	FileName    string
+	FileMime    string
+	FileSize    int64
 	CreatedBy   int64
 }
 
 type NoticeRow struct {
-	ID            int64
-	Source        string
-	Title         string
-	Description   string
-	Batch         string
-	Section       string
-	FilePath      string
-	CreatedByName string
-	CreatedAt     time.Time
+	ID             int64
+	Source         string
+	Title          string
+	Description    string
+	Batch          string
+	Section        string
+	LinkURL        string
+	FilePath       string
+	FileName       string
+	FileMime       string
+	FileSize       int64
+	CreatedBy      int64
+	CreatedByName  string
+	CreatedByPhoto string
+	CreatedAt      time.Time
 }
 
 const (
 	noticeColumns = `n.id, n.source, n.title, n.description, COALESCE(n.batch, ''), COALESCE(n.section, ''),
-COALESCE(n.file_path, ''), COALESCE(s.full_name, t.name, 'Administration'), n.created_at`
+COALESCE(n.link_url, ''), COALESCE(n.file_path, ''), COALESCE(n.file_name, ''), COALESCE(n.file_mime, ''),
+COALESCE(n.file_size, 0), n.created_by, COALESCE(s.full_name, t.name, 'Administration'),
+COALESCE(u.photo_path, ''), n.created_at`
 	noticeJoins = `FROM notices n
 JOIN users u ON u.id = n.created_by
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id`
 	insertNoticeSQL = `WITH inserted AS (
-    INSERT INTO notices (source, title, description, batch, section, file_path, created_by)
-    VALUES ($1, $2, $3, NULLIF($4::text, ''), NULLIF($5::text, ''), NULLIF($6::text, ''), $7)
-    RETURNING id, source, title, description, batch, section, file_path, created_by, created_at
+    INSERT INTO notices
+    (source, title, description, batch, section, link_url, file_path, file_name, file_mime, file_size, created_by)
+    VALUES ($1, $2, $3, NULLIF($4::text, ''), NULLIF($5::text, ''), NULLIF($6::text, ''),
+    NULLIF($7::text, ''), NULLIF($8::text, ''), NULLIF($9::text, ''), NULLIF($10::bigint, 0), $11)
+    RETURNING id, source, title, description, batch, section, link_url, file_path, file_name,
+    file_mime, file_size, created_by, created_at
 )
-SELECT n.id, n.source, n.title, n.description, COALESCE(n.batch, ''), COALESCE(n.section, ''),
-COALESCE(n.file_path, ''), COALESCE(s.full_name, t.name, 'Administration'), n.created_at
+SELECT ` + noticeColumns + `
 FROM inserted n
 JOIN users u ON u.id = n.created_by
 LEFT JOIN students s ON s.user_id = u.id
@@ -71,6 +89,24 @@ WHERE n.source = 'cr' AND (($2::bool AND n.batch <> $1::text) OR (NOT $2::bool A
 ORDER BY n.created_at DESC, n.id DESC`
 	deleteAdminNoticeSQL = `DELETE FROM notices WHERE id = $1 AND source = 'admin'
 RETURNING COALESCE(file_path, '')`
+	listTeacherNoticesSQL = `SELECT ` + noticeColumns + `
+` + noticeJoins + `
+WHERE n.source = 'teacher' AND n.created_by = $1
+ORDER BY n.created_at DESC, n.id DESC`
+	deleteOwnNoticeSQL = `DELETE FROM notices WHERE id = $1 AND source = $2 AND created_by = $3
+RETURNING COALESCE(file_path, '')`
+	listStudentNoticesSQL = `SELECT ` + noticeColumns + `
+` + noticeJoins + `
+WHERE (
+    ($3::text IN ('all', 'admin') AND n.source = 'admin'
+        AND (n.batch IS NULL OR n.batch = $1::text))
+    OR ($3::text IN ('all', 'teacher') AND n.source = 'teacher'
+        AND n.batch = $1::text AND (n.section IS NULL OR n.section = $2::text))
+    OR ($3::text IN ('all', 'cr') AND n.source = 'cr'
+        AND (($4::text = 'other' AND n.batch <> $1::text)
+             OR ($4::text <> 'other' AND n.batch = $1::text)))
+)
+ORDER BY n.created_at DESC, n.id DESC`
 )
 
 func (s *Store) CreateNotice(ctx context.Context, notice NewNotice) (NoticeRow, error) {
@@ -81,7 +117,11 @@ func (s *Store) CreateNotice(ctx context.Context, notice NewNotice) (NoticeRow, 
 		notice.Description,
 		notice.Batch,
 		notice.Section,
+		notice.LinkURL,
 		notice.FilePath,
+		notice.FileName,
+		notice.FileMime,
+		notice.FileSize,
 		notice.CreatedBy,
 	).Scan(
 		&row.ID,
@@ -90,8 +130,14 @@ func (s *Store) CreateNotice(ctx context.Context, notice NewNotice) (NoticeRow, 
 		&row.Description,
 		&row.Batch,
 		&row.Section,
+		&row.LinkURL,
 		&row.FilePath,
+		&row.FileName,
+		&row.FileMime,
+		&row.FileSize,
+		&row.CreatedBy,
 		&row.CreatedByName,
+		&row.CreatedByPhoto,
 		&row.CreatedAt,
 	)
 	if err != nil {
@@ -114,6 +160,26 @@ func (s *Store) ListCRNotices(ctx context.Context, createdBy int64) ([]NoticeRow
 
 func (s *Store) ListBatchCRNotices(ctx context.Context, batch string, otherBatches bool) ([]NoticeRow, error) {
 	return s.notices(ctx, listBatchCRNoticesSQL, batch, otherBatches)
+}
+
+func (s *Store) ListTeacherNotices(ctx context.Context, createdBy int64) ([]NoticeRow, error) {
+	return s.notices(ctx, listTeacherNoticesSQL, createdBy)
+}
+
+func (s *Store) ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]NoticeRow, error) {
+	return s.notices(ctx, listStudentNoticesSQL, batch, section, source, scope)
+}
+
+func (s *Store) DeleteOwnNotice(ctx context.Context, noticeID int64, source string, createdBy int64) (string, error) {
+	var filePath string
+	err := s.pool.QueryRow(ctx, deleteOwnNoticeSQL, noticeID, source, createdBy).Scan(&filePath)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: could not delete the notice %d: %w", noticeID, err)
+	}
+	return filePath, nil
 }
 
 func (s *Store) DeleteAdminNotice(ctx context.Context, noticeID int64) (string, error) {
@@ -144,8 +210,14 @@ func (s *Store) notices(ctx context.Context, query string, args ...any) ([]Notic
 			&row.Description,
 			&row.Batch,
 			&row.Section,
+			&row.LinkURL,
 			&row.FilePath,
+			&row.FileName,
+			&row.FileMime,
+			&row.FileSize,
+			&row.CreatedBy,
 			&row.CreatedByName,
+			&row.CreatedByPhoto,
 			&row.CreatedAt,
 		)
 		if err != nil {

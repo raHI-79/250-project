@@ -50,6 +50,7 @@ type planItem struct {
 	Room        string `json:"room"`
 	TeacherName string `json:"teacher_name"`
 	Status      string `json:"status"`
+	Note        string `json:"note,omitempty"`
 }
 
 type planGroup struct {
@@ -160,6 +161,7 @@ func groupPlan(items []store.PlanItem, ownBatch string) []planGroup {
 			Room:        item.Room,
 			TeacherName: item.TeacherName,
 			Status:      planStatus(item.Cancelled),
+			Note:        item.Note,
 		})
 	}
 	sort.Slice(keys, func(i, j int) bool {

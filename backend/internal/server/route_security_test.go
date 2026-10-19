@@ -11,55 +11,61 @@ import (
 	"time"
 )
 
-type emptyMessageStore struct{}
+type emptyChatStore struct{}
 
-func (emptyMessageStore) GetMessageSender(ctx context.Context, userID int64) (store.Sender, error) {
+func (emptyChatStore) GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error) {
 	switch userID {
 	case accessCRID:
-		return store.Sender{UserID: userID, Role: auth.RoleCR, Name: "Access CR", Batch: "CSE-23", Section: "A", IsCR: true}, nil
+		return store.MessageViewer{UserID: userID, Name: "Access CR", Role: auth.RoleCR, Batch: "CSE-23", Section: "A"}, nil
 	case accessTeacherID:
-		return store.Sender{UserID: userID, Role: auth.RoleTeacher, Name: "Access Teacher"}, nil
+		return store.MessageViewer{UserID: userID, Name: "Access Teacher", Role: auth.RoleTeacher}, nil
 	case accessStudentID:
-		return store.Sender{UserID: userID, Role: auth.RoleStudent, Name: "Access Student", Batch: "CSE-23", Section: "A"}, nil
+		return store.MessageViewer{UserID: userID, Name: "Access Student", Role: auth.RoleStudent, Batch: "CSE-23", Section: "A"}, nil
+	case accessAdminID:
+		return store.MessageViewer{UserID: userID, Name: "Access Admin", Role: auth.RoleAdmin}, nil
 	default:
-		return store.Sender{}, store.ErrNotFound
+		return store.MessageViewer{}, store.ErrNotFound
 	}
 }
 
-func (emptyMessageStore) FindMessageTarget(ctx context.Context, userID int64, kind string) (store.MessageTarget, error) {
-	return store.MessageTarget{}, store.ErrNotFound
-}
-
-func (emptyMessageStore) FindReplyTarget(ctx context.Context, messageID, teacherUserID int64) (store.MessageTarget, error) {
-	return store.MessageTarget{}, store.ErrNotFound
-}
-
-func (emptyMessageStore) CreateMessage(ctx context.Context, message store.NewMessage) (store.MessageRow, error) {
-	return store.MessageRow{}, store.ErrNotFound
-}
-
-func (emptyMessageStore) ListCRInbox(ctx context.Context, crUserID int64) ([]store.MessageRow, error) {
+func (emptyChatStore) SearchContacts(ctx context.Context, viewerID int64, search, role string) ([]store.ContactRow, error) {
 	return nil, nil
 }
 
-func (emptyMessageStore) ListTeacherInbox(ctx context.Context, teacherUserID int64) ([]store.MessageRow, error) {
+func (emptyChatStore) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) (store.Conversation, error) {
+	return store.Conversation{}, store.ErrInactiveTarget
+}
+
+func (emptyChatStore) GetOrCreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error) {
+	return store.Conversation{}, store.ErrNotFound
+}
+
+func (emptyChatStore) ListConversations(ctx context.Context, viewer store.MessageViewer, limit int) ([]store.ConversationRow, error) {
 	return nil, nil
 }
 
-func (emptyMessageStore) ListSentMessages(ctx context.Context, senderID int64) ([]store.MessageRow, error) {
+func (emptyChatStore) FindConversationAccess(ctx context.Context, conversationID int64, viewer store.MessageViewer) (store.ConversationAccess, error) {
+	return store.ConversationAccess{}, store.ErrNotFound
+}
+
+func (emptyChatStore) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time, limit int) ([]store.ChatMessageRow, error) {
 	return nil, nil
 }
 
-func (emptyMessageStore) ListStudentMessages(ctx context.Context, userID int64, batch, section string) ([]store.MessageRow, error) {
-	return nil, nil
+func (emptyChatStore) CreateChatMessage(ctx context.Context, message store.NewChatMessage) (store.ChatMessageRow, error) {
+	return store.ChatMessageRow{}, store.ErrNotFound
 }
 
-func (emptyMessageStore) ListCROptions(ctx context.Context, batch string) ([]store.CROption, error) {
-	return nil, nil
+func (emptyChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error {
+	return nil
 }
 
-func (emptyMessageStore) SearchStudents(ctx context.Context, search string) ([]store.StudentOption, error) {
-	return nil, nil
+func (emptyChatStore) CountUnreadMessages(ctx context.Context, viewer store.MessageViewer) (int, error) {
+	return 0, nil
+}
+
+func (emptyChatStore) DirectRecipient(ctx context.Context, conversationID, senderID int64) (int64, error) {
+	return 0, store.ErrNoRecipient
 }
 
 type emptyPollStore struct{}
@@ -163,9 +169,9 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodPost, path: "/api/cr/materials", allowed: crOnly()},
 		{method: http.MethodGet, path: "/api/cr/materials", allowed: crOnly()},
 		{method: http.MethodDelete, path: "/api/cr/materials/1", allowed: crOnly()},
-		{method: http.MethodPost, path: "/api/cr/messages", allowed: crOnly()},
-		{method: http.MethodGet, path: "/api/cr/messages/inbox", allowed: crOnly()},
-		{method: http.MethodGet, path: "/api/cr/messages/sent", allowed: crOnly()},
+		{method: http.MethodGet, path: "/api/messages/contacts", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/messages/conversations", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/messages/direct", allowed: everyRole()},
 		{method: http.MethodPost, path: "/api/cr/polls", allowed: crOnly()},
 		{method: http.MethodPost, path: "/api/cr/polls/1/close", allowed: crOnly()},
 		{method: http.MethodGet, path: "/api/cr/polls", allowed: crOnly()},
@@ -176,20 +182,18 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodGet, path: "/api/teacher/classes/upcoming", allowed: teacherOnly()},
 		{method: http.MethodPost, path: "/api/teacher/classes/1/cancel", allowed: teacherOnly()},
 		{method: http.MethodPost, path: "/api/teacher/routines/1/cancel", allowed: teacherOnly()},
-		{method: http.MethodPost, path: "/api/teacher/messages", allowed: teacherOnly()},
-		{method: http.MethodGet, path: "/api/teacher/messages/inbox", allowed: teacherOnly()},
-		{method: http.MethodGet, path: "/api/teacher/messages/sent", allowed: teacherOnly()},
-		{method: http.MethodGet, path: "/api/teacher/lookups/crs", allowed: teacherOnly()},
-		{method: http.MethodGet, path: "/api/teacher/lookups/students", allowed: teacherOnly()},
+		{method: http.MethodPost, path: "/api/messages/groups", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/messages/conversations/1/messages", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/messages/conversations/1/messages", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/messages/unread-count", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/teacher/notices", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/students/upcoming-routine", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/drop-course-routine", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/exams", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/routine", allowed: studentRoles()},
-		{method: http.MethodGet, path: "/api/students/notices/cr", allowed: studentRoles()},
-		{method: http.MethodGet, path: "/api/students/notices/admin", allowed: studentRoles()},
+		{method: http.MethodGet, path: "/api/students/notices", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/materials", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/directory", allowed: studentRoles()},
-		{method: http.MethodGet, path: "/api/students/messages", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/polls", allowed: studentRoles()},
 		{method: http.MethodPost, path: "/api/students/polls/1/vote", allowed: studentRoles()},
 	}
@@ -244,22 +248,34 @@ func TestEveryProtectedRouteChecksTheCaller(t *testing.T) {
 	}
 }
 
-func TestStudentsCannotSendMessages(t *testing.T) {
+func TestRetiredMessageRoutesAreGone(t *testing.T) {
 	deps, router := newAccessRouter(t)
 	tokens := accessTokens(t, deps)
-	callers := []struct {
-		name  string
-		token string
+	retired := []struct {
+		method string
+		path   string
 	}{
-		{name: "without a token"},
-		{name: "as a student", token: tokens[auth.RoleStudent]},
-		{name: "as a class representative", token: tokens[auth.RoleCR]},
+		{method: http.MethodPost, path: "/api/students/messages"},
+		{method: http.MethodGet, path: "/api/students/messages"},
+		{method: http.MethodPost, path: "/api/cr/messages"},
+		{method: http.MethodGet, path: "/api/cr/messages/inbox"},
+		{method: http.MethodGet, path: "/api/cr/messages/sent"},
+		{method: http.MethodPost, path: "/api/teacher/messages"},
+		{method: http.MethodGet, path: "/api/teacher/messages/inbox"},
+		{method: http.MethodGet, path: "/api/teacher/messages/sent"},
+		{method: http.MethodGet, path: "/api/teacher/lookups/crs"},
+		{method: http.MethodGet, path: "/api/teacher/lookups/students"},
+		{method: http.MethodGet, path: "/api/students/notices/cr"},
+		{method: http.MethodGet, path: "/api/students/notices/admin"},
 	}
-	for _, caller := range callers {
-		t.Run(caller.name, func(t *testing.T) {
-			rec := serve(t, router, http.MethodPost, "/api/students/messages", `{"content":"hello"}`, caller.token)
-			if rec.Code != http.StatusNotFound {
-				t.Fatalf("status = %d, want 404 (body = %q)", rec.Code, rec.Body.String())
+	for _, route := range retired {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			for _, role := range []string{auth.RoleStudent, auth.RoleCR, auth.RoleTeacher, auth.RoleAdmin} {
+				rec := serve(t, router, route.method, route.path, "", tokens[role])
+				if rec.Code != http.StatusNotFound {
+					t.Fatalf("%s as a %s = %d, want 404 (body = %q)",
+						route.path, role, rec.Code, rec.Body.String())
+				}
 			}
 		})
 	}
