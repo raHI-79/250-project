@@ -1,6 +1,6 @@
 # Development Roadmap
 
-The project is built in 22 development steps. Each step is owned by one team
+The project is built in 23 development steps. Each step is owned by one team
 member, is worked on alone, and ends with reviewed Git commits. The last step is
 shared.
 
@@ -11,9 +11,9 @@ Status values: `todo` → `in progress` → `done`.
 
 Full requirements: [SPEC.md](SPEC.md)
 
-## Sets
+## Steps
 
-| Set | Owner | Title | Status |
+| Step | Owner | Title | Status |
 |---:|:---:|---|---|
 | 1 | A | Foundation and Go server skeleton | done |
 | 2 | A | PostgreSQL connection and database schema | done |
@@ -33,7 +33,8 @@ Full requirements: [SPEC.md](SPEC.md)
 | 16 | B | Account backend: verification, invitations, promotion, profiles | done |
 | 17 | A | Account and profile pages | done |
 | 18 | B | Unified messaging, teacher notices and attachments | done |
-| 19 | A | Routine experience, materials by batch and CR student access | todo |
+| 19 | A | Routine experience, batch Drive links and CR student access | done |
 | 20 | A | Browser push notifications | todo |
-| 21 | B | Maroon academic interface redesign | todo |
-| 22 | A+B | Requirement updates, demo data, docs and CI | todo |
+| 21 | B | Interface redesign part 1: design system, public home and sign-in pages | todo |
+| 22 | A | Interface redesign part 2: all dashboard pages | todo |
+| 23 | A+B | Requirement updates, demo data, docs and CI | todo |
