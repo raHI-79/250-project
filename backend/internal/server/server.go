@@ -219,6 +219,8 @@ func registerStudentRoutes(group RouteGroup, student *handler.Student) {
 
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {
 	group.Handle("GET /api/cr/routine", cr.Routine())
+	group.Handle("GET /api/cr/courses", cr.Courses())
+	group.Handle("GET /api/cr/day", cr.Day())
 	group.Handle("POST /api/cr/class-requests", cr.CreateClassRequest())
 	group.Handle("GET /api/cr/room-availability", cr.RoomAvailability())
 	group.Handle("GET /api/cr/requests", cr.Requests())

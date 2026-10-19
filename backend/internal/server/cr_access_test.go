@@ -33,6 +33,14 @@ func (emptyCRStore) ListClassRequests(ctx context.Context, createdBy int64, stat
 	return nil, nil
 }
 
+func (emptyCRStore) ListBatchCourseSlots(ctx context.Context, batch, section string) ([]store.CourseSlotRow, error) {
+	return nil, nil
+}
+
+func (emptyCRStore) ListBatchDay(ctx context.Context, batch, date string) ([]store.DayEntryRow, error) {
+	return nil, nil
+}
+
 type silentNotifier struct{}
 
 func (silentNotifier) NotifyUser(ctx context.Context, userID int64, kind, title, body string) error {
@@ -50,6 +58,8 @@ func crRoutes() []crRoute {
 	return []crRoute{
 		{method: http.MethodGet, path: "/api/cr/routine", wantForCR: http.StatusOK},
 		{method: http.MethodGet, path: "/api/cr/requests", wantForCR: http.StatusOK},
+		{method: http.MethodGet, path: "/api/cr/courses", wantForCR: http.StatusOK},
+		{method: http.MethodGet, path: "/api/cr/day?date=2026-10-17", wantForCR: http.StatusOK},
 		{method: http.MethodGet, path: "/api/cr/room-availability?date=2026-10-17", wantForCR: http.StatusOK},
 		{method: http.MethodPost, path: "/api/cr/class-requests", body: `{`, wantForCR: http.StatusBadRequest},
 	}

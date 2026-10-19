@@ -24,6 +24,8 @@ type CRStore interface {
 	CreateClassRequest(ctx context.Context, event store.NewClassEvent) (store.ClassEventRow, error)
 	ListRoomBookings(ctx context.Context, date, room string) ([]store.Booking, error)
 	ListClassRequests(ctx context.Context, createdBy int64, status string) ([]store.ClassEventRow, error)
+	ListBatchCourseSlots(ctx context.Context, batch, section string) ([]store.CourseSlotRow, error)
+	ListBatchDay(ctx context.Context, batch, date string) ([]store.DayEntryRow, error)
 }
 
 type Notifier interface {
