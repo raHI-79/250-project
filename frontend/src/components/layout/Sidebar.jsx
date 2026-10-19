@@ -22,6 +22,11 @@ export default function Sidebar({ items, open, onClose }) {
         >
           <item.icon size={17} className="shrink-0 transition-transform group-hover:scale-110" />
           <span className="truncate">{item.label}</span>
+          {item.count > 0 && (
+            <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[11px] font-semibold text-white">
+              {item.count > 9 ? '9+' : item.count}
+            </span>
+          )}
         </NavLink>
       ))}
     </nav>

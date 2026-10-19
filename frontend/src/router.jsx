@@ -13,27 +13,23 @@ import UpcomingRoutinePage from './pages/student/UpcomingRoutinePage'
 import DropCourseRoutinePage from './pages/student/DropCourseRoutinePage'
 import ExamsPage from './pages/student/ExamsPage'
 import FixedRoutinePage from './pages/student/FixedRoutinePage'
-import CRNoticesPage from './pages/student/CRNoticesPage'
-import AdminNoticesPage from './pages/student/AdminNoticesPage'
+import NoticesPage from './pages/NoticesPage'
 import MaterialsPage from './pages/student/MaterialsPage'
 import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
 import TeachersPage from './pages/student/TeachersPage'
-import MessagesPage from './pages/student/MessagesPage'
+import MessagesPage from './pages/MessagesPage'
 import CRFixedRoutinePage from './pages/cr/CRFixedRoutinePage'
 import CreateClassPage from './pages/cr/CreateClassPage'
 import ExtraClassPage from './pages/cr/ExtraClassPage'
 import MyRequestsPage from './pages/cr/MyRequestsPage'
-import SendMessagePage from './pages/cr/SendMessagePage'
-import TeacherMessagesPage from './pages/cr/TeacherMessagesPage'
 import CRPostNoticesPage from './pages/cr/CRNoticesPage'
 import CRMaterialsPage from './pages/cr/CRMaterialsPage'
 import CRPollsPage from './pages/cr/CRPollsPage'
 import DailySchedulePage from './pages/teacher/DailySchedulePage'
 import ApprovalRequestsPage from './pages/teacher/ApprovalRequestsPage'
 import CancelClassPage from './pages/teacher/CancelClassPage'
-import CRMessagesPage from './pages/teacher/CRMessagesPage'
-import TeacherSendMessagePage from './pages/teacher/TeacherSendMessagePage'
+import TeacherNoticesPage from './pages/teacher/TeacherNoticesPage'
 import OverviewPage from './pages/admin/OverviewPage'
 import RegistrationsPage from './pages/admin/RegistrationsPage'
 import AdminStudentsPage from './pages/admin/AdminStudentsPage'
@@ -89,8 +85,7 @@ export default function Router() {
           <Route path={paths.student.dropCourseRoutine()} element={<DropCourseRoutinePage />} />
           <Route path={paths.student.exams()} element={<ExamsPage />} />
           <Route path={paths.student.fixedRoutine()} element={<FixedRoutinePage />} />
-          <Route path={paths.student.crNotices()} element={<CRNoticesPage />} />
-          <Route path={paths.student.adminNotices()} element={<AdminNoticesPage />} />
+          <Route path={paths.student.notices()} element={<NoticesPage />} />
           <Route path={paths.student.materials()} element={<MaterialsPage />} />
           <Route path={paths.student.students()} element={<StudentsDirectoryPage />} />
           <Route path={paths.student.polls()} element={<PollsPage />} />
@@ -108,9 +103,9 @@ export default function Router() {
           <Route path={paths.cr.createClass()} element={<CreateClassPage />} />
           <Route path={paths.cr.extraClass()} element={<ExtraClassPage />} />
           <Route path={paths.cr.requests()} element={<MyRequestsPage />} />
-          <Route path={paths.cr.sendMessage()} element={<SendMessagePage />} />
-          <Route path={paths.cr.teacherMessages()} element={<TeacherMessagesPage />} />
-          <Route path={paths.cr.notices()} element={<CRPostNoticesPage />} />
+          <Route path={paths.cr.messages()} element={<MessagesPage />} />
+          <Route path={paths.cr.notices()} element={<NoticesPage />} />
+          <Route path={paths.cr.postNotices()} element={<CRPostNoticesPage />} />
           <Route path={paths.cr.materials()} element={<CRMaterialsPage />} />
           <Route path={paths.cr.polls()} element={<CRPollsPage />} />
           <Route path={paths.cr.teachers()} element={<TeachersPage />} />
@@ -125,8 +120,8 @@ export default function Router() {
           <Route path={paths.teacher.schedule()} element={<DailySchedulePage />} />
           <Route path={paths.teacher.requests()} element={<ApprovalRequestsPage />} />
           <Route path={paths.teacher.cancelClass()} element={<CancelClassPage />} />
-          <Route path={paths.teacher.crMessages()} element={<CRMessagesPage />} />
-          <Route path={paths.teacher.sendMessage()} element={<TeacherSendMessagePage />} />
+          <Route path={paths.teacher.notices()} element={<TeacherNoticesPage />} />
+          <Route path={paths.teacher.messages()} element={<MessagesPage />} />
         </Route>
       </Route>
       <Route element={<RequireRole roles="admin" />}>
@@ -140,6 +135,7 @@ export default function Router() {
           <Route path={paths.admin.routines()} element={<AdminRoutinesPage />} />
           <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />
           <Route path={paths.admin.materials()} element={<AdminMaterialsPage />} />
+          <Route path={paths.admin.messages()} element={<MessagesPage />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundPage />} />
