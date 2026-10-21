@@ -16,7 +16,7 @@ import (
 
 const (
 	scheduleCourse  = `{"code":"cse233","title":"Digital Logic Design"}`
-	scheduleTeacher = `{"name":"Schedule Teacher","teacher_id":"T-900","email":"scheduleteacher@sust.edu",
+	scheduleTeacher = `{"name":"Schedule Teacher","user_id":"T-900","email":"scheduleteacher@sust.edu",
 "phone":"01712345900","password":"sust-250-project","confirm_password":"sust-250-project"}`
 	scheduleCR = `{"full_name":"Schedule CR","reg_no":"2023331900","batch":"CSE-23","section":"A",
 "email":"schedulecr@student.sust.edu","phone":"01712345901","blood_group":"O+",

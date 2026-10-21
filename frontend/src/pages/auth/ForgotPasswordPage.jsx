@@ -29,8 +29,8 @@ const copy = {
   },
   teacher: {
     heading: 'Reset your password',
-    subtitle: 'We check your teacher ID against the date of birth on your account.',
-    identifier: 'Teacher ID',
+    subtitle: 'We check your User ID or email against the date of birth on your account.',
+    identifier: 'User ID or email',
   },
   admin: {
     heading: 'Administration password reset',

@@ -71,7 +71,6 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 			Location:       loc,
 			FrontendOrigin: testFrontend,
 			StudentDomain:  "student.sust.edu",
-			TeacherDomain:  "sust.edu",
 		},
 		Database: stubPinger{},
 		Tokens:   tokens,
@@ -115,6 +114,19 @@ func call(t *testing.T, router http.Handler, method, path, body, token string) *
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+func boolean(t *testing.T, rec *httptest.ResponseRecorder, name string) bool {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("body is not valid JSON: %v (body = %q)", err, rec.Body.String())
+	}
+	value, ok := payload[name].(bool)
+	if !ok {
+		t.Fatalf("the %q field is not a boolean (body = %q)", name, rec.Body.String())
+	}
+	return value
 }
 
 func field(t *testing.T, rec *httptest.ResponseRecorder, name string) string {

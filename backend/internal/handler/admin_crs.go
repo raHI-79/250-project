@@ -59,7 +59,12 @@ func (a *Admin) PromoteCR() http.HandlerFunc {
 func (a *Admin) CRs() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
-		filter := store.CRFilter{Search: strings.TrimSpace(query.Get("search"))}
+		status, err := statusFilter(query.Get("status"))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		filter := store.CRFilter{Search: strings.TrimSpace(query.Get("search")), Status: status}
 		if batch := strings.TrimSpace(query.Get("batch")); batch != "" {
 			value, err := validate.Batch("batch", batch)
 			if err != nil {
@@ -115,6 +120,7 @@ func (a *Admin) DeactivateCR() http.HandlerFunc {
 			log.Printf("handler: could not deactivate a class representative: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 		default:
+			a.auditRemoval(r, userID)
 			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageCRDeactivated})
 		}
 	}

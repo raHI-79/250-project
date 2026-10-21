@@ -28,7 +28,6 @@ func setEnv(t *testing.T, overrides map[string]string) {
 		"ADMIN_IDENTIFIER":     "",
 		"ADMIN_PASSWORD":       "",
 		"STUDENT_EMAIL_DOMAIN": "",
-		"TEACHER_EMAIL_DOMAIN": "",
 		"GOOGLE_CLIENT_ID":     "",
 	}
 	for key, value := range overrides {
@@ -63,11 +62,9 @@ func TestLoadDefaults(t *testing.T) {
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: ""},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: ""},
 		{name: "StudentDomain", got: cfg.StudentDomain, want: "student.sust.edu"},
-		{name: "TeacherDomain", got: cfg.TeacherDomain, want: "sust.edu"},
 		{name: "GoogleClientID", got: cfg.GoogleClientID, want: ""},
 		{name: "GoogleEnabled", got: cfg.GoogleEnabled(), want: false},
 		{name: "StudentEmailSuffix", got: cfg.StudentEmailSuffix(), want: "@student.sust.edu"},
-		{name: "TeacherEmailSuffix", got: cfg.TeacherEmailSuffix(), want: "@sust.edu"},
 	}
 	for _, check := range checks {
 		if check.got != check.want {
@@ -96,7 +93,6 @@ func TestLoadOverrides(t *testing.T) {
 		"ADMIN_IDENTIFIER":     "admin",
 		"ADMIN_PASSWORD":       "a-long-enough-password",
 		"STUDENT_EMAIL_DOMAIN": "Student.CSE.SUST.edu",
-		"TEACHER_EMAIL_DOMAIN": "CSE.SUST.edu",
 		"GOOGLE_CLIENT_ID":     "client-id.apps.googleusercontent.com",
 	})
 	cfg, err := Load()
@@ -118,7 +114,6 @@ func TestLoadOverrides(t *testing.T) {
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: "admin"},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: "a-long-enough-password"},
 		{name: "StudentDomain", got: cfg.StudentDomain, want: "student.cse.sust.edu"},
-		{name: "TeacherDomain", got: cfg.TeacherDomain, want: "cse.sust.edu"},
 		{name: "GoogleEnabled", got: cfg.GoogleEnabled(), want: true},
 		{name: "StudentEmailSuffix", got: cfg.StudentEmailSuffix(), want: "@student.cse.sust.edu"},
 	}

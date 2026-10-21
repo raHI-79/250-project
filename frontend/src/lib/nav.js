@@ -13,6 +13,7 @@ import {
   Link2,
   Mail,
   Megaphone,
+  ScrollText,
   Send,
   Sunrise,
   UserCircle,
@@ -92,6 +93,7 @@ export const adminNav = [
       { label: 'Routines', to: paths.admin.routines, icon: CalendarDays },
       { label: 'Notices', to: paths.admin.notices, icon: Megaphone },
       { label: 'Messages', to: paths.admin.messages, icon: Mail, badge: MESSAGES_BADGE },
+      { label: 'Activity log', to: paths.admin.activity, icon: ScrollText },
     ],
   },
 ]

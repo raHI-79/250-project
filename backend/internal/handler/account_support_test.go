@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -27,7 +28,6 @@ import (
 const (
 	testSecret     = "0123456789abcdef0123456789abcdef"
 	studentDomain  = "student.sust.edu"
-	teacherDomain  = "sust.edu"
 	googleClientID = "client-id.apps.googleusercontent.com"
 )
 
@@ -63,7 +63,6 @@ func accountConfig(t *testing.T, appEnv string) *config.Config {
 		JWTSecret:      testSecret,
 		FrontendOrigin: "http://localhost:5173",
 		StudentDomain:  studentDomain,
-		TeacherDomain:  teacherDomain,
 		GoogleClientID: googleClientID,
 	}
 }
@@ -174,6 +173,9 @@ type accountStore struct {
 	clearedCodes  []int64
 	clearedInvite []int64
 	activated     []int64
+	chosenIDs     []string
+	takenIDs      map[string]bool
+	takenErr      error
 	startedCodes  []startResetCall
 	emailAttempts int
 	inviteTries   int
@@ -186,6 +188,7 @@ func newAccountStore() *accountStore {
 		challenges: make(map[string]store.EmailChallenge),
 		invites:    make(map[string]store.TeacherInvite),
 		allowedIDs: make(map[int64]bool),
+		takenIDs:   make(map[string]bool),
 	}
 }
 
@@ -304,15 +307,26 @@ func (f *accountStore) ClearInvite(ctx context.Context, userID int64) error {
 	return nil
 }
 
-func (f *accountStore) ActivateTeacher(ctx context.Context, userID int64, passwordHash, photoPath string) error {
+func (f *accountStore) ActivateTeacher(ctx context.Context, userID int64, chosenID, passwordHash, photoPath string) error {
 	if f.activateErr != nil {
 		return f.activateErr
 	}
 	if passwordHash == "" {
 		return errors.New("the activation did not receive a password hash")
 	}
+	if f.takenIDs[strings.ToLower(chosenID)] {
+		return store.ErrDuplicateIdentifier
+	}
 	f.activated = append(f.activated, userID)
+	f.chosenIDs = append(f.chosenIDs, chosenID)
 	return nil
+}
+
+func (f *accountStore) IdentifierTaken(ctx context.Context, chosenID string) (bool, error) {
+	if f.takenErr != nil {
+		return false, f.takenErr
+	}
+	return f.takenIDs[strings.ToLower(chosenID)], nil
 }
 
 func newAccountAuth(t *testing.T, users AuthStore, photos PhotoStore, google googleauth.Validator, mail *fakeMailer) *Auth {

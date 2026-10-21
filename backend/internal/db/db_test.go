@@ -19,6 +19,7 @@ const (
 )
 
 var expectedTables = []string{
+	"admin_audit",
 	"batch_drive_links",
 	"class_events",
 	"courses",

@@ -29,7 +29,7 @@ const (
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
 	adminFlowEmail   = "flowadmin@sust.edu"
 	adminFlowPhone   = "01799999999"
-	adminFlowTeacher = `{"name":"Flow Teacher","teacher_id":"T-900","email":"flowteacher@sust.edu",
+	adminFlowTeacher = `{"name":"Flow Teacher","user_id":"T-900","email":"flowteacher@sust.edu",
 "phone":"01712345602","password":"sust-250-project","confirm_password":"sust-250-project"}`
 )
 

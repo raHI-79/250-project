@@ -12,9 +12,18 @@ const (
 	MaxFieldLength    = 120
 	MaxEmailLength    = 254
 	MinPasswordLength = 8
+	MinUserIDLength   = 4
+	MaxUserIDLength   = 20
 	MinAge            = 15
 	MaxAge            = 60
 	MessagePhone      = "Phone number must be 11 digits, for example 01712345678."
+
+	MessageUserIDRequired   = "User ID is required."
+	MessageUserIDLength     = "User ID must be 4 to 20 characters long."
+	MessageUserIDCharacters = "User ID may only use letters, digits, dots, underscores and hyphens."
+	MessageUserIDDigitsOnly = "User ID cannot be digits only."
+	MessageUserIDStart      = "User ID must start with a letter."
+	MessageUserIDReserved   = "This User ID is reserved."
 )
 
 var (
@@ -23,8 +32,11 @@ var (
 	batchPattern      = regexp.MustCompile(`^[A-Z]{2,6}-[0-9]{2}$`)
 	sectionPattern    = regexp.MustCompile(`^[A-Z]$`)
 	courseCodePattern = regexp.MustCompile(`^[A-Z]{2,6}-?[0-9]{3}$`)
-	teacherIDPattern  = regexp.MustCompile(`^[A-Za-z0-9-]{3,20}$`)
+	userIDPattern     = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	userIDDigits      = regexp.MustCompile(`^[0-9]+$`)
+	userIDStart       = regexp.MustCompile(`^[A-Za-z]`)
 	bloodGroups       = []string{"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
+	reservedUserIDs   = []string{"admin", "office", "root", "support", "system", "teacher", "student"}
 )
 
 func Required(label, value string) (string, error) {
@@ -171,15 +183,35 @@ func CourseCode(label, value string) (string, error) {
 	return trimmed, nil
 }
 
-func TeacherID(label, value string) (string, error) {
-	trimmed, err := Required(label, value)
-	if err != nil {
-		return "", err
+func UserID(value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", errors.New(MessageUserIDRequired)
 	}
-	if !teacherIDPattern.MatchString(trimmed) {
-		return "", fmt.Errorf("%s must be 3 to 20 letters, digits or hyphens.", label)
+	length := len([]rune(trimmed))
+	if length < MinUserIDLength || length > MaxUserIDLength {
+		return "", errors.New(MessageUserIDLength)
+	}
+	if !userIDPattern.MatchString(trimmed) {
+		return "", errors.New(MessageUserIDCharacters)
+	}
+	if userIDDigits.MatchString(trimmed) {
+		return "", errors.New(MessageUserIDDigitsOnly)
+	}
+	if !userIDStart.MatchString(trimmed) {
+		return "", errors.New(MessageUserIDStart)
+	}
+	lowered := strings.ToLower(trimmed)
+	for _, reserved := range reservedUserIDs {
+		if lowered == reserved {
+			return "", errors.New(MessageUserIDReserved)
+		}
 	}
 	return trimmed, nil
+}
+
+func ReservedUserIDs() []string {
+	return append([]string(nil), reservedUserIDs...)
 }
 
 func Password(label, password, confirm string) error {

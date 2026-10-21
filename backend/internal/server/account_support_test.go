@@ -158,18 +158,18 @@ func teacherInviteCall(t *testing.T, router http.Handler, adminToken, body strin
 	if invited.Code != http.StatusCreated {
 		return invited
 	}
-	activated := activateTeacher(t, router, field(t, invited, "invite_link"), teacherIDOf(t, body), teacherFlowBirthDate)
+	activated := activateTeacher(t, router, field(t, invited, "invite_link"), chosenUserIDOf(t, body), teacherFlowBirthDate)
 	if activated.Code != http.StatusOK {
 		t.Fatalf("activate teacher status = %d, want 200 (body = %q)", activated.Code, activated.Body.String())
 	}
 	return invited
 }
 
-func activateTeacher(t *testing.T, router http.Handler, link, teacherID, birthDate string) *httptest.ResponseRecorder {
+func activateTeacher(t *testing.T, router http.Handler, link, chosenID, birthDate string) *httptest.ResponseRecorder {
 	t.Helper()
 	values := map[string][]string{
 		"token":            {inviteTokenOf(t, link)},
-		"teacher_id":       {teacherID},
+		"user_id":          {chosenID},
 		"date_of_birth":    {birthDate},
 		"password":         {flowPassword},
 		"confirm_password": {flowPassword},
@@ -191,9 +191,9 @@ func regNoOf(t *testing.T, body string) string {
 	return stringField(t, body, "reg_no")
 }
 
-func teacherIDOf(t *testing.T, body string) string {
+func chosenUserIDOf(t *testing.T, body string) string {
 	t.Helper()
-	return stringField(t, body, "teacher_id")
+	return stringField(t, body, "user_id")
 }
 
 func stringField(t *testing.T, body, name string) string {

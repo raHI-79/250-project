@@ -17,7 +17,6 @@ const (
 
 type authConfigResponse struct {
 	StudentEmailDomain string `json:"student_email_domain"`
-	TeacherEmailDomain string `json:"teacher_email_domain"`
 	GoogleEnabled      bool   `json:"google_enabled"`
 }
 
@@ -45,7 +44,6 @@ func (a *Auth) Config() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusOK, authConfigResponse{
 			StudentEmailDomain: a.cfg.StudentDomain,
-			TeacherEmailDomain: a.cfg.TeacherDomain,
 			GoogleEnabled:      a.cfg.GoogleEnabled(),
 		})
 	}

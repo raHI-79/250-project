@@ -9,6 +9,9 @@ import (
 )
 
 const (
+	RoleStudent      = "student"
+	RoleTeacher      = "teacher"
+	RoleAdmin        = "admin"
 	StatusActive     = "active"
 	StatusPending    = "pending"
 	StatusRejected   = "rejected"
@@ -45,7 +48,7 @@ func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-const getAuthUserSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version, COALESCE(s.is_cr, FALSE),
+const getAuthUserSQL = `SELECT u.id, COALESCE(u.identifier, ''), u.role, u.status, u.token_version, COALESCE(s.is_cr, FALSE),
 COALESCE(u.photo_path, '')
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id

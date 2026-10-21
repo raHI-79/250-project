@@ -219,7 +219,6 @@ func TestTeacherInvitations(t *testing.T) {
 	expiresAt := time.Now().Add(72 * time.Hour).Truncate(time.Second)
 	teacher := NewTeacher{
 		Name:            "Invited Teacher",
-		TeacherID:       "T-500",
 		Designation:     "Assistant Professor",
 		Email:           "invited@sust.edu",
 		Phone:           "01812345678",
@@ -245,14 +244,14 @@ func TestTeacherInvitations(t *testing.T) {
 	if user.PhotoPath != "/uploads/photos/teacher.png" {
 		t.Errorf("photo = %q, want the stored photo", user.PhotoPath)
 	}
-	if hash := storedPasswordHash(t, ctx, pool, "T-500"); hash != "" {
-		t.Errorf("the invited teacher has the password hash %q, want none", hash)
+	if identifier := storedIdentifier(t, ctx, pool, userID); identifier != "" {
+		t.Errorf("the invited teacher already has the user id %q, want none", identifier)
 	}
 	invite, err := store.FindInvite(ctx, "stored-invite-hash")
 	if err != nil {
 		t.Fatalf("FindInvite() returned an unexpected error: %v", err)
 	}
-	if invite.UserID != userID || invite.TeacherID != "T-500" || invite.DateOfBirth != "1988-03-09" {
+	if invite.UserID != userID || invite.TeacherID != "" || invite.DateOfBirth != "1988-03-09" {
 		t.Errorf("invite = %+v, want the stored teacher", invite)
 	}
 	if _, err := store.FindInvite(ctx, "another-hash"); !errors.Is(err, ErrNotFound) {
@@ -288,8 +287,14 @@ func TestTeacherInvitations(t *testing.T) {
 	if teachers[0].OfficeRoom != "AB-401" || teachers[0].JoiningDate != "2015-01-15" {
 		t.Errorf("teacher row = %+v, want the office room and joining date", teachers[0])
 	}
-	if err := store.ActivateTeacher(ctx, userID, "new-password-hash", ""); err != nil {
+	if err := store.ActivateTeacher(ctx, userID, "karim.cse", "new-password-hash", ""); err != nil {
 		t.Fatalf("ActivateTeacher() returned an unexpected error: %v", err)
+	}
+	if identifier := storedIdentifier(t, ctx, pool, userID); identifier != "karim.cse" {
+		t.Errorf("identifier = %q, want karim.cse", identifier)
+	}
+	if hash := storedPasswordHash(t, ctx, pool, "karim.cse"); hash != "new-password-hash" {
+		t.Errorf("stored hash = %q, want the activation hash", hash)
 	}
 	active, err := store.GetAuthUser(ctx, userID)
 	if err != nil {
@@ -301,7 +306,7 @@ func TestTeacherInvitations(t *testing.T) {
 	if _, err := store.FindInvite(ctx, "second-invite-hash"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("the invitation hash survived the activation: %v", err)
 	}
-	if err := store.ActivateTeacher(ctx, userID, "another-hash", ""); !errors.Is(err, ErrNotFound) {
+	if err := store.ActivateTeacher(ctx, userID, "karim.two", "another-hash", ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("second ActivateTeacher() error = %v, want ErrNotFound", err)
 	}
 	if _, err := store.ResetTeacherInvite(ctx, userID, "third-hash", expiresAt); !errors.Is(err, ErrNotInvited) {

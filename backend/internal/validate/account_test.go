@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -107,5 +108,50 @@ func TestPlainDate(t *testing.T) {
 			got, err := PlainDate("Joining date", tc.value)
 			checkResult(t, got, err, tc.want, tc.wantErr)
 		})
+	}
+}
+
+func TestUserID(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr string
+	}{
+		{name: "letters and a dot", value: "karim.cse", want: "karim.cse"},
+		{name: "letters digits and marks", value: "k_rahman-2", want: "k_rahman-2"},
+		{name: "the shortest allowed", value: "abcd", want: "abcd"},
+		{name: "the longest allowed", value: "a" + strings.Repeat("b", 19), want: "a" + strings.Repeat("b", 19)},
+		{name: "mixed case is kept", value: "Karim.CSE", want: "Karim.CSE"},
+		{name: "spaces are trimmed", value: "  karim.cse  ", want: "karim.cse"},
+		{name: "empty", value: "", wantErr: MessageUserIDRequired},
+		{name: "only spaces", value: "   ", wantErr: MessageUserIDRequired},
+		{name: "too short", value: "abc", wantErr: MessageUserIDLength},
+		{name: "too long", value: "a" + strings.Repeat("b", 20), wantErr: MessageUserIDLength},
+		{name: "a space inside", value: "karim cse", wantErr: MessageUserIDCharacters},
+		{name: "an at sign", value: "karim@sust.edu", wantErr: MessageUserIDCharacters},
+		{name: "a slash", value: "karim/cse", wantErr: MessageUserIDCharacters},
+		{name: "digits only", value: "2023331079", wantErr: MessageUserIDDigitsOnly},
+		{name: "starts with a digit", value: "1karim", wantErr: MessageUserIDStart},
+		{name: "starts with an underscore", value: "_karim", wantErr: MessageUserIDStart},
+		{name: "starts with a hyphen", value: "-karim", wantErr: MessageUserIDStart},
+		{name: "reserved admin", value: "admin", wantErr: MessageUserIDReserved},
+		{name: "reserved office", value: "office", wantErr: MessageUserIDReserved},
+		{name: "reserved teacher in another case", value: "Teacher", wantErr: MessageUserIDReserved},
+		{name: "a reserved word as a prefix is allowed", value: "admin.karim", want: "admin.karim"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := UserID(tc.value)
+			checkResult(t, got, err, tc.want, tc.wantErr)
+		})
+	}
+}
+
+func TestReservedUserIDsAreAllRefused(t *testing.T) {
+	for _, reserved := range ReservedUserIDs() {
+		if _, err := UserID(reserved); err == nil {
+			t.Errorf("UserID(%q) was accepted, want the reserved message", reserved)
+		}
 	}
 }

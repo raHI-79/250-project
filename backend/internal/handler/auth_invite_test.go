@@ -2,21 +2,22 @@ package handler
 
 import (
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
 
 const (
 	inviteToken     = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	inviteTeacherID = "T-100"
 	inviteBirthDate = "1988-03-09"
+	chosenUserID    = "karim.cse"
 )
 
 func plannedInvite(users *accountStore, attempts int) {
 	users.invites[hashResetSecret(inviteToken)] = store.TeacherInvite{
 		UserID:      6,
-		TeacherID:   inviteTeacherID,
 		Name:        "Invited Teacher",
 		Designation: "Assistant Professor",
 		Email:       "invited@sust.edu",
@@ -63,11 +64,62 @@ func TestInviteLookup(t *testing.T) {
 			if strings.Contains(rec.Body.String(), inviteBirthDate) {
 				t.Error("the invitation lookup leaks the birth date")
 			}
-			if strings.Contains(rec.Body.String(), inviteTeacherID) {
-				t.Error("the invitation lookup leaks the teacher id")
-			}
 			if strings.Contains(rec.Body.String(), "invited@sust.edu") {
 				t.Error("the invitation lookup leaks the full email address")
+			}
+		})
+	}
+}
+
+func TestUserIDAvailable(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name      string
+		userID    string
+		taken     string
+		wantFree  bool
+		wantWhyNo string
+	}{
+		{name: "free", userID: chosenUserID, wantFree: true},
+		{name: "letters digits and marks", userID: "k_rahman-2", wantFree: true},
+		{name: "mixed case of a free id", userID: "Karim.CSE", wantFree: true},
+		{name: "missing", userID: "", wantWhyNo: validate.MessageUserIDRequired},
+		{name: "too short", userID: "ab1", wantWhyNo: validate.MessageUserIDLength},
+		{name: "too long", userID: "karim" + strings.Repeat("x", 16), wantWhyNo: validate.MessageUserIDLength},
+		{name: "a space inside", userID: "karim cse", wantWhyNo: validate.MessageUserIDCharacters},
+		{name: "an at sign", userID: "karim@cse", wantWhyNo: validate.MessageUserIDCharacters},
+		{name: "digits only", userID: "20233310", wantWhyNo: validate.MessageUserIDDigitsOnly},
+		{name: "starts with a digit", userID: "1karim", wantWhyNo: validate.MessageUserIDStart},
+		{name: "starts with a dot", userID: ".karim", wantWhyNo: validate.MessageUserIDStart},
+		{name: "reserved", userID: "admin", wantWhyNo: validate.MessageUserIDReserved},
+		{name: "reserved in another case", userID: "Student", wantWhyNo: validate.MessageUserIDReserved},
+		{name: "taken", userID: chosenUserID, taken: chosenUserID, wantWhyNo: MessageUserIDTaken},
+		{name: "taken in another case", userID: "KARIM.CSE", taken: chosenUserID, wantWhyNo: MessageUserIDTaken},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			users := newAccountStore()
+			if test.taken != "" {
+				users.takenIDs[strings.ToLower(test.taken)] = true
+			}
+			handler := newAccountAuth(t, users, testPhotos(t), &fakeGoogle{}, &fakeMailer{})
+			target := "/api/auth/user-id-available?user_id=" + url.QueryEscape(test.userID)
+			rec := serve(handler.UserIDAvailable(), jsonRequest(t, http.MethodGet, target, "", 0, ""))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+			}
+			payload := decodeBody(t, rec)
+			if payload["available"] != test.wantFree {
+				t.Errorf("available = %v, want %v", payload["available"], test.wantFree)
+			}
+			if test.wantFree {
+				if _, present := payload["reason"]; present {
+					t.Errorf("a free user id carries the reason %v", payload["reason"])
+				}
+				return
+			}
+			if got := payload["reason"]; got != test.wantWhyNo {
+				t.Errorf("reason = %v, want %q", got, test.wantWhyNo)
 			}
 		})
 	}
@@ -78,7 +130,7 @@ func TestActivateTeacher(t *testing.T) {
 	activation := func() map[string][]string {
 		return map[string][]string{
 			"token":            {inviteToken},
-			"teacher_id":       {inviteTeacherID},
+			"user_id":          {chosenUserID},
 			"date_of_birth":    {inviteBirthDate},
 			"password":         {"sust-250-project"},
 			"confirm_password": {"sust-250-project"},
@@ -88,6 +140,7 @@ func TestActivateTeacher(t *testing.T) {
 		name        string
 		values      map[string][]string
 		attempts    int
+		taken       string
 		withPhoto   bool
 		wantStatus  int
 		wantError   string
@@ -96,12 +149,6 @@ func TestActivateTeacher(t *testing.T) {
 	}{
 		{name: "right answers", values: activation(), wantStatus: http.StatusOK, wantActive: true},
 		{name: "with a photo", values: activation(), withPhoto: true, wantStatus: http.StatusOK, wantActive: true},
-		{
-			name:       "wrong teacher id",
-			values:     withField(activation(), "teacher_id", "T-999"),
-			wantStatus: http.StatusBadRequest,
-			wantError:  MessageInviteMismatch,
-		},
 		{
 			name:       "wrong birth date",
 			values:     withField(activation(), "date_of_birth", "1990-01-01"),
@@ -116,11 +163,36 @@ func TestActivateTeacher(t *testing.T) {
 		},
 		{
 			name:        "the fifth wrong answer locks the invitation",
-			values:      withField(activation(), "teacher_id", "T-999"),
+			values:      withField(activation(), "date_of_birth", "1990-01-01"),
 			attempts:    4,
 			wantStatus:  http.StatusBadRequest,
 			wantError:   MessageInviteLocked,
 			wantCleared: true,
+		},
+		{
+			name:       "no user id",
+			values:     withField(activation(), "user_id"),
+			wantStatus: http.StatusBadRequest,
+			wantError:  validate.MessageUserIDRequired,
+		},
+		{
+			name:       "a user id against the rules",
+			values:     withField(activation(), "user_id", "1karim"),
+			wantStatus: http.StatusBadRequest,
+			wantError:  validate.MessageUserIDStart,
+		},
+		{
+			name:       "a reserved user id",
+			values:     withField(activation(), "user_id", "office"),
+			wantStatus: http.StatusBadRequest,
+			wantError:  validate.MessageUserIDReserved,
+		},
+		{
+			name:       "a taken user id",
+			values:     activation(),
+			taken:      chosenUserID,
+			wantStatus: http.StatusConflict,
+			wantError:  MessageUserIDTaken,
 		},
 		{
 			name:       "unknown token",
@@ -152,8 +224,12 @@ func TestActivateTeacher(t *testing.T) {
 			users := newAccountStore()
 			plannedInvite(users, test.attempts)
 			users.inviteTries = test.attempts
+			if test.taken != "" {
+				users.takenIDs[strings.ToLower(test.taken)] = true
+			}
 			photos := testPhotos(t)
-			handler := newAccountAuth(t, users, photos, &fakeGoogle{}, &fakeMailer{})
+			mail := &fakeMailer{configured: true}
+			handler := newAccountAuth(t, users, photos, &fakeGoogle{}, mail)
 			files := []formFile{}
 			if test.withPhoto {
 				files = append(files, formFile{field: "photo", name: "teacher.jpg", data: jpegPhoto(t, 300, 300)})
@@ -180,11 +256,30 @@ func TestActivateTeacher(t *testing.T) {
 				}
 				return
 			}
-			if got := successMessage(t, rec); got != MessageTeacherActivated {
-				t.Errorf("message = %q, want %q", got, MessageTeacherActivated)
+			if got := users.chosenIDs[0]; got != chosenUserID {
+				t.Errorf("stored user id = %q, want %q", got, chosenUserID)
+			}
+			payload := decodeBody(t, rec)
+			if payload["user_id"] != chosenUserID {
+				t.Errorf("user_id = %v, want %q", payload["user_id"], chosenUserID)
+			}
+			if payload["name"] != "Invited Teacher" {
+				t.Errorf("name = %v, want the invited teacher", payload["name"])
+			}
+			if payload["message"] != MessageTeacherActivated {
+				t.Errorf("message = %v, want %q", payload["message"], MessageTeacherActivated)
 			}
 			if strings.Contains(rec.Body.String(), "sust-250-project") {
 				t.Error("the activation response leaks the password")
+			}
+			if len(mail.sent) != 1 || mail.sent[0].to != "invited@sust.edu" {
+				t.Fatalf("sent mail = %+v, want one message to the teacher", mail.sent)
+			}
+			if !strings.Contains(mail.sent[0].body, chosenUserID) {
+				t.Errorf("mail body = %q, want the chosen user id", mail.sent[0].body)
+			}
+			if strings.Contains(mail.sent[0].body, "sust-250-project") {
+				t.Error("the confirmation email leaks the password")
 			}
 			wantPhotos := 0
 			if test.withPhoto {
@@ -206,7 +301,7 @@ func TestActivateTeacherRemovesThePhotoWhenTheStoreFails(t *testing.T) {
 	handler := newAccountAuth(t, users, photos, &fakeGoogle{}, &fakeMailer{})
 	values := map[string][]string{
 		"token":            {inviteToken},
-		"teacher_id":       {inviteTeacherID},
+		"user_id":          {chosenUserID},
 		"date_of_birth":    {inviteBirthDate},
 		"password":         {"sust-250-project"},
 		"confirm_password": {"sust-250-project"},

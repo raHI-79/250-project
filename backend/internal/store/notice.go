@@ -52,10 +52,11 @@ type NoticeRow struct {
 const (
 	noticeColumns = `n.id, n.source, n.title, n.description, COALESCE(n.batch, ''), COALESCE(n.section, ''),
 COALESCE(n.link_url, ''), COALESCE(n.file_path, ''), COALESCE(n.file_name, ''), COALESCE(n.file_mime, ''),
-COALESCE(n.file_size, 0), n.created_by, COALESCE(s.full_name, t.name, 'Administration'),
+COALESCE(n.file_size, 0), COALESCE(n.created_by, 0),
+COALESCE(s.full_name, t.name, CASE WHEN n.created_by IS NULL THEN 'Deleted user' ELSE 'Administration' END),
 COALESCE(u.photo_path, ''), n.created_at`
 	noticeJoins = `FROM notices n
-JOIN users u ON u.id = n.created_by
+LEFT JOIN users u ON u.id = n.created_by
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id`
 	insertNoticeSQL = `WITH inserted AS (
@@ -68,7 +69,7 @@ LEFT JOIN teachers t ON t.user_id = u.id`
 )
 SELECT ` + noticeColumns + `
 FROM inserted n
-JOIN users u ON u.id = n.created_by
+LEFT JOIN users u ON u.id = n.created_by
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id`
 	listAdminNoticesSQL = `SELECT ` + noticeColumns + `

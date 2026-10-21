@@ -16,7 +16,7 @@ import (
 const (
 	todayCourse  = `{"code":"cse233","title":"Digital Logic Design"}`
 	todayDropped = `{"code":"cse211","title":"Data Structures"}`
-	todayTeacher = `{"name":"Today Teacher","teacher_id":"T-600","email":"todayteacher@sust.edu",
+	todayTeacher = `{"name":"Today Teacher","user_id":"T-600","email":"todayteacher@sust.edu",
 "phone":"01712345600","password":"sust-250-project","confirm_password":"sust-250-project"}`
 	todayStudent = `{"full_name":"Today Student","reg_no":"2023331600","batch":"CSE-23","section":"A",
 "email":"todaystudent@student.sust.edu","phone":"01712345601","blood_group":"O+",

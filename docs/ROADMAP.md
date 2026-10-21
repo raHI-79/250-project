@@ -1,6 +1,6 @@
 # Development Roadmap
 
-The project is built in 23 development steps. Each step is owned by one team
+The project is built in 24 development steps. Each step is owned by one team
 member, is worked on alone, and ends with reviewed Git commits. The last step is
 shared.
 
@@ -34,7 +34,8 @@ Full requirements: [SPEC.md](SPEC.md)
 | 17 | A | Account and profile pages | done |
 | 18 | B | Unified messaging, teacher notices and attachments | done |
 | 19 | A | Routine experience, batch Drive links and CR student access | done |
-| 20 | A | Browser push notifications | todo |
-| 21 | B | Interface redesign part 1: design system, public home and sign-in pages | todo |
-| 22 | A | Interface redesign part 2: all dashboard pages | todo |
-| 23 | A+B | Requirement updates, demo data, docs and CI | todo |
+| 20 | B | Teacher-chosen user IDs, open teacher email and admin record retention | done |
+| 21 | A | Browser push notifications | todo |
+| 22 | B | Interface redesign part 1: design system, public home and sign-in pages | todo |
+| 23 | A | Interface redesign part 2: all dashboard pages | todo |
+| 24 | A+B | Requirement updates, demo data, docs and CI | todo |

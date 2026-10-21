@@ -75,11 +75,12 @@ LIMIT 1`
 (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
 VALUES ($1, $2, $3, $4, $5, $6::time, $7::time, $8, $9)
 RETURNING id`
-	listRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title, r.teacher_id, t.name,
+	listRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title,
+COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
 FROM routines r
 JOIN courses c ON c.id = r.course_id
-JOIN teachers t ON t.id = r.teacher_id
+LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE ($1::text = '' OR r.batch = $1::text)
   AND ($2::text = '' OR r.section = $2::text OR r.section = 'ALL')
 ORDER BY r.batch, r.section, r.day_of_week, r.start_time`

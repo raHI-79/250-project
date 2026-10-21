@@ -143,6 +143,7 @@ func (a *Admin) RemoveStudent() http.HandlerFunc {
 			log.Printf("handler: could not remove a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 		default:
+			a.auditRemoval(r, userID)
 			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageStudentRemoved})
 		}
 	}

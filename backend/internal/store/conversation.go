@@ -126,7 +126,7 @@ const visibleConversation = `(
 
 const (
 	messageViewerSQL = `SELECT u.id,
-COALESCE(s.full_name, t.name, u.identifier),
+COALESCE(s.full_name, t.name, u.identifier, ''),
 CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END,
 COALESCE(s.batch, ''), COALESCE(s.section, '')
 FROM users u
@@ -134,7 +134,7 @@ LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
 WHERE u.id = $1 AND u.status = 'active'`
 	searchContactsSQL = `SELECT u.id,
-COALESCE(s.full_name, t.name, u.identifier),
+COALESCE(s.full_name, t.name, u.identifier, ''),
 CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END AS effective_role,
 COALESCE(s.batch, ''), COALESCE(s.section, ''), COALESCE(t.designation, ''),
 COALESCE(u.photo_path, '')
@@ -142,16 +142,16 @@ FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
 WHERE u.status = 'active' AND u.id <> $1
-  AND ($2::text = '' OR COALESCE(s.full_name, t.name, u.identifier) ILIKE '%' || $2::text || '%'
+  AND ($2::text = '' OR COALESCE(s.full_name, t.name, u.identifier, '') ILIKE '%' || $2::text || '%'
        OR u.identifier ILIKE '%' || $2::text || '%')
   AND ($3::text = '' OR $3::text =
        CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END)
-ORDER BY effective_role, COALESCE(s.full_name, t.name, u.identifier), u.id
+ORDER BY effective_role, COALESCE(s.full_name, t.name, u.identifier, ''), u.id
 LIMIT $4`
 	activeUserRoleSQL = `SELECT u.role FROM users u WHERE u.id = $1 AND u.status = 'active'`
 	lockDirectPairSQL = `SELECT pg_advisory_xact_lock(hashtext('direct:' || LEAST($1::bigint, $2::bigint) || ':' || GREATEST($1::bigint, $2::bigint)))`
 	findDirectSQL     = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-c.created_by, c.created_at, c.last_message_at
+COALESCE(c.created_by, 0), c.created_at, c.last_message_at
 FROM conversations c
 JOIN conversation_members a ON a.conversation_id = c.id AND a.user_id = $1
 JOIN conversation_members b ON b.conversation_id = c.id AND b.user_id = $2
@@ -160,31 +160,31 @@ LIMIT 1`
 	insertDirectSQL = `INSERT INTO conversations (kind, created_by)
 VALUES ('direct', $1)
 RETURNING id, kind, COALESCE(scope, ''), COALESCE(batch, ''), COALESCE(section, ''),
-created_by, created_at, last_message_at`
+COALESCE(created_by, 0), created_at, last_message_at`
 	insertMemberSQL = `INSERT INTO conversation_members (conversation_id, user_id)
 VALUES ($1, $2)
 ON CONFLICT DO NOTHING`
 	findGroupSQL = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-c.created_by, c.created_at, c.last_message_at
+COALESCE(c.created_by, 0), c.created_at, c.last_message_at
 FROM conversations c
 WHERE c.kind = 'group' AND c.created_by = $1 AND c.scope = $2
   AND COALESCE(c.batch, '') = $3::text AND COALESCE(c.section, '') = $4::text`
 	insertGroupSQL = `INSERT INTO conversations (kind, scope, batch, section, created_by)
 VALUES ('group', $2, NULLIF($3::text, ''), NULLIF($4::text, ''), $1)
 RETURNING id, kind, COALESCE(scope, ''), COALESCE(batch, ''), COALESCE(section, ''),
-created_by, created_at, last_message_at`
+COALESCE(created_by, 0), created_at, last_message_at`
 	listConversationsSQL = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-c.created_by, c.created_at, c.last_message_at,
+COALESCE(c.created_by, 0), c.created_at, c.last_message_at,
 COALESCE(other.user_id, 0), COALESCE(other.name, ''), COALESCE(other.photo_path, ''),
 COALESCE(last.sender_name, ''), COALESCE(last.body, ''), COALESCE(last.file_name, ''),
 (SELECT COUNT(*) FROM messages m2
- WHERE m2.conversation_id = c.id AND m2.sender_id <> $1
+ WHERE m2.conversation_id = c.id AND COALESCE(m2.sender_id, 0) <> $1
    AND (r.last_read_at IS NULL OR m2.created_at > r.last_read_at))
 FROM conversations c
 LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
 LEFT JOIN LATERAL (
     SELECT cm.user_id,
-           COALESCE(s.full_name, t.name, u.identifier) AS name,
+           COALESCE(s.full_name, t.name, u.identifier, '') AS name,
            COALESCE(u.photo_path, '') AS photo_path
     FROM conversation_members cm
     JOIN users u ON u.id = cm.user_id
@@ -195,9 +195,9 @@ LEFT JOIN LATERAL (
 ) other ON c.kind = 'direct'
 LEFT JOIN LATERAL (
     SELECT m.body, m.file_name,
-           COALESCE(s.full_name, t.name, u.identifier) AS sender_name
+           COALESCE(s.full_name, t.name, u.identifier, 'Deleted user') AS sender_name
     FROM messages m
-    JOIN users u ON u.id = m.sender_id
+    LEFT JOIN users u ON u.id = m.sender_id
     LEFT JOIN students s ON s.user_id = u.id
     LEFT JOIN teachers t ON t.user_id = u.id
     WHERE m.conversation_id = c.id
@@ -208,20 +208,20 @@ WHERE ` + visibleConversation + `
 ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.id DESC
 LIMIT $6`
 	findConversationAccessSQL = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-c.created_by, c.created_at, c.last_message_at,
+COALESCE(c.created_by, 0), c.created_at, c.last_message_at,
 CASE WHEN c.kind = 'direct'
      THEN EXISTS (SELECT 1 FROM conversation_members cm WHERE cm.conversation_id = c.id AND cm.user_id = $1)
      ELSE c.created_by = $1 END
 FROM conversations c
 WHERE c.id = $6 AND ` + visibleConversation
-	listChatMessagesSQL = `SELECT m.id, m.sender_id,
-COALESCE(s.full_name, t.name, u.identifier),
-CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END,
+	listChatMessagesSQL = `SELECT m.id, COALESCE(m.sender_id, 0),
+COALESCE(s.full_name, t.name, u.identifier, 'Deleted user'),
+COALESCE(CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END, ''),
 COALESCE(u.photo_path, ''),
 m.body, COALESCE(m.link_url, ''), COALESCE(m.file_path, ''), COALESCE(m.file_name, ''),
 COALESCE(m.file_mime, ''), COALESCE(m.file_size, 0), m.created_at
 FROM messages m
-JOIN users u ON u.id = m.sender_id
+LEFT JOIN users u ON u.id = m.sender_id
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
 WHERE m.conversation_id = $1 AND ($2::timestamptz IS NULL OR m.created_at < $2::timestamptz)
@@ -240,7 +240,7 @@ ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = EXCLUDED.las
 FROM messages m
 JOIN conversations c ON c.id = m.conversation_id
 LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
-WHERE m.sender_id <> $1
+WHERE COALESCE(m.sender_id, 0) <> $1
   AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
   AND ` + visibleConversation
 	directRecipientSQL = `SELECT cm.user_id

@@ -22,7 +22,7 @@ const (
 	boardOutsider = `{"full_name":"Board Outsider","reg_no":"2022331912","batch":"CSE-22","section":"A",
 "email":"boardoutsider@student.sust.edu","phone":"01712345912","blood_group":"A+",
 "password":"sust-250-project","confirm_password":"sust-250-project","has_drop_course":false}`
-	boardTeacher = `{"name":"Board Teacher","teacher_id":"T-910","email":"boardteacher@sust.edu",
+	boardTeacher = `{"name":"Board Teacher","user_id":"T-910","email":"boardteacher@sust.edu",
 "phone":"01712345913","password":"sust-250-project","confirm_password":"sust-250-project"}`
 	boardLink = "https://drive.google.com/drive/folders/board"
 	pdfBody   = "%PDF-1.7 board notice"

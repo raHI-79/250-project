@@ -38,6 +38,14 @@ type fakeAdminStore struct {
 	studentFilter       store.StudentFilter
 	crFilter            store.CRFilter
 	teacherFilter       store.TeacherFilter
+	accounts            map[int64]store.AccountRef
+	accountErr          error
+	restoreErr          error
+	deleteErr           error
+	restored            []int64
+	deleted             []int64
+	auditEntries        []store.AuditRow
+	auditLimit          int
 }
 
 func (f *fakeAdminStore) ListPendingRegistrations(ctx context.Context) ([]store.PendingRegistration, error) {
@@ -156,6 +164,69 @@ func (f *fakeAdminStore) Stats(ctx context.Context) (store.Stats, error) {
 		return store.Stats{}, f.err
 	}
 	return f.stats, nil
+}
+
+func (f *fakeAdminStore) FindAccount(ctx context.Context, userID int64) (store.AccountRef, error) {
+	if f.accountErr != nil {
+		return store.AccountRef{}, f.accountErr
+	}
+	account, ok := f.accounts[userID]
+	if !ok {
+		return store.AccountRef{}, store.ErrNotFound
+	}
+	return account, nil
+}
+
+func (f *fakeAdminStore) RestoreAccount(ctx context.Context, userID int64) (string, error) {
+	if f.restoreErr != nil {
+		return "", f.restoreErr
+	}
+	account, ok := f.accounts[userID]
+	if !ok {
+		return "", store.ErrNotFound
+	}
+	switch account.Status {
+	case store.StatusRemoved:
+		account.Status = store.StatusActive
+	case store.StatusRejected:
+		account.Status = store.StatusPending
+	default:
+		return "", store.ErrNotRestorable
+	}
+	f.accounts[userID] = account
+	f.restored = append(f.restored, userID)
+	return account.Status, nil
+}
+
+func (f *fakeAdminStore) DeleteAccount(ctx context.Context, userID int64) (string, error) {
+	if f.deleteErr != nil {
+		return "", f.deleteErr
+	}
+	account, ok := f.accounts[userID]
+	if !ok {
+		return "", store.ErrNotFound
+	}
+	delete(f.accounts, userID)
+	f.deleted = append(f.deleted, userID)
+	return account.PhotoPath, nil
+}
+
+func (f *fakeAdminStore) WriteAudit(ctx context.Context, adminID int64, action, targetSummary string) error {
+	f.auditEntries = append(f.auditEntries, store.AuditRow{
+		AdminID:       adminID,
+		Action:        action,
+		TargetSummary: targetSummary,
+		CreatedAt:     adminNow,
+	})
+	return nil
+}
+
+func (f *fakeAdminStore) ListAudit(ctx context.Context, limit int) ([]store.AuditRow, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.auditLimit = limit
+	return f.auditEntries, nil
 }
 
 func adminCall(t *testing.T, handlerFunc http.HandlerFunc, method, target, id, body string) *httptest.ResponseRecorder {
@@ -547,9 +618,20 @@ func TestAdminCRs(t *testing.T) {
 	if list := items(t, rec); len(list) != 1 || list[0]["is_cr"] != true {
 		t.Errorf("items = %v, want one class representative", list)
 	}
+	filtered := adminCall(t, admin.CRs(), http.MethodGet, "/api/admin/crs?status=removed", "", "")
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("status filter code = %d, want 200 (body = %q)", filtered.Code, filtered.Body.String())
+	}
+	if people.crFilter != (store.CRFilter{Status: store.StatusRemoved}) {
+		t.Errorf("filter = %+v, want status removed", people.crFilter)
+	}
 	bad := adminCall(t, admin.CRs(), http.MethodGet, "/api/admin/crs?batch=23", "", "")
 	if bad.Code != http.StatusBadRequest {
 		t.Errorf("bad batch status = %d, want 400", bad.Code)
+	}
+	badStatus := adminCall(t, admin.CRs(), http.MethodGet, "/api/admin/crs?status=gone", "", "")
+	if badStatus.Code != http.StatusBadRequest {
+		t.Errorf("bad status code = %d, want 400", badStatus.Code)
 	}
 	failing := newAdminHandler(t, &fakeAdminStore{err: errors.New("database is down")})
 	broken := adminCall(t, failing.CRs(), http.MethodGet, "/api/admin/crs", "", "")
@@ -605,7 +687,6 @@ func TestAdminDemoteAndDeactivateCR(t *testing.T) {
 func teacherForm() map[string][]string {
 	return map[string][]string{
 		"name":          {"New Teacher"},
-		"teacher_id":    {"T-100"},
 		"designation":   {"Assistant Professor"},
 		"email":         {"teacher@sust.edu"},
 		"phone":         {"01712345671"},
@@ -638,6 +719,7 @@ func TestAdminInviteTeacher(t *testing.T) {
 		storeErr   error
 		wantStatus int
 		wantError  string
+		wantEmail  string
 	}{
 		{name: "invited", values: teacherForm(), wantStatus: http.StatusCreated},
 		{name: "invited with a photo", values: teacherForm(), withPhoto: true, wantStatus: http.StatusCreated},
@@ -648,22 +730,22 @@ func TestAdminInviteTeacher(t *testing.T) {
 			wantError:  "Designation is required.",
 		},
 		{
-			name:       "email outside the teacher domain",
+			name:       "any email domain is accepted",
 			values:     withoutField(teacherForm(), "email", "teacher@gmail.com"),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Email must end with @sust.edu.",
+			wantStatus: http.StatusCreated,
+			wantEmail:  "teacher@gmail.com",
 		},
 		{
-			name:       "student email domain",
-			values:     withoutField(teacherForm(), "email", "teacher@student.sust.edu"),
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Email must end with @sust.edu.",
+			name:       "a personal domain is accepted",
+			values:     withoutField(teacherForm(), "email", "Teacher@Example.ORG"),
+			wantStatus: http.StatusCreated,
+			wantEmail:  "teacher@example.org",
 		},
 		{
-			name:       "short teacher id",
-			values:     withoutField(teacherForm(), "teacher_id", "T1"),
+			name:       "a broken email is refused",
+			values:     withoutField(teacherForm(), "email", "teacher@localhost"),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Teacher ID must be 3 to 20 letters, digits or hyphens.",
+			wantError:  "Email must be a valid email address.",
 		},
 		{
 			name:       "bad phone",
@@ -720,8 +802,12 @@ func TestAdminInviteTeacher(t *testing.T) {
 				t.Fatalf("the store received %d teachers, want 1", len(people.createdTeachers))
 			}
 			created := people.createdTeachers[0]
-			if created.TeacherID != "T-100" || created.Email != "teacher@sust.edu" {
-				t.Errorf("created = %+v, want the submitted teacher ID and email", created)
+			wantEmail := test.wantEmail
+			if wantEmail == "" {
+				wantEmail = "teacher@sust.edu"
+			}
+			if created.Email != wantEmail {
+				t.Errorf("created email = %q, want %q", created.Email, wantEmail)
 			}
 			if created.Designation != "Assistant Professor" || created.OfficeRoom != "AB-401" {
 				t.Errorf("created = %+v, want the submitted designation and office room", created)
@@ -780,8 +866,9 @@ func TestAdminUpdateTeacher(t *testing.T) {
 		storeErr   error
 		wantStatus int
 		wantError  string
+		wantUpdate bool
 	}{
-		{name: "updated", id: "6", body: `{"designation":"Professor"}`, wantStatus: http.StatusOK},
+		{name: "updated", id: "6", body: `{"designation":"Professor"}`, wantStatus: http.StatusOK, wantUpdate: true},
 		{name: "bad id", id: "six", body: `{"designation":"Professor"}`, wantStatus: http.StatusBadRequest, wantError: MessageInvalidID},
 		{name: "nothing to change", id: "6", body: `{}`, wantStatus: http.StatusBadRequest, wantError: MessageNothingToUpdate},
 		{
@@ -799,11 +886,18 @@ func TestAdminUpdateTeacher(t *testing.T) {
 			wantError:  "Invalid request body",
 		},
 		{
-			name:       "email outside the teacher domain",
+			name:       "the teacher id is not an admin field any more",
 			id:         "6",
-			body:       `{"email":"teacher@gmail.com"}`,
+			body:       `{"teacher_id":"T-200"}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Email must end with @sust.edu.",
+			wantError:  "Invalid request body",
+		},
+		{
+			name:       "a broken email is refused",
+			id:         "6",
+			body:       `{"email":"teacher@localhost"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Email must be a valid email address.",
 		},
 		{
 			name:       "unknown teacher",
@@ -814,9 +908,9 @@ func TestAdminUpdateTeacher(t *testing.T) {
 			wantError:  MessageTeacherNotFound,
 		},
 		{
-			name:       "duplicate teacher id",
+			name:       "duplicate email",
 			id:         "6",
-			body:       `{"teacher_id":"T-200"}`,
+			body:       `{"email":"taken@sust.edu"}`,
 			storeErr:   store.ErrDuplicateAccount,
 			wantStatus: http.StatusConflict,
 			wantError:  MessageDuplicateTeacher,
@@ -839,11 +933,14 @@ func TestAdminUpdateTeacher(t *testing.T) {
 			if got := successMessage(t, rec); got != MessageTeacherUpdated {
 				t.Errorf("message = %q, want %q", got, MessageTeacherUpdated)
 			}
-			if len(people.teacherUpdates) != 1 || people.teacherUpdates[0].Designation == nil {
-				t.Fatalf("updates = %+v, want one designation change", people.teacherUpdates)
+			if !test.wantUpdate {
+				return
 			}
-			if *people.teacherUpdates[0].Designation != "Professor" {
-				t.Errorf("designation = %q, want Professor", *people.teacherUpdates[0].Designation)
+			if len(people.teacherUpdates) != 1 {
+				t.Fatalf("updates = %+v, want one update", people.teacherUpdates)
+			}
+			if people.teacherUpdates[0].Designation == nil || *people.teacherUpdates[0].Designation != "Professor" {
+				t.Errorf("updates = %+v, want one designation change", people.teacherUpdates)
 			}
 		})
 	}
@@ -919,8 +1016,8 @@ func TestAdminTeachers(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("got %d items, want 1", len(list))
 	}
-	if got := list[0]["teacher_id"]; got != "T-001" {
-		t.Errorf("teacher_id = %v, want T-001", got)
+	if got := list[0]["identifier"]; got != "T-001" {
+		t.Errorf("identifier = %v, want T-001", got)
 	}
 	if got := list[0]["photo_url"]; got != "/uploads/photos/bbbb.png" {
 		t.Errorf("photo_url = %v, want the stored photo", got)

@@ -72,7 +72,6 @@ type profileResponse struct {
 	IsCR         *bool           `json:"is_cr,omitempty"`
 	DropCourses  []profileCourse `json:"drop_courses,omitempty"`
 	Name         string          `json:"name,omitempty"`
-	TeacherID    string          `json:"teacher_id,omitempty"`
 	Designation  string          `json:"designation,omitempty"`
 	OfficeRoom   string          `json:"office_room,omitempty"`
 	JoiningDate  string          `json:"joining_date,omitempty"`
@@ -146,7 +145,7 @@ func profileBody(role string, profile store.Profile) profileResponse {
 		body.DropCourses = profileCourses(profile.DropCourses)
 	case auth.RoleTeacher:
 		body.Name = profile.FullName
-		body.TeacherID = profile.TeacherID
+		body.Identifier = profile.TeacherID
 		body.Designation = profile.Designation
 		body.Email = profile.Email
 		body.Phone = profile.Phone

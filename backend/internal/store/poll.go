@@ -59,12 +59,13 @@ WHERE id = $1 AND created_by = $2 AND status = 'open'
 RETURNING id`
 	pollStatusSQL = `SELECT status FROM polls WHERE id = $1 AND created_by = $2`
 	pollColumns   = `p.id, p.question, p.batch, p.section, p.status,
-COALESCE(s.full_name, t.name, 'Administration'), p.created_at,
+COALESCE(s.full_name, t.name, CASE WHEN p.created_by IS NULL THEN 'Deleted user' ELSE 'Administration' END),
+p.created_at,
 (SELECT COUNT(*) FROM poll_votes v WHERE v.poll_id = p.id),
 COALESCE((SELECT v.option_id FROM poll_votes v JOIN students vs ON vs.id = v.student_id
           WHERE v.poll_id = p.id AND vs.user_id = $1), 0)`
 	pollJoins = `FROM polls p
-JOIN users u ON u.id = p.created_by
+LEFT JOIN users u ON u.id = p.created_by
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id`
 	listCreatorPollsSQL = `SELECT ` + pollColumns + `

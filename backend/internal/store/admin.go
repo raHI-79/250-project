@@ -65,6 +65,7 @@ type StudentFilter struct {
 type CRFilter struct {
 	Search string
 	Batch  string
+	Status string
 }
 
 type TeacherRow struct {
@@ -91,7 +92,6 @@ type TeacherFilter struct {
 
 type NewTeacher struct {
 	Name            string
-	TeacherID       string
 	Designation     string
 	Email           string
 	Phone           string
@@ -106,7 +106,6 @@ type NewTeacher struct {
 
 type TeacherUpdate struct {
 	Name        *string
-	TeacherID   *string
 	Designation *string
 	Email       *string
 	DateOfBirth *string
@@ -164,9 +163,9 @@ s.is_cr, u.status, s.created_at
 FROM users u
 JOIN students s ON s.user_id = u.id
 WHERE s.is_cr
-  AND u.status NOT IN ('rejected', 'unverified')
   AND ($1::text = '' OR s.full_name ILIKE '%' || $1::text || '%' OR s.reg_no ILIKE '%' || $1::text || '%')
   AND ($2::text = '' OR s.batch = $2::text)
+  AND ($3::text = 'all' OR ($3::text = '' AND u.status NOT IN ('rejected', 'unverified')) OR u.status = $3::text)
 ORDER BY s.batch, s.section, s.full_name, s.reg_no`
 	demoteCRSQL = `UPDATE students
 SET is_cr = FALSE, updated_at = now()
@@ -182,39 +181,35 @@ FROM users u
 JOIN students s ON s.user_id = u.id
 WHERE u.id = $1 AND s.is_cr`
 	insertTeacherUserSQL = `INSERT INTO users
-(role, identifier, password_hash, status, photo_path, invite_token, invite_expires_at)
-VALUES ('teacher', $1, '', 'invited', NULLIF($2, ''), $3, $4)
+(role, password_hash, status, photo_path, invite_token, invite_expires_at)
+VALUES ('teacher', '', 'invited', NULLIF($1, ''), $2, $3)
 RETURNING id`
 	insertTeacherSQL = `INSERT INTO teachers
-(user_id, teacher_id, name, designation, email, phone, blood_group, date_of_birth, office_room, joining_date)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, NULLIF($10, '')::date)`
-	listTeachersSQL = `SELECT u.id, t.teacher_id, t.name, t.designation, t.email, t.phone,
+(user_id, name, designation, email, phone, blood_group, date_of_birth, office_room, joining_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8, NULLIF($9, '')::date)`
+	listTeachersSQL = `SELECT u.id, COALESCE(t.teacher_id, ''), t.name, t.designation, t.email, t.phone,
 COALESCE(t.blood_group, ''), COALESCE(to_char(t.date_of_birth, 'YYYY-MM-DD'), ''),
 t.office_room, COALESCE(to_char(t.joining_date, 'YYYY-MM-DD'), ''), t.bio,
 COALESCE(u.photo_path, ''), u.status, t.created_at
 FROM users u
 JOIN teachers t ON t.user_id = u.id
-WHERE ($1::text = '' OR t.name ILIKE '%' || $1::text || '%' OR t.teacher_id ILIKE '%' || $1::text || '%')
+WHERE ($1::text = '' OR t.name ILIKE '%' || $1::text || '%'
+       OR COALESCE(t.teacher_id, '') ILIKE '%' || $1::text || '%')
   AND ($2::text = 'all' OR ($2::text = '' AND u.status <> 'rejected') OR u.status = $2::text)
-ORDER BY t.name, t.teacher_id`
+ORDER BY t.name, t.id`
 	deactivateTeacherSQL = `UPDATE users
 SET status = 'removed', token_version = token_version + 1, updated_at = now()
 WHERE id = $1 AND role = 'teacher' AND status <> 'removed'
 RETURNING id`
-	teacherStatusSQL     = `SELECT status FROM users WHERE id = $1 AND role = 'teacher'`
-	updateTeacherUserSQL = `UPDATE users
-SET identifier = COALESCE($2, identifier), updated_at = now()
-WHERE id = $1 AND role = 'teacher'
-RETURNING id`
+	teacherStatusSQL       = `SELECT status FROM users WHERE id = $1 AND role = 'teacher'`
 	updateTeacherRecordSQL = `UPDATE teachers
 SET name = COALESCE($2, name),
-    teacher_id = COALESCE($3, teacher_id),
-    designation = COALESCE($4, designation),
-    email = COALESCE($5, email),
-    date_of_birth = COALESCE($6::date, date_of_birth),
-    blood_group = COALESCE($7, blood_group),
-    joining_date = COALESCE($8::date, joining_date),
-    office_room = COALESCE($9, office_room),
+    designation = COALESCE($3, designation),
+    email = COALESCE($4, email),
+    date_of_birth = COALESCE($5::date, date_of_birth),
+    blood_group = COALESCE($6, blood_group),
+    joining_date = COALESCE($7::date, joining_date),
+    office_room = COALESCE($8, office_room),
     updated_at = now()
 WHERE user_id = $1
 RETURNING id`
@@ -222,12 +217,12 @@ RETURNING id`
 SET invite_token = $2, invite_expires_at = $3, invite_attempts = 0, updated_at = now()
 WHERE id = $1 AND role = 'teacher' AND status = 'invited'
 RETURNING id`
-	findInviteSQL = `SELECT u.id, t.teacher_id, t.name, t.designation, t.email,
+	findInviteSQL = `SELECT u.id, COALESCE(t.teacher_id, ''), t.name, t.designation, t.email,
 COALESCE(to_char(t.date_of_birth, 'YYYY-MM-DD'), ''), COALESCE(u.photo_path, ''), u.invite_attempts
 FROM users u
 JOIN teachers t ON t.user_id = u.id
 WHERE u.invite_token = $1 AND u.status = 'invited' AND u.invite_expires_at > now()`
-	findTeacherInviteByIDSQL = `SELECT u.id, t.teacher_id, t.name, t.designation, t.email,
+	findTeacherInviteByIDSQL = `SELECT u.id, COALESCE(t.teacher_id, ''), t.name, t.designation, t.email,
 COALESCE(to_char(t.date_of_birth, 'YYYY-MM-DD'), ''), COALESCE(u.photo_path, ''), u.invite_attempts
 FROM users u
 JOIN teachers t ON t.user_id = u.id
@@ -242,8 +237,9 @@ WHERE id = $1
 RETURNING id`
 	activateTeacherSQL = `UPDATE users
 SET status = 'active',
-    password_hash = $2,
-    photo_path = COALESCE(NULLIF($3, ''), photo_path),
+    identifier = $2,
+    password_hash = $3,
+    photo_path = COALESCE(NULLIF($4, ''), photo_path),
     invite_token = NULL,
     invite_expires_at = NULL,
     invite_attempts = 0,
@@ -252,7 +248,11 @@ SET status = 'active',
     updated_at = now()
 WHERE id = $1 AND role = 'teacher' AND status = 'invited'
 RETURNING id`
-	statsSQL = `SELECT
+	setTeacherUserIDSQL = `UPDATE teachers
+SET teacher_id = $2, updated_at = now()
+WHERE user_id = $1`
+	identifierTakenSQL = `SELECT EXISTS (SELECT 1 FROM users WHERE lower(identifier) = lower($1))`
+	statsSQL           = `SELECT
 (SELECT COUNT(*) FROM users u JOIN students s ON s.user_id = u.id WHERE u.status = 'active'),
 (SELECT COUNT(*) FROM users u JOIN students s ON s.user_id = u.id WHERE u.status = 'active' AND s.is_cr),
 (SELECT COUNT(*) FROM users u JOIN teachers t ON t.user_id = u.id WHERE u.status = 'active'),
@@ -429,7 +429,7 @@ func (s *Store) removalConflict(ctx context.Context, lookupSQL string, userID in
 }
 
 func (s *Store) ListCRs(ctx context.Context, filter CRFilter) ([]StudentRow, error) {
-	rows, err := s.pool.Query(ctx, listCRsSQL, filter.Search, filter.Batch)
+	rows, err := s.pool.Query(ctx, listCRsSQL, filter.Search, filter.Batch, filter.Status)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the class representatives: %w", err)
 	}
@@ -516,7 +516,6 @@ func (s *Store) CreateTeacher(ctx context.Context, teacher NewTeacher) (int64, e
 	defer func() { _ = tx.Rollback(ctx) }()
 	var userID int64
 	err = tx.QueryRow(ctx, insertTeacherUserSQL,
-		teacher.TeacherID,
 		teacher.PhotoPath,
 		teacher.InviteHash,
 		teacher.InviteExpiresAt,
@@ -529,7 +528,6 @@ func (s *Store) CreateTeacher(ctx context.Context, teacher NewTeacher) (int64, e
 	}
 	_, err = tx.Exec(ctx, insertTeacherSQL,
 		userID,
-		teacher.TeacherID,
 		teacher.Name,
 		teacher.Designation,
 		teacher.Email,
@@ -614,27 +612,10 @@ func (s *Store) Stats(ctx context.Context) (Stats, error) {
 }
 
 func (s *Store) UpdateTeacher(ctx context.Context, userID int64, update TeacherUpdate) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("store: could not start the teacher update transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	var id int64
-	err = tx.QueryRow(ctx, updateTeacherUserSQL, userID, update.TeacherID).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		if isUniqueViolation(err) {
-			return ErrDuplicateAccount
-		}
-		return fmt.Errorf("store: could not update the account of the teacher %d: %w", userID, err)
-	}
 	var teacherID int64
-	err = tx.QueryRow(ctx, updateTeacherRecordSQL,
+	err := s.pool.QueryRow(ctx, updateTeacherRecordSQL,
 		userID,
 		update.Name,
-		update.TeacherID,
 		update.Designation,
 		update.Email,
 		update.DateOfBirth,
@@ -650,9 +631,6 @@ func (s *Store) UpdateTeacher(ctx context.Context, userID int64, update TeacherU
 			return ErrDuplicateAccount
 		}
 		return fmt.Errorf("store: could not update the teacher %d: %w", userID, err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("store: could not commit the teacher update: %w", err)
 	}
 	return nil
 }
@@ -730,14 +708,39 @@ func (s *Store) ClearInvite(ctx context.Context, userID int64) error {
 	return nil
 }
 
-func (s *Store) ActivateTeacher(ctx context.Context, userID int64, passwordHash, photoPath string) error {
+func (s *Store) ActivateTeacher(ctx context.Context, userID int64, chosenID, passwordHash, photoPath string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: could not start the activation transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var id int64
-	err := s.pool.QueryRow(ctx, activateTeacherSQL, userID, passwordHash, photoPath).Scan(&id)
+	err = tx.QueryRow(ctx, activateTeacherSQL, userID, chosenID, passwordHash, photoPath).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrDuplicateIdentifier
+		}
 		return fmt.Errorf("store: could not activate the teacher %d: %w", userID, err)
 	}
+	if _, err := tx.Exec(ctx, setTeacherUserIDSQL, userID, chosenID); err != nil {
+		if isUniqueViolation(err) {
+			return ErrDuplicateIdentifier
+		}
+		return fmt.Errorf("store: could not store the user id of the teacher %d: %w", userID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: could not commit the activation: %w", err)
+	}
 	return nil
+}
+
+func (s *Store) IdentifierTaken(ctx context.Context, chosenID string) (bool, error) {
+	var taken bool
+	if err := s.pool.QueryRow(ctx, identifierTakenSQL, chosenID).Scan(&taken); err != nil {
+		return false, fmt.Errorf("store: could not check the user id %q: %w", chosenID, err)
+	}
+	return taken, nil
 }

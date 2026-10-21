@@ -121,6 +121,26 @@ func (emptyAdminStore) Stats(ctx context.Context) (store.Stats, error) {
 	return store.Stats{}, nil
 }
 
+func (emptyAdminStore) FindAccount(ctx context.Context, userID int64) (store.AccountRef, error) {
+	return store.AccountRef{}, store.ErrNotFound
+}
+
+func (emptyAdminStore) RestoreAccount(ctx context.Context, userID int64) (string, error) {
+	return "", store.ErrNotFound
+}
+
+func (emptyAdminStore) DeleteAccount(ctx context.Context, userID int64) (string, error) {
+	return "", store.ErrNotFound
+}
+
+func (emptyAdminStore) WriteAudit(ctx context.Context, adminID int64, action, targetSummary string) error {
+	return nil
+}
+
+func (emptyAdminStore) ListAudit(ctx context.Context, limit int) ([]store.AuditRow, error) {
+	return nil, nil
+}
+
 type adminRoute struct {
 	method string
 	path   string
@@ -142,6 +162,9 @@ func adminRoutes() []adminRoute {
 		{method: http.MethodPatch, path: "/api/admin/teachers/1"},
 		{method: http.MethodPost, path: "/api/admin/teachers/1/resend-invite"},
 		{method: http.MethodPost, path: "/api/admin/teachers/1/deactivate"},
+		{method: http.MethodPost, path: "/api/admin/users/1/restore"},
+		{method: http.MethodDelete, path: "/api/admin/users/1/permanent"},
+		{method: http.MethodGet, path: "/api/admin/audit"},
 		{method: http.MethodGet, path: "/api/admin/stats"},
 		{method: http.MethodPost, path: "/api/admin/courses"},
 		{method: http.MethodGet, path: "/api/admin/courses"},

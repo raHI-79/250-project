@@ -36,6 +36,16 @@ func storedPasswordHash(t *testing.T, ctx context.Context, pool *pgxpool.Pool, i
 	return hash
 }
 
+func storedIdentifier(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID int64) string {
+	t.Helper()
+	var identifier string
+	query := "SELECT COALESCE(identifier, '') FROM users WHERE id = $1"
+	if err := pool.QueryRow(ctx, query, userID).Scan(&identifier); err != nil {
+		t.Fatalf("could not read back the identifier: %v", err)
+	}
+	return identifier
+}
+
 func insertUser(t *testing.T, ctx context.Context, pool *pgxpool.Pool, role, identifier, status string, tokenVersion int) int64 {
 	t.Helper()
 	var id int64
