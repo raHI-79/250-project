@@ -5,6 +5,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"net/http"
 	"testing"
 	"time"
@@ -103,15 +104,26 @@ type scheduleRoute struct {
 	wantForOwn int
 }
 
-func teacherRoutes() []scheduleRoute {
+func accessDate(t *testing.T) string {
+	t.Helper()
+	loc, err := time.LoadLocation("Asia/Dhaka")
+	if err != nil {
+		t.Fatalf("could not load the timezone: %v", err)
+	}
+	return time.Now().In(loc).AddDate(0, 0, 1).Format(validate.DateLayout)
+}
+
+func teacherRoutes(t *testing.T) []scheduleRoute {
+	t.Helper()
+	date := accessDate(t)
 	return []scheduleRoute{
 		{method: http.MethodGet, path: "/api/teacher/requests", wantForOwn: http.StatusOK},
 		{method: http.MethodPost, path: "/api/teacher/requests/1/approve", wantForOwn: http.StatusNotFound},
 		{method: http.MethodPost, path: "/api/teacher/requests/1/reject", wantForOwn: http.StatusNotFound},
-		{method: http.MethodGet, path: "/api/teacher/schedule?date=2026-10-20", wantForOwn: http.StatusOK},
+		{method: http.MethodGet, path: "/api/teacher/schedule?date=" + date, wantForOwn: http.StatusOK},
 		{method: http.MethodGet, path: "/api/teacher/classes/upcoming", wantForOwn: http.StatusOK},
 		{method: http.MethodPost, path: "/api/teacher/classes/1/cancel", wantForOwn: http.StatusNotFound},
-		{method: http.MethodPost, path: "/api/teacher/routines/1/cancel", body: `{"date":"2026-10-20"}`, wantForOwn: http.StatusNotFound},
+		{method: http.MethodPost, path: "/api/teacher/routines/1/cancel", body: `{"date":"` + date + `"}`, wantForOwn: http.StatusNotFound},
 	}
 }
 
@@ -153,7 +165,7 @@ func TestTeacherRoutesNeedATeacherToken(t *testing.T) {
 		},
 	}
 	teacherToken := issue(t, deps, accessTeacherID, auth.RoleTeacher)
-	for _, route := range teacherRoutes() {
+	for _, route := range teacherRoutes(t) {
 		for _, caller := range callers {
 			t.Run(route.method+" "+route.path+" "+caller.name, func(t *testing.T) {
 				rec := serve(t, router, route.method, route.path, route.body, caller.token)
