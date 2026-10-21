@@ -15,14 +15,26 @@ import {
   SkeletonLines,
   SkeletonTable,
   StatusBadge,
+  StatusTabs,
   useConfirm,
   useToast,
 } from '../../components/ui'
+import DeleteAccountModal from '../../components/admin/DeleteAccountModal'
+import useAccountActions from '../../components/admin/useAccountActions'
 import api from '../../lib/api'
 import { useDebounced, useResource } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
+import { PEOPLE_STATUS_TABS, canRestore } from '../../lib/options'
 
 const HEADINGS = ['Name', 'Reg No', 'Batch', 'Section', 'Email', 'Phone', 'Status', '']
+
+const accountOf = (item) => ({
+  id: item.id,
+  name: item.full_name,
+  identifier: item.reg_no,
+  email: item.email,
+  status: item.status,
+})
 
 function PromoteModal({ open, onClose, batches, onPromoted }) {
   const confirm = useConfirm()
@@ -134,6 +146,7 @@ export default function CRsPage() {
   const confirm = useConfirm()
   const [search, setSearch] = useState('')
   const [batch, setBatch] = useState('')
+  const [status, setStatus] = useState('')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(0)
   const settled = useDebounced(search)
@@ -141,7 +154,9 @@ export default function CRsPage() {
   const query = {}
   if (settled.trim()) query.search = settled.trim()
   if (batch) query.batch = batch
+  if (status) query.status = status
   const { data, loading, error, reload } = useResource('/api/admin/crs', query)
+  const { busy: actionBusy, deleting, setDeleting, restore, deletePermanently } = useAccountActions(reload)
   const act = async (item, action) => {
     const ok = await confirm(
       action === 'demote'
@@ -198,6 +213,7 @@ export default function CRsPage() {
             ))}
           </Select>
         </div>
+        <StatusTabs tabs={PEOPLE_STATUS_TABS} value={status} onChange={setStatus} className="mt-4" />
       </Card>
       {error && (
         <Alert tone="error" className="mb-5">
@@ -247,24 +263,45 @@ export default function CRsPage() {
                   <StatusBadge status={item.status} />
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      loading={busy === item.id}
-                      onClick={() => act(item, 'demote')}
-                    >
-                      Demote
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      loading={busy === item.id}
-                      disabled={item.status === 'removed'}
-                      onClick={() => act(item, 'deactivate')}
-                    >
-                      Deactivate
-                    </Button>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {canRestore(item.status) ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={actionBusy === item.id}
+                          onClick={() => restore(accountOf(item))}
+                        >
+                          Restore
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => setDeleting(accountOf(item))}
+                        >
+                          Delete permanently
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={busy === item.id}
+                          onClick={() => act(item, 'demote')}
+                        >
+                          Demote
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          loading={busy === item.id}
+                          onClick={() => act(item, 'deactivate')}
+                        >
+                          Deactivate
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -277,6 +314,12 @@ export default function CRsPage() {
         onClose={() => setOpen(false)}
         batches={batches.data?.items || []}
         onPromoted={reload}
+      />
+      <DeleteAccountModal
+        account={deleting}
+        busy={actionBusy === deleting?.id}
+        onClose={() => setDeleting(null)}
+        onConfirmed={deletePermanently}
       />
     </>
   )

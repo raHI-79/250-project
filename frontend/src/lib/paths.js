@@ -64,6 +64,7 @@ export const paths = {
     routines: () => build('portal-admin', 'routines'),
     notices: () => build('portal-admin', 'notices'),
     messages: () => build('portal-admin', 'messages'),
+    activity: () => build('portal-admin', 'activity'),
   },
 }
 

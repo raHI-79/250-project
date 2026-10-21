@@ -13,19 +13,30 @@ import {
   Select,
   SkeletonTable,
   StatusBadge,
+  StatusTabs,
   useConfirm,
   useToast,
 } from '../../components/ui'
+import DeleteAccountModal from '../../components/admin/DeleteAccountModal'
+import useAccountActions from '../../components/admin/useAccountActions'
 import api from '../../lib/api'
 import { useDebounced, useResource } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
-import { ACCOUNT_STATUSES } from '../../lib/options'
+import { PEOPLE_STATUS_TABS, canRestore } from '../../lib/options'
 
 const PAGE_SIZE = 50
 
 const SECTIONS = ['A', 'B', 'C', 'D']
 
 const HEADINGS = ['Name', 'Reg No', 'Batch', 'Section', 'Email', 'Phone', 'Status', '']
+
+const accountOf = (item) => ({
+  id: item.id,
+  name: item.full_name,
+  identifier: item.reg_no,
+  email: item.email,
+  status: item.status,
+})
 
 export default function AdminStudentsPage() {
   const toast = useToast()
@@ -44,6 +55,7 @@ export default function AdminStudentsPage() {
   if (section) query.section = section
   if (status) query.status = status
   const { data, loading, error, reload } = useResource('/api/admin/students', query)
+  const { busy: actionBusy, deleting, setDeleting, restore, deletePermanently } = useAccountActions(reload)
   const items = data?.items || []
   const total = data?.total || 0
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
@@ -77,7 +89,7 @@ export default function AdminStudentsPage() {
         subtitle={total > 0 ? `${total} student${total === 1 ? '' : 's'} match` : 'Every student account'}
       />
       <Card hover={false} className="mb-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Input
             label="Search"
             value={search}
@@ -103,16 +115,16 @@ export default function AdminStudentsPage() {
               </option>
             ))}
           </Select>
-          <Select label="Status" value={status} onChange={onFilter(setStatus)}>
-            <option value="">Active and pending</option>
-            {ACCOUNT_STATUSES.map((entry) => (
-              <option key={entry} value={entry}>
-                {entry[0].toUpperCase() + entry.slice(1)}
-              </option>
-            ))}
-            <option value="all">Every status</option>
-          </Select>
         </div>
+        <StatusTabs
+          tabs={PEOPLE_STATUS_TABS}
+          value={status}
+          onChange={(next) => {
+            setStatus(next)
+            setPage(0)
+          }}
+          className="mt-4"
+        />
       </Card>
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
       {loading ? (
@@ -158,16 +170,37 @@ export default function AdminStudentsPage() {
                   <td className="px-4 py-3">
                     <StatusBadge status={item.status} />
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      loading={busy === item.id}
-                      disabled={item.status === 'removed'}
-                      onClick={() => remove(item)}
-                    >
-                      Remove
-                    </Button>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {canRestore(item.status) ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            loading={actionBusy === item.id}
+                            onClick={() => restore(accountOf(item))}
+                          >
+                            Restore
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => setDeleting(accountOf(item))}
+                          >
+                            Delete permanently
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          loading={busy === item.id}
+                          onClick={() => remove(item)}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -198,6 +231,12 @@ export default function AdminStudentsPage() {
           </div>
         </>
       )}
+      <DeleteAccountModal
+        account={deleting}
+        busy={actionBusy === deleting?.id}
+        onClose={() => setDeleting(null)}
+        onConfirmed={deletePermanently}
+      />
     </>
   )
 }

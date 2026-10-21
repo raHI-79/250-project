@@ -36,6 +36,7 @@ import AdminTeachersPage from './pages/admin/AdminTeachersPage'
 import CoursesPage from './pages/admin/CoursesPage'
 import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
 import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
+import ActivityLogPage from './pages/admin/ActivityLogPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { useAuth } from './context/auth'
 import { PORTAL_ADMIN, PORTAL_STUDENT, PORTAL_TEACHER, homeFor, paths } from './lib/paths'
@@ -129,6 +130,7 @@ export default function Router() {
           <Route path={paths.admin.routines()} element={<AdminRoutinesPage />} />
           <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />
           <Route path={paths.admin.messages()} element={<MessagesPage />} />
+          <Route path={paths.admin.activity()} element={<ActivityLogPage />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundPage />} />

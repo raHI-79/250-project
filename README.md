@@ -107,9 +107,10 @@ all you have to do is create two empty databases and set your password.
 
    - set `ADMIN_IDENTIFIER` and `ADMIN_PASSWORD` if you want the hidden admin
      account created for you at startup,
-   - leave `STUDENT_EMAIL_DOMAIN` and `TEACHER_EMAIL_DOMAIN` alone unless your
-     university uses other domains, and set `GOOGLE_CLIENT_ID` only if you want
-     the Google Sign-In shortcut on the registration page.
+   - leave `STUDENT_EMAIL_DOMAIN` alone unless your university uses another
+     domain, and set `GOOGLE_CLIENT_ID` only if you want the Google Sign-In
+     shortcut on the registration page. Teacher addresses are not tied to a
+     domain.
 
    `backend/.env` is listed in `.gitignore`, so your password is never
    committed. Only `backend/.env.example` is tracked.
@@ -213,7 +214,6 @@ go run ./cmd/server
 | `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs and profile photos are saved, created when it is missing |
 | `MAX_UPLOAD_MB` | `10` | Largest accepted PDF in megabytes; a bigger file gets `413` |
 | `STUDENT_EMAIL_DOMAIN` | `student.sust.edu` | Domain every student email address must end with |
-| `TEACHER_EMAIL_DOMAIN` | `sust.edu` | Domain every teacher email address must end with |
 | `GOOGLE_CLIENT_ID` | none — optional | Google Sign-In client id; empty turns `google_enabled` off |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only browser origin allowed to call the API |
 | `ADMIN_IDENTIFIER` | none — optional | Login id of the admin account created at startup |
@@ -318,14 +318,15 @@ Every route lives under `/api`. Errors always use the same shape:
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/health` | public | `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
-| `GET` | `/api/auth/config` | public | `student_email_domain`, `teacher_email_domain` and `google_enabled` |
+| `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
 | `POST` | `/api/auth/register` | public | `multipart/form-data` student registration with a required photo; `201` on success |
 | `POST` | `/api/auth/verify-email` | public, rate limited | `{reg_no, code}` turns an `unverified` account into `pending` |
 | `POST` | `/api/auth/resend-verification` | public, rate limited | `{reg_no}` sends a new 6-digit code; `429` inside the 60 second cooldown |
 | `GET` | `/api/auth/drop-course-options` | public, rate limited | Up to 20 courses that appear in a fixed routine, matched by `search` |
 | `POST` | `/api/auth/google/verify-email` | public, rate limited | `{credential}` from Google Sign-In; answers `{email, email_proof}` |
 | `GET` | `/api/auth/invite` | public | `token=` answers `{name, designation, masked_email}` of a teacher invitation |
-| `POST` | `/api/auth/activate` | public, rate limited | `multipart/form-data`; a teacher sets their own password from the invitation |
+| `GET` | `/api/auth/user-id-available` | public, rate limited | `user_id=` answers `{available, reason}` for a User ID a teacher is about to choose |
+| `POST` | `/api/auth/activate` | public, rate limited | `multipart/form-data`; a teacher picks their own User ID and password from the invitation |
 | `POST` | `/api/auth/login` | public, rate limited | Student, CR and teacher login. Returns a token and the user |
 | `POST` | `/api/auth/admin/login` | public, rate limited | Admin login only. Returns a token and the admin user |
 | `POST` | `/api/auth/forgot-password` | public, rate limited | Emails a 6-digit reset code valid for 10 minutes |
@@ -351,6 +352,9 @@ Every route lives under `/api`. Errors always use the same shape:
 | `PATCH` | `/api/admin/teachers/{id}` | admin | Changes the admin-owned teacher fields; `409` on a duplicate |
 | `POST` | `/api/admin/teachers/{id}/resend-invite` | admin | New invitation link, old one dead; `409` once the teacher is active |
 | `POST` | `/api/admin/teachers/{id}/deactivate` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
+| `POST` | `/api/admin/users/{id}/restore` | admin | `removed` becomes `active` and `rejected` becomes `pending`; `409` for any other status |
+| `DELETE` | `/api/admin/users/{id}/permanent` | admin | `{confirm}` deletes a `removed` or `rejected` account for good; `400` on a wrong confirmation, `403` for an admin or the caller, `409` otherwise |
+| `GET` | `/api/admin/audit` | admin | The latest 100 removals, restores and permanent deletions |
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
 | `POST` | `/api/admin/courses` | admin | Adds a course; the code is stored in upper case, `409` on a duplicate |
 | `GET` | `/api/admin/courses` | admin | Every course, sorted by code |
@@ -547,20 +551,42 @@ page."}`. `role` is the **effective** role (`student`, `cr`, `teacher`), and
 `batch` and `section` appear only for students and CRs. Send the token on later
 requests as `Authorization: Bearer <token>`.
 
-Teachers are **invited**, never created with a password.
-`POST /api/admin/teachers` takes `name`, `teacher_id`, `designation`, `email`
-(ending with `@` plus `TEACHER_EMAIL_DOMAIN`), `phone`, `date_of_birth`,
-`blood_group`, `office_room`, an optional `joining_date` and an optional
-`photo`. The account is stored as `invited` with a random 32-byte invitation
-token, hashed, valid for **72 hours**, and the teacher gets an email with
-`FRONTEND_ORIGIN` + `/teacher/activate?token=<token>`. The response carries
-`invite_link` only when no mailer is configured outside production.
+Teachers are **invited**, never created with a password, and the administration
+never picks their login identifier. `POST /api/admin/teachers` takes `name`,
+`designation`, `email` (any valid address, unique across the teachers), `phone`,
+`date_of_birth`, `blood_group`, `office_room`, an optional `joining_date` and an
+optional `photo`. The account is stored as `invited` with **no identifier at
+all** and a random 32-byte invitation token, hashed, valid for **72 hours**, and
+the teacher gets an email with `FRONTEND_ORIGIN` +
+`/teacher/activate?token=<token>`. The response carries `invite_link` only when
+no mailer is configured outside production.
 
 `GET /api/auth/invite?token=` answers `{name, designation, masked_email}` and
-never the birth date. `POST /api/auth/activate` takes `token`, `teacher_id`,
-`date_of_birth`, `password`, `confirm_password` and an optional `photo`; the
-teacher ID and birth date must match the invitation, five wrong answers kill it,
-and success makes the account `active`.
+never the birth date. `POST /api/auth/activate` takes `token`,
+`date_of_birth`, `user_id`, `password`, `confirm_password` and an optional
+`photo`. The birth date must match the invitation and five wrong answers kill
+the link. The `user_id` is the login identifier the teacher chooses for
+themselves and must be **4 to 20 characters**, start with a letter, use only
+letters, digits, dots, underscores and hyphens, and may not be digits only or
+one of the reserved words `admin`, `office`, `root`, `support`, `system`,
+`teacher` and `student`. It is compared without case against every
+`users.identifier`, which a unique index on `lower(identifier)` enforces, so a
+taken one answers `409` with `{"error":"This User ID is already taken."}`.
+
+`GET /api/auth/user-id-available?user_id=` answers
+`{"available": true}` or `{"available": false, "reason": "..."}` with the rule
+that failed, so the activation page can check while the teacher types.
+
+On success the account becomes `active`, the chosen ID is stored as both
+`users.identifier` and `teachers.teacher_id`, the answer is
+`{user_id, name, message}`, and a confirmation email carries the User ID. The
+password is never emailed and never returned.
+
+A teacher signs in and resets their password with **either** their User ID or
+their email address, compared without case, so
+`POST /api/auth/login` and `POST /api/auth/forgot-password` both accept either
+one in `identifier`. A student or CR still signs in with their registration
+number.
 
 The password reset runs in three steps and works for students, CRs, teachers
 and the admin.
@@ -604,12 +630,16 @@ token.
 returns as `id`. No admin response ever carries `password_hash` or the password
 reset fields.
 
-`GET /api/admin/students` defaults to every status except `rejected`; pass
-`status=active`, `pending`, `rejected`, `removed` or `all` to choose. `search`
-matches the full name or the registration number and ignores case. `limit`
-defaults to **50** and may not exceed **200**, and the answer looks like
-`{"items": [...], "total": 128}` where `total` counts every match, not just
-the current page. Each item carries `is_cr` and `status`.
+`GET /api/admin/students`, `GET /api/admin/crs` and `GET /api/admin/teachers`
+all take the same `status` filter and default to every status except
+`rejected`; pass `status=active`, `pending`, `invited`, `rejected`, `removed`
+or `all` to choose. `search` matches the full name and the registration number
+for students and CRs, and the name and the User ID for teachers, ignoring case.
+`GET /api/admin/students` also takes `limit`, which defaults to **50** and may
+not exceed **200**, and answers `{"items": [...], "total": 128}` where `total`
+counts every match, not just the current page. Each student item carries
+`is_cr` and `status`; each teacher item carries `identifier`, which is empty
+until the teacher activates the account.
 
 CRs are **promoted**, not created. `POST /api/admin/crs/promote` takes
 `{"user_id"}`, sets `is_cr` on an active student, raises `token_version` and
@@ -618,14 +648,41 @@ sends that student the notification `You are now the Class Representative of
 student and `409` when they already are a CR.
 
 `PATCH /api/admin/teachers/{id}` changes only the fields the administration
-owns: `name`, `teacher_id`, `designation`, `email`, `date_of_birth`,
-`blood_group`, `joining_date` and `office_room`. Anything else answers `400`.
+owns: `name`, `designation`, `email`, `date_of_birth`, `blood_group`,
+`joining_date` and `office_room`. The User ID belongs to the teacher, so it is
+not an admin field and sending it answers `400`.
 `POST /api/admin/teachers/{id}/resend-invite` issues a new link and kills the
 old one; it answers `409` once the teacher has activated the account.
 
 Removing, deactivating or demoting an account also raises its
 `token_version`, so **every token that account already holds stops working at
 once** — a demoted CR has to log in again to get a student token.
+
+### Record retention
+
+A removed or rejected account is kept so the administration can change its
+mind. `POST /api/admin/users/{id}/restore` turns `removed` back into `active`
+and raises `token_version`, and turns `rejected` back into `pending`. Any other
+status answers `409`.
+
+`DELETE /api/admin/users/{id}/permanent` takes `{"confirm": "<identifier or
+email>"}` and is the only way to erase an account. It refuses anything that is
+not `removed` or `rejected` with `409`, refuses an admin account or the caller
+themselves with `403`, and refuses a confirmation that does not match the
+account's User ID or email address with `400`. In one transaction it deletes
+the user row, the student or teacher profile, the dropped-course rows, the poll
+votes, the conversation memberships and the conversation reads, and then
+deletes the profile photo from disk.
+
+**What other people rely on stays.** Notices, messages, class requests, polls
+and routines keep their row; their author column becomes `NULL` through
+`ON DELETE SET NULL` and every API then reports the author as `Deleted user`
+with no photo. A routine or class event that named the deleted teacher keeps
+its slot and shows `Deleted user` as the teacher.
+
+Every removal, restore and permanent deletion writes a row into `admin_audit`
+(`id`, `admin_id`, `action`, `target_summary`, `created_at`), which
+`GET /api/admin/audit` returns newest first, at most 100 rows.
 
 ### Courses, routines and notifications
 
@@ -790,7 +847,12 @@ password check.
 | Wrong or expired email confirmation code | `400` | `{"error":"Invalid or expired code."}` |
 | Five wrong email confirmation codes | `400` | `{"error":"Too many wrong codes. Request a new code."}` |
 | A dead or expired teacher invitation link | `400` | `{"error":"This invitation link is invalid or has expired."}` |
-| Teacher ID or birth date wrong on an invitation | `400` | `{"error":"The teacher ID and date of birth do not match this invitation."}` |
+| Birth date wrong on an invitation | `400` | `{"error":"The date of birth does not match this invitation."}` |
+| A User ID somebody already has | `409` | `{"error":"This User ID is already taken."}` |
+| Restoring an account that is not removed or rejected | `409` | `{"error":"Only a removed or rejected account can be restored."}` |
+| Deleting an account that is not removed or rejected | `409` | `{"error":"Only a removed or rejected account can be deleted permanently."}` |
+| Deleting an admin account or your own | `403` | `{"error":"This account cannot be deleted."}` |
+| A confirmation that does not match the account | `400` | `{"error":"Type the User ID or the email address of the account exactly to confirm."}` |
 | A phone number that is not 11 Bangladeshi digits | `400` | `{"error":"Phone number must be 11 digits, for example 01712345678."}` |
 | A profile photo over 2 MB | `413` | `{"error":"The profile photo must be 2 MB or smaller."}` |
 | A new reset code asked for within 60 seconds | `429` | `{"error":"Please wait a minute before requesting a new code."}` |
