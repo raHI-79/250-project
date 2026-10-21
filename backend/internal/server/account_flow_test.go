@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,7 +14,7 @@ const (
 	accountStudent = `{"full_name":"Account Student","reg_no":"2023331950","batch":"CSE-23","section":"A",
 "email":"accountstudent@student.sust.edu","phone":"01712345950","blood_group":"O+",
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
-	accountTeacher = `{"name":"Account Teacher","teacher_id":"T-950","email":"accountteacher@sust.edu",
+	accountTeacher = `{"name":"Account Teacher","user_id":"T-950","email":"accountteacher@sust.edu",
 "phone":"01712345951"}`
 	accountCourse = `{"code":"cse245","title":"Databases"}`
 )
@@ -27,9 +28,6 @@ func TestAccountFlowFromRegistrationToLogin(t *testing.T) {
 	}
 	if got := field(t, config, "student_email_domain"); got != "student.sust.edu" {
 		t.Errorf("student_email_domain = %q, want student.sust.edu", got)
-	}
-	if got := field(t, config, "teacher_email_domain"); got != "sust.edu" {
-		t.Errorf("teacher_email_domain = %q, want sust.edu", got)
 	}
 	courseID := int64(number(t, mustCreate(t, router, adminToken, "/api/admin/courses", accountCourse), "id"))
 	teacherUserID := onboardTeacherForAccounts(t, router, adminToken)
@@ -205,24 +203,37 @@ func TestTeacherInvitationFlow(t *testing.T) {
 	if got := field(t, lookup, "masked_email"); got != "a***@sust.edu" {
 		t.Errorf("masked_email = %q, want a***@sust.edu", got)
 	}
-	beforeActivation := call(t, router, http.MethodPost, "/api/auth/login",
+	withoutUserID := call(t, router, http.MethodPost, "/api/auth/login",
 		`{"identifier":"T-950","password":"sust-250-project","portal":"teacher"}`, "")
+	if withoutUserID.Code != http.StatusUnauthorized {
+		t.Fatalf("login before a user id exists status = %d, want 401 (body = %q)",
+			withoutUserID.Code, withoutUserID.Body.String())
+	}
+	beforeActivation := call(t, router, http.MethodPost, "/api/auth/login",
+		`{"identifier":"accountteacher@sust.edu","password":"sust-250-project","portal":"teacher"}`, "")
 	if beforeActivation.Code != http.StatusForbidden {
 		t.Fatalf("invited login status = %d, want 403 (body = %q)", beforeActivation.Code, beforeActivation.Body.String())
 	}
 	if got := field(t, beforeActivation, "error"); got != handler.MessageInvitedAccount {
 		t.Errorf("invited login error = %q, want %q", got, handler.MessageInvitedAccount)
 	}
-	wrongID := activateTeacher(t, router, link, "T-999", teacherFlowBirthDate)
-	if wrongID.Code != http.StatusBadRequest {
-		t.Fatalf("activation with a wrong teacher id status = %d, want 400", wrongID.Code)
-	}
-	if got := field(t, wrongID, "error"); got != handler.MessageInviteMismatch {
-		t.Errorf("activation error = %q, want %q", got, handler.MessageInviteMismatch)
-	}
 	wrongDate := activateTeacher(t, router, link, "T-950", "1990-01-01")
 	if wrongDate.Code != http.StatusBadRequest {
 		t.Fatalf("activation with a wrong birth date status = %d, want 400", wrongDate.Code)
+	}
+	if got := field(t, wrongDate, "error"); got != handler.MessageInviteMismatch {
+		t.Errorf("activation error = %q, want %q", got, handler.MessageInviteMismatch)
+	}
+	brokenID := activateTeacher(t, router, link, "1teacher", teacherFlowBirthDate)
+	if brokenID.Code != http.StatusBadRequest {
+		t.Fatalf("activation with a broken user id status = %d, want 400", brokenID.Code)
+	}
+	if got := field(t, brokenID, "error"); got != validate.MessageUserIDStart {
+		t.Errorf("user id error = %q, want %q", got, validate.MessageUserIDStart)
+	}
+	free := call(t, router, http.MethodGet, "/api/auth/user-id-available?user_id=T-950", "", "")
+	if got := boolean(t, free, "available"); !got {
+		t.Error("the chosen user id is reported as taken before the activation")
 	}
 	resent := call(t, router, http.MethodPost,
 		"/api/admin/teachers/"+strconv.FormatInt(teacherUserID, 10)+"/resend-invite", "", adminToken)
@@ -240,9 +251,19 @@ func TestTeacherInvitationFlow(t *testing.T) {
 	if activated.Code != http.StatusOK {
 		t.Fatalf("activation status = %d, want 200 (body = %q)", activated.Code, activated.Body.String())
 	}
+	if got := field(t, activated, "user_id"); got != "T-950" {
+		t.Errorf("activation user_id = %q, want T-950", got)
+	}
 	reused := activateTeacher(t, router, newLink, "T-950", teacherFlowBirthDate)
 	if reused.Code != http.StatusBadRequest {
 		t.Errorf("reusing the activation link status = %d, want 400", reused.Code)
+	}
+	taken := call(t, router, http.MethodGet, "/api/auth/user-id-available?user_id=t-950", "", "")
+	if boolean(t, taken, "available") {
+		t.Error("the stored user id is still reported as available")
+	}
+	if got := field(t, taken, "reason"); got != handler.MessageUserIDTaken {
+		t.Errorf("reason = %q, want %q", got, handler.MessageUserIDTaken)
 	}
 	wrongPortal := call(t, router, http.MethodPost, "/api/auth/login",
 		`{"identifier":"T-950","password":"`+flowPassword+`","portal":"student"}`, "")
@@ -253,9 +274,19 @@ func TestTeacherInvitationFlow(t *testing.T) {
 		t.Errorf("portal error = %q, want %q", got, handler.MessageTeacherPortal)
 	}
 	loggedIn := call(t, router, http.MethodPost, "/api/auth/login",
-		`{"identifier":"T-950","password":"`+flowPassword+`","portal":"teacher"}`, "")
+		`{"identifier":"t-950","password":"`+flowPassword+`","portal":"teacher"}`, "")
 	if loggedIn.Code != http.StatusOK {
 		t.Fatalf("teacher login status = %d, want 200 (body = %q)", loggedIn.Code, loggedIn.Body.String())
+	}
+	byEmail := call(t, router, http.MethodPost, "/api/auth/login",
+		`{"identifier":"AccountTeacher@SUST.edu","password":"`+flowPassword+`","portal":"teacher"}`, "")
+	if byEmail.Code != http.StatusOK {
+		t.Fatalf("teacher login by email status = %d, want 200 (body = %q)", byEmail.Code, byEmail.Body.String())
+	}
+	resetByEmail := call(t, router, http.MethodPost, "/api/auth/forgot-password",
+		`{"identifier":"accountteacher@sust.edu","date_of_birth":"`+teacherFlowBirthDate+`"}`, "")
+	if resetByEmail.Code != http.StatusOK {
+		t.Fatalf("teacher reset by email status = %d, want 200 (body = %q)", resetByEmail.Code, resetByEmail.Body.String())
 	}
 	teacherToken := field(t, loggedIn, "token")
 	profile := call(t, router, http.MethodGet, "/api/profile", "", teacherToken)

@@ -17,8 +17,9 @@ const (
 )
 
 var (
-	ErrDuplicateAccount  = errors.New("store: an account with this registration number or email already exists")
-	ErrInvalidResetToken = errors.New("store: the reset token is missing, wrong or expired")
+	ErrDuplicateAccount    = errors.New("store: an account with this registration number or email already exists")
+	ErrDuplicateIdentifier = errors.New("store: this user id is already taken")
+	ErrInvalidResetToken   = errors.New("store: the reset token is missing, wrong or expired")
 )
 
 type Registration struct {
@@ -84,7 +85,11 @@ RETURNING id`
 (user_id, full_name, reg_no, batch, section, email, phone, blood_group, date_of_birth, is_cr)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, FALSE)
 RETURNING id`
-	findLoginUserSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version, COALESCE(u.photo_path, ''),
+	identifierMatch = `WHERE (lower(u.identifier) = lower($1)
+   OR (u.role = 'teacher' AND lower(t.email) = lower($1)))
+ORDER BY (lower(u.identifier) = lower($1)) DESC NULLS LAST, u.id
+LIMIT 1`
+	findLoginUserSQL = `SELECT u.id, COALESCE(u.identifier, ''), u.role, u.status, u.token_version, COALESCE(u.photo_path, ''),
 u.password_hash,
 COALESCE(s.is_cr, FALSE),
 COALESCE(s.full_name, t.name, ''),
@@ -93,12 +98,12 @@ COALESCE(s.section, '')
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
-WHERE u.identifier = $1`
+` + identifierMatch
 	incrementTokenVersionSQL = `UPDATE users
 SET token_version = token_version + 1, updated_at = now()
 WHERE id = $1
 RETURNING token_version`
-	findResetTargetSQL = `SELECT u.id, u.identifier, u.role, u.status, u.token_version,
+	findResetTargetSQL = `SELECT u.id, COALESCE(u.identifier, ''), u.role, u.status, u.token_version,
 COALESCE(s.is_cr, FALSE),
 COALESCE(s.email, t.email, u.contact_email, ''),
 COALESCE(s.phone, t.phone, u.contact_phone, ''),
@@ -107,10 +112,12 @@ u.reset_sent_at
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
-WHERE u.identifier = $1`
-	findResetChallengeSQL = `SELECT id, status, COALESCE(reset_token, ''), COALESCE(reset_stage, ''), reset_attempts, reset_token_expires_at
-FROM users
-WHERE identifier = $1`
+` + identifierMatch
+	findResetChallengeSQL = `SELECT u.id, u.status, COALESCE(u.reset_token, ''), COALESCE(u.reset_stage, ''),
+u.reset_attempts, u.reset_token_expires_at
+FROM users u
+LEFT JOIN teachers t ON t.user_id = u.id
+` + identifierMatch
 	startPasswordResetSQL = `UPDATE users
 SET reset_token = $2,
     reset_token_expires_at = $3,
@@ -150,7 +157,7 @@ SET password_hash = $3,
     reset_sent_at = NULL,
     token_version = token_version + 1,
     updated_at = now()
-WHERE identifier = $1
+WHERE id = (SELECT u.id FROM users u LEFT JOIN teachers t ON t.user_id = u.id ` + identifierMatch + `)
   AND status = 'active'
   AND reset_token = $2
   AND reset_stage = 'verified'
