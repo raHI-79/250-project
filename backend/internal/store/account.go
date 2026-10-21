@@ -162,7 +162,7 @@ WHERE s.user_id = $1 AND u.role = 'student' AND u.status = 'active'`
 SET password_hash = $2, token_version = token_version + 1, updated_at = now()
 WHERE id = $1 AND status = 'active'
 RETURNING token_version`
-	getProfileSQL = `SELECT u.id, u.role, u.status, u.identifier, COALESCE(u.photo_path, ''), u.created_at,
+	getProfileSQL = `SELECT u.id, u.role, u.status, COALESCE(u.identifier, ''), COALESCE(u.photo_path, ''), u.created_at,
 COALESCE(s.id, 0),
 COALESCE(s.full_name, ''), COALESCE(s.reg_no, ''), COALESCE(s.batch, ''), COALESCE(s.section, ''),
 COALESCE(s.email, ''), COALESCE(s.phone, ''), COALESCE(s.blood_group, ''),

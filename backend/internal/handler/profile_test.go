@@ -209,7 +209,7 @@ func TestProfileGet(t *testing.T) {
 				"is_cr":         false,
 				"photo_url":     "/uploads/photos/aaaa.png",
 			},
-			wantMissing: []string{"teacher_id", "designation", "contact_email"},
+			wantMissing: []string{"designation", "contact_email"},
 		},
 		{
 			name:       "class representative",
@@ -226,7 +226,7 @@ func TestProfileGet(t *testing.T) {
 			wantFields: map[string]any{
 				"role":          auth.RoleTeacher,
 				"name":          "Active Teacher",
-				"teacher_id":    "T-001",
+				"identifier":    "T-001",
 				"designation":   "Assistant Professor",
 				"email":         "teacher@sust.edu",
 				"phone":         "01812345678",
@@ -249,7 +249,7 @@ func TestProfileGet(t *testing.T) {
 				"contact_email": "admin@sust.edu",
 				"contact_phone": "01912345678",
 			},
-			wantMissing: []string{"reg_no", "teacher_id", "phone", "email"},
+			wantMissing: []string{"reg_no", "phone", "email"},
 		},
 		{name: "unknown account", userID: 99, role: auth.RoleStudent, wantStatus: http.StatusNotFound},
 	}

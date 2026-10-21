@@ -23,7 +23,7 @@ const (
 type teacherItem struct {
 	ID          int64  `json:"id"`
 	UserID      int64  `json:"user_id"`
-	TeacherID   string `json:"teacher_id"`
+	Identifier  string `json:"identifier"`
 	Name        string `json:"name"`
 	Designation string `json:"designation"`
 	Email       string `json:"email"`
@@ -108,7 +108,6 @@ func (a *Admin) teacherFrom(r *http.Request) (store.NewTeacher, error) {
 		check  func(string, string) (string, error)
 	}{
 		{target: &teacher.Name, field: "name", label: "Name", check: validate.Required},
-		{target: &teacher.TeacherID, field: fieldTeacherID, label: "Teacher ID", check: validate.TeacherID},
 		{target: &teacher.Designation, field: "designation", label: "Designation", check: validate.Required},
 		{target: &teacher.Phone, field: fieldPhone, label: "Phone", check: validate.Phone},
 		{target: &teacher.BloodGroup, field: fieldBloodGroup, label: "Blood group", check: validate.BloodGroup},
@@ -121,7 +120,7 @@ func (a *Admin) teacherFrom(r *http.Request) (store.NewTeacher, error) {
 		}
 		*field.target = value
 	}
-	email, err := validate.EmailInDomain("Email", r.FormValue(fieldEmail), a.cfg.TeacherDomain)
+	email, err := validate.Email("Email", r.FormValue(fieldEmail))
 	if err != nil {
 		return store.NewTeacher{}, err
 	}
@@ -253,7 +252,7 @@ func (a *Admin) Teachers() http.HandlerFunc {
 			items = append(items, teacherItem{
 				ID:          teacher.ID,
 				UserID:      teacher.ID,
-				TeacherID:   teacher.TeacherID,
+				Identifier:  teacher.TeacherID,
 				Name:        teacher.Name,
 				Designation: teacher.Designation,
 				Email:       teacher.Email,
@@ -288,6 +287,7 @@ func (a *Admin) DeactivateTeacher() http.HandlerFunc {
 			log.Printf("handler: could not deactivate a teacher: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 		default:
+			a.auditRemoval(r, userID)
 			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageTeacherDeactivated})
 		}
 	}

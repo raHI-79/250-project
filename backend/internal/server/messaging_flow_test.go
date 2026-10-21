@@ -22,7 +22,7 @@ const (
 	chatFlowOutsider = `{"full_name":"Chat Outsider","reg_no":"2022331962","batch":"CSE-22","section":"A",
 "email":"chatoutsider@student.sust.edu","phone":"01712345962","blood_group":"B+",
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
-	chatFlowTeacher = `{"name":"Chat Teacher","teacher_id":"T-960","email":"chatteacher@sust.edu",
+	chatFlowTeacher = `{"name":"Chat Teacher","user_id":"T-960","email":"chatteacher@sust.edu",
 "phone":"01712345963"}`
 )
 
@@ -284,7 +284,7 @@ func onboardTeacherForMessaging(t *testing.T, router http.Handler, adminToken st
 
 func onboardSecondTeacher(t *testing.T, router http.Handler, adminToken string) string {
 	t.Helper()
-	body := `{"name":"Other Teacher","teacher_id":"T-961","email":"otherteacher@sust.edu",
+	body := `{"name":"Other Teacher","user_id":"T-961","email":"otherteacher@sust.edu",
 "phone":"01712345964"}`
 	invited := teacherInviteCall(t, router, adminToken, body)
 	if invited.Code != http.StatusCreated {

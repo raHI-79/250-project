@@ -75,7 +75,8 @@ type AuthStore interface {
 	FindInvite(ctx context.Context, inviteHash string) (store.TeacherInvite, error)
 	CountInviteAttempt(ctx context.Context, userID int64) (int, error)
 	ClearInvite(ctx context.Context, userID int64) error
-	ActivateTeacher(ctx context.Context, userID int64, passwordHash, photoPath string) error
+	ActivateTeacher(ctx context.Context, userID int64, chosenID, passwordHash, photoPath string) error
+	IdentifierTaken(ctx context.Context, chosenID string) (bool, error)
 }
 
 type TokenIssuer interface {

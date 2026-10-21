@@ -15,7 +15,7 @@ import (
 
 const (
 	flowCourse  = `{"code":"cse233","title":"Digital Logic Design"}`
-	flowTeacher = `{"name":"Routine Teacher","teacher_id":"T-700","email":"routineteacher@sust.edu",
+	flowTeacher = `{"name":"Routine Teacher","user_id":"T-700","email":"routineteacher@sust.edu",
 "phone":"01712345700","password":"sust-250-project","confirm_password":"sust-250-project"}`
 	flowStudentOne = `{"full_name":"Routine Student","reg_no":"2023331700","batch":"CSE-23","section":"A",
 "email":"routinestudent@student.sust.edu","phone":"01712345701","blood_group":"O+",

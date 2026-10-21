@@ -11,7 +11,7 @@ import (
 
 const (
 	crFlowCourse  = `{"code":"cse233","title":"Digital Logic Design"}`
-	crFlowTeacher = `{"name":"Request Teacher","teacher_id":"T-800","email":"requestteacher@sust.edu",
+	crFlowTeacher = `{"name":"Request Teacher","user_id":"T-800","email":"requestteacher@sust.edu",
 "phone":"01712345800","password":"sust-250-project","confirm_password":"sust-250-project"}`
 	crFlowFirstCR = `{"full_name":"First CR","reg_no":"2023331800","batch":"CSE-23","section":"A",
 "email":"firstcr@student.sust.edu","phone":"01712345801","blood_group":"O+",
