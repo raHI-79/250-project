@@ -44,21 +44,21 @@ type RoutineFilter struct {
 
 const (
 	listDayPlanSQL = `SELECT r.batch, r.section, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'),
-c.code, c.title, r.type, r.room, t.name,
+c.code, c.title, r.type, r.room, COALESCE(t.name, 'Deleted user'),
 EXISTS (SELECT 1 FROM routine_cancellations rc WHERE rc.routine_id = r.id AND rc.cancel_date = $2::date) AS cancelled,
 '' AS note
 FROM routines r
 JOIN courses c ON c.id = r.course_id
-JOIN teachers t ON t.id = r.teacher_id
+LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE r.day_of_week = EXTRACT(DOW FROM $2::date)::int
   AND (r.batch = $1 OR (r.batch <> $1 AND c.code = ANY($3::text[])))
 UNION ALL
 SELECT e.batch, e.section, to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-c.code, c.title, e.event_type, e.room, t.name, (e.status = 'cancelled') AS cancelled,
+c.code, c.title, e.event_type, e.room, COALESCE(t.name, 'Deleted user'), (e.status = 'cancelled') AS cancelled,
 CASE WHEN e.status = 'approved' AND e.note_audience IN ('students', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
-JOIN teachers t ON t.id = e.teacher_id
+LEFT JOIN teachers t ON t.id = e.teacher_id
 WHERE e.event_date = $2::date AND e.status IN ('approved', 'cancelled')
   AND (e.batch = $1 OR (e.batch <> $1 AND c.code = ANY($3::text[])))
 ORDER BY 1, 2, 3`
@@ -70,11 +70,12 @@ JOIN courses c ON c.id = e.course_id
 WHERE e.batch = $1 AND (e.section = $2 OR e.section = 'ALL') AND e.status = 'approved'
   AND e.event_type = 'exam' AND e.event_date >= $3::date
 ORDER BY e.event_date, e.start_time, e.id`
-	listFilteredRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title, r.teacher_id, t.name,
+	listFilteredRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title,
+COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
 FROM routines r
 JOIN courses c ON c.id = r.course_id
-JOIN teachers t ON t.id = r.teacher_id
+LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE r.batch = $1
   AND ($2::text = '' OR r.section = $2::text OR r.section = 'ALL')
   AND ($3::int < 0 OR r.day_of_week = $3::int)

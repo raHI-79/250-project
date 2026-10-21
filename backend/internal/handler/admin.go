@@ -38,10 +38,17 @@ const (
 	MessageTeacherNotInvited      = "This teacher has already activated their account."
 	MessageTeacherNotFound        = "No teacher found with this ID."
 	MessageTeacherDeactivated     = "Teacher deactivated."
-	MessageDuplicateTeacher       = "An account with this teacher ID or email already exists."
+	MessageDuplicateTeacher       = "An account with this email already exists."
 	MessageInvalidStatus          = "status must be one of active, pending, rejected, removed, unverified, invited, all."
 	MessageInvalidLimit           = "limit must be a number between 1 and 200."
 	MessageInvalidOffset          = "offset must be a number of 0 or more."
+	MessageAccountNotFound        = "No account found with this ID."
+	MessageNotRestorable          = "Only a removed or rejected account can be restored."
+	MessageNotDeletable           = "Only a removed or rejected account can be deleted permanently."
+	MessageProtectedAccount       = "This account cannot be deleted."
+	MessageConfirmMismatch        = "Type the User ID or the email address of the account exactly to confirm."
+	MessageAccountRestored        = "Account restored."
+	MessageAccountDeleted         = "Account deleted permanently."
 	fieldJoiningDate              = "joining_date"
 )
 
@@ -60,6 +67,11 @@ type AdminStore interface {
 	ListTeachers(ctx context.Context, filter store.TeacherFilter) ([]store.TeacherRow, error)
 	DeactivateTeacher(ctx context.Context, userID int64) error
 	Stats(ctx context.Context) (store.Stats, error)
+	FindAccount(ctx context.Context, userID int64) (store.AccountRef, error)
+	RestoreAccount(ctx context.Context, userID int64) (string, error)
+	DeleteAccount(ctx context.Context, userID int64) (string, error)
+	WriteAudit(ctx context.Context, adminID int64, action, targetSummary string) error
+	ListAudit(ctx context.Context, limit int) ([]store.AuditRow, error)
 }
 
 type Admin struct {
@@ -96,7 +108,6 @@ type registrationsResponse struct {
 
 type updateTeacherRequest struct {
 	Name        *string `json:"name"`
-	TeacherID   *string `json:"teacher_id"`
 	Designation *string `json:"designation"`
 	Email       *string `json:"email"`
 	DateOfBirth *string `json:"date_of_birth"`
@@ -114,7 +125,6 @@ func (request updateTeacherRequest) toUpdate(cfg *config.Config) (store.TeacherU
 		check  func(string, string) (string, error)
 	}{
 		{source: request.Name, target: &update.Name, label: "Name", check: validate.Required},
-		{source: request.TeacherID, target: &update.TeacherID, label: "Teacher ID", check: validate.TeacherID},
 		{source: request.Designation, target: &update.Designation, label: "Designation", check: validate.Required},
 		{source: request.BloodGroup, target: &update.BloodGroup, label: "Blood group", check: validate.BloodGroup},
 		{source: request.OfficeRoom, target: &update.OfficeRoom, label: "Office room", check: validate.Required},
@@ -130,7 +140,7 @@ func (request updateTeacherRequest) toUpdate(cfg *config.Config) (store.TeacherU
 		*text.target = &value
 	}
 	if request.Email != nil {
-		email, err := validate.EmailInDomain("Email", *request.Email, cfg.TeacherDomain)
+		email, err := validate.Email("Email", *request.Email)
 		if err != nil {
 			return store.TeacherUpdate{}, err
 		}

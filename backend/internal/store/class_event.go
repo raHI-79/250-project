@@ -92,11 +92,12 @@ const (
 FROM users u
 JOIN students s ON s.user_id = u.id
 WHERE u.id = $1`
-	listSectionRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title, r.teacher_id, t.name,
+	listSectionRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title,
+COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
 FROM routines r
 JOIN courses c ON c.id = r.course_id
-JOIN teachers t ON t.id = r.teacher_id
+LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE r.batch = $1 AND (r.section = $2 OR r.section = 'ALL')
 ORDER BY r.day_of_week, r.start_time, r.room`
 	lockRoomDateSQL        = `SELECT pg_advisory_xact_lock(hashtext($1::text || ':' || $2::text))`
@@ -143,12 +144,13 @@ WHERE e.event_date = $1::date
   AND ($2::text = '' OR e.room = $2::text)
 ORDER BY 1, 2, 3`
 	listClassRequestsSQL = `SELECT e.id, e.batch, e.section, e.event_type, e.course_id, c.code, c.title,
-e.teacher_id, t.user_id, t.name, to_char(e.event_date, 'YYYY-MM-DD'),
+COALESCE(e.teacher_id, 0), COALESCE(t.user_id, 0), COALESCE(t.name, 'Deleted user'),
+to_char(e.event_date, 'YYYY-MM-DD'),
 to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'), e.room, e.status, e.created_at, e.decided_at,
 COALESCE(e.note, ''), COALESCE(e.note_audience, '')
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
-JOIN teachers t ON t.id = e.teacher_id
+LEFT JOIN teachers t ON t.id = e.teacher_id
 WHERE e.created_by = $1 AND ($2::text = '' OR e.status = $2::text)
 ORDER BY e.created_at DESC, e.id DESC`
 )

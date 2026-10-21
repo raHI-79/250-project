@@ -73,7 +73,8 @@ const (
 	findTeacherByUserSQL   = `SELECT id, user_id, name FROM teachers WHERE user_id = $1`
 	listTeacherRequestsSQL = `SELECT e.id, e.event_type, e.batch, e.section, c.code, c.title,
 to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-e.room, COALESCE(s.full_name, ''), COALESCE(s.reg_no, ''), e.created_by, e.created_at,
+e.room, CASE WHEN e.created_by IS NULL THEN 'Deleted user' ELSE COALESCE(s.full_name, '') END,
+COALESCE(s.reg_no, ''), COALESCE(e.created_by, 0), e.created_at,
 CASE WHEN e.note_audience IN ('teacher', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
@@ -82,7 +83,7 @@ WHERE e.teacher_id = $1 AND e.status = 'pending'
 ORDER BY e.created_at, e.id`
 	findTeacherEventSQL = `SELECT e.status, e.event_type, e.batch, e.section, c.code, c.title,
 to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-e.room, e.created_by, (e.event_date <= $3::date)
+e.room, COALESCE(e.created_by, 0), (e.event_date <= $3::date)
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
 WHERE e.id = $1 AND e.teacher_id = $2
@@ -109,7 +110,7 @@ WHERE e.teacher_id = $1 AND e.event_date = $2::date AND e.status IN ('approved',
 ORDER BY 7, 2`
 	listTeacherClassesSQL = `SELECT e.id, e.event_type, e.batch, e.section, c.code, c.title,
 to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-e.room, e.status, e.created_by,
+e.room, e.status, COALESCE(e.created_by, 0),
 CASE WHEN e.note_audience IN ('teacher', 'both') THEN COALESCE(e.note, '') ELSE '' END
 FROM class_events e
 JOIN courses c ON c.id = e.course_id
@@ -137,7 +138,7 @@ ORDER BY u.id`
     WHERE status = 'pending' AND event_date <= $2::date
     RETURNING id, created_by, event_type, course_id, batch, section, event_date, start_time, end_time, room
 )
-SELECT stale.id, stale.created_by, stale.event_type, c.code, c.title, stale.batch, stale.section,
+SELECT stale.id, COALESCE(stale.created_by, 0), stale.event_type, c.code, c.title, stale.batch, stale.section,
 to_char(stale.event_date, 'YYYY-MM-DD'), to_char(stale.start_time, 'HH24:MI'), to_char(stale.end_time, 'HH24:MI'),
 stale.room
 FROM stale
