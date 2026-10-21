@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/jobs"
 	"github.com/raHI-79/250-project/backend/internal/notify"
@@ -10,20 +12,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
 
 const (
-	scheduleCourse  = `{"code":"cse233","title":"Digital Logic Design"}`
-	scheduleTeacher = `{"name":"Schedule Teacher","user_id":"T-900","email":"scheduleteacher@sust.edu",
-"phone":"01712345900","password":"sust-250-project","confirm_password":"sust-250-project"}`
-	scheduleCR = `{"full_name":"Schedule CR","reg_no":"2023331900","batch":"CSE-23","section":"A",
-"email":"schedulecr@student.sust.edu","phone":"01712345901","blood_group":"O+",
+	engineCourse  = `{"code":"cse 2243 7637d","title":"Compilers"}`
+	engineSecond  = `{"code":"CSE-2211","title":"Operating Systems"}`
+	engineTeacher = `{"name":"Engine Teacher","user_id":"T-500","email":"engineteacher@sust.edu",
+"phone":"01712345500"}`
+	engineCR = `{"full_name":"Engine CR","reg_no":"2023331500","batch":"CSE-23","section":"A",
+"email":"enginecr@student.sust.edu","phone":"01712345501","blood_group":"O+",
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
-	scheduleStudent = `{"full_name":"Schedule Student","reg_no":"2023331901","batch":"CSE-23","section":"A",
-"email":"schedulestudent@student.sust.edu","phone":"01712345902","blood_group":"A+",
-"password":"sust-250-project","confirm_password":"sust-250-project","has_drop_course":false}`
+	engineStudent = `{"full_name":"Engine Student","reg_no":"2023331502","batch":"CSE-23","section":"A",
+"email":"enginestudent@student.sust.edu","phone":"01712345502","blood_group":"A+",
+"password":"sust-250-project","confirm_password":"sust-250-project"}`
 )
 
 func groupsOf(t *testing.T, rec *httptest.ResponseRecorder) []map[string]any {
@@ -54,163 +58,503 @@ func groupItems(t *testing.T, group map[string]any) []map[string]any {
 	return items
 }
 
-func TestScheduleFlow(t *testing.T) {
-	ctx, pool, router := newFlowRouter(t)
-	adminToken := seedAdmin(t, ctx, pool, router)
-	loc, err := time.LoadLocation("Asia/Dhaka")
-	if err != nil {
-		t.Fatalf("could not load the timezone: %v", err)
+func generateItems(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	userStore := store.New(pool)
+	scheduler := jobs.NewScheduler(flowConfig(t), userStore, notify.New(userStore))
+	if _, err := scheduler.Generate(ctx, flowConfig(t).Now()); err != nil {
+		t.Fatalf("Generate() returned an unexpected error: %v", err)
 	}
-	now := time.Now().In(loc)
-	tomorrow := now.AddDate(0, 0, 1)
-	date := tomorrow.Format(validate.DateLayout)
-	course := call(t, router, http.MethodPost, "/api/admin/courses", scheduleCourse, adminToken)
-	if course.Code != http.StatusCreated {
-		t.Fatalf("create course status = %d, want 201 (body = %q)", course.Code, course.Body.String())
+}
+
+func itemsOn(t *testing.T, router http.Handler, token, path string) []map[string]any {
+	t.Helper()
+	rec := call(t, router, http.MethodGet, path, "", token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200 (body = %q)", path, rec.Code, rec.Body.String())
 	}
-	courseID := int64(number(t, course, "id"))
-	createdTeacher := teacherInviteCall(t, router, adminToken, scheduleTeacher)
-	if createdTeacher.Code != http.StatusCreated {
-		t.Fatalf("create teacher status = %d, want 201 (body = %q)", createdTeacher.Code, createdTeacher.Body.String())
-	}
-	teacherUserID := int64(number(t, createdTeacher, "id"))
-	var teacherID int64
-	for _, item := range listItems(t, call(t, router, http.MethodGet, "/api/lookups/teachers", "", adminToken)) {
-		if int64(item["user_id"].(float64)) == teacherUserID {
-			teacherID = int64(item["id"].(float64))
+	return listItems(t, rec)
+}
+
+func itemOfCourse(t *testing.T, items []map[string]any, code string) map[string]any {
+	t.Helper()
+	for _, item := range items {
+		if item["course_code"] == code {
+			return item
 		}
 	}
-	if teacherID == 0 {
-		t.Fatal("the new teacher is missing from the teacher lookup")
+	t.Fatalf("no item for the course %q in %v", code, items)
+	return nil
+}
+
+func itemID(t *testing.T, item map[string]any) int64 {
+	t.Helper()
+	value, ok := item["id"].(float64)
+	if !ok {
+		t.Fatalf("the item has no id: %v", item)
 	}
-	onboardCR(t, router, adminToken, scheduleCR)
-	registeredStudent := registerStudent(t, router, scheduleStudent)
-	if registeredStudent.Code != http.StatusCreated {
-		t.Fatalf("register status = %d, want 201 (body = %q)", registeredStudent.Code, registeredStudent.Body.String())
+	return int64(value)
+}
+
+func addToFinal(t *testing.T, router http.Handler, crToken string, id int64) {
+	t.Helper()
+	path := "/api/cr/items/" + strconv.FormatInt(id, 10) + "/final"
+	rec := call(t, router, http.MethodPost, path, "", crToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("add to final status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 	}
-	verifyStudentEmail(t, router, registeredStudent, "2023331901")
-	approveStudent(t, router, adminToken, "2023331901")
-	crToken := loginToken(t, router, "2023331900")
-	teacherToken := loginToken(t, router, "T-900")
-	studentToken := loginToken(t, router, "2023331901")
-	requested := call(t, router, http.MethodPost, "/api/cr/class-requests",
-		classRequestBody("class", date, "10:30", "12:45", "1101", courseID, teacherID), crToken)
-	if requested.Code != http.StatusCreated {
-		t.Fatalf("class request status = %d, want 201 (body = %q)", requested.Code, requested.Body.String())
+}
+
+func publishItems(t *testing.T, router http.Handler, crToken string, ids ...int64) *httptest.ResponseRecorder {
+	t.Helper()
+	texts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		texts = append(texts, strconv.FormatInt(id, 10))
 	}
-	pending := call(t, router, http.MethodGet, "/api/teacher/requests", "", teacherToken)
-	if pending.Code != http.StatusOK {
-		t.Fatalf("teacher requests status = %d, want 200 (body = %q)", pending.Code, pending.Body.String())
+	body := `{"item_ids":[` + strings.Join(texts, ",") + `]}`
+	return call(t, router, http.MethodPost, "/api/cr/final/publish", body, crToken)
+}
+
+func seedEngine(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
+	router http.Handler) (string, string, string, int64, int64) {
+	t.Helper()
+	adminToken := seedAdmin(t, ctx, pool, router)
+	first := call(t, router, http.MethodPost, "/api/admin/courses", engineCourse, adminToken)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("create course status = %d, want 201 (body = %q)", first.Code, first.Body.String())
 	}
-	waiting := listItems(t, pending)
-	if len(waiting) != 1 {
-		t.Fatalf("the teacher has %d requests, want 1 (body = %q)", len(waiting), pending.Body.String())
+	firstID := int64(number(t, first, "id"))
+	second := call(t, router, http.MethodPost, "/api/admin/courses", engineSecond, adminToken)
+	if second.Code != http.StatusCreated {
+		t.Fatalf("create second course status = %d, want 201 (body = %q)", second.Code, second.Body.String())
 	}
-	if waiting[0]["requested_by"] != "Schedule CR" || waiting[0]["requested_by_reg_no"] != "2023331900" {
-		t.Errorf("request = %v, want the class representative who asked", waiting[0])
+	secondID := int64(number(t, second, "id"))
+	invited := teacherInviteCall(t, router, adminToken, engineTeacher)
+	if invited.Code != http.StatusCreated {
+		t.Fatalf("invite teacher status = %d, want 201 (body = %q)", invited.Code, invited.Body.String())
 	}
-	requestID := int64(waiting[0]["id"].(float64))
-	requestPath := "/api/teacher/requests/" + strconv.FormatInt(requestID, 10)
-	approved := call(t, router, http.MethodPost, requestPath+"/approve", "", teacherToken)
-	if approved.Code != http.StatusOK {
-		t.Fatalf("approve status = %d, want 200 (body = %q)", approved.Code, approved.Body.String())
+	teacherRowID := lookupTeacherID(t, router, adminToken, int64(number(t, invited, "id")))
+	tomorrow := flowConfig(t).Now().AddDate(0, 0, 1)
+	weekday := int(tomorrow.Weekday())
+	for _, routine := range []string{
+		routineBody("A", firstID, teacherRowID, weekday, "08:00", "09:30", "1003", "class"),
+		routineBody("A", secondID, teacherRowID, weekday, "10:00", "11:30", "1004", "class"),
+	} {
+		rec := call(t, router, http.MethodPost, "/api/admin/routines", routine, adminToken)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create routine status = %d, want 201 (body = %q)", rec.Code, rec.Body.String())
+		}
 	}
-	again := call(t, router, http.MethodPost, requestPath+"/approve", "", teacherToken)
-	if again.Code != http.StatusConflict {
-		t.Errorf("second approve status = %d, want 409 (body = %q)", again.Code, again.Body.String())
+	onboardCR(t, router, adminToken, engineCR)
+	onboardStudent(t, router, adminToken, engineStudent)
+	return adminToken, loginToken(t, router, "T-500"), loginToken(t, router, "2023331500"), firstID, secondID
+}
+
+func TestScheduleEngineFullDay(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	_, teacherToken, crToken, _, _ := seedEngine(t, ctx, pool, router)
+	studentToken := loginToken(t, router, "2023331502")
+	generateItems(t, ctx, pool)
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	nextDay := call(t, router, http.MethodGet, "/api/teacher/upcoming/next-day", "", teacherToken)
+	if nextDay.Code != http.StatusOK {
+		t.Fatalf("next day status = %d, want 200 (body = %q)", nextDay.Code, nextDay.Body.String())
 	}
-	schedule := call(t, router, http.MethodGet, "/api/teacher/schedule?date="+date, "", teacherToken)
-	if schedule.Code != http.StatusOK {
-		t.Fatalf("schedule status = %d, want 200 (body = %q)", schedule.Code, schedule.Body.String())
+	if got := field(t, nextDay, "date"); got != tomorrow {
+		t.Errorf("next day date = %q, want %q", got, tomorrow)
 	}
-	entries := listItems(t, schedule)
-	if len(entries) != 1 || entries[0]["kind"] != "class" || entries[0]["cancelled"] != false {
-		t.Fatalf("schedule = %v, want the approved class", entries)
+	if !boolean(t, nextDay, "decision_open") {
+		t.Fatal("the decision window is closed in the test configuration")
 	}
-	upcoming := call(t, router, http.MethodGet, "/api/teacher/classes/upcoming", "", teacherToken)
-	classes := listItems(t, upcoming)
-	if len(classes) != 1 || classes[0]["event_date"] != date {
-		t.Fatalf("upcoming classes = %v, want the class of tomorrow", classes)
+	items := listItems(t, nextDay)
+	if len(items) != 2 {
+		t.Fatalf("the teacher sees %d items, want 2 (body = %q)", len(items), nextDay.Body.String())
 	}
-	classID := int64(classes[0]["id"].(float64))
-	routinePath := "/api/students/upcoming-routine?date=" + date
-	routine := call(t, router, http.MethodGet, routinePath, "", studentToken)
-	if routine.Code != http.StatusOK {
-		t.Fatalf("upcoming routine status = %d, want 200 (body = %q)", routine.Code, routine.Body.String())
-	}
-	if got := field(t, routine, "date"); got != date {
-		t.Errorf("date = %q, want tomorrow %q", got, date)
-	}
-	groups := groupsOf(t, routine)
-	if len(groups) != 1 || groups[0]["key"] != "A" || groups[0]["section_label"] != "Section A" {
-		t.Fatalf("groups = %v, want one for section A", groups)
-	}
-	planned := groupItems(t, groups[0])
-	if len(planned) != 1 || planned[0]["status"] != handler.StatusScheduled || planned[0]["course_code"] != "CSE233" {
-		t.Fatalf("items = %v, want the scheduled class", planned)
-	}
-	if planned[0]["teacher_name"] != "Schedule Teacher" || planned[0]["room"] != "1101" {
-		t.Errorf("item = %v, want the teacher and room", planned[0])
-	}
-	crDay := call(t, router, http.MethodGet, "/api/cr/day?date="+date, "", crToken)
-	if crDay.Code != http.StatusOK {
-		t.Fatalf("cr day status = %d, want 200 (body = %q)", crDay.Code, crDay.Body.String())
-	}
-	onThatDay := listItems(t, crDay)
-	if len(onThatDay) != 1 || onThatDay[0]["source"] != "event" || onThatDay[0]["status"] != store.EventStatusApproved {
-		t.Fatalf("the day panel shows %v, want the approved event", onThatDay)
+	compilers := itemID(t, itemOfCourse(t, items, "CSE 2243 7637D"))
+	systems := itemID(t, itemOfCourse(t, items, "CSE 2211"))
+	confirmed := call(t, router, http.MethodPost,
+		"/api/teacher/items/"+strconv.FormatInt(compilers, 10)+"/confirm",
+		`{"mode":"online","meeting_link":"https://meet.example.com/compilers"}`, teacherToken)
+	if confirmed.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want 200 (body = %q)", confirmed.Code, confirmed.Body.String())
 	}
 	cancelled := call(t, router, http.MethodPost,
-		"/api/teacher/classes/"+strconv.FormatInt(classID, 10)+"/cancel", "", teacherToken)
+		"/api/teacher/items/"+strconv.FormatInt(systems, 10)+"/cancel",
+		`{"reason":"I am at a conference."}`, teacherToken)
 	if cancelled.Code != http.StatusOK {
 		t.Fatalf("cancel status = %d, want 200 (body = %q)", cancelled.Code, cancelled.Body.String())
 	}
-	today := call(t, router, http.MethodGet, "/api/students/today", "", studentToken)
-	if today.Code != http.StatusOK {
-		t.Fatalf("today status = %d, want 200 (body = %q)", today.Code, today.Body.String())
+	upcoming := itemsOn(t, router, crToken, "/api/cr/upcoming")
+	if len(upcoming) != 2 {
+		t.Fatalf("the class representative sees %d items, want 2", len(upcoming))
 	}
-	if got := field(t, today, "date"); got != now.Format(validate.DateLayout) {
-		t.Errorf("today date = %q, want %q", got, now.Format(validate.DateLayout))
+	addToFinal(t, router, crToken, compilers)
+	published := publishItems(t, router, crToken, compilers)
+	if published.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200 (body = %q)", published.Code, published.Body.String())
 	}
-	afterCancel := call(t, router, http.MethodGet, routinePath, "", studentToken)
-	cancelledGroups := groupsOf(t, afterCancel)
-	if len(cancelledGroups) != 1 {
-		t.Fatalf("groups after the cancellation = %v, want one", cancelledGroups)
+	routine := call(t, router, http.MethodGet, "/api/students/upcoming-routine?date="+tomorrow, "", studentToken)
+	if routine.Code != http.StatusOK {
+		t.Fatalf("student routine status = %d, want 200 (body = %q)", routine.Code, routine.Body.String())
 	}
-	shown := groupItems(t, cancelledGroups[0])
-	if len(shown) != 1 || shown[0]["status"] != handler.StatusCancelled {
-		t.Fatalf("items after the cancellation = %v, want the class marked as cancelled", shown)
+	groups := groupsOf(t, routine)
+	if len(groups) != 1 {
+		t.Fatalf("the student sees %d groups, want only section A (body = %q)", len(groups), routine.Body.String())
 	}
-	alerts := listItems(t, call(t, router, http.MethodGet, "/api/notifications", "", studentToken))
-	if len(alerts) != 2 {
-		t.Fatalf("the student has %d notifications, want the approval and the cancellation", len(alerts))
+	studentItems := groupItems(t, groups[0])
+	if len(studentItems) != 1 {
+		t.Fatalf("the student sees %d items, want only the published one", len(studentItems))
 	}
-	stale := call(t, router, http.MethodPost, "/api/cr/class-requests",
-		classRequestBody("exam", date, "08:00", "09:00", "1102", courseID, teacherID), crToken)
-	if stale.Code != http.StatusCreated {
-		t.Fatalf("second class request status = %d, want 201 (body = %q)", stale.Code, stale.Body.String())
+	if studentItems[0]["course_code"] != "CSE 2243 7637D" {
+		t.Errorf("the student sees %v, want the published class", studentItems[0])
 	}
+	if studentItems[0]["mode"] != "online" {
+		t.Errorf("mode = %v, want online", studentItems[0]["mode"])
+	}
+	if studentItems[0]["meeting_link"] != "https://meet.example.com/compilers" {
+		t.Errorf("meeting_link = %v, want the online link", studentItems[0]["meeting_link"])
+	}
+}
+
+func TestScheduleEngineRescheduleAndCancellationReachStudents(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	_, teacherToken, crToken, _, _ := seedEngine(t, ctx, pool, router)
+	studentToken := loginToken(t, router, "2023331502")
+	generateItems(t, ctx, pool)
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	items := itemsOn(t, router, teacherToken, "/api/teacher/upcoming/next-day")
+	compilers := itemID(t, itemOfCourse(t, items, "CSE 2243 7637D"))
+	asked := call(t, router, http.MethodPost,
+		"/api/teacher/items/"+strconv.FormatInt(compilers, 10)+"/request-reschedule",
+		`{"message":"Please move this class."}`, teacherToken)
+	if asked.Code != http.StatusOK {
+		t.Fatalf("request reschedule status = %d, want 200 (body = %q)", asked.Code, asked.Body.String())
+	}
+	moved := call(t, router, http.MethodPatch, "/api/cr/items/"+strconv.FormatInt(compilers, 10),
+		`{"start_time":"14:00","end_time":"15:30","mode":"room","room":"1003"}`, crToken)
+	if moved.Code != http.StatusOK {
+		t.Fatalf("patch status = %d, want 200 (body = %q)", moved.Code, moved.Body.String())
+	}
+	addToFinal(t, router, crToken, compilers)
+	if rec := publishItems(t, router, crToken, compilers); rec.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	published := groupItems(t, groupsOf(t, call(t, router, http.MethodGet,
+		"/api/students/upcoming-routine?date="+tomorrow, "", studentToken))[0])
+	if len(published) != 1 || published[0]["start_time"] != "14:00" {
+		t.Fatalf("the student sees %v, want the moved class at 14:00", published)
+	}
+	if published[0]["status"] != store.ItemRescheduled {
+		t.Errorf("status = %v, want %q", published[0]["status"], store.ItemRescheduled)
+	}
+	later := call(t, router, http.MethodPost,
+		"/api/teacher/items/"+strconv.FormatInt(compilers, 10)+"/cancel", `{}`, teacherToken)
+	if later.Code != http.StatusOK {
+		t.Fatalf("cancel status = %d, want 200 (body = %q)", later.Code, later.Body.String())
+	}
+	afterCancel := groupItems(t, groupsOf(t, call(t, router, http.MethodGet,
+		"/api/students/upcoming-routine?date="+tomorrow, "", studentToken))[0])
+	if len(afterCancel) != 1 || afterCancel[0]["status"] != store.ItemCancelled {
+		t.Fatalf("the student sees %v, want the cancellation straight away", afterCancel)
+	}
+}
+
+func TestScheduleEngineSnapshotHidesLaterEdits(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	_, teacherToken, crToken, _, _ := seedEngine(t, ctx, pool, router)
+	studentToken := loginToken(t, router, "2023331502")
+	generateItems(t, ctx, pool)
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	items := itemsOn(t, router, teacherToken, "/api/teacher/upcoming/next-day")
+	compilers := itemID(t, itemOfCourse(t, items, "CSE 2243 7637D"))
+	confirm := call(t, router, http.MethodPost,
+		"/api/teacher/items/"+strconv.FormatInt(compilers, 10)+"/confirm",
+		`{"mode":"room","room":"1003"}`, teacherToken)
+	if confirm.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want 200 (body = %q)", confirm.Code, confirm.Body.String())
+	}
+	addToFinal(t, router, crToken, compilers)
+	if rec := publishItems(t, router, crToken, compilers); rec.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	changed := call(t, router, http.MethodPost,
+		"/api/teacher/items/"+strconv.FormatInt(compilers, 10)+"/confirm",
+		`{"mode":"room","room":"2104"}`, teacherToken)
+	if changed.Code != http.StatusOK {
+		t.Fatalf("second confirm status = %d, want 200 (body = %q)", changed.Code, changed.Body.String())
+	}
+	studentItems := groupItems(t, groupsOf(t, call(t, router, http.MethodGet,
+		"/api/students/upcoming-routine?date="+tomorrow, "", studentToken))[0])
+	if len(studentItems) != 1 || studentItems[0]["room"] != "1003" {
+		t.Fatalf("the student sees %v, want the published room 1003", studentItems)
+	}
+	final := call(t, router, http.MethodGet, "/api/cr/final", "", crToken)
+	if final.Code != http.StatusOK {
+		t.Fatalf("final status = %d, want 200 (body = %q)", final.Code, final.Body.String())
+	}
+	if got := number(t, final, "changed_since_publish"); got != 1 {
+		t.Errorf("changed_since_publish = %v, want 1 (body = %q)", got, final.Body.String())
+	}
+	if rec := publishItems(t, router, crToken, compilers); rec.Code != http.StatusOK {
+		t.Fatalf("republish status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	after := groupItems(t, groupsOf(t, call(t, router, http.MethodGet,
+		"/api/students/upcoming-routine?date="+tomorrow, "", studentToken))[0])
+	if len(after) != 1 || after[0]["room"] != "2104" {
+		t.Fatalf("the student sees %v, want room 2104 after the republish", after)
+	}
+}
+
+func TestScheduleEngineExamFlow(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	_, teacherToken, crToken, courseID, _ := seedEngine(t, ctx, pool, router)
+	studentToken := loginToken(t, router, "2023331502")
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	body := `{"course_id":` + strconv.FormatInt(courseID, 10) +
+		`,"batch":"CSE-23","section":"A","item_date":"` + tomorrow +
+		`","syllabus":"Chapters 1 to 4","instructions":"Bring a calculator."}`
+	created := call(t, router, http.MethodPost, "/api/teacher/exams", body, teacherToken)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create exam status = %d, want 201 (body = %q)", created.Code, created.Body.String())
+	}
+	var payload struct {
+		Item map[string]any `json:"item"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("body is not valid JSON: %v", err)
+	}
+	examID := itemID(t, payload.Item)
+	if payload.Item["needs_time"] != true {
+		t.Errorf("needs_time = %v, want true for a fresh teacher exam", payload.Item["needs_time"])
+	}
+	exams := itemsOn(t, router, studentToken, "/api/students/exams")
+	if len(exams) != 1 {
+		t.Fatalf("the student sees %d exams, want the teacher exam straight away", len(exams))
+	}
+	if exams[0]["syllabus"] != "Chapters 1 to 4" || exams[0]["start_time"] != nil {
+		t.Errorf("exam = %v, want the syllabus without a time", exams[0])
+	}
+	timed := call(t, router, http.MethodPatch, "/api/cr/items/"+strconv.FormatInt(examID, 10),
+		`{"start_time":"09:00","end_time":"11:00","mode":"room","room":"1003"}`, crToken)
+	if timed.Code != http.StatusOK {
+		t.Fatalf("set the exam time status = %d, want 200 (body = %q)", timed.Code, timed.Body.String())
+	}
+	addToFinal(t, router, crToken, examID)
+	if rec := publishItems(t, router, crToken, examID); rec.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	afterPublish := itemsOn(t, router, studentToken, "/api/students/exams")
+	if len(afterPublish) != 1 || afterPublish[0]["start_time"] != "09:00" {
+		t.Fatalf("the student sees %v, want the published exam time", afterPublish)
+	}
+	if afterPublish[0]["room"] != "1003" {
+		t.Errorf("room = %v, want 1003", afterPublish[0]["room"])
+	}
+}
+
+func TestScheduleEngineRoomAndBatchRules(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	_, teacherToken, crToken, courseID, _ := seedEngine(t, ctx, pool, router)
+	generateItems(t, ctx, pool)
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	items := itemsOn(t, router, teacherToken, "/api/teacher/upcoming/next-day")
+	if len(items) != 2 {
+		t.Fatalf("the teacher sees %d items, want 2", len(items))
+	}
+	clash := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
+		`,"section":"A","item_date":"` + tomorrow +
+		`","start_time":"08:30","end_time":"09:00","mode":"room","room":"2104"}`
+	rec := call(t, router, http.MethodPost, "/api/cr/items", clash, crToken)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("batch clash status = %d, want 409 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if got := field(t, rec, "error"); !strings.Contains(got, "CSE-23 section A already has") {
+		t.Errorf("error = %q, want the batch clash sentence", got)
+	}
+	roomClash := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
+		`,"section":"B","item_date":"` + tomorrow +
+		`","start_time":"08:30","end_time":"09:00","mode":"room","room":"1003"}`
+	roomRec := call(t, router, http.MethodPost, "/api/cr/items", roomClash, crToken)
+	if roomRec.Code != http.StatusConflict {
+		t.Fatalf("room clash status = %d, want 409 (body = %q)", roomRec.Code, roomRec.Body.String())
+	}
+	if got := field(t, roomRec, "error"); !strings.Contains(got, "Room 1003 is already booked") {
+		t.Errorf("error = %q, want the room clash sentence", got)
+	}
+	unmanaged := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
+		`,"section":"B","item_date":"` + tomorrow +
+		`","start_time":"08:30","end_time":"09:00","mode":"room","room":"Library Hall"}`
+	free := call(t, router, http.MethodPost, "/api/cr/items", unmanaged, crToken)
+	if free.Code != http.StatusCreated {
+		t.Fatalf("unmanaged room status = %d, want 201 (body = %q)", free.Code, free.Body.String())
+	}
+	online := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
+		`,"section":"C","item_date":"` + tomorrow +
+		`","start_time":"08:30","end_time":"09:00","mode":"online","meeting_link":"https://meet.example.com/extra"}`
+	onlineRec := call(t, router, http.MethodPost, "/api/cr/items", online, crToken)
+	if onlineRec.Code != http.StatusCreated {
+		t.Fatalf("online class status = %d, want 201 (body = %q)", onlineRec.Code, onlineRec.Body.String())
+	}
+}
+
+func TestScheduleEngineDecisionDeadline(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	seedEngine(t, ctx, pool, router)
 	userStore := store.New(pool)
-	count, err := jobs.NewAutoCanceller(userStore, notify.New(userStore)).AutoCancel(ctx, tomorrow)
+	closedConfig := flowConfig(t)
+	closedConfig.DecisionFrom = 17 * 60
+	closedConfig.DecisionTo = 23 * 60
+	scheduler := jobs.NewScheduler(closedConfig, userStore, notify.New(userStore))
+	now := closedConfig.Now()
+	if _, err := scheduler.Generate(ctx, now); err != nil {
+		t.Fatalf("Generate() returned an unexpected error: %v", err)
+	}
+	again, err := scheduler.Generate(ctx, now)
 	if err != nil {
-		t.Fatalf("AutoCancel() returned an unexpected error: %v", err)
+		t.Fatalf("second Generate() returned an unexpected error: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("%d requests were auto cancelled, want 1", count)
+	if again != 0 {
+		t.Errorf("the second generation created %d items, want none", again)
 	}
-	empty := call(t, router, http.MethodGet, "/api/teacher/requests", "", teacherToken)
-	if left := listItems(t, empty); len(left) != 0 {
-		t.Errorf("the teacher still has %v, want no pending request", left)
+	deadline := time.Date(now.Year(), now.Month(), now.Day(), 23, 30, 0, 0, now.Location())
+	closed, err := scheduler.CloseDecisions(ctx, deadline)
+	if err != nil {
+		t.Fatalf("CloseDecisions() returned an unexpected error: %v", err)
 	}
-	mine := listItems(t, call(t, router, http.MethodGet, "/api/cr/requests?status=auto_cancelled", "", crToken))
-	if len(mine) != 1 || mine[0]["room"] != "1102" {
-		t.Fatalf("auto cancelled requests = %v, want the exam in room 1102", mine)
+	if closed != 2 {
+		t.Fatalf("CloseDecisions() closed %d items, want 2", closed)
 	}
-	crAlerts := listItems(t, call(t, router, http.MethodGet, "/api/notifications", "", crToken))
-	if len(crAlerts) != 6 {
-		t.Fatalf("the class representative has %d notifications, want the promotion, the three decisions and the two batch broadcasts", len(crAlerts))
+	repeat, err := scheduler.CloseDecisions(ctx, deadline)
+	if err != nil || repeat != 0 {
+		t.Errorf("the second CloseDecisions() closed %d items (err = %v), want none", repeat, err)
 	}
-	if crAlerts[0]["title"] != jobs.NotificationTitle {
-		t.Errorf("the newest notification = %v, want %q", crAlerts[0], jobs.NotificationTitle)
+	early := time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, now.Location())
+	if count, err := scheduler.CloseDecisions(ctx, early); err != nil || count != 0 {
+		t.Errorf("CloseDecisions() inside the window closed %d items (err = %v), want none", count, err)
 	}
+	tomorrow := validate.DateString(now.AddDate(0, 0, 1))
+	crToken := loginToken(t, router, "2023331500")
+	items := itemsOn(t, router, crToken, "/api/cr/upcoming?from="+tomorrow)
+	for _, item := range items {
+		if item["status"] != store.ItemNoResponse {
+			t.Errorf("status = %v, want %q", item["status"], store.ItemNoResponse)
+		}
+	}
+	notifications := itemsOn(t, router, crToken, "/api/notifications")
+	found := false
+	for _, entry := range notifications {
+		if entry["title"] == jobs.TitleNoResponse {
+			found = true
+			link, _ := entry["link"].(map[string]any)
+			if link == nil || link["kind"] != notify.LinkCRUpcoming {
+				t.Errorf("link = %v, want the class representative upcoming page", link)
+			}
+		}
+	}
+	if !found {
+		t.Error("the class representative got no notification about the missing answer")
+	}
+}
+
+func TestScheduleEngineClosedWindowRefusesTheFirstDecision(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	seedEngine(t, ctx, pool, router)
+	generateItems(t, ctx, pool)
+	userStore := store.New(pool)
+	teacher, err := userStore.GetTeacherByUser(ctx, teacherUserOf(t, ctx, pool, "T-500"))
+	if err != nil {
+		t.Fatalf("GetTeacherByUser() returned an unexpected error: %v", err)
+	}
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	items, err := userStore.ListTeacherDayItems(ctx, teacher.ID, tomorrow)
+	if err != nil {
+		t.Fatalf("ListTeacherDayItems() returned an unexpected error: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatal("the teacher has no generated items")
+	}
+	_, err = userStore.ConfirmItem(ctx, items[0].ID, teacher.ID, store.ModeRoom, "1003", "",
+		flowConfig(t).Now(), false)
+	if err != store.ErrDecisionClosed {
+		t.Errorf("ConfirmItem() outside the window error = %v, want ErrDecisionClosed", err)
+	}
+	_ = router
+}
+
+func teacherUserOf(t *testing.T, ctx context.Context, pool *pgxpool.Pool, identifier string) int64 {
+	t.Helper()
+	var userID int64
+	query := "SELECT id FROM users WHERE lower(identifier) = lower($1)"
+	if err := pool.QueryRow(ctx, query, identifier).Scan(&userID); err != nil {
+		t.Fatalf("could not find the user %q: %v", identifier, err)
+	}
+	return userID
+}
+
+func TestScheduleEnginePublishNeedsACompleteItem(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	_, teacherToken, crToken, courseID, _ := seedEngine(t, ctx, pool, router)
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	body := `{"course_id":` + strconv.FormatInt(courseID, 10) +
+		`,"batch":"CSE-23","section":"A","item_date":"` + tomorrow + `","syllabus":"Everything"}`
+	created := call(t, router, http.MethodPost, "/api/teacher/exams", body, teacherToken)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create exam status = %d, want 201 (body = %q)", created.Code, created.Body.String())
+	}
+	var payload struct {
+		Item map[string]any `json:"item"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("body is not valid JSON: %v", err)
+	}
+	examID := itemID(t, payload.Item)
+	addToFinal(t, router, crToken, examID)
+	rec := publishItems(t, router, crToken, examID)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("publish without a time status = %d, want 400 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if got := field(t, rec, "error"); !strings.Contains(got, "still needs a date") {
+		t.Errorf("error = %q, want the incomplete item sentence", got)
+	}
+	final := call(t, router, http.MethodGet, "/api/cr/final", "", crToken)
+	if got := number(t, final, "needs_time"); got != 1 {
+		t.Errorf("needs_time = %v, want 1", got)
+	}
+}
+
+func TestScheduleEngineLinkUpdateReachesStudents(t *testing.T) {
+	ctx, pool, router := newFlowRouter(t)
+	_, teacherToken, crToken, _, _ := seedEngine(t, ctx, pool, router)
+	studentToken := loginToken(t, router, "2023331502")
+	generateItems(t, ctx, pool)
+	tomorrow := validate.DateString(flowConfig(t).Now().AddDate(0, 0, 1))
+	items := itemsOn(t, router, teacherToken, "/api/teacher/upcoming/next-day")
+	compilers := itemID(t, itemOfCourse(t, items, "CSE 2243 7637D"))
+	confirm := call(t, router, http.MethodPost,
+		"/api/teacher/items/"+strconv.FormatInt(compilers, 10)+"/confirm",
+		`{"mode":"online","meeting_link":"https://meet.example.com/first"}`, teacherToken)
+	if confirm.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want 200 (body = %q)", confirm.Code, confirm.Body.String())
+	}
+	addToFinal(t, router, crToken, compilers)
+	if rec := publishItems(t, router, crToken, compilers); rec.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	path := "/api/schedule/items/" + strconv.FormatInt(compilers, 10) + "/link"
+	updated := call(t, router, http.MethodPatch, path,
+		`{"meeting_link":"https://meet.example.com/second"}`, crToken)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("link update status = %d, want 200 (body = %q)", updated.Code, updated.Body.String())
+	}
+	studentItems := groupItems(t, groupsOf(t, call(t, router, http.MethodGet,
+		"/api/students/upcoming-routine?date="+tomorrow, "", studentToken))[0])
+	if len(studentItems) != 1 || studentItems[0]["meeting_link"] != "https://meet.example.com/second" {
+		t.Fatalf("the student sees %v, want the new link", studentItems)
+	}
+	refused := call(t, router, http.MethodPatch, path,
+		`{"meeting_link":"https://meet.example.com/third"}`, studentToken)
+	if refused.Code != http.StatusNotFound {
+		t.Errorf("a plain student changing the link status = %d, want 404", refused.Code)
+	}
+	_ = handler.MessageLinkChanged
 }

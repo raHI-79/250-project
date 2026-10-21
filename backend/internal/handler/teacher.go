@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
@@ -13,33 +12,52 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const (
-	MessageNotATeacher      = "No teacher profile found for this account."
-	MessageRequestNotFound  = "No request found with this ID."
-	MessageRequestDecided   = "This request has already been decided."
-	MessageTooLateToApprove = "This request can no longer be approved."
-	MessageRequestApproved  = "Request approved."
-	MessageRequestRejected  = "Request rejected."
+	MessageNotATeacher     = "No teacher profile found for this account."
+	MessageItemConfirmed   = "Class confirmed."
+	MessageItemCancelled   = "Class cancelled."
+	MessageRescheduleAsked = "Reschedule requested. The class representative picks a new slot."
+	MessageProposalTaken   = "New slot accepted."
+	MessageProposalLeft    = "The original slot stays."
+	MessageExamCreated     = "Exam added. The class representative sets the time and the room."
+	MessageExamUpdated     = "Exam updated."
+	MessageExamCancelled   = "Exam cancelled."
+	MessageExamDeleted     = "Exam deleted."
+	MessagePastDate        = "Date must be today or later."
+
+	titleTeacherConfirmed = "Class confirmed by the teacher"
+	titleTeacherCancelled = "Class cancelled by the teacher"
+	titleTeacherAsked     = "The teacher asked for another slot"
+	titleProposalTaken    = "The teacher accepted the new slot"
+	titleProposalLeft     = "The teacher kept the original slot"
+	titleExamAdded        = "New exam from the teacher"
+	titleExamChanged      = "Exam changed by the teacher"
+	titleExamCancelled    = "Exam cancelled by the teacher"
+	titleStudentCancelled = "Class cancelled"
+	titleStudentChanged   = "Class changed"
 )
 
 type TeacherStore interface {
 	GetTeacherByUser(ctx context.Context, userID int64) (store.Teacher, error)
-	ListTeacherRequests(ctx context.Context, teacherID int64) ([]store.RequestRow, error)
-	DecideRequest(ctx context.Context, eventID, teacherID int64, status string, now time.Time) (store.EventDecision, error)
-	CancelClassEvent(ctx context.Context, eventID, teacherID int64, now time.Time) (store.EventDecision, error)
-	ListTeacherSchedule(ctx context.Context, teacherID int64, date string) ([]store.ScheduleItem, error)
-	ListTeacherClasses(ctx context.Context, teacherID int64, date string, now time.Time) ([]store.ClassEventRow, error)
-	GetTeacherRoutine(ctx context.Context, routineID, teacherID int64) (store.RoutineRow, error)
-	CancelRoutineOccurrence(ctx context.Context, routineID, cancelledBy int64, date string) error
+	ListTeacherRoutine(ctx context.Context, teacherID int64) ([]store.RoutineRow, error)
+	ListTeacherDayItems(ctx context.Context, teacherID int64, date string) ([]store.ScheduleItem, error)
+	ListTeacherFinalItems(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
+	ListTeacherExams(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
+	ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
+		now time.Time, windowOpen bool) (store.ScheduleItem, error)
+	CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64, reason string) (store.ScheduleItem, error)
+	TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64, message string) (store.ScheduleItem, error)
+	AcceptProposal(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error)
+	DeclineProposal(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error)
+	CreateTeacherExam(ctx context.Context, exam store.NewScheduleItem) (store.ScheduleItem, error)
+	UpdateTeacherExam(ctx context.Context, itemID, teacherID int64, patch store.ItemPatch) (store.ScheduleItem, error)
+	CancelTeacherExam(ctx context.Context, itemID, teacherID int64, reason string) (store.ScheduleItem, error)
+	DeleteTeacherExam(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error)
 	ListActiveCRs(ctx context.Context, batch, section string) ([]int64, error)
-}
-
-type BroadcastNotifier interface {
-	NotifyUser(ctx context.Context, userID int64, kind, title, body string) error
-	NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string) error
 }
 
 type Teacher struct {
@@ -52,25 +70,42 @@ func NewTeacher(cfg *config.Config, teachers TeacherStore, alerts BroadcastNotif
 	return &Teacher{cfg: cfg, teachers: teachers, alerts: alerts}
 }
 
-type requestItem struct {
-	ID               int64  `json:"id"`
-	EventType        string `json:"event_type"`
-	Batch            string `json:"batch"`
-	Section          string `json:"section"`
-	CourseCode       string `json:"course_code"`
-	CourseTitle      string `json:"course_title"`
-	EventDate        string `json:"event_date"`
-	StartTime        string `json:"start_time"`
-	EndTime          string `json:"end_time"`
-	Room             string `json:"room"`
-	RequestedBy      string `json:"requested_by"`
-	RequestedByRegNo string `json:"requested_by_reg_no"`
-	Note             string `json:"note,omitempty"`
-	CreatedAt        string `json:"created_at"`
+type nextDayResponse struct {
+	Date         string     `json:"date"`
+	Weekday      string     `json:"weekday"`
+	DecisionOpen bool       `json:"decision_open"`
+	WindowStart  string     `json:"window_start"`
+	WindowEnd    string     `json:"window_end"`
+	Items        []itemBody `json:"items"`
 }
 
-type requestsResponse struct {
-	Items []requestItem `json:"items"`
+type confirmRequest struct {
+	Mode        string `json:"mode"`
+	Room        string `json:"room"`
+	MeetingLink string `json:"meeting_link"`
+}
+
+type cancelRequest struct {
+	Reason string `json:"reason"`
+}
+
+type messageRequest struct {
+	Message string `json:"message"`
+}
+
+type examRequest struct {
+	CourseID     int64  `json:"course_id"`
+	Batch        string `json:"batch"`
+	Section      string `json:"section"`
+	ItemDate     string `json:"item_date"`
+	Syllabus     string `json:"syllabus"`
+	Instructions string `json:"instructions"`
+}
+
+type examPatchRequest struct {
+	ItemDate     *string `json:"item_date"`
+	Syllabus     *string `json:"syllabus"`
+	Instructions *string `json:"instructions"`
 }
 
 func (t *Teacher) profile(w http.ResponseWriter, r *http.Request) (store.Teacher, bool) {
@@ -92,116 +127,424 @@ func (t *Teacher) profile(w http.ResponseWriter, r *http.Request) (store.Teacher
 	return teacher, true
 }
 
-func (t *Teacher) Requests() http.HandlerFunc {
+func (t *Teacher) FixedRoutine() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		teacher, ok := t.profile(w, r)
 		if !ok {
 			return
 		}
-		requests, err := t.teachers.ListTeacherRequests(r.Context(), teacher.ID)
+		entries, err := t.teachers.ListTeacherRoutine(r.Context(), teacher.ID)
 		if err != nil {
-			log.Printf("handler: could not list the requests of a teacher: %v", err)
+			log.Printf("handler: could not list the routine of a teacher: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		items := make([]requestItem, 0, len(requests))
-		for _, request := range requests {
-			items = append(items, requestItem{
-				ID:               request.ID,
-				EventType:        request.EventType,
-				Batch:            request.Batch,
-				Section:          request.Section,
-				CourseCode:       request.CourseCode,
-				CourseTitle:      request.CourseTitle,
-				EventDate:        request.EventDate,
-				StartTime:        request.StartTime,
-				EndTime:          request.EndTime,
-				Room:             request.Room,
-				RequestedBy:      request.RequestedBy,
-				RequestedByRegNo: request.RequestedByRegNo,
-				Note:             request.Note,
-				CreatedAt:        timestamp(request.CreatedAt),
-			})
+		items := make([]routineItem, 0, len(entries))
+		for _, entry := range entries {
+			items = append(items, newRoutineItem(entry))
 		}
-		httpx.WriteJSON(w, http.StatusOK, requestsResponse{Items: items})
+		httpx.WriteJSON(w, http.StatusOK, routinesResponse{Items: items})
 	}
 }
 
-func (t *Teacher) Approve() http.HandlerFunc {
-	return t.decide(store.EventStatusApproved, MessageRequestApproved)
-}
-
-func (t *Teacher) Reject() http.HandlerFunc {
-	return t.decide(store.EventStatusRejected, MessageRequestRejected)
-}
-
-func (t *Teacher) decide(status, message string) http.HandlerFunc {
+func (t *Teacher) NextDay() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		teacher, ok := t.profile(w, r)
 		if !ok {
 			return
 		}
-		eventID, ok := pathID(w, r)
-		if !ok {
-			return
-		}
-		decision, err := t.teachers.DecideRequest(r.Context(), eventID, teacher.ID, status, t.cfg.Now())
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.WriteError(w, http.StatusNotFound, MessageRequestNotFound)
-			return
-		case errors.Is(err, store.ErrNotPending):
-			httpx.WriteError(w, http.StatusConflict, MessageRequestDecided)
-			return
-		case errors.Is(err, store.ErrTooLateToApprove):
-			httpx.WriteError(w, http.StatusConflict, MessageTooLateToApprove)
-			return
-		case err != nil:
-			log.Printf("handler: could not decide a request: %v", err)
+		now := t.cfg.Now()
+		tomorrow := now.AddDate(0, 0, 1)
+		day := validate.DateString(tomorrow)
+		items, err := t.teachers.ListTeacherDayItems(r.Context(), teacher.ID, day)
+		if err != nil {
+			log.Printf("handler: could not list the next day of a teacher: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		t.announceDecision(r.Context(), decision, status)
-		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: message})
+		httpx.WriteJSON(w, http.StatusOK, nextDayResponse{
+			Date:         day,
+			Weekday:      validate.DayName(int(tomorrow.Weekday())),
+			DecisionOpen: t.cfg.DecisionOpen(now),
+			WindowStart:  t.cfg.DecisionStart,
+			WindowEnd:    t.cfg.DecisionEnd,
+			Items:        newItemBodies(items),
+		})
 	}
 }
 
-func (t *Teacher) announceDecision(ctx context.Context, decision store.EventDecision, status string) {
-	title := MessageRequestRejected
-	if status == store.EventStatusApproved {
-		title = MessageRequestApproved
+func (t *Teacher) FinalRoutine() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		from := validate.DateString(t.cfg.Now())
+		items, err := t.teachers.ListTeacherFinalItems(r.Context(), teacher.ID, from)
+		if err != nil {
+			log.Printf("handler: could not list the final routine of a teacher: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, itemsResponse{Items: newItemBodies(items)})
 	}
-	err := t.alerts.NotifyUser(ctx, decision.CreatedBy, notify.TypeDecision, title, eventSentence(decision))
+}
+
+func (t *Teacher) Confirm() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request confirmRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		mode, err := validate.ItemMode("mode", request.Mode)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		link, err := validate.OptionalLink("Meeting link", request.MeetingLink)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		room, link, err := validate.Slot(mode, request.Room, link)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		now := t.cfg.Now()
+		item, err := t.teachers.ConfirmItem(r.Context(), itemID, teacher.ID, mode, room, link,
+			now, t.cfg.DecisionOpen(now))
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeRoutine, titleTeacherConfirmed)
+		t.tellStudents(r, item, titleStudentChanged)
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: MessageItemConfirmed})
+	}
+}
+
+func (t *Teacher) Cancel() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request cancelRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		reason, err := validate.ShortText("Reason", request.Reason, validate.MaxMessageLength)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		item, err := t.teachers.CancelItemAsTeacher(r.Context(), itemID, teacher.ID, reason)
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeRoutine, titleTeacherCancelled)
+		t.tellStudents(r, item, titleStudentCancelled)
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: MessageItemCancelled})
+	}
+}
+
+func (t *Teacher) RequestReschedule() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request messageRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		message, err := validate.Message("Message", request.Message)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		item, err := t.teachers.TeacherRequestReschedule(r.Context(), itemID, teacher.ID, message)
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeRoutine, titleTeacherAsked)
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: MessageRescheduleAsked})
+	}
+}
+
+func (t *Teacher) AcceptReschedule() http.HandlerFunc {
+	return t.decideProposal(true)
+}
+
+func (t *Teacher) DeclineReschedule() http.HandlerFunc {
+	return t.decideProposal(false)
+}
+
+func (t *Teacher) decideProposal(accept bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var item store.ScheduleItem
+		var err error
+		if accept {
+			item, err = t.teachers.AcceptProposal(r.Context(), itemID, teacher.ID)
+		} else {
+			item, err = t.teachers.DeclineProposal(r.Context(), itemID, teacher.ID)
+		}
+		if scheduleError(w, err) {
+			return
+		}
+		title, message := titleProposalLeft, MessageProposalLeft
+		if accept {
+			title, message = titleProposalTaken, MessageProposalTaken
+		}
+		t.tellCRs(r, item, notify.TypeRoutine, title)
+		if accept {
+			t.tellStudents(r, item, titleStudentChanged)
+		}
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: message})
+	}
+}
+
+func (t *Teacher) Exams() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		from := validate.DateString(t.cfg.Now())
+		items, err := t.teachers.ListTeacherExams(r.Context(), teacher.ID, from)
+		if err != nil {
+			log.Printf("handler: could not list the exams of a teacher: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, itemsResponse{Items: newItemBodies(items)})
+	}
+}
+
+func (t *Teacher) CreateExam() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		var request examRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		exam, err := t.examFrom(request, teacher)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		item, err := t.teachers.CreateTeacherExam(r.Context(), exam)
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeExam, titleExamAdded)
+		httpx.WriteJSON(w, http.StatusCreated, itemResponse{Item: newItemBody(item), Message: MessageExamCreated})
+	}
+}
+
+func (t *Teacher) examFrom(request examRequest, teacher store.Teacher) (store.NewScheduleItem, error) {
+	if request.CourseID <= 0 {
+		return store.NewScheduleItem{}, errors.New("course_id must be a positive number.")
+	}
+	batch, err := validate.Batch("Batch", request.Batch)
 	if err != nil {
-		log.Printf("handler: could not notify the class representative of a decision: %v", err)
+		return store.NewScheduleItem{}, err
 	}
-	if status != store.EventStatusApproved {
+	section := validate.SectionAll
+	if strings.TrimSpace(request.Section) != "" {
+		section, err = validate.RoutineSection("Section", request.Section)
+		if err != nil {
+			return store.NewScheduleItem{}, err
+		}
+	}
+	date, err := validate.Date("Date", request.ItemDate, t.cfg.Location)
+	if err != nil {
+		return store.NewScheduleItem{}, err
+	}
+	if validate.DateString(date) < validate.DateString(t.cfg.Now()) {
+		return store.NewScheduleItem{}, errors.New(MessagePastDate)
+	}
+	syllabus, err := validate.ShortText("Syllabus", request.Syllabus, validate.MaxSyllabus)
+	if err != nil {
+		return store.NewScheduleItem{}, err
+	}
+	instructions, err := validate.ShortText("Instructions", request.Instructions, validate.MaxSyllabus)
+	if err != nil {
+		return store.NewScheduleItem{}, err
+	}
+	return store.NewScheduleItem{
+		Batch:        batch,
+		Section:      section,
+		CourseID:     request.CourseID,
+		TeacherID:    teacher.ID,
+		ItemDate:     validate.DateString(date),
+		Syllabus:     syllabus,
+		Instructions: instructions,
+		CreatedBy:    teacher.UserID,
+	}, nil
+}
+
+func (t *Teacher) UpdateExam() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request examPatchRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		patch, err := t.examPatch(request)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		item, err := t.teachers.UpdateTeacherExam(r.Context(), itemID, teacher.ID, patch)
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeExam, titleExamChanged)
+		t.tellStudents(r, item, titleStudentChanged)
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: MessageExamUpdated})
+	}
+}
+
+func (t *Teacher) examPatch(request examPatchRequest) (store.ItemPatch, error) {
+	var patch store.ItemPatch
+	if request.ItemDate != nil {
+		date, err := validate.Date("Date", *request.ItemDate, t.cfg.Location)
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		if validate.DateString(date) < validate.DateString(t.cfg.Now()) {
+			return store.ItemPatch{}, errors.New(MessagePastDate)
+		}
+		value := validate.DateString(date)
+		patch.ItemDate = &value
+	}
+	if request.Syllabus != nil {
+		value, err := validate.ShortText("Syllabus", *request.Syllabus, validate.MaxSyllabus)
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		patch.Syllabus = &value
+	}
+	if request.Instructions != nil {
+		value, err := validate.ShortText("Instructions", *request.Instructions, validate.MaxSyllabus)
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		patch.Instructions = &value
+	}
+	if patch.ItemDate == nil && patch.Syllabus == nil && patch.Instructions == nil {
+		return store.ItemPatch{}, errors.New(MessageNothingToUpdate)
+	}
+	return patch, nil
+}
+
+func (t *Teacher) CancelExam() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request cancelRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		reason, err := validate.ShortText("Reason", request.Reason, validate.MaxMessageLength)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		item, err := t.teachers.CancelTeacherExam(r.Context(), itemID, teacher.ID, reason)
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeExam, titleExamCancelled)
+		t.tellStudents(r, item, titleStudentCancelled)
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: MessageExamCancelled})
+	}
+}
+
+func (t *Teacher) DeleteExam() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		item, err := t.teachers.DeleteTeacherExam(r.Context(), itemID, teacher.ID)
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeExam, titleExamCancelled)
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageExamDeleted})
+	}
+}
+
+func (t *Teacher) tellCRs(r *http.Request, item store.ScheduleItem, kind, title string) {
+	crs, err := t.teachers.ListActiveCRs(r.Context(), item.Batch, item.Section)
+	if err != nil {
+		log.Printf("handler: could not list the class representatives of %s: %v", item.Batch, err)
 		return
 	}
-	broadcastTitle := fmt.Sprintf("New %s scheduled", eventTypeWords(decision.EventType))
-	err = t.alerts.NotifyBroadcast(ctx, auth.RoleStudent, decision.Batch, broadcastSection(decision.Section),
-		notify.TypeClass, broadcastTitle, eventSentence(decision))
+	link := notify.Ref(notify.LinkCRUpcoming, item.ID)
+	if kind == notify.TypeExam {
+		link = notify.Page(notify.LinkCRFinal)
+	}
+	for _, userID := range crs {
+		if err := t.alerts.NotifyUser(r.Context(), userID, kind, title, itemSentence(item), link); err != nil {
+			log.Printf("handler: could not notify the class representative %d: %v", userID, err)
+		}
+	}
+}
+
+func (t *Teacher) tellStudents(r *http.Request, item store.ScheduleItem, title string) {
+	if !item.Published() {
+		return
+	}
+	err := t.alerts.NotifyBroadcast(r.Context(), auth.RoleStudent, item.Batch, broadcastSection(item.Section),
+		notify.TypeRoutine, title, itemSentence(item), notify.OnDate(notify.LinkRoutine, item.ItemDate))
 	if err != nil {
-		log.Printf("handler: could not announce a scheduled class: %v", err)
+		log.Printf("handler: could not announce a change to the students: %v", err)
 	}
-}
-
-func eventSentence(decision store.EventDecision) string {
-	return fmt.Sprintf("%s %s on %s from %s to %s in room %s for %s section %s.",
-		decision.CourseCode,
-		eventTypeWords(decision.EventType),
-		decision.EventDate,
-		decision.StartTime,
-		decision.EndTime,
-		decision.Room,
-		decision.Batch,
-		decision.Section,
-	)
-}
-
-func broadcastSection(section string) string {
-	if section == validate.SectionAll {
-		return ""
-	}
-	return section
 }

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
-	"time"
 )
 
 const (
@@ -23,6 +22,9 @@ const (
 "password":"sust-250-project","confirm_password":"sust-250-project","has_drop_course":true}`
 	todayCR = `{"full_name":"Today CR","reg_no":"2022331601","batch":"CSE-22","section":"A",
 "email":"todaycr@student.sust.edu","phone":"01712345602","blood_group":"A+",
+"password":"sust-250-project","confirm_password":"sust-250-project"}`
+	todayOwnCR = `{"full_name":"Today Own CR","reg_no":"2023331603","batch":"CSE-23","section":"A",
+"email":"todayowncr@student.sust.edu","phone":"01712345603","blood_group":"B+",
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
 )
 
@@ -49,12 +51,8 @@ func otherBatchRoutineBody(section string, courseID, teacherID int64, day int, s
 func TestTodayAndDropCourseRoutineFlow(t *testing.T) {
 	ctx, pool, router := newFlowRouter(t)
 	adminToken := seedAdmin(t, ctx, pool, router)
-	loc, err := time.LoadLocation("Asia/Dhaka")
-	if err != nil {
-		t.Fatalf("could not load the timezone: %v", err)
-	}
-	now := time.Now().In(loc)
-	date := now.Format(validate.DateLayout)
+	now := flowConfig(t).Now()
+	date := validate.DateString(now)
 	weekday := int(now.Weekday())
 	course := call(t, router, http.MethodPost, "/api/admin/courses", todayCourse, adminToken)
 	if course.Code != http.StatusCreated {
@@ -83,14 +81,27 @@ func TestTodayAndDropCourseRoutineFlow(t *testing.T) {
 	}
 	onboardStudent(t, router, adminToken, todayStudent, droppedID)
 	onboardCR(t, router, adminToken, todayCR)
+	ownCR := onboardCR(t, router, adminToken, todayOwnCR)
+	_ = ownCR
 	studentToken := loginToken(t, router, "2023331600")
-	crToken := loginToken(t, router, "2022331601")
+	juniorCRToken := loginToken(t, router, "2022331601")
+	ownCRToken := loginToken(t, router, "2023331603")
+	generateItems(t, ctx, pool)
+	empty := call(t, router, http.MethodGet, "/api/students/upcoming-routine", "", studentToken)
+	if empty.Code != http.StatusOK {
+		t.Fatalf("upcoming routine status = %d, want 200 (body = %q)", empty.Code, empty.Body.String())
+	}
+	if got := field(t, empty, "date"); got != date {
+		t.Errorf("date = %q, want today %q", got, date)
+	}
+	if groups := groupsOf(t, empty); len(groups) != 0 {
+		t.Fatalf("the student sees %v before anything is published, want nothing", groups)
+	}
+	publishToday(t, router, ownCRToken)
+	publishToday(t, router, juniorCRToken)
 	routine := call(t, router, http.MethodGet, "/api/students/upcoming-routine", "", studentToken)
 	if routine.Code != http.StatusOK {
 		t.Fatalf("upcoming routine status = %d, want 200 (body = %q)", routine.Code, routine.Body.String())
-	}
-	if got := field(t, routine, "date"); got != date {
-		t.Errorf("date = %q, want today %q", got, date)
 	}
 	groups := groupsOf(t, routine)
 	if len(groups) != 2 {
@@ -117,11 +128,32 @@ func TestTodayAndDropCourseRoutineFlow(t *testing.T) {
 	if got := number(t, summary, "upcoming_exams"); got != 0 {
 		t.Errorf("upcoming_exams = %v, want none", got)
 	}
-	noDropCourse := groupsOf(t, call(t, router, http.MethodGet, "/api/students/upcoming-routine", "", crToken))
+	noDropCourse := groupsOf(t, call(t, router, http.MethodGet, "/api/students/upcoming-routine", "", ownCRToken))
 	for _, group := range noDropCourse {
 		if group["key"] == handler.GroupDropCourses {
 			t.Errorf("the class representative without a drop course sees %v", group)
 		}
+	}
+}
+
+func publishToday(t *testing.T, router http.Handler, crToken string) {
+	t.Helper()
+	today := validate.DateString(flowConfig(t).Now())
+	items := itemsOn(t, router, crToken, "/api/cr/upcoming?from="+today)
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		if item["item_date"] != today {
+			continue
+		}
+		id := itemID(t, item)
+		addToFinal(t, router, crToken, id)
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		t.Fatal("the class representative has nothing to publish today")
+	}
+	if rec := publishItems(t, router, crToken, ids...); rec.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 	}
 }
 

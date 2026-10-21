@@ -49,7 +49,9 @@ func (a *Admin) PromoteCR() http.HandlerFunc {
 			return
 		}
 		title := "You are now the Class Representative of " + promoted.Batch + " section " + promoted.Section
-		if err := a.alerts.NotifyUser(r.Context(), promoted.UserID, notify.TypeDecision, title, ""); err != nil {
+		err = a.alerts.NotifyUser(r.Context(), promoted.UserID, notify.TypeDecision, title, "",
+			notify.Page(notify.LinkCRRole))
+		if err != nil {
 			log.Printf("handler: could not notify a new class representative: %v", err)
 		}
 		httpx.WriteJSON(w, http.StatusOK, createdResponse{ID: promoted.UserID, Message: MessageCRPromoted})

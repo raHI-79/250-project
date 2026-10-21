@@ -12,11 +12,14 @@ const (
 	MaxFieldLength    = 120
 	MaxEmailLength    = 254
 	MinPasswordLength = 8
+	MinCourseCode     = 3
+	MaxCourseCode     = 25
 	MinUserIDLength   = 4
 	MaxUserIDLength   = 20
 	MinAge            = 15
 	MaxAge            = 60
 	MessagePhone      = "Phone number must be 11 digits, for example 01712345678."
+	MessageCourseCode = "Course code may only use letters, digits, spaces and hyphens, for example CSE 2243 7637D."
 
 	MessageUserIDRequired   = "User ID is required."
 	MessageUserIDLength     = "User ID must be 4 to 20 characters long."
@@ -31,7 +34,8 @@ var (
 	phonePattern      = regexp.MustCompile(`^01[3-9][0-9]{8}$`)
 	batchPattern      = regexp.MustCompile(`^[A-Z]{2,6}-[0-9]{2}$`)
 	sectionPattern    = regexp.MustCompile(`^[A-Z]$`)
-	courseCodePattern = regexp.MustCompile(`^[A-Z]{2,6}-?[0-9]{3}$`)
+	courseCodePattern = regexp.MustCompile(`^[A-Z0-9 ]+$`)
+	courseCodeDigit   = regexp.MustCompile(`[0-9]`)
 	userIDPattern     = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	userIDDigits      = regexp.MustCompile(`^[0-9]+$`)
 	userIDStart       = regexp.MustCompile(`^[A-Za-z]`)
@@ -171,16 +175,31 @@ func BloodGroup(label, value string) (string, error) {
 	return "", fmt.Errorf("%s must be one of %s.", label, strings.Join(bloodGroups, ", "))
 }
 
+func NormalizeCourseCode(value string) string {
+	upper := strings.ToUpper(strings.ReplaceAll(value, "-", " "))
+	return strings.Join(strings.Fields(upper), " ")
+}
+
+func SqueezeCourseCode(value string) string {
+	return strings.ReplaceAll(NormalizeCourseCode(value), " ", "")
+}
+
 func CourseCode(label, value string) (string, error) {
-	trimmed, err := Required(label, value)
-	if err != nil {
-		return "", err
+	normalized := NormalizeCourseCode(value)
+	if normalized == "" {
+		return "", fmt.Errorf("%s is required.", label)
 	}
-	trimmed = strings.ToUpper(strings.ReplaceAll(trimmed, " ", ""))
-	if !courseCodePattern.MatchString(trimmed) {
-		return "", fmt.Errorf("%s must look like CSE-233 or CSE233.", label)
+	length := len([]rune(normalized))
+	if length < MinCourseCode || length > MaxCourseCode {
+		return "", fmt.Errorf("%s must be %d to %d characters long.", label, MinCourseCode, MaxCourseCode)
 	}
-	return trimmed, nil
+	if !courseCodePattern.MatchString(normalized) {
+		return "", errors.New(MessageCourseCode)
+	}
+	if !courseCodeDigit.MatchString(normalized) {
+		return "", fmt.Errorf("%s must contain at least one digit.", label)
+	}
+	return normalized, nil
 }
 
 func UserID(value string) (string, error) {

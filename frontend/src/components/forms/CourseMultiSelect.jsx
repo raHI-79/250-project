@@ -87,7 +87,7 @@ export default function CourseMultiSelect({
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Type a course code or title"
+          placeholder="CSE 2243 7637D or a title"
           aria-label="Search drop courses"
         />
         <span className="pointer-events-none absolute top-2.5 right-3 text-brand-400">

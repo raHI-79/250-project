@@ -105,8 +105,8 @@ FROM students WHERE user_id = $1`
 
 func TestCreateRegistrationWithDropCourses(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	first := newDropCourse(t, ctx, store, "CSE-233", "Algorithms")
-	second := newDropCourse(t, ctx, store, "CSE-245", "Databases")
+	first := newDropCourse(t, ctx, store, "CSE 233", "Algorithms")
+	second := newDropCourse(t, ctx, store, "CSE 245", "Databases")
 	registration := newRegistration("2023331080", "drop@student.sust.edu")
 	registration.DropCourseIDs = []int64{first, second}
 	result, err := store.CreateRegistration(ctx, registration)
@@ -121,8 +121,8 @@ func TestCreateRegistrationWithDropCourses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListStudentDropCourses() returned an unexpected error: %v", err)
 	}
-	if len(courses) != 2 || courses[0].Code != "CSE-233" || courses[1].Code != "CSE-245" {
-		t.Errorf("drop courses = %+v, want CSE-233 and CSE-245", courses)
+	if len(courses) != 2 || courses[0].Code != "CSE 233" || courses[1].Code != "CSE 245" {
+		t.Errorf("drop courses = %+v, want CSE 233 and CSE 245", courses)
 	}
 }
 

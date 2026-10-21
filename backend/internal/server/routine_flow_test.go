@@ -235,13 +235,19 @@ func TestNotificationFlow(t *testing.T) {
 	firstToken := loginToken(t, router, "2023331700")
 	secondToken := loginToken(t, router, "2022331701")
 	notifier := notify.New(store.New(pool))
-	if err := notifier.NotifyUser(ctx, firstID, notify.TypeDecision, "Your request was approved", "Monday 10:30"); err != nil {
+	err := notifier.NotifyUser(ctx, firstID, notify.TypeDecision, "Your request was approved", "Monday 10:30",
+		notify.Ref(notify.LinkCRUpcoming, 1))
+	if err != nil {
 		t.Fatalf("NotifyUser() returned an unexpected error: %v", err)
 	}
-	if err := notifier.NotifyBroadcast(ctx, "student", "CSE-23", "A", notify.TypeClass, "Extra class added", ""); err != nil {
+	err = notifier.NotifyBroadcast(ctx, "student", "CSE-23", "A", notify.TypeRoutine, "Extra class added", "",
+		notify.OnDate(notify.LinkRoutine, "2026-10-22"))
+	if err != nil {
 		t.Fatalf("NotifyBroadcast() returned an unexpected error: %v", err)
 	}
-	if err := notifier.NotifyBroadcast(ctx, "student", "CSE-22", "", notify.TypeNotice, "Other batch notice", ""); err != nil {
+	err = notifier.NotifyBroadcast(ctx, "student", "CSE-22", "", notify.TypeNotice, "Other batch notice", "",
+		notify.Ref(notify.LinkNotice, 1))
+	if err != nil {
 		t.Fatalf("NotifyBroadcast() returned an unexpected error: %v", err)
 	}
 	tests := []struct {

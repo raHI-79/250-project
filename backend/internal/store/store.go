@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	dateLayout       = "2006-01-02"
 	RoleStudent      = "student"
 	RoleTeacher      = "teacher"
 	RoleAdmin        = "admin"

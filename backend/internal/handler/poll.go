@@ -7,6 +7,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -127,7 +128,7 @@ func (p *Poll) CRCreate() http.HandlerFunc {
 			target = created.Section
 		}
 		err = p.alerts.NotifyBroadcast(r.Context(), auth.RoleStudent, created.Batch, target,
-			NotificationTypePoll, "New poll", created.Question)
+			NotificationTypePoll, "New poll", created.Question, notify.Ref(notify.LinkPoll, created.ID))
 		if err != nil {
 			log.Printf("handler: could not notify the students of a poll: %v", err)
 		}

@@ -17,7 +17,9 @@ const (
 
 func seedNotifications(t *testing.T, ctx context.Context, store *Store, firstStudent int64) {
 	t.Helper()
-	if err := store.CreateDirectNotification(ctx, firstStudent, "notice", directToFirstStudent, "only for this user"); err != nil {
+	err := store.CreateDirectNotification(ctx, firstStudent, "notice", directToFirstStudent, "only for this user",
+		NotificationLink{Kind: "notice", Ref: 4})
+	if err != nil {
 		t.Fatalf("CreateDirectNotification() returned an unexpected error: %v", err)
 	}
 	broadcasts := []struct {
@@ -32,7 +34,8 @@ func seedNotifications(t *testing.T, ctx context.Context, store *Store, firstStu
 		{role: "teacher", title: teacherBroadcast},
 	}
 	for _, broadcast := range broadcasts {
-		err := store.CreateBroadcastNotification(ctx, broadcast.role, broadcast.batch, broadcast.section, "notice", broadcast.title, "")
+		err := store.CreateBroadcastNotification(ctx, broadcast.role, broadcast.batch, broadcast.section,
+			"notice", broadcast.title, "", NotificationLink{Kind: "routine", Date: "2026-10-22"})
 		if err != nil {
 			t.Fatalf("CreateBroadcastNotification(%q) returned an unexpected error: %v", broadcast.title, err)
 		}

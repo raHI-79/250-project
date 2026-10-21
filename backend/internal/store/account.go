@@ -102,7 +102,9 @@ ON CONFLICT DO NOTHING`
 	searchDropCourseOptionsSQL = `SELECT c.id, c.code, c.title
 FROM courses c
 WHERE EXISTS (SELECT 1 FROM routines r WHERE r.course_id = c.id)
-  AND ($1::text = '' OR c.code ILIKE '%' || $1::text || '%' OR c.title ILIKE '%' || $1::text || '%')
+  AND ($1::text = ''
+       OR replace(c.code, ' ', '') ILIKE '%' || replace(replace(upper($1::text), '-', ''), ' ', '') || '%'
+       OR c.title ILIKE '%' || $1::text || '%')
 ORDER BY c.code
 LIMIT $2`
 	filterDropCourseIDsSQL = `SELECT c.id

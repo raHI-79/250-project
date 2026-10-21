@@ -182,18 +182,21 @@ type recordingAlerts struct {
 	batch   string
 	section string
 	title   string
+	link    store.NotificationLink
 	calls   int
 	users   int
 }
 
-func (r *recordingAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, body string) error {
-	r.title = title
+func (r *recordingAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
+	r.title, r.link = title, link
 	r.users++
 	return nil
 }
 
-func (r *recordingAlerts) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string) error {
-	r.role, r.batch, r.section, r.title = role, batch, section, title
+func (r *recordingAlerts) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
+	link store.NotificationLink) error {
+	r.role, r.batch, r.section, r.title, r.link = role, batch, section, title, link
 	r.calls++
 	return nil
 }

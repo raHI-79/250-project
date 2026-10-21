@@ -16,9 +16,12 @@ const (
 	defaultTimezone       = "Asia/Dhaka"
 	defaultJWTTTL         = "24h"
 	defaultFrontendOrigin = "http://localhost:5173"
-	defaultAutoCancel     = "5m"
+	defaultDecisionStart  = "17:00"
+	defaultDecisionEnd    = "23:00"
+	defaultDaysAhead      = 7
 	defaultUploadDir      = "uploads"
 	defaultMaxUploadMB    = 10
+	maxDaysAhead          = 31
 	defaultSMTPPort       = 587
 	defaultStudentDomain  = "student.sust.edu"
 	minJWTSecretLength    = 32
@@ -40,7 +43,11 @@ type Config struct {
 	JWTSecret       string
 	JWTTTL          time.Duration
 	FrontendOrigin  string
-	AutoCancel      time.Duration
+	DecisionStart   string
+	DecisionEnd     string
+	DecisionFrom    int
+	DecisionTo      int
+	DaysAhead       int
 	UploadDir       string
 	MaxUploadMB     int
 	AdminIdentifier string
@@ -98,15 +105,30 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: JWT_TTL must be a positive duration, got %q", rawTTL)
 	}
 	cfg.JWTTTL = ttl
-	rawAutoCancel := getEnv("AUTO_CANCEL_INTERVAL", defaultAutoCancel)
-	autoCancel, err := time.ParseDuration(rawAutoCancel)
+	cfg.DecisionStart = getEnv("DECISION_WINDOW_START", defaultDecisionStart)
+	cfg.DecisionFrom, err = clockMinutes("DECISION_WINDOW_START", cfg.DecisionStart)
 	if err != nil {
-		return nil, fmt.Errorf("config: invalid AUTO_CANCEL_INTERVAL %q: %w", rawAutoCancel, err)
+		return nil, err
 	}
-	if autoCancel <= 0 {
-		return nil, fmt.Errorf("config: AUTO_CANCEL_INTERVAL must be a positive duration, got %q", rawAutoCancel)
+	cfg.DecisionEnd = getEnv("DECISION_WINDOW_END", defaultDecisionEnd)
+	cfg.DecisionTo, err = clockMinutes("DECISION_WINDOW_END", cfg.DecisionEnd)
+	if err != nil {
+		return nil, err
 	}
-	cfg.AutoCancel = autoCancel
+	if cfg.DecisionFrom >= cfg.DecisionTo {
+		return nil, fmt.Errorf("config: DECISION_WINDOW_START %q must be earlier than DECISION_WINDOW_END %q",
+			cfg.DecisionStart, cfg.DecisionEnd)
+	}
+	rawDaysAhead := getEnv("SCHEDULE_DAYS_AHEAD", strconv.Itoa(defaultDaysAhead))
+	daysAhead, err := strconv.Atoi(rawDaysAhead)
+	if err != nil {
+		return nil, fmt.Errorf("config: invalid SCHEDULE_DAYS_AHEAD %q: %w", rawDaysAhead, err)
+	}
+	if daysAhead < 1 || daysAhead > maxDaysAhead {
+		return nil, fmt.Errorf("config: SCHEDULE_DAYS_AHEAD must be a number between 1 and %d, got %q",
+			maxDaysAhead, rawDaysAhead)
+	}
+	cfg.DaysAhead = daysAhead
 	rawMaxUpload := getEnv("MAX_UPLOAD_MB", strconv.Itoa(defaultMaxUploadMB))
 	maxUpload, err := strconv.Atoi(rawMaxUpload)
 	if err != nil {
@@ -135,6 +157,23 @@ func Load() (*Config, error) {
 
 func (c *Config) Now() time.Time {
 	return time.Now().In(c.Location)
+}
+
+func (c *Config) DecisionOpen(now time.Time) bool {
+	minutes := now.Hour()*60 + now.Minute()
+	return minutes >= c.DecisionFrom && minutes < c.DecisionTo
+}
+
+func (c *Config) DecisionClosed(now time.Time) bool {
+	return now.Hour()*60+now.Minute() >= c.DecisionTo
+}
+
+func clockMinutes(key, value string) (int, error) {
+	parsed, err := time.Parse("15:04", strings.TrimSpace(value))
+	if err != nil {
+		return 0, fmt.Errorf("config: %s must look like 17:00, got %q", key, value)
+	}
+	return parsed.Hour()*60 + parsed.Minute(), nil
 }
 
 func (c *Config) HasAdminSeed() bool {

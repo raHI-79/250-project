@@ -37,7 +37,7 @@ VALUES ($1, $2, $3, $4, $5, $6, '01712345678', 'O+', $7)`,
 
 func seedCourseAndTeacher(t *testing.T, ctx context.Context, store *Store, pool *pgxpool.Pool) (int64, int64) {
 	t.Helper()
-	course, err := store.CreateCourse(ctx, "CSE-233", "Digital Logic Design")
+	course, err := store.CreateCourse(ctx, "CSE 233", "Digital Logic Design")
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestCreateRoutineRejectsRoomClashes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRoutine() returned an unexpected error: %v", err)
 	}
-	if created.ID == 0 || created.CourseCode != "CSE-233" {
+	if created.ID == 0 || created.CourseCode != "CSE 233" {
 		t.Fatalf("created = %+v, want an id and the course code", created)
 	}
 	tests := []struct {
@@ -106,7 +106,7 @@ func TestCreateRoutineRejectsRoomClashes(t *testing.T) {
 				if !errors.As(err, &booked) {
 					t.Fatalf("error = %v, want a room clash", err)
 				}
-				if booked.Booking.Room != "1003" || booked.Booking.CourseCode != "CSE-233" || booked.Booking.StartTime != "10:30" {
+				if booked.Booking.Room != "1003" || booked.Booking.CourseCode != "CSE 233" || booked.Booking.StartTime != "10:30" {
 					t.Errorf("booking = %+v, want the first entry", booked.Booking)
 				}
 				return

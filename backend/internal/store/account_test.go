@@ -31,7 +31,7 @@ VALUES ('CSE-22', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
 
 func TestSearchDropCourseOptions(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	routineCourse := seedRoutineCourse(t, ctx, store, pool, "CSE-245", "Databases")
+	routineCourse := seedRoutineCourse(t, ctx, store, pool, "CSE 245", "Databases")
 	if _, err := store.CreateCourse(ctx, "CSE-299", "Project Work"); err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestSearchDropCourseOptions(t *testing.T) {
 		wantID    int64
 	}{
 		{name: "no search", search: "", wantCount: 1, wantID: routineCourse},
-		{name: "by code", search: "CSE-245", wantCount: 1, wantID: routineCourse},
+		{name: "by code", search: "CSE 245", wantCount: 1, wantID: routineCourse},
 		{name: "by code without a dash", search: "245", wantCount: 1, wantID: routineCourse},
 		{name: "by title", search: "data", wantCount: 1, wantID: routineCourse},
 		{name: "by lowercase title", search: "databases", wantCount: 1, wantID: routineCourse},
@@ -67,7 +67,7 @@ func TestSearchDropCourseOptions(t *testing.T) {
 
 func TestFilterDropCourseIDs(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	routineCourse := seedRoutineCourse(t, ctx, store, pool, "CSE-245", "Databases")
+	routineCourse := seedRoutineCourse(t, ctx, store, pool, "CSE 245", "Databases")
 	plain, err := store.CreateCourse(ctx, "CSE-299", "Project Work")
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
@@ -319,7 +319,7 @@ func TestTeacherInvitations(t *testing.T) {
 
 func TestProfilesAndPeople(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	courseID := seedRoutineCourse(t, ctx, store, pool, "CSE-245", "Databases")
+	courseID := seedRoutineCourse(t, ctx, store, pool, "CSE 245", "Databases")
 	registration := newRegistration("2023331600", "profile@student.sust.edu")
 	registration.DropCourseIDs = []int64{courseID}
 	result, err := store.CreateRegistration(ctx, registration)
@@ -339,8 +339,8 @@ func TestProfilesAndPeople(t *testing.T) {
 	if profile.DateOfBirth != "2003-05-14" || profile.PhotoPath == "" {
 		t.Errorf("profile = %+v, want the birth date and photo", profile)
 	}
-	if len(profile.DropCourses) != 1 || profile.DropCourses[0].Code != "CSE-245" {
-		t.Errorf("drop courses = %+v, want CSE-245", profile.DropCourses)
+	if len(profile.DropCourses) != 1 || profile.DropCourses[0].Code != "CSE 245" {
+		t.Errorf("drop courses = %+v, want CSE 245", profile.DropCourses)
 	}
 	phone := "01799999999"
 	newPhoto := "/uploads/photos/replacement.png"

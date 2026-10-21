@@ -33,7 +33,8 @@ type Dependencies struct {
 	Lookups   handler.LookupStore
 	Alerts    handler.NotificationService
 	Classes   handler.CRStore
-	Notifier  handler.Notifier
+	Notifier  handler.BroadcastNotifier
+	Items     handler.ScheduleStore
 	Teachers  handler.TeacherStore
 	Students  handler.StudentStore
 	Alarms    handler.BroadcastNotifier
@@ -105,7 +106,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
-	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Notifier))
+	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Alarms))
+	authenticated.Handle("PATCH /api/schedule/items/{id}/link",
+		handler.NewSchedule(deps.Config, deps.Items, deps.Alarms).Link())
 	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
 	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
 	files := deps.Files
@@ -202,13 +205,19 @@ func StudentGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 }
 
 func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
-	group.Handle("GET /api/teacher/requests", teacher.Requests())
-	group.Handle("POST /api/teacher/requests/{id}/approve", teacher.Approve())
-	group.Handle("POST /api/teacher/requests/{id}/reject", teacher.Reject())
-	group.Handle("GET /api/teacher/schedule", teacher.Schedule())
-	group.Handle("GET /api/teacher/classes/upcoming", teacher.UpcomingClasses())
-	group.Handle("POST /api/teacher/classes/{id}/cancel", teacher.CancelClass())
-	group.Handle("POST /api/teacher/routines/{id}/cancel", teacher.CancelRoutine())
+	group.Handle("GET /api/teacher/fixed-routine", teacher.FixedRoutine())
+	group.Handle("GET /api/teacher/upcoming/next-day", teacher.NextDay())
+	group.Handle("GET /api/teacher/upcoming/final", teacher.FinalRoutine())
+	group.Handle("POST /api/teacher/items/{id}/confirm", teacher.Confirm())
+	group.Handle("POST /api/teacher/items/{id}/cancel", teacher.Cancel())
+	group.Handle("POST /api/teacher/items/{id}/request-reschedule", teacher.RequestReschedule())
+	group.Handle("POST /api/teacher/items/{id}/reschedule-request/accept", teacher.AcceptReschedule())
+	group.Handle("POST /api/teacher/items/{id}/reschedule-request/decline", teacher.DeclineReschedule())
+	group.Handle("GET /api/teacher/exams", teacher.Exams())
+	group.Handle("POST /api/teacher/exams", teacher.CreateExam())
+	group.Handle("PATCH /api/teacher/exams/{id}", teacher.UpdateExam())
+	group.Handle("POST /api/teacher/exams/{id}/cancel", teacher.CancelExam())
+	group.Handle("DELETE /api/teacher/exams/{id}", teacher.DeleteExam())
 }
 
 func registerStudentRoutes(group RouteGroup, student *handler.Student) {
@@ -221,10 +230,18 @@ func registerStudentRoutes(group RouteGroup, student *handler.Student) {
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {
 	group.Handle("GET /api/cr/routine", cr.Routine())
 	group.Handle("GET /api/cr/courses", cr.Courses())
-	group.Handle("GET /api/cr/day", cr.Day())
-	group.Handle("POST /api/cr/class-requests", cr.CreateClassRequest())
 	group.Handle("GET /api/cr/room-availability", cr.RoomAvailability())
-	group.Handle("GET /api/cr/requests", cr.Requests())
+	group.Handle("GET /api/cr/upcoming", cr.Upcoming())
+	group.Handle("POST /api/cr/items", cr.CreateItem())
+	group.Handle("PATCH /api/cr/items/{id}", cr.UpdateItem())
+	group.Handle("DELETE /api/cr/items/{id}", cr.DeleteItem())
+	group.Handle("POST /api/cr/items/{id}/request-reschedule", cr.RequestReschedule())
+	group.Handle("POST /api/cr/items/{id}/cancel", cr.CancelItem())
+	group.Handle("POST /api/cr/items/{id}/final", cr.AddToFinal())
+	group.Handle("DELETE /api/cr/items/{id}/final", cr.RemoveFromFinal())
+	group.Handle("GET /api/cr/final", cr.Final())
+	group.Handle("GET /api/cr/final/preview", cr.FinalPreview())
+	group.Handle("POST /api/cr/final/publish", cr.Publish())
 }
 
 func registerNoticeRoutes(mux *http.ServeMux, deps Dependencies, notices *handler.Notice) {

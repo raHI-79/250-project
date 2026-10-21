@@ -36,7 +36,7 @@ func (s *Student) Today() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		exams, err := s.students.ListExams(r.Context(), profile.Batch, profile.Section, now)
+		exams, err := s.students.ListStudentExams(r.Context(), profile.Batch, profile.Section, now)
 		if err != nil {
 			log.Printf("handler: could not count the exams of a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -90,7 +90,7 @@ func scheduledCount(groups []planGroup) int {
 	count := 0
 	for _, group := range groups {
 		for _, item := range group.Items {
-			if item.Status == StatusScheduled {
+			if item.Status != StatusCancelled {
 				count++
 			}
 		}
@@ -98,11 +98,11 @@ func scheduledCount(groups []planGroup) int {
 	return count
 }
 
-func firstExam(exams []store.ExamRow) *nextExam {
+func firstExam(exams []store.StudentExam) *nextExam {
 	if len(exams) == 0 {
 		return nil
 	}
-	return &nextExam{Date: exams[0].EventDate, Course: exams[0].CourseCode}
+	return &nextExam{Date: exams[0].ItemDate, Course: exams[0].CourseCode}
 }
 
 func openPollCount(polls []store.PollRow) int {

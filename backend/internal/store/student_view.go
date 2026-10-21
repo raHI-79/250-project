@@ -2,11 +2,21 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"time"
 )
 
 const NoDayFilter = -1
+
+type StudentProfile struct {
+	UserID    int64
+	StudentID int64
+	Batch     string
+	Section   string
+	IsCR      bool
+}
 
 type PlanItem struct {
 	Batch       string
@@ -16,23 +26,31 @@ type PlanItem struct {
 	CourseCode  string
 	CourseTitle string
 	Kind        string
+	Mode        string
 	Room        string
+	MeetingLink string
 	TeacherName string
-	Cancelled   bool
+	Status      string
 	Note        string
 }
 
-type ExamRow struct {
-	ID          int64
-	EventDate   string
-	StartTime   string
-	EndTime     string
-	CourseCode  string
-	CourseTitle string
-	Batch       string
-	Section     string
-	Room        string
-	Note        string
+type StudentExam struct {
+	ID           int64
+	ItemDate     string
+	StartTime    string
+	EndTime      string
+	CourseCode   string
+	CourseTitle  string
+	Batch        string
+	Section      string
+	Mode         string
+	Room         string
+	MeetingLink  string
+	Syllabus     string
+	Instructions string
+	Origin       string
+	Status       string
+	Published    bool
 }
 
 type RoutineFilter struct {
@@ -43,33 +61,39 @@ type RoutineFilter struct {
 }
 
 const (
-	listDayPlanSQL = `SELECT r.batch, r.section, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'),
-c.code, c.title, r.type, r.room, COALESCE(t.name, 'Deleted user'),
-EXISTS (SELECT 1 FROM routine_cancellations rc WHERE rc.routine_id = r.id AND rc.cancel_date = $2::date) AS cancelled,
-'' AS note
-FROM routines r
-JOIN courses c ON c.id = r.course_id
-LEFT JOIN teachers t ON t.id = r.teacher_id
-WHERE r.day_of_week = EXTRACT(DOW FROM $2::date)::int
-  AND (r.batch = $1 OR (r.batch <> $1 AND c.code = ANY($3::text[])))
+	findStudentProfileSQL = `SELECT u.id, s.id, s.batch, s.section, s.is_cr
+FROM users u
+JOIN students s ON s.user_id = u.id
+WHERE u.id = $1`
+	listPublishedDaySQL = `SELECT p.batch, p.section,
+COALESCE(to_char(p.start_time, 'HH24:MI'), ''), COALESCE(to_char(p.end_time, 'HH24:MI'), ''),
+p.course_code, p.course_title, p.kind, p.mode, p.room, p.meeting_link, p.teacher_name, p.status, p.note
+FROM published_items p
+WHERE p.item_date = $2::date
+  AND (p.batch = $1 OR (p.batch <> $1 AND replace(p.course_code, ' ', '') = ANY($3::text[])))
+ORDER BY p.start_time NULLS LAST, p.batch, p.section`
+	listStudentExamsSQL = `SELECT i.id, to_char(i.item_date, 'YYYY-MM-DD'),
+COALESCE(to_char(pi.start_time, 'HH24:MI'), ''), COALESCE(to_char(pi.end_time, 'HH24:MI'), ''),
+c.code, c.title, i.batch, i.section,
+COALESCE(pi.mode, ''), COALESCE(pi.room, ''), COALESCE(pi.meeting_link, ''),
+i.syllabus, i.instructions, i.origin, i.status, (pi.item_id IS NOT NULL)
+FROM schedule_items i
+JOIN courses c ON c.id = i.course_id
+LEFT JOIN published_items pi ON pi.item_id = i.id
+WHERE i.origin = 'teacher_exam' AND i.status <> 'cancelled'
+  AND i.batch = $1 AND (i.section = $2::text OR i.section = 'ALL')
+  AND i.item_date >= $3::date
 UNION ALL
-SELECT e.batch, e.section, to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-c.code, c.title, e.event_type, e.room, COALESCE(t.name, 'Deleted user'), (e.status = 'cancelled') AS cancelled,
-CASE WHEN e.status = 'approved' AND e.note_audience IN ('students', 'both') THEN COALESCE(e.note, '') ELSE '' END
-FROM class_events e
-JOIN courses c ON c.id = e.course_id
-LEFT JOIN teachers t ON t.id = e.teacher_id
-WHERE e.event_date = $2::date AND e.status IN ('approved', 'cancelled')
-  AND (e.batch = $1 OR (e.batch <> $1 AND c.code = ANY($3::text[])))
-ORDER BY 1, 2, 3`
-	listExamsSQL = `SELECT e.id, to_char(e.event_date, 'YYYY-MM-DD'), to_char(e.start_time, 'HH24:MI'),
-to_char(e.end_time, 'HH24:MI'), c.code, c.title, e.batch, e.section, e.room,
-CASE WHEN e.status = 'approved' AND e.note_audience IN ('students', 'both') THEN COALESCE(e.note, '') ELSE '' END
-FROM class_events e
-JOIN courses c ON c.id = e.course_id
-WHERE e.batch = $1 AND (e.section = $2 OR e.section = 'ALL') AND e.status = 'approved'
-  AND e.event_type = 'exam' AND e.event_date >= $3::date
-ORDER BY e.event_date, e.start_time, e.id`
+SELECT p.item_id, to_char(p.item_date, 'YYYY-MM-DD'),
+COALESCE(to_char(p.start_time, 'HH24:MI'), ''), COALESCE(to_char(p.end_time, 'HH24:MI'), ''),
+p.course_code, p.course_title, p.batch, p.section,
+p.mode, p.room, p.meeting_link, p.syllabus, p.instructions, 'cr', p.status, TRUE
+FROM published_items p
+JOIN schedule_items i ON i.id = p.item_id
+WHERE p.kind = 'exam' AND i.origin = 'cr' AND p.status <> 'cancelled'
+  AND p.batch = $1 AND (p.section = $2::text OR p.section = 'ALL')
+  AND p.item_date >= $3::date
+ORDER BY 2, 3`
 	listFilteredRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title,
 COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
@@ -79,14 +103,32 @@ LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE r.batch = $1
   AND ($2::text = '' OR r.section = $2::text OR r.section = 'ALL')
   AND ($3::int < 0 OR r.day_of_week = $3::int)
-  AND ($4::text = '' OR c.code = $4::text)
+  AND ($4::text = '' OR replace(c.code, ' ', '') = $4::text)
 ORDER BY r.day_of_week, r.start_time, r.section, r.id`
 )
 
-func (s *Store) ListDayPlan(ctx context.Context, batch, date string, dropCourseCodes []string) ([]PlanItem, error) {
-	rows, err := s.pool.Query(ctx, listDayPlanSQL, batch, date, dropCourseCodes)
+func (s *Store) GetStudentProfile(ctx context.Context, userID int64) (StudentProfile, error) {
+	var profile StudentProfile
+	err := s.pool.QueryRow(ctx, findStudentProfileSQL, userID).Scan(
+		&profile.UserID,
+		&profile.StudentID,
+		&profile.Batch,
+		&profile.Section,
+		&profile.IsCR,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StudentProfile{}, ErrNotFound
+	}
 	if err != nil {
-		return nil, fmt.Errorf("store: could not list the plan of %s on %s: %w", batch, date, err)
+		return StudentProfile{}, fmt.Errorf("store: could not load the student profile of the user %d: %w", userID, err)
+	}
+	return profile, nil
+}
+
+func (s *Store) ListPublishedDay(ctx context.Context, batch, date string, dropCourseCodes []string) ([]PlanItem, error) {
+	rows, err := s.pool.Query(ctx, listPublishedDaySQL, batch, date, dropCourseCodes)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the published plan of %s on %s: %w", batch, date, err)
 	}
 	defer rows.Close()
 	items := make([]PlanItem, 0)
@@ -100,42 +142,50 @@ func (s *Store) ListDayPlan(ctx context.Context, batch, date string, dropCourseC
 			&item.CourseCode,
 			&item.CourseTitle,
 			&item.Kind,
+			&item.Mode,
 			&item.Room,
+			&item.MeetingLink,
 			&item.TeacherName,
-			&item.Cancelled,
+			&item.Status,
 			&item.Note,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("store: could not scan a plan item: %w", err)
+			return nil, fmt.Errorf("store: could not scan a published plan item: %w", err)
 		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: could not read the plan: %w", err)
+		return nil, fmt.Errorf("store: could not read the published plan: %w", err)
 	}
 	return items, nil
 }
 
-func (s *Store) ListExams(ctx context.Context, batch, section string, now time.Time) ([]ExamRow, error) {
-	rows, err := s.pool.Query(ctx, listExamsSQL, batch, section, now.Format(dateLayout))
+func (s *Store) ListStudentExams(ctx context.Context, batch, section string, now time.Time) ([]StudentExam, error) {
+	rows, err := s.pool.Query(ctx, listStudentExamsSQL, batch, section, now.Format(dateLayout))
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the exams of %s: %w", batch, err)
 	}
 	defer rows.Close()
-	exams := make([]ExamRow, 0)
+	exams := make([]StudentExam, 0)
 	for rows.Next() {
-		var exam ExamRow
+		var exam StudentExam
 		err := rows.Scan(
 			&exam.ID,
-			&exam.EventDate,
+			&exam.ItemDate,
 			&exam.StartTime,
 			&exam.EndTime,
 			&exam.CourseCode,
 			&exam.CourseTitle,
 			&exam.Batch,
 			&exam.Section,
+			&exam.Mode,
 			&exam.Room,
-			&exam.Note,
+			&exam.MeetingLink,
+			&exam.Syllabus,
+			&exam.Instructions,
+			&exam.Origin,
+			&exam.Status,
+			&exam.Published,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan an exam: %w", err)
@@ -149,41 +199,10 @@ func (s *Store) ListExams(ctx context.Context, batch, section string, now time.T
 }
 
 func (s *Store) ListFilteredRoutines(ctx context.Context, filter RoutineFilter) ([]RoutineRow, error) {
-	rows, err := s.pool.Query(ctx, listFilteredRoutinesSQL,
+	return s.routines(ctx, listFilteredRoutinesSQL,
 		filter.Batch,
 		filter.Section,
 		filter.DayOfWeek,
 		filter.CourseCode,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("store: could not list the routine of %s: %w", filter.Batch, err)
-	}
-	defer rows.Close()
-	entries := make([]RoutineRow, 0)
-	for rows.Next() {
-		var entry RoutineRow
-		err := rows.Scan(
-			&entry.ID,
-			&entry.Batch,
-			&entry.Section,
-			&entry.CourseID,
-			&entry.CourseCode,
-			&entry.CourseTitle,
-			&entry.TeacherID,
-			&entry.TeacherName,
-			&entry.DayOfWeek,
-			&entry.StartTime,
-			&entry.EndTime,
-			&entry.Room,
-			&entry.Type,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("store: could not scan a routine entry: %w", err)
-		}
-		entries = append(entries, entry)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: could not read the routine entries: %w", err)
-	}
-	return entries, nil
 }
