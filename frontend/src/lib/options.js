@@ -2,6 +2,25 @@ export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
 export const ACCOUNT_STATUSES = ['active', 'pending', 'rejected', 'removed']
 
+export const PEOPLE_STATUS_TABS = [
+  { value: '', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'invited', label: 'Invited' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'removed', label: 'Removed' },
+]
+
+export const RETENTION_STATUSES = ['removed', 'rejected']
+
+export const canRestore = (status) => RETENTION_STATUSES.includes(status)
+
+export const AUDIT_ACTION_LABELS = {
+  remove: 'Removed',
+  restore: 'Restored',
+  permanent_delete: 'Deleted permanently',
+}
+
 export const MAX_NOTE = 500
 
 export const NOTE_AUDIENCES = [

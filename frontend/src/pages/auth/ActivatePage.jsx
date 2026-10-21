@@ -1,34 +1,66 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { KeyRound } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, X } from 'lucide-react'
 import { Alert, Button, Card, Input, SkeletonLines, Stepper } from '../../components/ui'
 import PhotoPicker from '../../components/forms/PhotoPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
 import api from '../../lib/api'
 import { HERO_BUILDING } from '../../lib/campus'
+import { useDebounced } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
-import { birthDateBounds, passwordError } from '../../lib/account'
+import { USER_ID_RULES, birthDateBounds, passwordError, userIdError } from '../../lib/account'
 
 const OVERLAY = 'bg-brand-950/92'
 
-const STEPS = ['Confirm who you are', 'Set your password']
+const STEPS = ['Confirm who you are', 'Choose your User ID']
+
+function Availability({ checking, result }) {
+  if (checking) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-brand-400">
+        <Loader2 size={13} className="animate-spin" />
+        Checking…
+      </span>
+    )
+  }
+  if (!result) return null
+  if (result.available) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-brand-700">
+        <Check size={13} />
+        Available
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-medium text-accent-700">
+      <X size={13} />
+      {result.reason}
+    </span>
+  )
+}
 
 export default function ActivatePage() {
   const [params] = useSearchParams()
   const token = params.get('token') || ''
-  const navigate = useNavigate()
   const bounds = birthDateBounds()
   const [invite, setInvite] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [loadingInvite, setLoadingInvite] = useState(true)
   const [step, setStep] = useState(1)
-  const [teacherId, setTeacherId] = useState('')
   const [dateOfBirth, setDateOfBirth] = useState('')
+  const [userId, setUserId] = useState('')
+  const [availability, setAvailability] = useState(null)
+  const [checking, setChecking] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [photo, setPhoto] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [done, setDone] = useState(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const settledUserId = useDebounced(userId.trim())
   useEffect(() => {
     if (!token) {
       setLoadError('This invitation link is invalid or has expired.')
@@ -52,8 +84,42 @@ export default function ActivatePage() {
       active = false
     }
   }, [token])
+  useEffect(() => {
+    if (!settledUserId) {
+      setAvailability(null)
+      setChecking(false)
+      return undefined
+    }
+    const problem = userIdError(settledUserId)
+    if (problem) {
+      setAvailability({ available: false, reason: problem })
+      setChecking(false)
+      return undefined
+    }
+    let active = true
+    setChecking(true)
+    api
+      .get('/api/auth/user-id-available', { query: { user_id: settledUserId }, auth: false })
+      .then((data) => {
+        if (active) setAvailability(data || null)
+      })
+      .catch(() => {
+        if (active) setAvailability(null)
+      })
+      .finally(() => {
+        if (active) setChecking(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [settledUserId])
   const activate = async () => {
     setError('')
+    const idProblem = userIdError(userId)
+    if (idProblem) {
+      setError(idProblem)
+      return
+    }
     const problem = passwordError(password, confirmPassword)
     if (problem) {
       setError(problem)
@@ -61,21 +127,17 @@ export default function ActivatePage() {
     }
     const body = new FormData()
     body.append('token', token)
-    body.append('teacher_id', teacherId.trim())
+    body.append('user_id', userId.trim())
     body.append('date_of_birth', dateOfBirth)
     body.append('password', password)
     body.append('confirm_password', confirmPassword)
     if (photo) body.append('photo', photo)
     setSaving(true)
     try {
-      await api.post('/api/auth/activate', body, { auth: false })
-      navigate(paths.teacherLogin(), {
-        replace: true,
-        state: { notice: 'Your account is active. Log in with your teacher ID and new password.' },
-      })
+      const result = await api.post('/api/auth/activate', body, { auth: false })
+      setDone(result)
     } catch (failure) {
       setError(failure.message)
-      setStep(1)
     } finally {
       setSaving(false)
     }
@@ -84,10 +146,6 @@ export default function ActivatePage() {
     event.preventDefault()
     if (step === 1) {
       setError('')
-      if (!teacherId.trim()) {
-        setError('Teacher ID is required.')
-        return
-      }
       if (!dateOfBirth) {
         setError('Date of birth is required.')
         return
@@ -97,6 +155,15 @@ export default function ActivatePage() {
     }
     activate()
   }
+  const copyUserId = async () => {
+    try {
+      await navigator.clipboard.writeText(done?.user_id || '')
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
+  }
   return (
     <AuthScreen images={HERO_BUILDING} overlay={OVERLAY} className="max-w-md">
       <Card hover={false} className="animate-fade-in-up w-full">
@@ -105,16 +172,53 @@ export default function ActivatePage() {
             <KeyRound size={22} />
           </span>
           <p className="font-display mt-3 text-xl font-semibold text-brand-900">
-            Activate your account
+            {done ? 'Your account is ready' : 'Activate your account'}
           </p>
-          {invite && (
+          {invite && !done && (
             <p className="mt-1 text-sm text-brand-500">
               {invite.name}
               {invite.designation ? ` · ${invite.designation}` : ''}
             </p>
           )}
+          {done && <p className="mt-1 text-sm text-brand-500">{done.name}</p>}
         </div>
-        {loadingInvite ? (
+        {done ? (
+          <div className="mt-5 flex flex-col gap-4">
+            <div className="rounded-lg border border-brand-100 bg-brand-50/60 p-4">
+              <p className="text-xs font-medium tracking-wide text-brand-500 uppercase">Your User ID</p>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <p className="font-display text-lg font-semibold text-brand-900">{done.user_id}</p>
+                <Button size="sm" variant="secondary" onClick={copyUserId}>
+                  <Copy size={14} />
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-lg border border-brand-100 p-4">
+              <p className="text-xs font-medium tracking-wide text-brand-500 uppercase">Your password</p>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <p className="font-mono text-sm text-brand-900">
+                  {showPassword ? password : '•'.repeat(password.length)}
+                </p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showPassword ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+            </div>
+            <Alert tone="info">
+              We also emailed your User ID to {invite?.masked_email || 'your official address'}. Keep
+              your password to yourself.
+            </Alert>
+            <Link to={paths.teacherLogin()}>
+              <Button className="w-full">Go to the teacher sign-in</Button>
+            </Link>
+          </div>
+        ) : loadingInvite ? (
           <SkeletonLines className="mt-6" />
         ) : loadError ? (
           <div className="mt-5 flex flex-col gap-4">
@@ -125,7 +229,7 @@ export default function ActivatePage() {
               to={paths.teacherLogin()}
               className="text-center text-sm text-brand-600 hover:underline"
             >
-              Go to the teacher login
+              Go to the teacher sign-in
             </Link>
           </div>
         ) : (
@@ -137,15 +241,8 @@ export default function ActivatePage() {
                 <>
                   <Alert tone="info">
                     The invitation was sent to {invite?.masked_email || 'your official address'}.
-                    Confirm your teacher ID and date of birth to continue.
+                    Confirm your date of birth to continue.
                   </Alert>
-                  <Input
-                    label="Teacher ID"
-                    value={teacherId}
-                    onChange={(event) => setTeacherId(event.target.value)}
-                    autoComplete="username"
-                    required
-                  />
                   <Input
                     label="Date of birth"
                     type="date"
@@ -158,6 +255,18 @@ export default function ActivatePage() {
                 </>
               ) : (
                 <>
+                  <div className="flex flex-col gap-1.5">
+                    <Input
+                      label="Choose your User ID"
+                      value={userId}
+                      onChange={(event) => setUserId(event.target.value)}
+                      autoComplete="username"
+                      placeholder="karim.cse"
+                      hint={USER_ID_RULES}
+                      required
+                    />
+                    <Availability checking={checking} result={availability} />
+                  </div>
                   <Input
                     label="New password"
                     type="password"

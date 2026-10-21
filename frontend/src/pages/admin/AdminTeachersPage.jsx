@@ -14,15 +14,18 @@ import {
   Select,
   SkeletonTable,
   StatusBadge,
+  StatusTabs,
   useConfirm,
   useToast,
 } from '../../components/ui'
+import DeleteAccountModal from '../../components/admin/DeleteAccountModal'
+import useAccountActions from '../../components/admin/useAccountActions'
 import PhoneInput from '../../components/forms/PhoneInput'
 import PhotoPicker from '../../components/forms/PhotoPicker'
 import api from '../../lib/api'
-import { useAuthConfig, useDebounced, useResource } from '../../lib/hooks'
+import { useDebounced, useResource } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
-import { BLOOD_GROUPS } from '../../lib/options'
+import { BLOOD_GROUPS, PEOPLE_STATUS_TABS, canRestore } from '../../lib/options'
 import {
   PHONE_MESSAGE,
   appendIf,
@@ -33,13 +36,12 @@ import {
 } from '../../lib/account'
 import { formatDate } from '../../lib/time'
 
-const TEACHER_STATUSES = ['active', 'invited', 'removed']
+const HEADINGS = ['Name', 'User ID', 'Designation', 'Email', 'Phone', 'Status', '']
 
-const HEADINGS = ['Name', 'Teacher ID', 'Designation', 'Email', 'Phone', 'Status', '']
+const NOT_ACTIVATED = 'Not activated yet'
 
 const EMPTY = {
   name: '',
-  teacher_id: '',
   designation: '',
   email: '',
   phone: '',
@@ -53,13 +55,22 @@ const statusLabel = (status) => {
   if (status === 'invited') return 'Invited'
   if (status === 'active') return 'Active'
   if (status === 'removed') return 'Removed'
+  if (status === 'rejected') return 'Rejected'
+  if (status === 'pending') return 'Pending'
   return status
 }
+
+const accountOf = (item) => ({
+  id: item.id,
+  name: item.name,
+  identifier: item.identifier,
+  email: item.email,
+  status: item.status,
+})
 
 export default function AdminTeachersPage() {
   const toast = useToast()
   const confirm = useConfirm()
-  const { teacherEmailDomain } = useAuthConfig()
   const bounds = birthDateBounds()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -76,11 +87,11 @@ export default function AdminTeachersPage() {
   if (settled.trim()) query.search = settled.trim()
   if (status) query.status = status
   const { data, loading, error, reload } = useResource('/api/admin/teachers', query)
+  const { busy: actionBusy, deleting, setDeleting, restore, deletePermanently } = useAccountActions(reload)
   useEffect(() => {
     if (!editing) return
     setForm({
       name: editing.name || '',
-      teacher_id: editing.teacher_id || '',
       designation: editing.designation || '',
       email: editing.email || '',
       phone: editing.phone || '',
@@ -103,10 +114,9 @@ export default function AdminTeachersPage() {
     setForm(EMPTY)
   }
   const checkShared = () => {
-    const email = emailDomainError(form.email, teacherEmailDomain)
+    const email = emailDomainError(form.email)
     if (email) return email
     if (!form.name.trim()) return 'Name is required.'
-    if (!form.teacher_id.trim()) return 'Teacher ID is required.'
     if (!form.designation.trim()) return 'Designation is required.'
     const birth = birthDateError(form.date_of_birth)
     if (birth) return birth
@@ -124,7 +134,6 @@ export default function AdminTeachersPage() {
     }
     const body = new FormData()
     body.append('name', form.name.trim())
-    body.append('teacher_id', form.teacher_id.trim())
     body.append('designation', form.designation.trim())
     body.append('email', form.email.trim().toLowerCase())
     body.append('phone', form.phone.trim())
@@ -156,7 +165,6 @@ export default function AdminTeachersPage() {
     }
     const body = {
       name: form.name.trim(),
-      teacher_id: form.teacher_id.trim(),
       designation: form.designation.trim(),
       email: form.email.trim().toLowerCase(),
       date_of_birth: form.date_of_birth,
@@ -192,7 +200,7 @@ export default function AdminTeachersPage() {
   const deactivate = async (item) => {
     const ok = await confirm({
       title: 'Deactivate this teacher?',
-      message: `${item.name} (${item.teacher_id}) loses access immediately.`,
+      message: `${item.name} (${item.identifier || item.email}) loses access immediately.`,
       confirmLabel: 'Deactivate',
     })
     if (!ok) return
@@ -213,14 +221,6 @@ export default function AdminTeachersPage() {
       <Input label="Name" value={form.name} onChange={set('name')} required />
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
-          label="Teacher ID"
-          value={form.teacher_id}
-          onChange={set('teacher_id')}
-          placeholder="T-001"
-          hint="3 to 20 letters, digits or hyphens"
-          required
-        />
-        <Input
           label="Designation"
           value={form.designation}
           onChange={set('designation')}
@@ -232,8 +232,7 @@ export default function AdminTeachersPage() {
           type="email"
           value={form.email}
           onChange={set('email')}
-          hint={teacherEmailDomain ? `Must end with @${teacherEmailDomain}` : undefined}
-          className="sm:col-span-2"
+          hint="Any working address the teacher reads"
           required
         />
         <Input
@@ -295,22 +294,13 @@ export default function AdminTeachersPage() {
         </Alert>
       )}
       <Card hover={false} className="mb-5">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Name or teacher ID"
-          />
-          <Select label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="">Every status</option>
-            {TEACHER_STATUSES.map((entry) => (
-              <option key={entry} value={entry}>
-                {statusLabel(entry)}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <Input
+          label="Search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Name or User ID"
+        />
+        <StatusTabs tabs={PEOPLE_STATUS_TABS} value={status} onChange={setStatus} className="mt-4" />
       </Card>
       {error && (
         <Alert tone="error" className="mb-5">
@@ -350,7 +340,9 @@ export default function AdminTeachersPage() {
                     </Link>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-brand-700">{item.teacher_id}</td>
+                <td className="px-4 py-3 text-brand-700">
+                  {item.identifier || <span className="text-brand-400">{NOT_ACTIVATED}</span>}
+                </td>
                 <td className="px-4 py-3 text-brand-700">{item.designation || '—'}</td>
                 <td className="px-4 py-3 text-brand-700">{item.email}</td>
                 <td className="px-4 py-3 text-brand-700">{item.phone}</td>
@@ -376,15 +368,34 @@ export default function AdminTeachersPage() {
                         Resend invite
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      loading={busy === item.id}
-                      disabled={item.status === 'removed'}
-                      onClick={() => deactivate(item)}
-                    >
-                      Deactivate
-                    </Button>
+                    {canRestore(item.status) ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={actionBusy === item.id}
+                          onClick={() => restore(accountOf(item))}
+                        >
+                          Restore
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => setDeleting(accountOf(item))}
+                        >
+                          Delete permanently
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        loading={busy === item.id}
+                        onClick={() => deactivate(item)}
+                      >
+                        Deactivate
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -411,8 +422,8 @@ export default function AdminTeachersPage() {
         <form id="invite-teacher" onSubmit={invite} className="flex flex-col gap-4">
           {formError && <Alert tone="error">{formError}</Alert>}
           <Alert tone="info">
-            The teacher sets their own password from the invitation email, which stays valid for 72
-            hours.
+            The teacher picks their own User ID and password from the invitation email, which stays
+            valid for 72 hours.
           </Alert>
           {fields}
           <PhoneInput
@@ -458,6 +469,12 @@ export default function AdminTeachersPage() {
           )}
         </form>
       </Modal>
+      <DeleteAccountModal
+        account={deleting}
+        busy={actionBusy === deleting?.id}
+        onClose={() => setDeleting(null)}
+        onConfirmed={deletePermanently}
+      />
     </>
   )
 }

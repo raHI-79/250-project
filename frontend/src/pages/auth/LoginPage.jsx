@@ -33,7 +33,7 @@ const copy = {
   teacher: {
     heading: 'Faculty login',
     subtitle: 'Department of CSE, Shahjalal University of Science and Technology',
-    identifier: 'Teacher ID',
+    identifier: 'User ID or email',
     forgot: () => paths.teacherForgotPassword(),
     otherLabel: 'Are you a student?',
     otherLink: () => paths.studentLogin(),

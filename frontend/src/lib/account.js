@@ -63,6 +63,27 @@ export const emailDomainError = (value, domain) => {
   return ''
 }
 
+export const MIN_USER_ID = 4
+
+export const MAX_USER_ID = 20
+
+export const RESERVED_USER_IDS = ['admin', 'office', 'root', 'support', 'system', 'teacher', 'student']
+
+export const USER_ID_RULES = `${MIN_USER_ID} to ${MAX_USER_ID} characters, starts with a letter, and uses only letters, digits, dots, underscores and hyphens.`
+
+export const userIdError = (value) => {
+  const text = String(value || '').trim()
+  if (!text) return 'User ID is required.'
+  if (text.length < MIN_USER_ID || text.length > MAX_USER_ID)
+    return `User ID must be ${MIN_USER_ID} to ${MAX_USER_ID} characters long.`
+  if (!/^[A-Za-z0-9._-]+$/.test(text))
+    return 'User ID may only use letters, digits, dots, underscores and hyphens.'
+  if (/^[0-9]+$/.test(text)) return 'User ID cannot be digits only.'
+  if (!/^[A-Za-z]/.test(text)) return 'User ID must start with a letter.'
+  if (RESERVED_USER_IDS.includes(text.toLowerCase())) return 'This User ID is reserved.'
+  return ''
+}
+
 export const passwordError = (password, confirm) => {
   if (!password) return 'Password is required.'
   if (password.length < 8) return 'Password must be at least 8 characters long.'
