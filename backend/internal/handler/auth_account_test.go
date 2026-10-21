@@ -17,28 +17,24 @@ func TestAuthConfig(t *testing.T) {
 		clientID    string
 		wantGoogle  bool
 		wantStudent string
-		wantTeacher string
 	}{
 		{
 			name:        "google configured",
 			clientID:    googleClientID,
 			wantGoogle:  true,
 			wantStudent: studentDomain,
-			wantTeacher: teacherDomain,
 		},
 		{
 			name:        "google missing",
 			clientID:    "",
 			wantGoogle:  false,
 			wantStudent: studentDomain,
-			wantTeacher: teacherDomain,
 		},
 		{
 			name:        "google set to spaces",
 			clientID:    "   ",
 			wantGoogle:  false,
 			wantStudent: studentDomain,
-			wantTeacher: teacherDomain,
 		},
 	}
 	for _, test := range tests {
@@ -55,8 +51,8 @@ func TestAuthConfig(t *testing.T) {
 			if payload["student_email_domain"] != test.wantStudent {
 				t.Errorf("student_email_domain = %v, want %q", payload["student_email_domain"], test.wantStudent)
 			}
-			if payload["teacher_email_domain"] != test.wantTeacher {
-				t.Errorf("teacher_email_domain = %v, want %q", payload["teacher_email_domain"], test.wantTeacher)
+			if _, ok := payload["teacher_email_domain"]; ok {
+				t.Error("the public config still carries a teacher email domain")
 			}
 			if payload["google_enabled"] != test.wantGoogle {
 				t.Errorf("google_enabled = %v, want %v", payload["google_enabled"], test.wantGoogle)

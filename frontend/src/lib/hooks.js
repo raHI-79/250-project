@@ -94,7 +94,6 @@ export const useAuthConfig = () => {
   }, [])
   return {
     studentEmailDomain: config?.student_email_domain || '',
-    teacherEmailDomain: config?.teacher_email_domain || '',
     googleEnabled: Boolean(config?.google_enabled),
     loaded: Boolean(config),
   }

@@ -21,7 +21,6 @@ const (
 	defaultMaxUploadMB    = 10
 	defaultSMTPPort       = 587
 	defaultStudentDomain  = "student.sust.edu"
-	defaultTeacherDomain  = "sust.edu"
 	minJWTSecretLength    = 32
 )
 
@@ -54,7 +53,6 @@ type Config struct {
 	SMTPPassword    string
 	MailFrom        string
 	StudentDomain   string
-	TeacherDomain   string
 	GoogleClientID  string
 }
 
@@ -80,7 +78,6 @@ func Load() (*Config, error) {
 		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
 		MailFrom:        os.Getenv("MAIL_FROM"),
 		StudentDomain:   strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
-		TeacherDomain:   strings.ToLower(getEnv("TEACHER_EMAIL_DOMAIN", defaultTeacherDomain)),
 		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
 	}
 	if cfg.DatabaseURL == "" {
@@ -158,10 +155,6 @@ func (c *Config) GoogleEnabled() bool {
 
 func (c *Config) StudentEmailSuffix() string {
 	return "@" + c.StudentDomain
-}
-
-func (c *Config) TeacherEmailSuffix() string {
-	return "@" + c.TeacherDomain
 }
 
 func getEnv(key, fallback string) string {
