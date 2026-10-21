@@ -42,6 +42,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 │   │   ├── dbtest/           shared helper for the database integration tests
 │   │   ├── handler/          one file per group of endpoints
 │   │   ├── httpx/            shared JSON response helpers
+│   │   ├── jobs/             the scheduling job: item generation and the deadline
 │   │   ├── middleware/       VerifyToken, RequireRole, Logger, Recoverer, CORS
 │   │   ├── server/           router: URL -> handler
 │   │   └── store/            database queries used by the API
@@ -210,7 +211,9 @@ go run ./cmd/server
 | `TEST_DATABASE_URL` | none — optional | Connection string used by the database integration tests |
 | `JWT_SECRET` | none — **required** | Key that signs the login tokens, at least 32 characters |
 | `JWT_TTL` | `24h` | How long a login token stays valid, as a Go duration (`24h`, `90m`) |
-| `AUTO_CANCEL_INTERVAL` | `5m` | How often the auto-cancel job looks for requests nobody approved in time |
+| `DECISION_WINDOW_START` | `17:00` | When a teacher may start deciding on the next day's classes |
+| `DECISION_WINDOW_END` | `23:00` | When that window closes and undecided classes become `no_response` |
+| `SCHEDULE_DAYS_AHEAD` | `7` | How many days of dated schedule items the job keeps ahead of today |
 | `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs and profile photos are saved, created when it is missing |
 | `MAX_UPLOAD_MB` | `10` | Largest accepted PDF in megabytes; a bigger file gets `413` |
 | `STUDENT_EMAIL_DOMAIN` | `student.sust.edu` | Domain every student email address must end with |
@@ -369,20 +372,35 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/notifications/unread-count` | student, CR, teacher | How many matching notifications arrived after `since` |
 | `GET` | `/api/cr/routine` | CR | Fixed routine of the CR's own batch and section, including the `ALL` entries |
 | `GET` | `/api/cr/courses` | CR | Running-semester courses of the CR's batch with their teacher and weekly `slots` |
-| `GET` | `/api/cr/day` | CR | Everything already on a `date` for the CR's batch: the fixed routine of that weekday and the pending or approved events |
-| `POST` | `/api/cr/class-requests` | CR | Asks the chosen teacher for a class, exam or extra class; `201` with a pending request |
-| `GET` | `/api/cr/room-availability` | CR | Everything booked on a `date`, optionally narrowed to one `room` |
-| `GET` | `/api/cr/requests` | CR | The CR's own requests, newest first, with an optional `status` filter |
-| `GET` | `/api/teacher/requests` | teacher | Pending requests naming this teacher, oldest first, with who asked |
-| `POST` | `/api/teacher/requests/{id}/approve` | teacher | Approves a pending request dated tomorrow or later |
-| `POST` | `/api/teacher/requests/{id}/reject` | teacher | Rejects a pending request |
-| `GET` | `/api/teacher/schedule` | teacher | This teacher's fixed routine for a `date` plus the dated classes of that day |
-| `GET` | `/api/teacher/classes/upcoming` | teacher | Approved classes from today onward, or only those of one `date` |
-| `POST` | `/api/teacher/classes/{id}/cancel` | teacher | Cancels one approved class of this teacher |
-| `POST` | `/api/teacher/routines/{id}/cancel` | teacher | Cancels one `date` of this teacher's fixed routine entry |
+| `GET` | `/api/cr/room-availability` | CR | Seven days from `from` (today by default): every managed room and date with its booked intervals |
+| `GET` | `/api/cr/upcoming` | CR | The own batch's schedule items from `from`, each with its status, the teacher's message, any proposed slot and `allowed_actions` |
+| `POST` | `/api/cr/items` | CR | Adds a class or an exam to the own batch; `201` with status `scheduled` and no approval needed |
+| `PATCH` | `/api/cr/items/{id}` | CR | Changes an own-batch item as far as its origin and status allow |
+| `DELETE` | `/api/cr/items/{id}` | CR | Deletes an item the CR created |
+| `POST` | `/api/cr/items/{id}/request-reschedule` | CR | Proposes a new slot for a fixed item; the teacher accepts or declines |
+| `POST` | `/api/cr/items/{id}/cancel` | CR | Cancels an own item, a `teacher_reschedule_request`, a `no_response` or a `reschedule_declined` item |
+| `POST` | `/api/cr/items/{id}/final` | CR | Puts the item in the final routine |
+| `DELETE` | `/api/cr/items/{id}/final` | CR | Takes the item out of the final routine |
+| `GET` | `/api/cr/final` | CR | The final routine grouped by date with `needs_time` and `changed_since_publish` |
+| `GET` | `/api/cr/final/preview` | CR | The same shape for the `ids` the CR is about to publish |
+| `POST` | `/api/cr/final/publish` | CR | `{item_ids}` writes the snapshots students read and notifies the batch |
+| `GET` | `/api/teacher/fixed-routine` | teacher | This teacher's weekly fixed routine |
+| `GET` | `/api/teacher/upcoming/next-day` | teacher | Tomorrow's items with `decision_open` and the window bounds |
+| `GET` | `/api/teacher/upcoming/final` | teacher | This teacher's decided, final and published items from today, with their origin |
+| `POST` | `/api/teacher/items/{id}/confirm` | teacher | `{mode, room?, meeting_link?}`; the first decision only inside the window |
+| `POST` | `/api/teacher/items/{id}/cancel` | teacher | `{reason?}` cancels the class and frees the room |
+| `POST` | `/api/teacher/items/{id}/request-reschedule` | teacher | `{message}` asks the CR for another slot |
+| `POST` | `/api/teacher/items/{id}/reschedule-request/accept` | teacher | Takes the CR's proposed slot; the rules are checked again |
+| `POST` | `/api/teacher/items/{id}/reschedule-request/decline` | teacher | Keeps the original slot |
+| `GET` | `/api/teacher/exams` | teacher | This teacher's own exams from today |
+| `POST` | `/api/teacher/exams` | teacher | `{course_id, batch, section?, item_date, syllabus, instructions}`; no approval needed |
+| `PATCH` | `/api/teacher/exams/{id}` | teacher | Changes the date, the syllabus or the instructions |
+| `POST` | `/api/teacher/exams/{id}/cancel` | teacher | Cancels the exam |
+| `DELETE` | `/api/teacher/exams/{id}` | teacher | Deletes the exam |
+| `PATCH` | `/api/schedule/items/{id}/link` | item's teacher, batch CR | `{meeting_link}` updates the online link and the published copy |
 | `GET` | `/api/students/today` | student, CR | Today's summary: counts, the next exam and the three newest notices |
-| `GET` | `/api/students/upcoming-routine` | student, CR | The batch's plan for `date` (today by default), grouped by section plus `drop_courses` |
-| `GET` | `/api/students/exams` | student, CR | Approved exams of the own batch and section from today onward |
+| `GET` | `/api/students/upcoming-routine` | student, CR | The **published** plan for `date` (today by default), grouped by section plus `drop_courses` |
+| `GET` | `/api/students/exams` | student, CR | Teacher exams at once and published CR exams, from today onward |
 | `GET` | `/api/students/routine` | student, CR | Fixed routine browser with `batch`, `section`, `day` and `course` filters |
 | `POST` | `/api/admin/notices` | admin | `multipart/form-data` with `title`, optional `description`, optional `batch`, optional `link` and optional `file`; an empty `batch` means every batch |
 | `GET` | `/api/admin/notices` | admin | Every administration notice, newest first |
@@ -533,6 +551,20 @@ Sign-In, checks it with `google.golang.org/api/idtoken` against
 `400` with `{"error":"Use your @student.sust.edu Google account."}`. On success
 it answers `{"email", "email_proof"}`, where `email_proof` is a JWT signed with
 `JWT_SECRET`, carrying the purpose `email_proof`, and valid for 15 minutes.
+
+#### The two ways to confirm an email address
+
+Registration keeps **both** paths open and the student picks one on the contact
+step. The **University email** field comes first with the `@student.sust.edu`
+hint, then an `or` divider, then **Continue with Google** below it.
+
+- Typing the address by hand creates the account as `unverified` and the
+  6-digit email code step stays required.
+- Signing in with Google fills the field, locks it behind a **Verified with
+  Google** badge and sends `email_proof` with the registration, so the account
+  is created as `pending` and the code step is skipped.
+- Clearing a Google-verified address removes the badge and the proof, which puts
+  the student back on the code path.
 
 `POST /api/auth/login` takes `{"identifier":"2023331079","password":"...",
 "portal":"student"}` and answers:
@@ -686,9 +718,27 @@ Every removal, restore and permanent deletion writes a row into `admin_audit`
 
 ### Courses, routines and notifications
 
-`POST /api/admin/courses` takes `{"code": "cse233", "title": "Digital Logic
-Design"}`. The code may be written as `CSE-233` or `CSE233` and is stored in
-upper case.
+#### Course codes
+
+Codes differ from department to department, and the letter prefix is often
+missing: `CSE 2243 7637D`, `2243 7637D` and `CSE 1111` are all real. One rule
+holds everywhere: **3 to 25 characters, only letters, digits, spaces and
+hyphens, and at least one digit.**
+
+Every code is **normalised before it is saved and before it is searched**:
+raised to upper case, trimmed, hyphens turned into spaces and repeated spaces
+collapsed. So `cse-2243   7637d` is stored as `CSE 2243 7637D`, and a check
+constraint keeps the shape. Migration `0015_course_codes.sql` normalises the
+codes that already exist and **stops with a clear error** when two of them would
+collide, so nothing is merged silently.
+
+`GET /api/admin/courses?search=` and
+`GET /api/auth/drop-course-options?search=` match the normalised code **ignoring
+spaces** or the title, so `cse22437637d`, `CSE-2243-7637D` and `cse 2243` all
+find `CSE 2243 7637D`.
+
+`POST /api/admin/courses` takes `{"code": "cse 2243 7637d", "title":
+"Compilers"}` and answers the stored code.
 
 `POST /api/admin/routines` takes `batch`, `section`, `course_id`, `teacher_id`
 (the **`teachers.id`** from the teacher lookup), `day_of_week` (`0` is Sunday,
@@ -702,7 +752,7 @@ A second entry for the **same room on the same weekday at an overlapping time**
 answers `409` and names the booking it clashes with:
 
 ```json
-{"error": "Room 1003 is already booked on Monday 10:30–12:45 by CSE-23 section A (CSE-233)."}
+{"error": "Room 1003 is already booked on Monday 10:30–12:45 by CSE-23 section A (CSE 233)."}
 ```
 
 Two entries that only touch (one ends at 12:45, the next starts at 12:45) do
@@ -712,6 +762,29 @@ same moment cannot both win. Listing is sorted by batch, section, weekday and
 start time, and a `section` filter also returns the `ALL` entries, because they
 apply to that section too.
 
+#### Notification links
+
+Every notification carries a **link** so the frontend can send the reader to the
+page it is about. `GET /api/notifications` answers each item with
+`link: {kind, ref?, date?}`:
+
+| Kind | Points at | Carries |
+|---|---|---|
+| `teacher_next_day` | The teacher's next-day decisions | — |
+| `teacher_final` | The teacher's final routine | — |
+| `cr_upcoming` | The CR's upcoming list | `ref`, the item |
+| `cr_final` | The CR's final routine | — |
+| `routine` | The student routine | `date` |
+| `exam` | The student exams | `ref`, the item |
+| `notice` | The notices | `ref`, the notice |
+| `message` | The conversation | `ref`, the conversation |
+| `poll` | The polls | `ref`, the poll |
+| `cr_role` | The reader's own profile | — |
+
+Every place that creates a notification sets one, and `notify.PageURL` turns a
+link into a full address from `FRONTEND_ORIGIN`, which the push notifications of
+a later step will reuse.
+
 Notifications are either **direct** (one user id) or a **broadcast** scoped by
 role, batch and section. A reader sees their own direct notifications plus the
 broadcasts that match their role, batch and section; a broadcast without a
@@ -720,102 +793,136 @@ the CRs of that batch and section. `since` is an RFC 3339 timestamp, which the
 frontend keeps in `localStorage` as the moment the bell was last opened. Admin
 tokens get `403` on both notification routes.
 
-### Class requests and room availability
+### The scheduling engine
 
-Every `/api/cr/*` route needs role `cr`, and the CR's **batch and section are
-read from their own student row**, never from the request body or the query, so
-a CR can only act for their own batch and section. The create request body is
-`event_type` (`class`, `exam` or `extra`), `course_id`, `teacher_id` (the
-**`teachers.id`**), `event_date` as `YYYY-MM-DD`, `start_time`, `end_time` and
-`room`; any other field is rejected with `400`.
+Every fixed routine slot becomes a **dated schedule item**. A job runs once at
+startup and then every five minutes and creates the missing items for today up
+to `SCHEDULE_DAYS_AHEAD`, each one `awaiting_teacher` in the routine's own room.
+The job is idempotent: a unique index on `(routine_id, item_date)` means a
+second pass creates nothing.
 
-The date must be **tomorrow or later** in `APP_TIMEZONE`, the start must be
-before the end, both must stay inside **08:00 to 17:00**, the course must
-exist, and the teacher must exist and still be active.
+**The teacher decides on the next day.** Between `DECISION_WINDOW_START` and
+`DECISION_WINDOW_END` the teacher confirms, cancels or asks for a reschedule of
+tomorrow's items. The first decision only lands inside that window; later
+changes to a decided item are allowed until the class starts. Anything still
+`awaiting_teacher` when the window closes becomes `no_response`: the room stays
+booked and the CR decides, and every active CR of that batch is notified.
 
-The check and the insert run in **one transaction** guarded by
-`pg_advisory_xact_lock` on the room and the date, so the **first CR to book a
-free room wins**. A dated booking (`pending` or `approved`) that overlaps in the
-same room answers:
+**The CR owns the final routine.** CR-created classes and exams and
+teacher-created exams need no approval at all. Nothing reaches students until
+the CR adds items to the final routine and presses publish. A cancellation of
+an item that is already published reaches the students at once.
+
+These are the statuses an item moves through:
+
+| Status | Meaning |
+|---|---|
+| `awaiting_teacher` | A generated fixed item the teacher has not decided on yet |
+| `no_response` | The window closed with no decision; the room stays booked |
+| `confirmed` | The teacher takes the slot |
+| `teacher_reschedule_request` | The teacher asked for another slot; the CR sets it |
+| `cr_reschedule_request` | The CR proposed a slot; the teacher accepts or declines |
+| `reschedule_declined` | The teacher declined the proposal, so the original slot stands |
+| `rescheduled` | A proposal was accepted and the item moved |
+| `cancelled` | Cancelled by either side; the room is free again |
+| `scheduled` | A CR item or a teacher exam, which needs no approval |
+
+An `origin` of `fixed`, `cr` or `teacher_exam` says where the item came from.
+Only a teacher exam may arrive without a time: the CR sets it before publishing.
+
+### Room and batch rules
+
+A **managed room** is any room that appears in a fixed routine entry. For
+`mode` `room` with a managed room, an overlap with another active item in the
+same room on the same date answers `409` naming the other booking:
 
 ```json
-{"error": "This room is not available at the selected time."}
+{"error": "Room 1003 is already booked for CSE-22 section B from 10:30 to 12:00."}
 ```
 
-A fixed routine entry of **another batch** in that room on that weekday answers
-`409` naming it, for example `Room 1003 is reserved for CSE-22 section B
-(CSE-211) every Monday 10:30–12:45.` The CR's **own batch's** fixed entries do
-**not** block, because that is their own slot.
+Rooms nobody has a routine in and online classes skip that check, so a CR can
+book the library hall or go online without fighting the routine.
 
-A new request is stored as `pending` with the CR as `created_by`, and the
-chosen teacher gets a `class_request` notification naming the batch, section,
-course, date, time and room.
+The **batch rule always applies**: two active items of the same batch may never
+overlap in time when their sections overlap, which means the same letter or
+either side being `ALL`:
 
-`GET /api/cr/room-availability?date=2026-10-17&room=1003` combines the fixed
-routine of that weekday with the `pending` and `approved` dated bookings of
-that date, sorted by room and then start time. Each item carries `room`,
-`start_time`, `end_time`, `batch`, `section`, `course_code`, `source` (`fixed`,
-`class`, `exam` or `extra`), `status` (`fixed`, `pending` or `approved`) and
-`label`, which is **`yours`** for the fixed entries of the CR's own batch and
-**`unavailable`** for everything else.
+```json
+{"error": "CSE-23 section A already has CSE 2211 at 10:00."}
+```
 
-`POST /api/cr/class-requests` also takes an optional `note` of at most 500
-characters with a `note_audience` of `teacher`, `students` or `both`, which is
-required as soon as a note is present. The teacher reads it in
-`/api/teacher/requests`, `/api/teacher/schedule` and the upcoming classes when
-the audience is `teacher` or `both`. Students read it in
-`/api/students/upcoming-routine` and `/api/students/exams`, but only once the
-event is **approved** and only when the audience is `students` or `both`. The CR
-always sees their own note. A note never creates a message or a notification.
+An item is *active* unless it is `cancelled`, so cancelling frees both the room
+and the batch slot, and an accepted reschedule frees the old one. Times stay
+inside **08:00 to 17:00** with the start before the end, and `meeting_link` is
+optional but has to be a full `http://` or `https://` address.
 
-### Teacher decisions, cancellations and the auto-cancel rule
+Both checks and the write run in **one transaction** behind
+`pg_advisory_xact_lock` on the batch and date and, for a managed room, on the
+room and date, so the first writer of a free slot wins.
 
-A teacher only ever sees and changes rows where `teacher_id` is their own
-`teachers.id`; anything else answers `404`. Approving works only while the
-request is still `pending` and its date is **tomorrow or later**: a decided
-request answers `409 This request has already been decided.` and one whose date
-has arrived answers `409 This request can no longer be approved.` An approval
-notifies the CR who asked and broadcasts to the students of that batch and
-section, where section `ALL` reaches the whole batch; a rejection notifies only
-the CR.
+### Publishing
 
-`POST /api/teacher/classes/{id}/cancel` cancels an approved class dated today or
-later and notifies the CR and the students.
-`POST /api/teacher/routines/{id}/cancel` takes `{"date": "2026-10-20"}` and
-cancels **one occurrence** of a fixed routine entry: the date must be today or
-later and must fall on that entry's weekday (`400` otherwise), a second attempt
-answers `409`, and the students of that batch and section plus every active CR
-there are notified. Cancelled occurrences are kept in `routine_cancellations`,
-so the routine itself stays untouched.
+`POST /api/cr/final/publish` takes `{"item_ids": [...]}`. Every chosen item has
+to be in the final routine and carry a date, a time and either a room or a
+meeting link, otherwise the answer is `400` naming the item. The publication
+writes one `publications` row and upserts a **snapshot** per item into
+`published_items`: the date, times, course code and title, teacher name, kind,
+mode, room, link, note, syllabus, instructions and status as they are at that
+moment.
 
-**Auto-cancel**: a request nobody decided before its date arrives is not left
-hanging. A job runs once at startup and then every `AUTO_CANCEL_INTERVAL`
-(default `5m`), sets every `pending` request whose date is today or earlier to
-`auto_cancelled`, and tells the CR it was not approved in time. The job stops
-with the server's graceful shutdown.
+Students read **only those snapshots**, so a later edit stays invisible until
+the CR publishes again. `GET /api/cr/final` marks such an item with
+`changed_since_publish` so the CR can see what is waiting. A publication sends
+one `Routine published` notification to the batch plus one per item whose date,
+time, room, link or status changed since the previous snapshot.
+
+Cancelling a published item updates the snapshot's status straight away and
+notifies the students, because a class that is not happening cannot wait for the
+next publication. The same is true for `PATCH /api/schedule/items/{id}/link`,
+which the item's teacher or the batch CR may call.
+
+### What the teacher sees
+
+A teacher only ever sees and changes items whose `teacher_id` is their own
+`teachers.id`; anything else answers `404`.
+`GET /api/teacher/upcoming/next-day` carries `decision_open`, `window_start` and
+`window_end` beside tomorrow's items, each with the CR's message and proposed
+slot when there is one. Confirming takes `mode` with a `room` or a
+`meeting_link`. Every teacher action notifies the CRs of that batch, and an
+action on a published item also notifies the students.
+
+A teacher exam needs only `{course_id, batch, section?, item_date, syllabus,
+instructions}`. It is `scheduled` at once, students read its date, syllabus and
+instructions immediately, and the job moves it into the final routine the day
+before so the CR sets the time and the room.
 
 ### What a student sees
 
-Batch, section and the drop courses come from the caller's own student row.
+Batch, section and the drop courses come from the caller's own student row, and
+a student reads **only published items**.
 `GET /api/students/upcoming-routine` defaults to **today** in `APP_TIMEZONE`
 and answers `date`, `date_label` (`DD.MM.YY`), `weekday`, `batch` and `groups`:
 one group per section of the caller's own batch, the lettered sections first
-and `ALL` (`Both sections`) last, each item carrying `start_time`, `end_time`,
-`course_code`, `course_title`, `kind` (`class`, `lab`, `exam` or `extra`),
-`room`, `teacher_name`, `status`, which is `cancelled` for a cancelled class or
-a cancelled routine occurrence and `scheduled` otherwise, and the `note` when
-its audience allows it.
+and `ALL` (`Both sections`) last. Each item carries `start_time`, `end_time`,
+`course_code`, `course_title`, `kind` (`class`, `lab` or `exam`), `mode`,
+`room` or `meeting_link` for an online class, `teacher_name`, the item `status`
+and the `note`. Nothing appears before the CR publishes it.
 
 A student may carry **several** drop courses, kept in `student_drop_courses`.
 When they do, the same answer carries one more group, keyed `drop_courses` and
-marked `drop_course: true`, holding the fixed classes and the approved class and
-exam events of those courses **in the other batches** on that date. Every item
-of that group names its own `batch`.
+marked `drop_course: true`, holding the published items of those courses **in
+the other batches** on that date. Every item of that group names its own
+`batch`.
 
-`GET /api/students/today` answers `date`, `classes_today` (the scheduled items
-of that day), `upcoming_exams`, `next_exam` (`date` and `course`, or `null`),
-`unread_messages`, `open_polls` and `latest_notices`, which holds the three
-newest notices in the same shape as the notices list.
+`GET /api/students/exams` answers two kinds of exam. A **teacher exam** shows up
+the moment the teacher creates it, with its date, syllabus and instructions, and
+gains its time and room only once the CR publishes it. A **CR exam** appears
+once it is published. `published` says which of the two a row is.
+
+`GET /api/students/today` answers `date`, `classes_today` (the published items
+of that day that are not cancelled), `upcoming_exams`, `next_exam` (`date` and
+`course`, or `null`), `unread_messages`, `open_polls` and `latest_notices`,
+which holds the three newest notices in the same shape as the notices list.
 
 Materials are **one Drive link per batch**. The class representative of a batch
 owns that link through `/api/cr/drive-link`, its title is always their batch
@@ -858,6 +965,12 @@ password check.
 | A new reset code asked for within 60 seconds | `429` | `{"error":"Please wait a minute before requesting a new code."}` |
 | Wrong or expired reset code | `400` | `{"error":"Invalid or expired code."}` |
 | Five wrong reset codes | `400` | `{"error":"Too many wrong codes. Please request a new code."}` |
+| A first decision outside the window | `409` | `{"error":"The decision window is closed. The class representative decides from now on."}` |
+| A change to a class that already started | `409` | `{"error":"This class has already started."}` |
+| An action the item's status does not allow | `409` | `{"error":"This schedule item cannot be changed this way right now."}` |
+| An item of another teacher or another batch | `404` | `{"error":"No schedule item found with this ID."}` |
+| Publishing an item without a date, a time and a place | `400` | `{"error":"CSE 2243 7637D on 2026-10-23 still needs a date, a time and a room or a meeting link."}` |
+| A course code with a character outside the rule | `400` | `{"error":"Course code may only use letters, digits, spaces and hyphens, for example CSE 2243 7637D."}` |
 | Malformed JSON, unknown field, or a body over 1 MB | `400` | `{"error":"Invalid request body"}` |
 
 Any unknown route returns `404` with `{"error":"Route not found"}`.
