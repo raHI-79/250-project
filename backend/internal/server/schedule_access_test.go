@@ -17,32 +17,65 @@ func (emptyTeacherStore) GetTeacherByUser(ctx context.Context, userID int64) (st
 	return store.Teacher{ID: 7, UserID: userID, Name: "Active Teacher"}, nil
 }
 
-func (emptyTeacherStore) ListTeacherRequests(ctx context.Context, teacherID int64) ([]store.RequestRow, error) {
+func (emptyTeacherStore) ListTeacherRoutine(ctx context.Context, teacherID int64) ([]store.RoutineRow, error) {
 	return nil, nil
 }
 
-func (emptyTeacherStore) DecideRequest(ctx context.Context, eventID, teacherID int64, status string, now time.Time) (store.EventDecision, error) {
-	return store.EventDecision{}, store.ErrNotFound
-}
-
-func (emptyTeacherStore) CancelClassEvent(ctx context.Context, eventID, teacherID int64, now time.Time) (store.EventDecision, error) {
-	return store.EventDecision{}, store.ErrNotFound
-}
-
-func (emptyTeacherStore) ListTeacherSchedule(ctx context.Context, teacherID int64, date string) ([]store.ScheduleItem, error) {
+func (emptyTeacherStore) ListTeacherDayItems(ctx context.Context, teacherID int64,
+	date string) ([]store.ScheduleItem, error) {
 	return nil, nil
 }
 
-func (emptyTeacherStore) ListTeacherClasses(ctx context.Context, teacherID int64, date string, now time.Time) ([]store.ClassEventRow, error) {
+func (emptyTeacherStore) ListTeacherFinalItems(ctx context.Context, teacherID int64,
+	from string) ([]store.ScheduleItem, error) {
 	return nil, nil
 }
 
-func (emptyTeacherStore) GetTeacherRoutine(ctx context.Context, routineID, teacherID int64) (store.RoutineRow, error) {
-	return store.RoutineRow{}, store.ErrNotFound
+func (emptyTeacherStore) ListTeacherExams(ctx context.Context, teacherID int64,
+	from string) ([]store.ScheduleItem, error) {
+	return nil, nil
 }
 
-func (emptyTeacherStore) CancelRoutineOccurrence(ctx context.Context, routineID, cancelledBy int64, date string) error {
-	return store.ErrAlreadyCancelled
+func (emptyTeacherStore) ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
+	now time.Time, windowOpen bool) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64,
+	reason string) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64,
+	message string) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) AcceptProposal(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) DeclineProposal(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) CreateTeacherExam(ctx context.Context,
+	exam store.NewScheduleItem) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrCourseNotFound
+}
+
+func (emptyTeacherStore) UpdateTeacherExam(ctx context.Context, itemID, teacherID int64,
+	patch store.ItemPatch) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) CancelTeacherExam(ctx context.Context, itemID, teacherID int64,
+	reason string) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) DeleteTeacherExam(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
 }
 
 func (emptyTeacherStore) ListActiveCRs(ctx context.Context, batch, section string) ([]int64, error) {
@@ -59,11 +92,13 @@ func (emptyStudentStore) ListStudentDropCourses(ctx context.Context, studentID i
 	return nil, nil
 }
 
-func (emptyStudentStore) ListDayPlan(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error) {
+func (emptyStudentStore) ListPublishedDay(ctx context.Context, batch, date string,
+	dropCourseCodes []string) ([]store.PlanItem, error) {
 	return nil, nil
 }
 
-func (emptyStudentStore) ListExams(ctx context.Context, batch, section string, now time.Time) ([]store.ExamRow, error) {
+func (emptyStudentStore) ListStudentExams(ctx context.Context, batch, section string,
+	now time.Time) ([]store.StudentExam, error) {
 	return nil, nil
 }
 
@@ -89,11 +124,13 @@ func (emptyStudentStore) CountUnreadMessages(ctx context.Context, viewer store.M
 
 type silentAlerts struct{}
 
-func (silentAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, body string) error {
+func (silentAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
 	return nil
 }
 
-func (silentAlerts) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string) error {
+func (silentAlerts) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
+	link store.NotificationLink) error {
 	return nil
 }
 
@@ -117,13 +154,35 @@ func teacherRoutes(t *testing.T) []scheduleRoute {
 	t.Helper()
 	date := accessDate(t)
 	return []scheduleRoute{
-		{method: http.MethodGet, path: "/api/teacher/requests", wantForOwn: http.StatusOK},
-		{method: http.MethodPost, path: "/api/teacher/requests/1/approve", wantForOwn: http.StatusNotFound},
-		{method: http.MethodPost, path: "/api/teacher/requests/1/reject", wantForOwn: http.StatusNotFound},
-		{method: http.MethodGet, path: "/api/teacher/schedule?date=" + date, wantForOwn: http.StatusOK},
-		{method: http.MethodGet, path: "/api/teacher/classes/upcoming", wantForOwn: http.StatusOK},
-		{method: http.MethodPost, path: "/api/teacher/classes/1/cancel", wantForOwn: http.StatusNotFound},
-		{method: http.MethodPost, path: "/api/teacher/routines/1/cancel", body: `{"date":"` + date + `"}`, wantForOwn: http.StatusNotFound},
+		{method: http.MethodGet, path: "/api/teacher/fixed-routine", wantForOwn: http.StatusOK},
+		{method: http.MethodGet, path: "/api/teacher/upcoming/next-day", wantForOwn: http.StatusOK},
+		{method: http.MethodGet, path: "/api/teacher/upcoming/final", wantForOwn: http.StatusOK},
+		{method: http.MethodGet, path: "/api/teacher/exams", wantForOwn: http.StatusOK},
+		{
+			method: http.MethodPost, path: "/api/teacher/items/1/confirm",
+			body: `{"mode":"room","room":"1003"}`, wantForOwn: http.StatusNotFound,
+		},
+		{method: http.MethodPost, path: "/api/teacher/items/1/cancel", body: `{}`, wantForOwn: http.StatusNotFound},
+		{
+			method: http.MethodPost, path: "/api/teacher/items/1/request-reschedule",
+			body: `{"message":"I am away that day."}`, wantForOwn: http.StatusNotFound,
+		},
+		{
+			method: http.MethodPost, path: "/api/teacher/items/1/reschedule-request/accept",
+			wantForOwn: http.StatusNotFound,
+		},
+		{
+			method: http.MethodPost, path: "/api/teacher/items/1/reschedule-request/decline",
+			wantForOwn: http.StatusNotFound,
+		},
+		{
+			method: http.MethodPost, path: "/api/teacher/exams",
+			body:       `{"course_id":1,"batch":"CSE-23","item_date":"` + date + `"}`,
+			wantForOwn: http.StatusBadRequest,
+		},
+		{method: http.MethodPatch, path: "/api/teacher/exams/1", body: `{"syllabus":"All"}`, wantForOwn: http.StatusNotFound},
+		{method: http.MethodPost, path: "/api/teacher/exams/1/cancel", body: `{}`, wantForOwn: http.StatusNotFound},
+		{method: http.MethodDelete, path: "/api/teacher/exams/1", wantForOwn: http.StatusNotFound},
 	}
 }
 

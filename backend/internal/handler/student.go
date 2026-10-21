@@ -28,8 +28,8 @@ const (
 type StudentStore interface {
 	GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error)
 	ListStudentDropCourses(ctx context.Context, studentID int64) ([]store.Course, error)
-	ListDayPlan(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error)
-	ListExams(ctx context.Context, batch, section string, now time.Time) ([]store.ExamRow, error)
+	ListPublishedDay(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error)
+	ListStudentExams(ctx context.Context, batch, section string, now time.Time) ([]store.StudentExam, error)
 	ListFilteredRoutines(ctx context.Context, filter store.RoutineFilter) ([]store.RoutineRow, error)
 	ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error)
 	ListStudentPolls(ctx context.Context, viewerUserID int64, batch, section string) ([]store.PollRow, error)
@@ -53,7 +53,9 @@ type planItem struct {
 	CourseCode  string `json:"course_code"`
 	CourseTitle string `json:"course_title"`
 	Kind        string `json:"kind"`
-	Room        string `json:"room"`
+	Mode        string `json:"mode"`
+	Room        string `json:"room,omitempty"`
+	MeetingLink string `json:"meeting_link,omitempty"`
 	TeacherName string `json:"teacher_name"`
 	Status      string `json:"status"`
 	Note        string `json:"note,omitempty"`
@@ -138,7 +140,7 @@ func (s *Student) dayGroups(w http.ResponseWriter, r *http.Request, profile stor
 	if !ok {
 		return nil, false
 	}
-	items, err := s.students.ListDayPlan(r.Context(), profile.Batch, day, codes)
+	items, err := s.students.ListPublishedDay(r.Context(), profile.Batch, day, codes)
 	if err != nil {
 		log.Printf("handler: could not list the upcoming routine of a student: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -156,7 +158,7 @@ func (s *Student) dropCourseCodes(w http.ResponseWriter, r *http.Request, studen
 	}
 	codes := make([]string, 0, len(courses))
 	for _, course := range courses {
-		codes = append(codes, course.Code)
+		codes = append(codes, validate.SqueezeCourseCode(course.Code))
 	}
 	return codes, true
 }
@@ -209,9 +211,11 @@ func newPlanItem(item store.PlanItem) planItem {
 		CourseCode:  item.CourseCode,
 		CourseTitle: item.CourseTitle,
 		Kind:        item.Kind,
+		Mode:        item.Mode,
 		Room:        item.Room,
+		MeetingLink: item.MeetingLink,
 		TeacherName: item.TeacherName,
-		Status:      planStatus(item.Cancelled),
+		Status:      item.Status,
 		Note:        item.Note,
 	}
 }
@@ -224,13 +228,6 @@ func sortedPlan(entries []planItem) []planItem {
 		return entries[i].Batch < entries[j].Batch
 	})
 	return entries
-}
-
-func planStatus(cancelled bool) string {
-	if cancelled {
-		return StatusCancelled
-	}
-	return StatusScheduled
 }
 
 func sectionLabel(section string) string {

@@ -14,16 +14,21 @@ import (
 )
 
 type examItem struct {
-	ID          int64  `json:"id"`
-	EventDate   string `json:"event_date"`
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	CourseCode  string `json:"course_code"`
-	CourseTitle string `json:"course_title"`
-	Batch       string `json:"batch"`
-	Section     string `json:"section"`
-	Room        string `json:"room"`
-	Note        string `json:"note,omitempty"`
+	ID           int64  `json:"id"`
+	ItemDate     string `json:"item_date"`
+	StartTime    string `json:"start_time,omitempty"`
+	EndTime      string `json:"end_time,omitempty"`
+	CourseCode   string `json:"course_code"`
+	CourseTitle  string `json:"course_title"`
+	Batch        string `json:"batch"`
+	Section      string `json:"section"`
+	Mode         string `json:"mode,omitempty"`
+	Room         string `json:"room,omitempty"`
+	MeetingLink  string `json:"meeting_link,omitempty"`
+	Syllabus     string `json:"syllabus,omitempty"`
+	Instructions string `json:"instructions,omitempty"`
+	Origin       string `json:"origin"`
+	Published    bool   `json:"published"`
 }
 
 type examsResponse struct {
@@ -36,7 +41,7 @@ func (s *Student) Exams() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		exams, err := s.students.ListExams(r.Context(), profile.Batch, profile.Section, s.cfg.Now())
+		exams, err := s.students.ListStudentExams(r.Context(), profile.Batch, profile.Section, s.cfg.Now())
 		if err != nil {
 			log.Printf("handler: could not list the exams of a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -50,18 +55,23 @@ func (s *Student) Exams() http.HandlerFunc {
 	}
 }
 
-func newExamItem(exam store.ExamRow) examItem {
+func newExamItem(exam store.StudentExam) examItem {
 	return examItem{
-		ID:          exam.ID,
-		EventDate:   exam.EventDate,
-		StartTime:   exam.StartTime,
-		EndTime:     exam.EndTime,
-		CourseCode:  exam.CourseCode,
-		CourseTitle: exam.CourseTitle,
-		Batch:       exam.Batch,
-		Section:     exam.Section,
-		Room:        exam.Room,
-		Note:        exam.Note,
+		ID:           exam.ID,
+		ItemDate:     exam.ItemDate,
+		StartTime:    exam.StartTime,
+		EndTime:      exam.EndTime,
+		CourseCode:   exam.CourseCode,
+		CourseTitle:  exam.CourseTitle,
+		Batch:        exam.Batch,
+		Section:      exam.Section,
+		Mode:         exam.Mode,
+		Room:         exam.Room,
+		MeetingLink:  exam.MeetingLink,
+		Syllabus:     exam.Syllabus,
+		Instructions: exam.Instructions,
+		Origin:       exam.Origin,
+		Published:    exam.Published,
 	}
 }
 
@@ -126,7 +136,7 @@ func routineBrowserFilter(query url.Values, profile store.StudentProfile) (store
 		if err != nil {
 			return store.RoutineFilter{}, err
 		}
-		filter.CourseCode = code
+		filter.CourseCode = validate.SqueezeCourseCode(code)
 	}
 	return filter, nil
 }

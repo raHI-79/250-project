@@ -41,15 +41,31 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 	return newFlowRouterWithLimit(t, flowRateLimit)
 }
 
+func flowConfig(t *testing.T) *config.Config {
+	t.Helper()
+	loc, err := time.LoadLocation("Asia/Dhaka")
+	if err != nil {
+		t.Fatalf("could not load timezone: %v", err)
+	}
+	return &config.Config{
+		AppEnv:         "test",
+		Timezone:       "Asia/Dhaka",
+		Location:       loc,
+		FrontendOrigin: testFrontend,
+		StudentDomain:  "student.sust.edu",
+		DecisionStart:  "00:00",
+		DecisionEnd:    "23:59",
+		DecisionFrom:   0,
+		DecisionTo:     24 * 60,
+		DaysAhead:      7,
+	}
+}
+
 func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxpool.Pool, http.Handler) {
 	t.Helper()
 	ctx, pool := dbtest.Pool(t)
 	if err := db.Migrate(ctx, pool); err != nil {
 		t.Fatalf("db.Migrate() returned an unexpected error: %v", err)
-	}
-	loc, err := time.LoadLocation("Asia/Dhaka")
-	if err != nil {
-		t.Fatalf("could not load timezone: %v", err)
 	}
 	tokens, err := auth.NewTokens(testSecret, time.Hour)
 	if err != nil {
@@ -65,36 +81,31 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	return ctx, pool, NewRouter(Dependencies{
 		RateLimit: rateLimit,
-		Config: &config.Config{
-			AppEnv:         "test",
-			Timezone:       "Asia/Dhaka",
-			Location:       loc,
-			FrontendOrigin: testFrontend,
-			StudentDomain:  "student.sust.edu",
-		},
-		Database: stubPinger{},
-		Tokens:   tokens,
-		Proofs:   proofs,
-		Photos:   upload.NewPhotos(t.TempDir()),
-		Shared:   upload.NewAttachments(t.TempDir(), 10),
-		Accounts: userStore,
-		Users:    userStore,
-		Auth:     userStore,
-		People:   userStore,
-		Catalog:  userStore,
-		Lookups:  userStore,
-		Alerts:   alerts,
-		Classes:  userStore,
-		Notifier: alerts,
-		Teachers: userStore,
-		Students: userStore,
-		Alarms:   alerts,
-		Notices:  userStore,
-		Drives:   userStore,
-		Contacts: userStore,
-		Files:    upload.NewSaver(t.TempDir(), 1),
-		Chats:    userStore,
-		Votes:    userStore,
+		Config:    flowConfig(t),
+		Database:  stubPinger{},
+		Tokens:    tokens,
+		Proofs:    proofs,
+		Photos:    upload.NewPhotos(t.TempDir()),
+		Shared:    upload.NewAttachments(t.TempDir(), 10),
+		Accounts:  userStore,
+		Users:     userStore,
+		Auth:      userStore,
+		People:    userStore,
+		Catalog:   userStore,
+		Lookups:   userStore,
+		Alerts:    alerts,
+		Classes:   userStore,
+		Items:     userStore,
+		Notifier:  alerts,
+		Teachers:  userStore,
+		Students:  userStore,
+		Alarms:    alerts,
+		Notices:   userStore,
+		Drives:    userStore,
+		Contacts:  userStore,
+		Files:     upload.NewSaver(t.TempDir(), 1),
+		Chats:     userStore,
+		Votes:     userStore,
 	})
 }
 

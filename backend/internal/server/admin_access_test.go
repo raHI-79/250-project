@@ -183,6 +183,7 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps.Lookups = emptyLookupStore{}
 	deps.Alerts = emptyNotificationService{}
 	deps.Classes = emptyCRStore{}
+	deps.Items = emptyItemStore{}
 	deps.Notifier = silentNotifier{}
 	deps.Teachers = emptyTeacherStore{}
 	deps.Students = emptyStudentStore{}

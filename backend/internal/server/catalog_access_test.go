@@ -21,6 +21,10 @@ func (emptyCatalogStore) ListCourses(ctx context.Context) ([]store.Course, error
 	return nil, nil
 }
 
+func (emptyCatalogStore) SearchCourses(ctx context.Context, search string) ([]store.Course, error) {
+	return nil, nil
+}
+
 func (emptyCatalogStore) CreateRoutine(ctx context.Context, routine store.NewRoutine) (store.RoutineRow, error) {
 	return store.RoutineRow{}, store.ErrCourseNotFound
 }
