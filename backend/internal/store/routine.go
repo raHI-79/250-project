@@ -84,7 +84,15 @@ LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE ($1::text = '' OR r.batch = $1::text)
   AND ($2::text = '' OR r.section = $2::text OR r.section = 'ALL')
 ORDER BY r.batch, r.section, r.day_of_week, r.start_time`
-	deleteRoutineSQL = `DELETE FROM routines WHERE id = $1 RETURNING id`
+	deleteRoutineSQL       = `DELETE FROM routines WHERE id = $1 RETURNING id`
+	listSectionRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title,
+COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
+r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
+FROM routines r
+JOIN courses c ON c.id = r.course_id
+LEFT JOIN teachers t ON t.id = r.teacher_id
+WHERE r.batch = $1 AND (r.section = $2 OR r.section = 'ALL')
+ORDER BY r.day_of_week, r.start_time, r.room`
 )
 
 func (s *Store) CreateRoutine(ctx context.Context, routine NewRoutine) (RoutineRow, error) {
@@ -161,8 +169,16 @@ func (s *Store) CreateRoutine(ctx context.Context, routine NewRoutine) (RoutineR
 	return row, nil
 }
 
+func (s *Store) ListSectionRoutines(ctx context.Context, batch, section string) ([]RoutineRow, error) {
+	return s.routines(ctx, listSectionRoutinesSQL, batch, section)
+}
+
 func (s *Store) ListRoutines(ctx context.Context, batch, section string) ([]RoutineRow, error) {
-	rows, err := s.pool.Query(ctx, listRoutinesSQL, batch, section)
+	return s.routines(ctx, listRoutinesSQL, batch, section)
+}
+
+func (s *Store) routines(ctx context.Context, query string, args ...any) ([]RoutineRow, error) {
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the routine entries: %w", err)
 	}

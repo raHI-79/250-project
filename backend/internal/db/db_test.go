@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/raHI-79/250-project/backend/internal/dbtest"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"os"
 	"testing"
@@ -21,7 +22,6 @@ const (
 var expectedTables = []string{
 	"admin_audit",
 	"batch_drive_links",
-	"class_events",
 	"courses",
 	"messages",
 	"notices",
@@ -29,7 +29,9 @@ var expectedTables = []string{
 	"poll_options",
 	"poll_votes",
 	"polls",
-	"routine_cancellations",
+	"publications",
+	"published_items",
+	"schedule_items",
 	"routines",
 	"conversation_members",
 	"conversation_reads",
@@ -124,7 +126,7 @@ func insertCourse(t *testing.T, ctx context.Context, pool *pgxpool.Pool, code st
 	t.Helper()
 	var id int64
 	query := "INSERT INTO courses (code, title) VALUES ($1, 'Digital Logic Design') RETURNING id"
-	if err := pool.QueryRow(ctx, query, code).Scan(&id); err != nil {
+	if err := pool.QueryRow(ctx, query, validate.NormalizeCourseCode(code)).Scan(&id); err != nil {
 		t.Fatalf("could not insert the course %q: %v", code, err)
 	}
 	return id
@@ -213,19 +215,25 @@ func TestRoutineAndClassEventTimeChecks(t *testing.T) {
 	courseID := insertCourse(t, ctx, pool, "CSE 250")
 	routineQuery := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
 VALUES ('CSE-23', 'A', $1, $2, 1, $3, $4, '1003', 'class')`
-	eventQuery := `INSERT INTO class_events (batch, section, course_id, teacher_id, event_date, start_time, end_time, room, event_type, created_by)
-VALUES ('CSE-23', 'A', $1, $2, DATE '2026-10-20', $3, $4, '1003', 'class', $5)`
+	itemQuery := `INSERT INTO schedule_items
+(batch, section, course_id, teacher_id, kind, origin, item_date, start_time, end_time, room, status, created_by)
+VALUES ('CSE-23', 'A', $1, $2, 'class', 'cr', DATE '2026-10-20', $3, $4, '1003', 'scheduled', $5)`
 	tests := []struct {
 		name      string
 		startTime string
 		endTime   string
 		wantCode  string
+		itemCode  string
 	}{
 		{name: "inside class hours is accepted", startTime: "08:00", endTime: "09:30"},
-		{name: "starting at 07:00 is rejected", startTime: "07:00", endTime: "09:30", wantCode: checkViolationCode},
-		{name: "ending after 17:00 is rejected", startTime: "16:00", endTime: "17:30", wantCode: checkViolationCode},
-		{name: "end before start is rejected", startTime: "11:00", endTime: "10:00", wantCode: checkViolationCode},
-		{name: "end equal to start is rejected", startTime: "11:00", endTime: "11:00", wantCode: checkViolationCode},
+		{name: "starting at 07:00 is rejected", startTime: "07:00", endTime: "09:30", wantCode: checkViolationCode,
+			itemCode: ""},
+		{name: "ending after 17:00 is rejected", startTime: "16:00", endTime: "17:30", wantCode: checkViolationCode,
+			itemCode: ""},
+		{name: "end before start is rejected", startTime: "11:00", endTime: "10:00", wantCode: checkViolationCode,
+			itemCode: checkViolationCode},
+		{name: "end equal to start is rejected", startTime: "11:00", endTime: "11:00", wantCode: checkViolationCode,
+			itemCode: checkViolationCode},
 	}
 	for _, tc := range tests {
 		t.Run("routines: "+tc.name, func(t *testing.T) {
@@ -240,16 +248,16 @@ VALUES ('CSE-23', 'A', $1, $2, DATE '2026-10-20', $3, $4, '1003', 'class', $5)`
 				t.Errorf("error code = %s, want %s (check violation)", code, tc.wantCode)
 			}
 		})
-		t.Run("class events: "+tc.name, func(t *testing.T) {
-			_, err := pool.Exec(ctx, eventQuery, courseID, teacherRowID, tc.startTime, tc.endTime, adminUserID)
-			if tc.wantCode == "" {
+		t.Run("schedule items: "+tc.name, func(t *testing.T) {
+			_, err := pool.Exec(ctx, itemQuery, courseID, teacherRowID, tc.startTime, tc.endTime, adminUserID)
+			if tc.itemCode == "" {
 				if err != nil {
 					t.Fatalf("insert was rejected unexpectedly: %v", err)
 				}
 				return
 			}
-			if code := pgErrorCode(t, err); code != tc.wantCode {
-				t.Errorf("error code = %s, want %s (check violation)", code, tc.wantCode)
+			if code := pgErrorCode(t, err); code != tc.itemCode {
+				t.Errorf("error code = %s, want %s (check violation)", code, tc.itemCode)
 			}
 		})
 	}
@@ -373,11 +381,32 @@ VALUES ($1, $2, 'Here', '/uploads/files/0123456789abcdef0123456789abcdef.pdf')`,
 			wantCode: checkViolationCode,
 		},
 		{
-			name: "class event note without an audience",
-			query: `INSERT INTO class_events
-(batch, section, course_id, teacher_id, event_date, start_time, end_time, room, event_type, created_by, note)
-VALUES ('CSE-23', 'A', $1, $2, CURRENT_DATE + 1, TIME '08:00', TIME '09:00', '1003', 'class', $3, 'Bring the lab sheet')`,
+			name: "a schedule item with only a start time",
+			query: `INSERT INTO schedule_items
+(batch, section, course_id, teacher_id, kind, origin, item_date, start_time, status, created_by)
+VALUES ('CSE-23', 'A', $1, $2, 'class', 'cr', CURRENT_DATE + 1, TIME '08:00', 'scheduled', $3)`,
 			args:     []any{courseID, teacherID, studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name: "a schedule item with an unknown status",
+			query: `INSERT INTO schedule_items
+(batch, section, course_id, teacher_id, kind, origin, item_date, status, created_by)
+VALUES ('CSE-23', 'A', $1, $2, 'class', 'cr', CURRENT_DATE + 1, 'maybe', $3)`,
+			args:     []any{courseID, teacherID, studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name: "a schedule item with an unknown origin",
+			query: `INSERT INTO schedule_items
+(batch, section, course_id, teacher_id, kind, origin, item_date, status, created_by)
+VALUES ('CSE-23', 'A', $1, $2, 'class', 'office', CURRENT_DATE + 1, 'scheduled', $3)`,
+			args:     []any{courseID, teacherID, studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "a course code without a digit",
+			query:    "INSERT INTO courses (code, title) VALUES ('CSE CODE', 'No digits')",
 			wantCode: checkViolationCode,
 		},
 		{
