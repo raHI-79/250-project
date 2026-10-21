@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"net/http"
 	"strings"
 	"testing"
 )
 
 type fakeCatalogStore struct {
+	search        string
 	courses       []store.Course
 	created       store.RoutineRow
 	entries       []store.RoutineRow
@@ -31,6 +33,14 @@ func (f *fakeCatalogStore) CreateCourse(ctx context.Context, code, title string)
 }
 
 func (f *fakeCatalogStore) ListCourses(ctx context.Context) ([]store.Course, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.courses, nil
+}
+
+func (f *fakeCatalogStore) SearchCourses(ctx context.Context, search string) ([]store.Course, error) {
+	f.search = search
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -82,12 +92,35 @@ func TestCreateCourse(t *testing.T) {
 		wantError  string
 		wantCode   string
 	}{
-		{name: "created", body: `{"code":"cse-233","title":"Digital Logic Design"}`, wantStatus: http.StatusCreated, wantCode: "CSE-233"},
+		{name: "created", body: `{"code":"cse-233","title":"Digital Logic Design"}`, wantStatus: http.StatusCreated, wantCode: "CSE 233"},
 		{name: "created without a hyphen", body: `{"code":"cse233","title":"Digital Logic Design"}`, wantStatus: http.StatusCreated, wantCode: "CSE233"},
 		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
 		{name: "unknown field", body: `{"code":"CSE-233","title":"A","credits":3}`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
 		{name: "missing code", body: `{"code":"","title":"Digital Logic Design"}`, wantStatus: http.StatusBadRequest, wantError: "Course code is required."},
-		{name: "bad code", body: `{"code":"CSE-23","title":"Digital Logic Design"}`, wantStatus: http.StatusBadRequest, wantError: "Course code must look like CSE-233 or CSE233."},
+		{
+			name:       "a code without a digit",
+			body:       `{"code":"CSE CODE","title":"Digital Logic Design"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "Course code must contain at least one digit.",
+		},
+		{
+			name:       "a code with an underscore",
+			body:       `{"code":"CSE_2243","title":"Digital Logic Design"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  validate.MessageCourseCode,
+		},
+		{
+			name:       "a long code with spaces",
+			body:       `{"code":"cse 2243 7637d","title":"Compilers"}`,
+			wantStatus: http.StatusCreated,
+			wantCode:   "CSE 2243 7637D",
+		},
+		{
+			name:       "a code without the letter prefix",
+			body:       `{"code":"2243 7637D","title":"Compilers"}`,
+			wantStatus: http.StatusCreated,
+			wantCode:   "2243 7637D",
+		},
 		{name: "missing title", body: `{"code":"CSE-233","title":"  "}`, wantStatus: http.StatusBadRequest, wantError: "Title is required."},
 		{
 			name:       "duplicate",

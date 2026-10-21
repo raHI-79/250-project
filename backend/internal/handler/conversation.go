@@ -486,13 +486,15 @@ func (c *Conversations) announce(ctx context.Context, access store.ConversationA
 			log.Printf("handler: could not find the message recipient: %v", err)
 			return
 		}
-		if err := c.alerts.NotifyUser(ctx, recipient, notify.TypeMessage, title, body); err != nil {
+		link := notify.Ref(notify.LinkMessage, access.ID)
+		if err := c.alerts.NotifyUser(ctx, recipient, notify.TypeMessage, title, body, link); err != nil {
 			log.Printf("handler: could not notify a message recipient: %v", err)
 		}
 		return
 	}
 	role, batch, section := groupAudience(access.Scope, access.Batch, access.Section)
-	if err := c.alerts.NotifyBroadcast(ctx, role, batch, section, notify.TypeMessage, title, body); err != nil {
+	link := notify.Ref(notify.LinkMessage, access.ID)
+	if err := c.alerts.NotifyBroadcast(ctx, role, batch, section, notify.TypeMessage, title, body, link); err != nil {
 		log.Printf("handler: could not notify a message group: %v", err)
 	}
 }

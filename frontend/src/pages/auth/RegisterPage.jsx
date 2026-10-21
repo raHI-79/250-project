@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { BadgeCheck, Mail } from 'lucide-react'
+import { BadgeCheck } from 'lucide-react'
 import {
   Alert,
   Button,
@@ -64,7 +64,6 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [emailProof, setEmailProof] = useState('')
-  const [useCode, setUseCode] = useState(false)
   const [code, setCode] = useState('')
   const [emailHint, setEmailHint] = useState('')
   const [devCode, setDevCode] = useState('')
@@ -112,6 +111,11 @@ export default function RegisterPage() {
     setErrors(found)
     if (Object.keys(found).length > 0) return
     setStep((current) => current + 1)
+  }
+  const clearGoogleEmail = () => {
+    setEmailProof('')
+    setForm((current) => ({ ...current, email: '' }))
+    setErrors((current) => ({ ...current, email: '' }))
   }
   const onGoogleCredential = async (credential) => {
     setError('')
@@ -356,31 +360,20 @@ export default function RegisterPage() {
                           <span className="min-w-0 truncate text-sm text-brand-900">
                             {form.email}
                           </span>
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-white">
-                            <BadgeCheck size={13} />
-                            Verified with Google
+                          <span className="flex shrink-0 items-center gap-2">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-white">
+                              <BadgeCheck size={13} />
+                              Verified with Google
+                            </span>
+                            <button
+                              type="button"
+                              onClick={clearGoogleEmail}
+                              className="text-xs text-brand-600 hover:underline"
+                            >
+                              Change
+                            </button>
                           </span>
                         </div>
-                      </Field>
-                    ) : googleEnabled && !useCode ? (
-                      <Field
-                        label="University email"
-                        hint={`Sign in with your @${studentEmailDomain} Google account to confirm it instantly`}
-                        error={errors.email}
-                      >
-                        <GoogleVerifyButton
-                          hostedDomain={studentEmailDomain}
-                          onCredential={onGoogleCredential}
-                          onError={setError}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setUseCode(true)}
-                          className="mt-1 inline-flex items-center justify-center gap-1.5 text-xs text-brand-600 hover:underline"
-                        >
-                          <Mail size={13} />
-                          Use an email code instead
-                        </button>
                       </Field>
                     ) : (
                       <>
@@ -399,13 +392,21 @@ export default function RegisterPage() {
                           required
                         />
                         {googleEnabled && (
-                          <button
-                            type="button"
-                            onClick={() => setUseCode(false)}
-                            className="-mt-2 self-start text-xs text-brand-600 hover:underline"
-                          >
-                            Verify with Google instead
-                          </button>
+                          <>
+                            <div className="flex items-center gap-3">
+                              <span className="h-px flex-1 bg-brand-100" />
+                              <span className="text-xs text-brand-400">or</span>
+                              <span className="h-px flex-1 bg-brand-100" />
+                            </div>
+                            <GoogleVerifyButton
+                              hostedDomain={studentEmailDomain}
+                              onCredential={onGoogleCredential}
+                              onError={setError}
+                            />
+                            <p className="text-center text-xs text-brand-400">
+                              Google confirms your address at once, so you can skip the email code.
+                            </p>
+                          </>
                         )}
                       </>
                     )}

@@ -31,12 +31,19 @@ func NewNotifications(service NotificationService) *Notifications {
 	return &Notifications{service: service}
 }
 
+type notificationLink struct {
+	Kind string `json:"kind"`
+	Ref  int64  `json:"ref,omitempty"`
+	Date string `json:"date,omitempty"`
+}
+
 type notificationItem struct {
-	ID        int64  `json:"id"`
-	Type      string `json:"type"`
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	CreatedAt string `json:"created_at"`
+	ID        int64             `json:"id"`
+	Type      string            `json:"type"`
+	Title     string            `json:"title"`
+	Body      string            `json:"body"`
+	Link      *notificationLink `json:"link,omitempty"`
+	CreatedAt string            `json:"created_at"`
 }
 
 type notificationsResponse struct {
@@ -72,13 +79,21 @@ func (n *Notifications) List() http.HandlerFunc {
 		}
 		items := make([]notificationItem, 0, len(notifications))
 		for _, notification := range notifications {
-			items = append(items, notificationItem{
+			item := notificationItem{
 				ID:        notification.ID,
 				Type:      notification.Type,
 				Title:     notification.Title,
 				Body:      notification.Body,
 				CreatedAt: timestamp(notification.CreatedAt),
-			})
+			}
+			if notification.Link.Kind != "" {
+				item.Link = &notificationLink{
+					Kind: notification.Link.Kind,
+					Ref:  notification.Link.Ref,
+					Date: notification.Link.Date,
+				}
+			}
+			items = append(items, item)
 		}
 		httpx.WriteJSON(w, http.StatusOK, notificationsResponse{Items: items})
 	}

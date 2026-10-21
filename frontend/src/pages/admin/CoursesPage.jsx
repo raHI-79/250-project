@@ -49,7 +49,7 @@ export default function CoursesPage() {
               label="Code"
               value={code}
               onChange={(event) => setCode(event.target.value)}
-              placeholder="CSE-233"
+              placeholder="CSE 2243 7637D"
               required
             />
             <Input

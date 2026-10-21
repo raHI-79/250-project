@@ -13,6 +13,7 @@ type directCall struct {
 	kind   string
 	title  string
 	body   string
+	link   store.NotificationLink
 }
 
 type broadcastCall struct {
@@ -22,6 +23,7 @@ type broadcastCall struct {
 	kind    string
 	title   string
 	body    string
+	link    store.NotificationLink
 }
 
 type fakeStore struct {
@@ -35,19 +37,23 @@ type fakeStore struct {
 	askedSince time.Time
 }
 
-func (f *fakeStore) CreateDirectNotification(ctx context.Context, userID int64, kind, title, body string) error {
+func (f *fakeStore) CreateDirectNotification(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.direct = append(f.direct, directCall{userID: userID, kind: kind, title: title, body: body})
+	f.direct = append(f.direct, directCall{userID: userID, kind: kind, title: title, body: body, link: link})
 	return nil
 }
 
-func (f *fakeStore) CreateBroadcastNotification(ctx context.Context, role, batch, section, kind, title, body string) error {
+func (f *fakeStore) CreateBroadcastNotification(ctx context.Context, role, batch, section, kind, title, body string,
+	link store.NotificationLink) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.broadcasts = append(f.broadcasts, broadcastCall{role: role, batch: batch, section: section, kind: kind, title: title, body: body})
+	f.broadcasts = append(f.broadcasts, broadcastCall{
+		role: role, batch: batch, section: section, kind: kind, title: title, body: body, link: link,
+	})
 	return nil
 }
 
@@ -95,7 +101,8 @@ func TestNotifyUser(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			notifications := &fakeStore{err: test.storeErr}
-			err := New(notifications).NotifyUser(context.Background(), test.userID, test.kind, test.title, test.body)
+			err := New(notifications).NotifyUser(context.Background(), test.userID, test.kind, test.title,
+				test.body, Page(LinkCRUpcoming))
 			if test.wantErr != nil {
 				if !errors.Is(err, test.wantErr) {
 					t.Fatalf("error = %v, want %v", err, test.wantErr)
@@ -114,8 +121,10 @@ func TestNotifyUser(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(notifications.direct) != 1 || notifications.direct[0] != test.wantCall {
-				t.Errorf("call = %+v, want %+v", notifications.direct, test.wantCall)
+			want := test.wantCall
+			want.link = Page(LinkCRUpcoming)
+			if len(notifications.direct) != 1 || notifications.direct[0] != want {
+				t.Errorf("call = %+v, want %+v", notifications.direct, want)
 			}
 		})
 	}
@@ -178,7 +187,8 @@ func TestNotifyBroadcast(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			notifications := &fakeStore{}
-			err := New(notifications).NotifyBroadcast(context.Background(), test.role, test.batch, test.section, test.kind, test.title, "")
+			err := New(notifications).NotifyBroadcast(context.Background(), test.role, test.batch,
+				test.section, test.kind, test.title, "", Page(LinkRoutine))
 			if test.wantErr != nil {
 				if !errors.Is(err, test.wantErr) {
 					t.Fatalf("error = %v, want %v", err, test.wantErr)
@@ -191,8 +201,10 @@ func TestNotifyBroadcast(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(notifications.broadcasts) != 1 || notifications.broadcasts[0] != test.wantCall {
-				t.Errorf("call = %+v, want %+v", notifications.broadcasts, test.wantCall)
+			want := test.wantCall
+			want.link = Page(LinkRoutine)
+			if len(notifications.broadcasts) != 1 || notifications.broadcasts[0] != want {
+				t.Errorf("call = %+v, want %+v", notifications.broadcasts, want)
 			}
 		})
 	}

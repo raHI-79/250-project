@@ -174,27 +174,54 @@ func TestBloodGroup(t *testing.T) {
 }
 
 func TestCourseCode(t *testing.T) {
-	const message = "Drop course code must look like CSE-233 or CSE233."
 	tests := []struct {
 		name    string
 		value   string
 		want    string
 		wantErr string
 	}{
-		{name: "with a dash", value: "CSE-233", want: "CSE-233"},
-		{name: "without a dash", value: "CSE233", want: "CSE233"},
-		{name: "lowercase is raised", value: "cse-233", want: "CSE-233"},
-		{name: "inner space is removed", value: "CSE 233", want: "CSE233"},
-		{name: "empty", value: "", wantErr: "Drop course code is required."},
-		{name: "two digits", value: "CSE-23", wantErr: message},
-		{name: "four digits", value: "CSE-2333", wantErr: message},
-		{name: "no letters", value: "233", wantErr: message},
-		{name: "two dashes", value: "CSE--233", wantErr: message},
+		{name: "a hyphen becomes a space", value: "CSE-233", want: "CSE 233"},
+		{name: "without a separator", value: "CSE233", want: "CSE233"},
+		{name: "lowercase is raised", value: "cse 2243 7637d", want: "CSE 2243 7637D"},
+		{name: "repeated spaces collapse", value: "CSE   2243    7637D", want: "CSE 2243 7637D"},
+		{name: "outer spaces are trimmed", value: "  cse 1111  ", want: "CSE 1111"},
+		{name: "a missing letter prefix is fine", value: "2243 7637D", want: "2243 7637D"},
+		{name: "hyphens and spaces mix", value: "CSE-2243 7637-D", want: "CSE 2243 7637 D"},
+		{name: "empty", value: "", wantErr: "Course code is required."},
+		{name: "only spaces", value: "   ", wantErr: "Course code is required."},
+		{name: "too short", value: "A1", wantErr: "Course code must be 3 to 25 characters long."},
+		{
+			name:    "too long",
+			value:   "CSE 2243 7637D 1234567890 12",
+			wantErr: "Course code must be 3 to 25 characters long.",
+		},
+		{name: "no digit", value: "CSE CODE", wantErr: "Course code must contain at least one digit."},
+		{name: "an underscore", value: "CSE_2243", wantErr: MessageCourseCode},
+		{name: "a slash", value: "CSE/2243", wantErr: MessageCourseCode},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := CourseCode("Drop course code", tc.value)
+			got, err := CourseCode("Course code", tc.value)
 			checkResult(t, got, err, tc.want, tc.wantErr)
+		})
+	}
+}
+
+func TestSqueezeCourseCode(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "spaces go", value: "CSE 2243 7637D", want: "CSE22437637D"},
+		{name: "hyphens go", value: "cse-233", want: "CSE233"},
+		{name: "already squeezed", value: "CSE233", want: "CSE233"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SqueezeCourseCode(tc.value); got != tc.want {
+				t.Errorf("SqueezeCourseCode(%q) = %q, want %q", tc.value, got, tc.want)
+			}
 		})
 	}
 }

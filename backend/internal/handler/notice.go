@@ -319,7 +319,8 @@ func (n *Notice) create(w http.ResponseWriter, r *http.Request, notice store.New
 	if body == "" {
 		body = created.Title
 	}
-	err = n.alerts.NotifyBroadcast(r.Context(), auth.RoleStudent, created.Batch, created.Section, notify.TypeNotice, created.Title, body)
+	err = n.alerts.NotifyBroadcast(r.Context(), auth.RoleStudent, created.Batch, created.Section,
+		notify.TypeNotice, created.Title, body, notify.Ref(notify.LinkNotice, created.ID))
 	if err != nil {
 		log.Printf("handler: could not notify the students of a notice: %v", err)
 	}

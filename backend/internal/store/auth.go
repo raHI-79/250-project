@@ -9,7 +9,10 @@ import (
 	"time"
 )
 
-const uniqueViolationCode = "23505"
+const (
+	uniqueViolationCode     = "23505"
+	foreignKeyViolationCode = "23503"
+)
 
 const (
 	ResetStageCode     = "code"
@@ -402,6 +405,14 @@ func (s *Store) FinishPasswordReset(ctx context.Context, identifier, tokenHash, 
 }
 
 func isUniqueViolation(err error) bool {
+	return hasPgCode(err, uniqueViolationCode)
+}
+
+func isForeignKeyViolation(err error) bool {
+	return hasPgCode(err, foreignKeyViolationCode)
+}
+
+func hasPgCode(err error, code string) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode
+	return errors.As(err, &pgErr) && pgErr.Code == code
 }

@@ -21,6 +21,7 @@ const (
 type CatalogStore interface {
 	CreateCourse(ctx context.Context, code, title string) (store.Course, error)
 	ListCourses(ctx context.Context) ([]store.Course, error)
+	SearchCourses(ctx context.Context, search string) ([]store.Course, error)
 	CreateRoutine(ctx context.Context, routine store.NewRoutine) (store.RoutineRow, error)
 	ListRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error)
 	DeleteRoutine(ctx context.Context, routineID int64) error
@@ -93,7 +94,12 @@ func (c *Catalog) CreateCourse() http.HandlerFunc {
 
 func (c *Catalog) Courses() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		courses, err := c.catalog.ListCourses(r.Context())
+		search, err := validate.Search("search", r.URL.Query().Get("search"))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		courses, err := c.catalog.SearchCourses(r.Context(), search)
 		if err != nil {
 			log.Printf("handler: could not list the courses: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
