@@ -84,6 +84,7 @@ func run() error {
 			Lookups:  userStore,
 			Alerts:   alerts,
 			Classes:  userStore,
+			Items:    userStore,
 			Notifier: alerts,
 			Teachers: userStore,
 			Students: userStore,
@@ -109,7 +110,7 @@ func run() error {
 	}
 	jobContext, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
-	go jobs.NewAutoCanceller(userStore, alerts).Run(jobContext, cfg.AutoCancel, cfg.Now)
+	go jobs.NewScheduler(cfg, userStore, alerts).Run(jobContext, jobs.Interval)
 	serverErrors := make(chan error, 1)
 	go func() {
 		log.Printf("server: listening on http://localhost:%s (env=%s, timezone=%s)", cfg.Port, cfg.AppEnv, cfg.Timezone)
