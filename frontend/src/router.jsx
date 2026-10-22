@@ -7,6 +7,7 @@ import AdminLoginPage from './pages/auth/AdminLoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ActivatePage from './pages/auth/ActivatePage'
+import HomePage from './pages/HomePage'
 import ProfilePage from './pages/ProfilePage'
 import PersonPage from './pages/PersonPage'
 import TodayPage from './pages/student/TodayPage'
@@ -42,15 +43,16 @@ import { PORTAL_ADMIN, PORTAL_STUDENT, PORTAL_TEACHER, homeFor, paths } from './
 
 const STUDENT_ROLES = ['student', 'cr']
 
-function RootRedirect() {
+function Root() {
   const { isAuthenticated, role } = useAuth()
-  return <Navigate to={isAuthenticated ? homeFor(role) : paths.studentLogin()} replace />
+  if (isAuthenticated) return <Navigate to={homeFor(role)} replace />
+  return <HomePage />
 }
 
 export default function Router() {
   return (
     <Routes>
-      <Route path={paths.root()} element={<RootRedirect />} />
+      <Route path={paths.root()} element={<Root />} />
       <Route path={paths.studentLogin()} element={<LoginPage portal={PORTAL_STUDENT} />} />
       <Route path={paths.studentRegister()} element={<RegisterPage />} />
       <Route
