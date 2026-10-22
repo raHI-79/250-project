@@ -1,7 +1,7 @@
 import cx from '../../lib/cx'
 
 export function Skeleton({ className }) {
-  return <div className={cx('shimmer-bg rounded-md', className)} />
+  return <div className={cx('shimmer-bg rounded-sm', className)} />
 }
 
 export function SkeletonLines({ lines = 3, className }) {
@@ -19,7 +19,7 @@ export function SkeletonLines({ lines = 3, className }) {
 
 export function SkeletonCard({ className }) {
   return (
-    <div className={cx('rounded-xl border border-brand-100 bg-surface p-5', className)}>
+    <div className={cx('border border-line bg-surface p-5', className)}>
       <Skeleton className="h-4 w-1/3" />
       <div className="mt-4">
         <SkeletonLines lines={3} />
@@ -30,14 +30,14 @@ export function SkeletonCard({ className }) {
 
 export function SkeletonTable({ rows = 5, columns = 4, className }) {
   return (
-    <div className={cx('overflow-hidden rounded-xl border border-brand-100 bg-surface', className)}>
-      <div className="flex gap-4 border-b border-brand-100 px-4 py-3">
+    <div className={cx('overflow-hidden border border-line bg-surface', className)}>
+      <div className="flex gap-4 border-b border-line px-4 py-3">
         {Array.from({ length: columns }).map((_, index) => (
           <Skeleton key={index} className="h-3.5 flex-1" />
         ))}
       </div>
       {Array.from({ length: rows }).map((_, row) => (
-        <div key={row} className="flex gap-4 border-b border-brand-50 px-4 py-3 last:border-b-0">
+        <div key={row} className="flex gap-4 border-b border-line px-4 py-3 last:border-b-0">
           {Array.from({ length: columns }).map((_, column) => (
             <Skeleton key={column} className="h-3.5 flex-1" />
           ))}

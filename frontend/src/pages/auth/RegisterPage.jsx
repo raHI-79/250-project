@@ -1,22 +1,14 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BadgeCheck } from 'lucide-react'
-import {
-  Alert,
-  Button,
-  Card,
-  Field,
-  Input,
-  Select,
-  Stepper,
-} from '../../components/ui'
+import { Alert, Button, Field, Input, Select, Stepper } from '../../components/ui'
 import CourseMultiSelect from '../../components/forms/CourseMultiSelect'
 import GoogleVerifyButton from '../../components/forms/GoogleVerifyButton'
 import PhoneInput from '../../components/forms/PhoneInput'
 import PhotoPicker from '../../components/forms/PhotoPicker'
-import CampusBackdrop from '../../components/layout/CampusBackdrop'
+import AuthScreen from '../../components/layout/AuthScreen'
 import api from '../../lib/api'
-import { BANNER_MONUMENT } from '../../lib/campus'
+import { HERO_IMAGES } from '../../lib/campus'
 import { useAuthConfig, useCountdown } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
 import { BLOOD_GROUPS } from '../../lib/options'
@@ -220,23 +212,17 @@ export default function RegisterPage() {
     else if (step === 4) verify()
   }
   return (
-    <div className="flex min-h-screen items-start justify-center bg-page px-4 py-10">
-      <Card hover={false} className="animate-fade-in-up w-full max-w-2xl p-0">
-        <div className="relative h-36 overflow-hidden rounded-t-xl sm:h-44">
-          <CampusBackdrop
-            images={BANNER_MONUMENT}
-            overlay="bg-linear-to-t from-brand-950/85 via-brand-900/45 to-brand-700/20"
-          />
-          <div className="relative flex h-full flex-col justify-end p-5 sm:p-6">
-            <p className="font-display text-xl font-semibold text-white sm:text-2xl">
-              Student registration
-            </p>
-            <p className="mt-1 text-sm text-brand-100">
-              Shahjalal University of Science and Technology, Department of CSE
-            </p>
-          </div>
-        </div>
-        <div className="p-5 sm:p-6">
+    <AuthScreen
+      images={HERO_IMAGES}
+      wide
+      note="Students register with their registration number and verify their university email."
+    >
+      <div>
+        <p className="eyebrow">Student registration</p>
+        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[26px] font-bold text-ink sm:text-[28px]">
+          Create your account
+        </h1>
+        <div className="mt-5">
           {step === 5 ? (
             <div className="flex flex-col gap-4">
               <Alert tone="success" title="Registration submitted">
@@ -356,8 +342,8 @@ export default function RegisterPage() {
                   <>
                     {emailProof ? (
                       <Field label="University email">
-                        <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
-                          <span className="min-w-0 truncate text-sm text-brand-900">
+                        <div className="flex items-center justify-between gap-3 rounded-md border border-line-strong bg-wash px-3 py-2">
+                          <span className="min-w-0 truncate text-sm text-ink">
                             {form.email}
                           </span>
                           <span className="flex shrink-0 items-center gap-2">
@@ -395,7 +381,7 @@ export default function RegisterPage() {
                           <>
                             <div className="flex items-center gap-3">
                               <span className="h-px flex-1 bg-brand-100" />
-                              <span className="text-xs text-brand-400">or</span>
+                              <span className="text-xs text-faint">or</span>
                               <span className="h-px flex-1 bg-brand-100" />
                             </div>
                             <GoogleVerifyButton
@@ -403,7 +389,7 @@ export default function RegisterPage() {
                               onCredential={onGoogleCredential}
                               onError={setError}
                             />
-                            <p className="text-center text-xs text-brand-400">
+                            <p className="text-center text-xs text-faint">
                               Google confirms your address at once, so you can skip the email code.
                             </p>
                           </>
@@ -509,7 +495,7 @@ export default function RegisterPage() {
                     {step === 3 ? 'Create account' : step === 4 ? 'Confirm email' : 'Continue'}
                   </Button>
                 </div>
-                <p className="text-center text-sm text-brand-500">
+                <p className="text-center text-sm text-muted">
                   Already registered?{' '}
                   <Link to={paths.studentLogin()} className="text-brand-600 hover:underline">
                     Log in
@@ -519,7 +505,7 @@ export default function RegisterPage() {
             </>
           )}
         </div>
-      </Card>
-    </div>
+      </div>
+    </AuthScreen>
   )
 }

@@ -165,7 +165,7 @@ export default function MessagesPage() {
   return (
     <>
       <PageHeader
-        title="Messages"
+        eyebrow="Department messages" title="Messages"
         subtitle="Search for a person or a group, then write"
       />
       {listError && (
@@ -173,7 +173,7 @@ export default function MessagesPage() {
           {listError}
         </Alert>
       )}
-      <div className="flex h-[70vh] min-h-[28rem] gap-4">
+      <div className="flex h-[70dvh] min-h-[28rem] gap-4">
         <div className={cx('w-full md:w-80 md:shrink-0', activeId && 'hidden md:block')}>
           <ConversationList
             items={items}
@@ -199,8 +199,8 @@ export default function MessagesPage() {
         </div>
         <div className={cx('min-w-0 flex-1', !activeId && 'hidden md:block')}>
           {active ? (
-            <div className="flex h-full min-h-0 flex-col rounded-xl border border-brand-100 bg-page">
-              <div className="flex items-center gap-3 border-b border-brand-100 bg-surface px-3 py-3">
+            <div className="flex h-full min-h-0 flex-col border border-line bg-page">
+              <div className="flex items-center gap-3 border-b border-line bg-surface px-3 py-3">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -211,15 +211,15 @@ export default function MessagesPage() {
                   <ArrowLeft size={16} />
                 </Button>
                 {active.kind === 'group' ? (
-                  <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-brand-100 bg-brand-50 text-brand-600">
+                  <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-line bg-wash text-brand-600">
                     <Users size={18} />
                   </span>
                 ) : (
                   <Avatar src={active.photo_url} name={active.title} />
                 )}
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-brand-900">{active.title}</p>
-                  <p className="text-xs text-brand-500">{conversationDetail(active)}</p>
+                  <p className="truncate text-sm font-semibold text-ink">{active.title}</p>
+                  <p className="text-xs text-muted">{conversationDetail(active)}</p>
                 </div>
               </div>
               {threadError && (
@@ -233,7 +233,7 @@ export default function MessagesPage() {
               {active.can_post ? (
                 <MessageComposer onSend={send} />
               ) : (
-                <div className="flex flex-wrap items-center gap-3 border-t border-brand-100 bg-surface p-3">
+                <div className="flex flex-wrap items-center gap-3 border-t border-line bg-surface p-3">
                   <p className="text-sm text-brand-600">
                     Only the person who started this group can post here.
                   </p>

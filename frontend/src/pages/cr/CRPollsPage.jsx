@@ -97,7 +97,7 @@ export default function CRPollsPage() {
   const items = polls.data?.items || []
   return (
     <>
-      <PageHeader title="Polls" subtitle="Ask your section or your whole batch a question" />
+      <PageHeader eyebrow="Ask your batch" title="Polls" subtitle="Ask your section or your whole batch a question" />
       <Card hover={false} className="mb-6">
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
@@ -115,7 +115,7 @@ export default function CRPollsPage() {
                     value={entry}
                     onChange={setOption(index)}
                     placeholder={`Option ${index + 1}`}
-                    className="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-brand-950 transition-colors placeholder:text-brand-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink transition-colors placeholder:text-faint focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none"
                   />
                   <Button
                     variant="ghost"
@@ -148,7 +148,7 @@ export default function CRPollsPage() {
           </Button>
         </form>
       </Card>
-      <p className="font-display mb-3 text-lg font-semibold text-brand-800">My polls</p>
+      <p className="font-display mb-3 text-lg font-semibold text-ink">My polls</p>
       {polls.error && <Alert tone="error" className="mb-5">{polls.error}</Alert>}
       {polls.loading ? (
         <SkeletonCard />
@@ -167,7 +167,7 @@ export default function CRPollsPage() {
               )}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <p className="font-display text-base font-semibold text-brand-900">
+                <p className="font-display text-lg font-bold text-ink">
                   {poll.question}
                 </p>
                 <StatusBadge
@@ -175,7 +175,7 @@ export default function CRPollsPage() {
                   label={poll.is_closed ? 'Closed' : 'Open'}
                 />
               </div>
-              <p className="mt-1 text-xs text-brand-500">
+              <p className="mt-1 text-xs text-muted">
                 {poll.section === 'ALL' ? `${poll.batch} · whole batch` : `${poll.batch} · section ${poll.section}`}{' '}
                 · {formatDateTime(poll.created_at)} · {poll.total_votes} vote
                 {poll.total_votes === 1 ? '' : 's'}

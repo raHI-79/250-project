@@ -11,15 +11,15 @@ export default function PollResults({ options, total, myOptionId = null }) {
         return (
           <li key={option.id} className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-3 text-sm">
-              <span className={cx('text-brand-800', mine && 'font-semibold text-brand-700')}>
+              <span className={cx('text-ink', mine && 'font-semibold text-ink-soft')}>
                 {option.text}
-                {mine && <span className="ml-2 text-xs text-brand-500">Your vote</span>}
+                {mine && <span className="ml-2 text-xs text-muted">Your vote</span>}
               </span>
-              <span className="tabular-nums text-brand-500">
+              <span className="tabular-nums text-muted">
                 {option.votes} · {percent}%
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-brand-50">
+            <div className="h-2 overflow-hidden rounded-full bg-wash">
               <div
                 style={{ width: `${percent}%` }}
                 className={cx(

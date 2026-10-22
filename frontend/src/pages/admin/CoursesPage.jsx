@@ -40,7 +40,7 @@ export default function CoursesPage() {
   }
   return (
     <>
-      <PageHeader title="Courses" subtitle="The course catalogue of the department" />
+      <PageHeader eyebrow="Course catalogue" title="Courses" subtitle="The course catalogue of the department" />
       <Card hover={false} className="mb-5">
         <form onSubmit={save} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
@@ -74,16 +74,16 @@ export default function CoursesPage() {
       ) : (
         <DataTable className="animate-fade-in">
           <thead>
-            <tr className="border-b border-brand-100 bg-brand-50/60">
-              <th className="px-4 py-3 font-semibold text-brand-700">Code</th>
-              <th className="px-4 py-3 font-semibold text-brand-700">Title</th>
+            <tr className="border-b border-line bg-wash">
+              <th className="px-4 py-3 font-semibold text-ink-soft">Code</th>
+              <th className="px-4 py-3 font-semibold text-ink-soft">Title</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
-                <td className="px-4 py-3 font-medium text-brand-900">{item.code}</td>
-                <td className="px-4 py-3 text-brand-700">{item.title}</td>
+              <tr key={item.id} className="border-b border-line last:border-b-0">
+                <td className="px-4 py-3 font-medium text-ink">{item.code}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.title}</td>
               </tr>
             ))}
           </tbody>

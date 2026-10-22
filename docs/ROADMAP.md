@@ -37,5 +37,5 @@ Full requirements: [SPEC.md](SPEC.md)
 | 20 | B | Teacher-chosen user IDs, open teacher email and admin record retention | done |
 | 21 | A | Scheduling engine, notification links, course codes and verification paths | done |
 | 22 | B | Scheduling pages, messaging search and clickable notifications | done |
-| 23 | A | Interface redesign: design system, public home, sign-in and dashboard pages | todo |
+| 23 | A | Interface redesign: design system, public home, sign-in and dashboard pages | done |
 | 24 | A+B | Push notifications, requirement updates, demo data, docs and CI | todo |

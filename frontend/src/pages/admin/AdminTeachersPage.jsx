@@ -278,7 +278,7 @@ export default function AdminTeachersPage() {
   return (
     <>
       <PageHeader
-        title="Teachers"
+        eyebrow="Faculty records" title="Teachers"
         subtitle="Teachers are invited and set their own password"
         actions={
           <Button onClick={() => setInviteOpen(true)}>
@@ -318,9 +318,9 @@ export default function AdminTeachersPage() {
       ) : (
         <DataTable className="animate-fade-in">
           <thead>
-            <tr className="border-b border-brand-100 bg-brand-50/60">
+            <tr className="border-b border-line bg-wash">
               {HEADINGS.map((heading, index) => (
-                <th key={heading || index} className="px-4 py-3 font-semibold text-brand-700">
+                <th key={heading || index} className="px-4 py-3 font-semibold text-ink-soft">
                   {heading}
                 </th>
               ))}
@@ -328,24 +328,24 @@ export default function AdminTeachersPage() {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
+              <tr key={item.id} className="border-b border-line last:border-b-0">
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-2.5">
                     <Avatar src={item.photo_url} name={item.name} size="sm" />
                     <Link
                       to={paths.person(item.user_id || item.id)}
-                      className="font-medium text-brand-900 hover:text-brand-600 hover:underline"
+                      className="font-medium text-ink hover:text-brand-600 hover:underline"
                     >
                       {item.name}
                     </Link>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-brand-700">
-                  {item.identifier || <span className="text-brand-400">{NOT_ACTIVATED}</span>}
+                <td className="px-4 py-3 text-ink-soft">
+                  {item.identifier || <span className="text-faint">{NOT_ACTIVATED}</span>}
                 </td>
-                <td className="px-4 py-3 text-brand-700">{item.designation || '—'}</td>
-                <td className="px-4 py-3 text-brand-700">{item.email}</td>
-                <td className="px-4 py-3 text-brand-700">{item.phone}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.designation || '—'}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.email}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.phone}</td>
                 <td className="px-4 py-3">
                   <StatusBadge
                     status={item.status === 'invited' ? 'pending' : item.status}
@@ -463,7 +463,7 @@ export default function AdminTeachersPage() {
           </Alert>
           {fields}
           {editing?.joining_date && (
-            <p className="text-xs text-brand-400">
+            <p className="text-xs text-faint">
               Joined on {formatDate(editing.joining_date)}
             </p>
           )}

@@ -49,7 +49,7 @@ export default function MessageComposer({ onSend }) {
     }
   }
   return (
-    <div className="flex flex-col gap-3 border-t border-brand-100 p-3">
+    <div className="flex flex-col gap-3 border-t border-line p-3">
       {error && <Alert tone="error">{error}</Alert>}
       {showLink && <LinkInput value={link} onChange={setLink} />}
       {showFile && <FileInput file={file} onChange={setFile} />}

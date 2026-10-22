@@ -38,8 +38,8 @@ export default function RoomAvailabilityPanel({ date, room = '', start = '', end
   if (!date) {
     return (
       <Card hover={false}>
-        <p className="font-display text-base font-semibold text-brand-800">Room availability</p>
-        <p className="mt-2 text-sm text-brand-500">
+        <p className="font-display text-lg font-bold text-ink">Room availability</p>
+        <p className="mt-2 text-sm text-muted">
           Choose a date to see everything booked that day.
         </p>
       </Card>
@@ -47,8 +47,8 @@ export default function RoomAvailabilityPanel({ date, room = '', start = '', end
   }
   return (
     <Card hover={false}>
-      <p className="font-display text-base font-semibold text-brand-800">Room availability</p>
-      <p className="mt-1 text-sm text-brand-500">
+      <p className="font-display text-lg font-bold text-ink">Room availability</p>
+      <p className="mt-1 text-sm text-muted">
         Everything booked on {date}, from the fixed routine and the dated bookings.
       </p>
       {error && (
@@ -79,20 +79,20 @@ export default function RoomAvailabilityPanel({ date, room = '', start = '', end
               <li
                 key={`${item.room}-${item.start_time}-${item.course_code}-${index}`}
                 className={cx(
-                  'flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-brand-50 px-2 py-2 text-sm last:border-b-0',
+                  'flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-2 py-2 text-sm last:border-b-0',
                   clash && 'rounded-md bg-amber-50 ring-1 ring-amber-200',
                 )}
               >
-                <span className="w-16 shrink-0 font-semibold text-brand-800">{item.room}</span>
+                <span className="w-16 shrink-0 font-semibold text-ink">{item.room}</span>
                 <span className="font-medium tabular-nums text-brand-600">
                   {formatTimeRange(item.start_time, item.end_time)}
                 </span>
-                <span className="text-brand-700">
+                <span className="text-ink-soft">
                   {item.batch}
                   {item.section ? ` · ${item.section === 'ALL' ? 'Both' : item.section}` : ''}
                 </span>
-                <span className="font-medium text-brand-900">{item.course_code}</span>
-                <span className="text-xs text-brand-400">
+                <span className="font-medium text-ink">{item.course_code}</span>
+                <span className="text-xs text-faint">
                   {SOURCE_LABELS[item.source] || item.source}
                 </span>
                 <StatusBadge

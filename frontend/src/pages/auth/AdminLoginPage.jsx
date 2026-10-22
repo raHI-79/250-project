@@ -1,16 +1,13 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ShieldCheck } from 'lucide-react'
 import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
-import Card from '../../components/ui/Card'
 import { Input } from '../../components/ui/Field'
 import AuthScreen from '../../components/layout/AuthScreen'
+import NoIndex from '../../components/layout/NoIndex'
 import { useAuth } from '../../context/auth'
 import { HERO_BUILDING } from '../../lib/campus'
 import { homeFor, paths } from '../../lib/paths'
-
-const OVERLAY = 'bg-brand-950/92'
 
 export default function AdminLoginPage() {
   const { adminLogin, isAuthenticated, role } = useAuth()
@@ -36,43 +33,54 @@ export default function AdminLoginPage() {
     }
   }
   return (
-    <AuthScreen images={HERO_BUILDING} overlay={OVERLAY}>
-      <Card hover={false} className="animate-fade-in-up w-full">
-        <div className="text-center">
-          <span className="inline-flex size-11 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-            <ShieldCheck size={22} />
-          </span>
-          <p className="font-display mt-3 text-xl font-semibold text-brand-900">Administration</p>
-          <p className="mt-1 text-sm text-brand-500">Department staff access only</p>
+    <>
+      <NoIndex />
+      <AuthScreen
+        images={HERO_BUILDING}
+        tone="dark"
+        note="Department office access for registrations, teachers, courses and the weekly routine."
+      >
+        <div>
+          <p className="text-xs font-semibold tracking-[0.14em] text-gold-300 uppercase">
+            Department office
+          </p>
+          <h1 className="font-display mt-2 border-b border-white/25 pb-3 text-[30px] font-bold text-white">
+            Staff sign in
+          </h1>
+          <p className="mt-3 text-sm text-white/55">
+            This entrance is for department staff accounts only.
+          </p>
+          <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
+            {notice && <Alert tone="success">{notice}</Alert>}
+            {error && <Alert tone="error">{error}</Alert>}
+            <Input
+              label="Admin ID"
+              value={identifier}
+              onChange={(event) => setIdentifier(event.target.value)}
+              autoComplete="username"
+              tone="dark"
+              required
+            />
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              tone="dark"
+              required
+            />
+            <Button type="submit" loading={loading} variant="light" className="w-full">
+              Sign in
+            </Button>
+          </form>
+          <div className="mt-5 text-sm">
+            <Link to={paths.adminForgotPassword()} className="text-gold-300 hover:underline">
+              Forgot your password?
+            </Link>
+          </div>
         </div>
-        <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
-          {notice && <Alert tone="success">{notice}</Alert>}
-          {error && <Alert tone="error">{error}</Alert>}
-          <Input
-            label="Admin ID"
-            value={identifier}
-            onChange={(event) => setIdentifier(event.target.value)}
-            autoComplete="username"
-            required
-          />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            required
-          />
-          <Button type="submit" loading={loading} className="w-full">
-            Log in
-          </Button>
-        </form>
-        <div className="mt-5 text-center text-sm">
-          <Link to={paths.adminForgotPassword()} className="text-brand-600 hover:underline">
-            Forgot password?
-          </Link>
-        </div>
-      </Card>
-    </AuthScreen>
+      </AuthScreen>
+    </>
   )
 }

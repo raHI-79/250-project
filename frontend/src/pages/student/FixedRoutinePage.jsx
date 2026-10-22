@@ -25,7 +25,7 @@ export default function FixedRoutinePage() {
   return (
     <>
       <PageHeader
-        title="Fixed Routine"
+        eyebrow="Weekly routine" title="Fixed Routine"
         subtitle="The weekly routine of this semester, for any batch and section"
       />
       <Card hover={false} className="mb-5">

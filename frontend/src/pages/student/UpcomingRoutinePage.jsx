@@ -3,8 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
 import DateChips from '../../components/DateChips'
 import PublishedLine from '../../components/schedule/PublishedLine'
-import { Alert, Card, EmptyState, PageHeader, SkeletonCard } from '../../components/ui'
+import { Link } from 'react-router-dom'
+import { Alert, Button, Card, EmptyState, PageHeader, SkeletonCard } from '../../components/ui'
 import { useResource } from '../../lib/hooks'
+import paths from '../../lib/paths'
 import { today } from '../../lib/time'
 
 export default function UpcomingRoutinePage() {
@@ -30,7 +32,7 @@ export default function UpcomingRoutinePage() {
   return (
     <>
       <PageHeader
-        title="Upcoming routine"
+        eyebrow="Published routine" title="Upcoming routine"
         subtitle="The routine your class representative published, one day at a time"
       />
       <DateChips value={picked} onChange={choose} label="Another day" />
@@ -43,7 +45,7 @@ export default function UpcomingRoutinePage() {
         <SkeletonCard />
       ) : (
         <div className="flex flex-col gap-4">
-          <p className="font-display text-lg font-semibold text-brand-800">
+          <p className="font-display text-lg font-semibold text-ink">
             {data.batch} · {data.date_label} ({data.weekday})
           </p>
           {groups.length === 0 ? (
@@ -51,11 +53,16 @@ export default function UpcomingRoutinePage() {
               icon={CalendarClock}
               title="Nothing published"
               text="Your class representative has not published anything for this day yet."
+              action={
+                <Button as={Link} to={paths.student.fixedRoutine()} variant="secondary" size="sm">
+                  Open the weekly routine
+                </Button>
+              }
             />
           ) : (
             groups.map((group) => (
               <Card key={group.key} hover={false} className="animate-fade-in-up">
-                <p className="text-sm font-semibold text-brand-700">{group.section_label}:</p>
+                <p className="text-sm font-semibold text-ink-soft">{group.section_label}:</p>
                 <ul className="mt-2 flex flex-col">
                   {group.items.map((item, index) => (
                     <PublishedLine

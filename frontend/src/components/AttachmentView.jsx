@@ -32,7 +32,7 @@ const iconFor = (name) => {
 }
 
 const chipClass =
-  'inline-flex max-w-full items-center gap-2 rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-50'
+  'inline-flex max-w-full items-start gap-2 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink-soft transition-colors hover:border-brand-300 hover:bg-wash'
 
 export default function AttachmentView({
   fileUrl,
@@ -53,16 +53,16 @@ export default function AttachmentView({
           <img
             src={fileUrl}
             alt={name}
-            className="max-h-52 max-w-full rounded-lg border border-brand-100 object-cover"
+            className="max-h-52 max-w-full rounded-md border border-line object-cover"
           />
         </a>
       )}
       {fileUrl && !isImageFile(fileMime, name) && (
         <a href={fileUrl} target="_blank" rel="noreferrer" className={chipClass}>
-          <Icon size={16} className="shrink-0 text-brand-500" />
-          <span className="truncate">{name}</span>
+          <Icon size={16} className="shrink-0 text-muted" />
+          <span className="wrap-long">{name}</span>
           {fileSize > 0 && (
-            <span className="shrink-0 text-xs text-brand-400">{formatFileSize(fileSize)}</span>
+            <span className="shrink-0 text-xs text-faint">{formatFileSize(fileSize)}</span>
           )}
           <span className="shrink-0 text-xs font-medium text-brand-600">
             {inline ? 'Open' : 'Download'}
@@ -71,8 +71,8 @@ export default function AttachmentView({
       )}
       {linkUrl && (
         <a href={linkUrl} target="_blank" rel="noreferrer" className={chipClass}>
-          <Link2 size={16} className="shrink-0 text-brand-500" />
-          <span className="truncate">{linkLabel(linkUrl)}</span>
+          <Link2 size={16} className="shrink-0 text-muted" />
+          <span className="wrap-long">{linkLabel(linkUrl)}</span>
         </a>
       )}
     </div>

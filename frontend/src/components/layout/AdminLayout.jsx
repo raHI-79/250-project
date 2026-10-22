@@ -1,6 +1,12 @@
 import AppShell from './AppShell'
+import NoIndex from './NoIndex'
 import { adminNav } from '../../lib/nav'
 
 export default function AdminLayout() {
-  return <AppShell groups={adminNav} showBell={false} />
+  return (
+    <>
+      <NoIndex />
+      <AppShell groups={adminNav} tone="ink" showBell={false} />
+    </>
+  )
 }

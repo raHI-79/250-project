@@ -19,7 +19,7 @@ export default function NoteFields({ note, audience, onNoteChange, onAudienceCha
             {NOTE_AUDIENCES.map((entry) => (
               <label
                 key={entry.value}
-                className="inline-flex items-center gap-2 text-sm text-brand-800"
+                className="inline-flex items-center gap-2 text-sm text-ink"
               >
                 <input
                   type="radio"

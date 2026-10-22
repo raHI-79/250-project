@@ -1,4 +1,4 @@
-import { Card, Input } from './ui'
+import { Input } from './ui'
 import { WEEKDAYS, shiftDate, today } from '../lib/time'
 import cx from '../lib/cx'
 
@@ -10,14 +10,14 @@ const chipLabel = (value, index) => {
   return WEEKDAYS[new Date(`${value}T00:00:00`).getDay()].slice(0, 3)
 }
 
-const chipDate = (value) => value.slice(8, 10) + '.' + value.slice(5, 7)
+const chipDate = (value) => `${value.slice(8, 10)}.${value.slice(5, 7)}`
 
 export default function DateChips({ value, onChange, label = 'Pick a day', min, className }) {
   const start = today()
   const days = Array.from({ length: CHIP_DAYS }, (_, index) => shiftDate(start, index))
   const chips = min ? days.filter((day) => day >= min) : days
   return (
-    <Card hover={false} className={cx('mb-5 flex flex-col gap-4', className)}>
+    <div className={cx('mb-5 border border-line bg-surface p-4 sm:p-5', className)}>
       <div className="flex flex-wrap gap-2">
         {chips.map((day) => (
           <button
@@ -25,15 +25,18 @@ export default function DateChips({ value, onChange, label = 'Pick a day', min, 
             type="button"
             onClick={() => onChange(day)}
             className={cx(
-              'flex min-w-18 flex-col items-center rounded-lg border px-3 py-2 text-sm transition-colors',
+              'flex min-w-18 flex-col items-center border px-3 py-2 text-xs transition-colors',
               value === day
                 ? 'border-brand-600 bg-brand-600 text-white'
-                : 'border-brand-200 bg-white text-brand-700 hover:border-brand-300 hover:bg-brand-50',
+                : 'border-line-strong bg-surface text-ink-soft hover:bg-wash',
             )}
           >
-            <span className="font-medium">{chipLabel(day, days.indexOf(day))}</span>
+            <span className="font-semibold">{chipLabel(day, days.indexOf(day))}</span>
             <span
-              className={cx('text-xs tabular-nums', value === day ? 'text-white/80' : 'text-brand-400')}
+              className={cx(
+                'font-numeral text-xs',
+                value === day ? 'text-white/80' : 'text-faint',
+              )}
             >
               {chipDate(day)}
             </span>
@@ -46,8 +49,8 @@ export default function DateChips({ value, onChange, label = 'Pick a day', min, 
         value={value}
         min={min}
         onChange={(event) => onChange(event.target.value)}
-        className="max-w-xs"
+        className="mt-4 max-w-xs"
       />
-    </Card>
+    </div>
   )
 }

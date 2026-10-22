@@ -132,7 +132,7 @@ export default function AdminRoutinesPage() {
   const groups = groupRoutines(items)
   return (
     <>
-      <PageHeader title="Routines" subtitle="The fixed weekly routine of every batch" />
+      <PageHeader eyebrow="Weekly routine" title="Routines" subtitle="The fixed weekly routine of every batch" />
       <Card hover={false} className="mb-6">
         <form onSubmit={save} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
@@ -242,25 +242,25 @@ export default function AdminRoutinesPage() {
         <div className="flex flex-col gap-5">
           {groups.map((group) => (
             <Card key={group.batch} hover={false} className="animate-fade-in-up">
-              <p className="font-display text-base font-semibold text-brand-800">{group.batch}</p>
+              <p className="font-display text-lg font-bold text-ink">{group.batch}</p>
               {group.sections.map((entry) => (
                 <div key={entry.section} className="mt-3">
-                  <p className="text-xs font-semibold tracking-wide text-brand-500 uppercase">
+                  <p className="text-xs font-semibold tracking-wide text-muted uppercase">
                     {entry.section === 'ALL' ? 'Both sections' : `Section ${entry.section}`}
                   </p>
                   {entry.days.map((day) => (
                     <div key={day.index} className="mt-2">
-                      <p className="text-sm font-medium text-brand-700">{WEEKDAYS[day.index]}</p>
+                      <p className="text-sm font-medium text-ink-soft">{WEEKDAYS[day.index]}</p>
                       <ul className="flex flex-col">
                         {day.items.map((item) => (
                           <li
                             key={item.id}
-                            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-brand-50 py-2 text-sm last:border-b-0"
+                            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2 text-sm last:border-b-0"
                           >
                             <span className="font-medium tabular-nums text-brand-600">
                               {formatTimeRange(item.start_time, item.end_time)}
                             </span>
-                            <span className="font-medium text-brand-900">
+                            <span className="font-medium text-ink">
                               {item.course_code}
                               {item.room ? ` @ ${item.room}` : ''}
                             </span>
@@ -268,7 +268,7 @@ export default function AdminRoutinesPage() {
                               status="unavailable"
                               label={TYPE_LABELS[item.type] || item.type}
                             />
-                            <span className="text-brand-500">{item.teacher_name}</span>
+                            <span className="text-muted">{item.teacher_name}</span>
                             <Button
                               size="sm"
                               variant="danger"

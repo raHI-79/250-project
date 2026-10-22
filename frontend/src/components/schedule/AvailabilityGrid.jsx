@@ -27,13 +27,13 @@ export default function AvailabilityGrid({ rooms, onPick }) {
     <div className="flex flex-col gap-4">
       {rooms.map((room) => (
         <Card key={room.room} hover={false} className="animate-fade-in-up overflow-x-auto">
-          <p className="font-display text-base font-semibold text-brand-800">Room {room.room}</p>
+          <p className="font-display text-lg font-bold text-ink">Room {room.room}</p>
           <table className="mt-3 w-full min-w-[42rem] border-separate border-spacing-1 text-xs">
             <thead>
               <tr>
-                <th className="w-24 text-left font-semibold text-brand-500">Day</th>
+                <th className="w-24 text-left font-semibold text-muted">Day</th>
                 {HOURS.map((hour) => (
-                  <th key={hour} className="font-medium text-brand-400">
+                  <th key={hour} className="font-medium text-faint">
                     {hour.slice(0, 2)}
                   </th>
                 ))}
@@ -42,9 +42,9 @@ export default function AvailabilityGrid({ rooms, onPick }) {
             <tbody>
               {room.days.map((day) => (
                 <tr key={day.date}>
-                  <th className="text-left font-medium whitespace-nowrap text-brand-700">
+                  <th className="text-left font-medium whitespace-nowrap text-ink-soft">
                     <span className="block">{day.weekday?.slice(0, 3)}</span>
-                    <span className="block tabular-nums text-brand-400">
+                    <span className="block tabular-nums text-faint">
                       {day.date.slice(8, 10)}.{day.date.slice(5, 7)}
                     </span>
                   </th>
@@ -65,7 +65,7 @@ export default function AvailabilityGrid({ rooms, onPick }) {
                             'h-7 w-full rounded border transition-colors',
                             booking
                               ? 'cursor-not-allowed border-accent-200 bg-accent-100'
-                              : 'border-brand-200 bg-brand-50 hover:border-brand-500 hover:bg-brand-100',
+                              : 'border-line-strong bg-wash hover:border-brand-500 hover:bg-brand-100',
                           )}
                         />
                       </td>
@@ -75,9 +75,9 @@ export default function AvailabilityGrid({ rooms, onPick }) {
               ))}
             </tbody>
           </table>
-          <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-brand-500">
+          <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-3 rounded border border-brand-200 bg-brand-50" />
+              <span className="size-3 rounded border border-line-strong bg-wash" />
               Free, click to fill the form
             </span>
             <span className="inline-flex items-center gap-1.5">

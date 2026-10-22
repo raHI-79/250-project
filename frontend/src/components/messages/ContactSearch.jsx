@@ -46,7 +46,7 @@ export default function ContactSearch({
         )
     : []
   return (
-    <div className="border-b border-brand-100 p-3">
+    <div className="border-b border-line p-3">
       <Input
         type="search"
         value={search}
@@ -64,7 +64,7 @@ export default function ContactSearch({
               'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
               roleFilter === chip.value
                 ? 'border-brand-600 bg-brand-600 text-white'
-                : 'border-brand-200 bg-white text-brand-600 hover:bg-brand-50',
+                : 'border-line-strong bg-surface text-brand-600 hover:bg-wash',
             )}
           >
             {chip.label}
@@ -74,7 +74,7 @@ export default function ContactSearch({
           <button
             type="button"
             onClick={() => onSearchChange('')}
-            className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-brand-500 hover:bg-brand-50"
+            className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-muted hover:bg-wash"
           >
             <X size={12} />
             Clear
@@ -82,11 +82,11 @@ export default function ContactSearch({
         )}
       </div>
       {settled && (
-        <div className="mt-3 rounded-lg border border-brand-100">
+        <div className="mt-3 rounded-md border border-line">
           {contacts.loading ? (
             <SkeletonLines lines={3} className="p-3" />
           ) : people.length === 0 && groups.length === 0 ? (
-            <p className="flex items-center gap-2 p-3 text-sm text-brand-500">
+            <p className="flex items-center gap-2 p-3 text-sm text-muted">
               <UserSearch size={15} />
               Nobody matches this search.
             </p>
@@ -98,15 +98,15 @@ export default function ContactSearch({
                     type="button"
                     disabled={busy}
                     onClick={() => onPickPerson(contact)}
-                    className="flex w-full items-center gap-3 border-b border-brand-50 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-brand-50/70 disabled:cursor-not-allowed"
+                    className="flex w-full items-center gap-3 border-b border-line px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-wash/70 disabled:cursor-not-allowed"
                   >
                     <Avatar src={contact.photo_url} name={contact.name} size="sm" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-brand-900">
+                      <span className="block truncate text-sm font-medium text-ink">
                         {contact.name}
                       </span>
                       {contactDetail(contact) && (
-                        <span className="block truncate text-xs text-brand-500">
+                        <span className="block truncate text-xs text-muted">
                           {contactDetail(contact)}
                         </span>
                       )}
@@ -121,16 +121,16 @@ export default function ContactSearch({
                     type="button"
                     disabled={busy}
                     onClick={() => onPickGroup(group)}
-                    className="flex w-full items-center gap-3 border-b border-brand-50 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-brand-50/70 disabled:cursor-not-allowed"
+                    className="flex w-full items-center gap-3 border-b border-line px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-wash/70 disabled:cursor-not-allowed"
                   >
-                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-brand-100 bg-brand-50 text-brand-600">
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-wash text-brand-600">
                       <Users size={16} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-brand-900">
+                      <span className="block truncate text-sm font-medium text-ink">
                         {group.title}
                       </span>
-                      <span className="block text-xs text-brand-500">{group.label}</span>
+                      <span className="block text-xs text-muted">{group.label}</span>
                     </span>
                     <StatusBadge status="unavailable" label="Group" />
                   </button>
@@ -141,7 +141,7 @@ export default function ContactSearch({
         </div>
       )}
       {!settled && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-brand-400">
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-faint">
           <Search size={12} />
           Type a name to start a chat, or pick a conversation below.
         </p>

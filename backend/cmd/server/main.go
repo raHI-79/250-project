@@ -79,6 +79,7 @@ func run() error {
 			Accounts: userStore,
 			Users:    userStore,
 			Auth:     userStore,
+			Numbers:  userStore,
 			People:   userStore,
 			Catalog:  userStore,
 			Lookups:  userStore,

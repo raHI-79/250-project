@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { CalendarClock, Clock, Link2 } from 'lucide-react'
 import ItemBadges from '../../components/schedule/ItemBadges'
 import {
@@ -17,9 +18,10 @@ import {
   StatusTabs,
   useToast,
 } from '../../components/ui'
+import Masthead from '../../components/layout/Masthead'
 import api from '../../lib/api'
 import { useHighlight, useQueryTab, useResource } from '../../lib/hooks'
-import { TEACHER_TAB_FINAL, TEACHER_TAB_NEXT_DAY } from '../../lib/paths'
+import paths, { TEACHER_TAB_FINAL, TEACHER_TAB_NEXT_DAY } from '../../lib/paths'
 import {
   STATUS_CR_ASK,
   countdownText,
@@ -133,10 +135,8 @@ export default function TeacherUpcomingPage() {
   const finalItems = final.data?.items || []
   return (
     <>
-      <PageHeader
-        title="Upcoming routine"
-        subtitle="Decide on tomorrow and keep an eye on what the batches published"
-      />
+      <Masthead subtitle="Decide on tomorrow and keep an eye on what the batches published" />
+      <PageHeader eyebrow="Teaching schedule" title="Upcoming routine" />
       <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
       {tab === TEACHER_TAB_NEXT_DAY && (
         <>
@@ -151,7 +151,7 @@ export default function TeacherUpcomingPage() {
                 start={nextDay.data.window_start}
                 end={nextDay.data.window_end}
               />
-              <p className="font-display mb-3 text-lg font-semibold text-brand-800">
+              <p className="font-display mb-3 text-lg font-semibold text-ink">
                 {formatDate(nextDay.data.date)} · {nextDay.data.weekday}
               </p>
               {items.length === 0 ? (
@@ -159,6 +159,16 @@ export default function TeacherUpcomingPage() {
                   icon={CalendarClock}
                   title="Nothing tomorrow"
                   text="You have no class or exam on the next day."
+                  action={
+                    <Button
+                      as={Link}
+                      to={paths.teacher.fixedRoutine()}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      Open your weekly routine
+                    </Button>
+                  }
                 />
               ) : (
                 <ul className="flex flex-col gap-3">
@@ -175,8 +185,8 @@ export default function TeacherUpcomingPage() {
                           <span className="font-medium tabular-nums text-brand-600">
                             {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                           </span>
-                          <span className="font-medium text-brand-900">{courseLine(item)}</span>
-                          <span className="text-brand-500">
+                          <span className="font-medium text-ink">{courseLine(item)}</span>
+                          <span className="text-muted">
                             {item.batch} {sectionShort(item.section)}
                             {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                           </span>
@@ -191,7 +201,7 @@ export default function TeacherUpcomingPage() {
                           </Alert>
                         )}
                         {item.cancel_reason && (
-                          <p className="mt-2 text-xs text-brand-500">
+                          <p className="mt-2 text-xs text-muted">
                             Reason: {item.cancel_reason}
                           </p>
                         )}
@@ -273,14 +283,14 @@ export default function TeacherUpcomingPage() {
                     )}
                   >
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                      <span className="w-28 shrink-0 text-sm font-medium text-brand-700">
+                      <span className="w-28 shrink-0 text-sm font-medium text-ink-soft">
                         {formatDate(item.item_date)}
                       </span>
                       <span className="font-medium tabular-nums text-brand-600">
                         {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                       </span>
-                      <span className="font-medium text-brand-900">{courseLine(item)}</span>
-                      <span className="text-brand-500">
+                      <span className="font-medium text-ink">{courseLine(item)}</span>
+                      <span className="text-muted">
                         {item.batch} {sectionShort(item.section)}
                         {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                       </span>

@@ -9,7 +9,7 @@ export default function ConversationList({ items, activeId, onSelect, search, lo
     ? items.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(text))
     : items
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-xl border border-brand-100 bg-surface">
+    <div className="flex h-full min-h-0 flex-col border border-line bg-surface">
       {header}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
@@ -29,12 +29,12 @@ export default function ConversationList({ items, activeId, onSelect, search, lo
                   type="button"
                   onClick={() => onSelect(item)}
                   className={cx(
-                    'flex w-full items-center gap-3 border-b border-brand-50 px-3 py-3 text-left transition-colors last:border-b-0',
-                    item.id === activeId ? 'bg-brand-50' : 'hover:bg-brand-50/60',
+                    'flex w-full items-center gap-3 border-b border-line px-3 py-3 text-left transition-colors last:border-b-0',
+                    item.id === activeId ? 'bg-wash' : 'hover:bg-wash',
                   )}
                 >
                   {item.kind === 'group' ? (
-                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-brand-100 bg-brand-50 text-brand-600">
+                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-line bg-wash text-brand-600">
                       <Users size={18} />
                     </span>
                   ) : (
@@ -42,19 +42,19 @@ export default function ConversationList({ items, activeId, onSelect, search, lo
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-brand-900">
+                      <span className="truncate text-sm font-semibold text-ink">
                         {item.title}
                       </span>
-                      <span className="ml-auto shrink-0 text-[11px] whitespace-nowrap text-brand-400">
+                      <span className="ml-auto shrink-0 text-xs whitespace-nowrap text-faint">
                         {relativeTime(item.last_message_at)}
                       </span>
                     </span>
                     <span className="mt-0.5 flex items-center gap-2">
-                      <span className="truncate text-xs text-brand-500">
+                      <span className="truncate text-xs text-muted">
                         {item.preview || 'No message yet'}
                       </span>
                       {item.unread_count > 0 && (
-                        <span className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[11px] font-semibold text-white">
+                        <span className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-accent-600 px-1.5 text-xs font-semibold text-white">
                           {item.unread_count > 9 ? '9+' : item.unread_count}
                         </span>
                       )}

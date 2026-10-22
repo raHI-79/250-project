@@ -5,18 +5,18 @@ export default function EmptyState({ icon: Icon = Inbox, title, text, action, cl
   return (
     <div
       className={cx(
-        'flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-brand-200 bg-surface px-6 py-12 text-center',
+        'flex flex-col items-center justify-center gap-3 border border-dashed border-line-strong bg-surface px-5 py-12 text-center sm:px-6',
         className,
       )}
     >
-      <span className="flex size-12 items-center justify-center rounded-full bg-brand-50 text-brand-500">
+      <span className="grid size-12 place-items-center rounded-full border border-line bg-wash text-brand-600">
         <Icon size={22} />
       </span>
-      <div>
-        <p className="font-display text-base font-semibold text-brand-900">{title}</p>
-        {text && <p className="mt-1 text-sm text-brand-500">{text}</p>}
+      <div className="max-w-md">
+        <p className="font-display text-lg font-bold text-ink">{title}</p>
+        {text && <p className="mt-1.5 text-sm text-muted">{text}</p>}
       </div>
-      {action}
+      {action && <div className="mt-1 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
   )
 }

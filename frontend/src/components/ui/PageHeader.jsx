@@ -1,16 +1,19 @@
 import cx from '../../lib/cx'
 
-export default function PageHeader({ title, subtitle, actions, className }) {
+export default function PageHeader({ eyebrow, title, subtitle, actions, className }) {
   return (
     <div
       className={cx(
-        'flex flex-col gap-3 pb-5 sm:flex-row sm:items-end sm:justify-between',
+        'mb-5 flex flex-col gap-3 border-b border-ink pb-3 sm:flex-row sm:items-end sm:justify-between',
         className,
       )}
     >
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-brand-900 sm:text-3xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-brand-500">{subtitle}</p>}
+      <div className="min-w-0">
+        {eyebrow && <p className="label-caps">{eyebrow}</p>}
+        <h1 className="font-display mt-1.5 text-[30px] leading-tight font-bold text-ink sm:text-[32px]">
+          {title}
+        </h1>
+        {subtitle && <p className="mt-2 max-w-3xl text-sm text-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
