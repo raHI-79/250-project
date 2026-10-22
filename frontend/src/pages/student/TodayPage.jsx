@@ -1,6 +1,6 @@
 import { CalendarCheck, CalendarClock, ClipboardList, Mail, Megaphone, Vote } from 'lucide-react'
 import AttachmentView from '../../components/AttachmentView'
-import NoteLine from '../../components/NoteLine'
+import PublishedLine from '../../components/schedule/PublishedLine'
 import StatCard from '../../components/StatCard'
 import {
   Alert,
@@ -14,10 +14,7 @@ import {
 import { useAuth } from '../../context/auth'
 import { useResource } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
-import { formatDateTime, formatTimeRange } from '../../lib/time'
-import cx from '../../lib/cx'
-
-const KIND_LABELS = { lab: 'Lab', exam: 'Exam', extra: 'Extra class' }
+import { formatDateTime } from '../../lib/time'
 
 const SOURCE_LABELS = { admin: 'Department', teacher: 'Teacher', cr: 'CR' }
 
@@ -29,27 +26,6 @@ const longDate = (value) => {
   const weekday = date.toLocaleDateString('en-GB', { weekday: 'long' })
   const rest = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   return `${weekday} · ${rest}`
-}
-
-function TimelineRow({ item }) {
-  const cancelled = item.status === 'cancelled'
-  const kind = KIND_LABELS[item.kind]
-  return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-brand-50 py-2.5 text-sm last:border-b-0">
-      <span className={cx('w-32 shrink-0 font-medium tabular-nums text-brand-600', cancelled && 'line-through')}>
-        {formatTimeRange(item.start_time, item.end_time)}
-      </span>
-      <span className={cx('font-medium text-brand-900', cancelled && 'line-through')}>
-        {item.course_code}
-        {item.course_title ? ` ${item.course_title}` : ''}
-        {kind ? ` ${kind}` : ''}
-        {item.room ? ` @ ${item.room}` : ''}
-      </span>
-      {item.teacher_name && <span className="text-brand-500">{item.teacher_name}</span>}
-      {cancelled && <StatusBadge status="cancelled" />}
-      <NoteLine text={item.note} className="w-full" />
-    </li>
-  )
 }
 
 export default function TodayPage() {
@@ -124,7 +100,11 @@ export default function TodayPage() {
                 <p className="text-sm font-semibold text-brand-700">{group.section_label}:</p>
                 <ul className="mt-1 flex flex-col">
                   {group.items.map((item, index) => (
-                    <TimelineRow key={`${item.start_time}-${item.course_code}-${index}`} item={item} />
+                    <PublishedLine
+                      key={`${item.start_time}-${item.course_code}-${index}`}
+                      item={item}
+                      showBatch={group.drop_course}
+                    />
                   ))}
                 </ul>
               </div>
