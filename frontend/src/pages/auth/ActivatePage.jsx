@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, X } from 'lucide-react'
-import { Alert, Button, Card, Input, SkeletonLines, Stepper } from '../../components/ui'
+import { Alert, Button, Input, SkeletonLines, Stepper } from '../../components/ui'
 import PhotoPicker from '../../components/forms/PhotoPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
 import api from '../../lib/api'
@@ -10,14 +10,12 @@ import { useDebounced } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
 import { USER_ID_RULES, birthDateBounds, passwordError, userIdError } from '../../lib/account'
 
-const OVERLAY = 'bg-brand-950/92'
-
 const STEPS = ['Confirm who you are', 'Choose your User ID']
 
 function Availability({ checking, result }) {
   if (checking) {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-brand-400">
+      <span className="flex items-center gap-1.5 text-xs text-faint">
         <Loader2 size={13} className="animate-spin" />
         Checking…
       </span>
@@ -26,7 +24,7 @@ function Availability({ checking, result }) {
   if (!result) return null
   if (result.available) {
     return (
-      <span className="flex items-center gap-1.5 text-xs font-medium text-brand-700">
+      <span className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
         <Check size={13} />
         Available
       </span>
@@ -165,39 +163,42 @@ export default function ActivatePage() {
     }
   }
   return (
-    <AuthScreen images={HERO_BUILDING} overlay={OVERLAY} className="max-w-md">
-      <Card hover={false} className="animate-fade-in-up w-full">
-        <div className="text-center">
-          <span className="inline-flex size-11 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-            <KeyRound size={22} />
-          </span>
-          <p className="font-display mt-3 text-xl font-semibold text-brand-900">
-            {done ? 'Your account is ready' : 'Activate your account'}
+    <AuthScreen
+      images={HERO_BUILDING}
+      className="max-w-md"
+      note="Teachers choose their own user ID while activating the invitation from the office."
+    >
+      <div>
+        <p className="eyebrow flex items-center gap-1.5">
+          <KeyRound size={13} />
+          Faculty invitation
+        </p>
+        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[26px] font-bold text-ink">
+          {done ? 'Your account is ready' : 'Activate your account'}
+        </h1>
+        {invite && !done && (
+          <p className="mt-3 text-sm text-muted">
+            {invite.name}
+            {invite.designation ? ` · ${invite.designation}` : ''}
           </p>
-          {invite && !done && (
-            <p className="mt-1 text-sm text-brand-500">
-              {invite.name}
-              {invite.designation ? ` · ${invite.designation}` : ''}
-            </p>
-          )}
-          {done && <p className="mt-1 text-sm text-brand-500">{done.name}</p>}
-        </div>
+        )}
+        {done && <p className="mt-3 text-sm text-muted">{done.name}</p>}
         {done ? (
           <div className="mt-5 flex flex-col gap-4">
-            <div className="rounded-lg border border-brand-100 bg-brand-50/60 p-4">
-              <p className="text-xs font-medium tracking-wide text-brand-500 uppercase">Your User ID</p>
+            <div className="rounded-md border border-line bg-wash p-4">
+              <p className="text-xs font-medium tracking-wide text-muted uppercase">Your User ID</p>
               <div className="mt-1 flex items-center justify-between gap-3">
-                <p className="font-display text-lg font-semibold text-brand-900">{done.user_id}</p>
+                <p className="font-display text-lg font-semibold text-ink">{done.user_id}</p>
                 <Button size="sm" variant="secondary" onClick={copyUserId}>
                   <Copy size={14} />
                   {copied ? 'Copied' : 'Copy'}
                 </Button>
               </div>
             </div>
-            <div className="rounded-lg border border-brand-100 p-4">
-              <p className="text-xs font-medium tracking-wide text-brand-500 uppercase">Your password</p>
+            <div className="rounded-md border border-line p-4">
+              <p className="text-xs font-medium tracking-wide text-muted uppercase">Your password</p>
               <div className="mt-1 flex items-center justify-between gap-3">
-                <p className="font-mono text-sm text-brand-900">
+                <p className="font-mono text-sm text-ink">
                   {showPassword ? password : '•'.repeat(password.length)}
                 </p>
                 <Button
@@ -312,7 +313,7 @@ export default function ActivatePage() {
             </form>
           </>
         )}
-      </Card>
+      </div>
     </AuthScreen>
   )
 }

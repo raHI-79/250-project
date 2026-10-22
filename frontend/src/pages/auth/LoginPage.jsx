@@ -3,7 +3,6 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { GraduationCap, Users } from 'lucide-react'
 import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
-import Card from '../../components/ui/Card'
 import { Input } from '../../components/ui/Field'
 import AuthScreen from '../../components/layout/AuthScreen'
 import { useAuth } from '../../context/auth'
@@ -11,8 +10,6 @@ import { HERO_IMAGES } from '../../lib/campus'
 import { PORTAL_TEACHER, homeFor, paths } from '../../lib/paths'
 
 const SLIDE_AFTER = 6000
-
-const OVERLAY = 'bg-linear-to-br from-brand-950/88 via-brand-800/72 to-brand-600/45'
 
 const VERIFY_EMAIL = 'Please verify your email first.'
 
@@ -22,8 +19,10 @@ const TEACHER_PORTAL = 'Use the teacher login page.'
 
 const copy = {
   student: {
-    heading: 'SUST CSE',
-    subtitle: 'Class and exam coordination for the Department of CSE',
+    eyebrow: 'Student portal',
+    heading: 'Sign in',
+    subtitle: 'Use the registration number you signed up with.',
+    note: 'Your day, the published routine, exams, notices and materials in one place.',
     identifier: 'Registration number',
     forgot: () => paths.studentForgotPassword(),
     otherLabel: 'Are you a teacher?',
@@ -31,8 +30,10 @@ const copy = {
     otherIcon: GraduationCap,
   },
   teacher: {
-    heading: 'Faculty login',
-    subtitle: 'Department of CSE, Shahjalal University of Science and Technology',
+    eyebrow: 'Faculty portal',
+    heading: 'Sign in',
+    subtitle: 'Use the user ID you chose while activating your account.',
+    note: 'The classes awaiting your decision, your weekly routine and the exams you set.',
     identifier: 'User ID or email',
     forgot: () => paths.teacherForgotPassword(),
     otherLabel: 'Are you a student?',
@@ -67,12 +68,13 @@ export default function LoginPage({ portal }) {
   }
   const OtherIcon = page.otherIcon
   return (
-    <AuthScreen images={HERO_IMAGES} rotateAfter={SLIDE_AFTER} overlay={OVERLAY}>
-      <Card hover={false} className="animate-fade-in-up w-full backdrop-blur-sm">
-        <div className="text-center">
-          <p className="font-display text-2xl font-semibold text-brand-700">{page.heading}</p>
-          <p className="mt-1 text-sm text-brand-500">{page.subtitle}</p>
-        </div>
+    <AuthScreen images={HERO_IMAGES} rotateAfter={SLIDE_AFTER} note={page.note}>
+      <div>
+        <p className="eyebrow">{page.eyebrow}</p>
+        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[30px] font-bold text-ink">
+          {page.heading}
+        </h1>
+        <p className="mt-3 text-sm text-muted">{page.subtitle}</p>
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
           {notice && <Alert tone="success">{notice}</Alert>}
           {error && (
@@ -123,19 +125,19 @@ export default function LoginPage({ portal }) {
             Log in
           </Button>
         </form>
-        <div className="mt-5 flex flex-col gap-1 text-center text-sm">
+        <div className="mt-5 flex flex-col gap-1 text-sm">
           <Link to={page.forgot()} className="text-brand-600 hover:underline">
             Forgot your password?
           </Link>
           {portal === PORTAL_TEACHER ? (
-            <p className="text-brand-500">
+            <p className="text-muted">
               Invited but not activated?{' '}
               <Link to={paths.teacherActivate()} className="text-brand-600 hover:underline">
                 Use your invitation link
               </Link>
             </p>
           ) : (
-            <p className="text-brand-500">
+            <p className="text-muted">
               New student?{' '}
               <Link to={paths.studentRegister()} className="text-brand-600 hover:underline">
                 Create an account
@@ -145,12 +147,12 @@ export default function LoginPage({ portal }) {
         </div>
         <Link
           to={page.otherLink()}
-          className="mt-4 flex items-center justify-center gap-1.5 border-t border-brand-100 pt-4 text-xs text-brand-500 transition-colors hover:text-brand-700"
+          className="mt-5 flex items-center gap-1.5 border-t border-line pt-4 text-xs text-muted transition-colors hover:text-ink-soft"
         >
           <OtherIcon size={14} />
           {page.otherLabel}
         </Link>
-      </Card>
+      </div>
     </AuthScreen>
   )
 }

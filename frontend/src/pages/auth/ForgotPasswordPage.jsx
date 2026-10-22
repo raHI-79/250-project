@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, Button, Card, Input, Stepper } from '../../components/ui'
+import { Alert, Button, Input, Stepper } from '../../components/ui'
 import PhoneInput from '../../components/forms/PhoneInput'
 import AuthScreen from '../../components/layout/AuthScreen'
 import api from '../../lib/api'
@@ -14,8 +14,6 @@ import {
   isPhone,
   passwordError,
 } from '../../lib/account'
-
-const OVERLAY = 'bg-linear-to-b from-white/92 via-white/88 to-brand-50/90'
 
 const RESEND_SECONDS = 60
 
@@ -138,19 +136,24 @@ export default function ForgotPasswordPage({ portal }) {
     else if (step === 3) savePassword()
   }
   return (
-    <AuthScreen images={HERO_IMAGES} rotateAfter={0} overlay={OVERLAY} className="max-w-md">
-      <Card hover={false} className="animate-fade-in-up w-full">
-        <div className="text-center">
-          <p className="font-display text-xl font-semibold text-brand-800">{page.heading}</p>
-          <p className="mt-1 text-sm text-brand-500">{page.subtitle}</p>
-        </div>
+    <AuthScreen
+      images={HERO_IMAGES}
+      className="max-w-md"
+      note="Lost your password? The account is checked before a code is sent."
+    >
+      <div>
+        <p className="eyebrow">Password reset</p>
+        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[26px] font-bold text-ink">
+          {page.heading}
+        </h1>
+        <p className="mt-3 text-sm text-muted">{page.subtitle}</p>
         {step < 4 && <Stepper steps={STEPS} current={step} className="mt-5" />}
         {step === 4 ? (
           <div className="mt-5 flex flex-col gap-4">
             <Alert tone="success" title="Password updated">
               You can now log in with your new password.
             </Alert>
-            <Link to={loginPath} className="text-center text-sm text-brand-600 hover:underline">
+            <Link to={loginPath} className="text-sm text-brand-600 hover:underline">
               Back to log in
             </Link>
           </div>
@@ -249,12 +252,12 @@ export default function ForgotPasswordPage({ portal }) {
                 </Button>
               </>
             )}
-            <Link to={loginPath} className="text-center text-sm text-brand-600 hover:underline">
+            <Link to={loginPath} className="text-sm text-brand-600 hover:underline">
               Back to log in
             </Link>
           </form>
         )}
-      </Card>
+      </div>
     </AuthScreen>
   )
 }
