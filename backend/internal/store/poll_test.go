@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ func seedPoll(t *testing.T, ctx context.Context, store *Store, creator int64, ma
 	t.Helper()
 	poll, err := store.CreatePoll(ctx, NewPoll{
 		Question:   "Which day suits the extra class?",
+		Scope:      validate.PollScopeSection,
 		Batch:      "CSE-23",
 		Section:    "A",
 		Options:    []string{"Sunday", "Monday", "Tuesday"},
@@ -125,5 +127,96 @@ func TestPollRowsNeverCarryVoterIdentities(t *testing.T) {
 				t.Errorf("%s.%s exposes who voted", shape.Name(), name)
 			}
 		}
+	}
+}
+
+func TestPollAudienceFollowsTheScope(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	crUser := insertUser(t, ctx, pool, "student", "2023331300", StatusActive, 0)
+	insertStudent(t, ctx, pool, crUser, "2023331300", true)
+	sectionPoll := seedPoll(t, ctx, store, crUser, 1)
+	batchPoll, err := store.CreatePoll(ctx, NewPoll{
+		Question: "Which topics for the revision?", Scope: validate.PollScopeBatch,
+		Batch: "CSE-23", Section: validate.SectionAll,
+		Options: []string{"Indexing", "Transactions"}, CreatedBy: crUser,
+	})
+	if err != nil {
+		t.Fatalf("CreatePoll() returned an unexpected error: %v", err)
+	}
+	everyBatch, err := store.CreatePoll(ctx, NewPoll{
+		Question: "Which week for the seminar?", Scope: validate.PollScopeAll,
+		Batch: validate.BatchAll, Section: validate.SectionAll,
+		Options: []string{"First", "Second"}, CreatedBy: crUser,
+	})
+	if err != nil {
+		t.Fatalf("CreatePoll() returned an unexpected error: %v", err)
+	}
+	readers := []struct {
+		name    string
+		regNo   string
+		batch   string
+		section string
+		want    []int64
+	}{
+		{name: "the same section", regNo: "2023331301", batch: "CSE-23", section: "A",
+			want: []int64{everyBatch.ID, batchPoll.ID, sectionPoll.ID}},
+		{name: "the other section of the batch", regNo: "2023331302", batch: "CSE-23", section: "B",
+			want: []int64{everyBatch.ID, batchPoll.ID}},
+		{name: "another batch", regNo: "2022331303", batch: "CSE-22", section: "A",
+			want: []int64{everyBatch.ID}},
+	}
+	for _, reader := range readers {
+		t.Run(reader.name, func(t *testing.T) {
+			userID := insertUser(t, ctx, pool, "student", reader.regNo, StatusActive, 0)
+			query := `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES ($1, 'Poll Reader', $2, $3, $4, $2 || '@student.sust.edu', '01700000300', 'O+')`
+			if _, err := pool.Exec(ctx, query, userID, reader.regNo, reader.batch, reader.section); err != nil {
+				t.Fatalf("could not insert the reader: %v", err)
+			}
+			polls, err := store.ListStudentPolls(ctx, userID, reader.batch, reader.section)
+			if err != nil {
+				t.Fatalf("ListStudentPolls() returned an unexpected error: %v", err)
+			}
+			got := make([]int64, 0, len(polls))
+			for _, poll := range polls {
+				got = append(got, poll.ID)
+			}
+			if !reflect.DeepEqual(got, reader.want) {
+				t.Errorf("polls = %v, want %v", got, reader.want)
+			}
+			if len(polls) > 0 && polls[0].Scope == "" {
+				t.Error("the poll carries no scope")
+			}
+		})
+	}
+}
+
+func TestVoteFollowsThePollAudience(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	crUser := insertUser(t, ctx, pool, "student", "2023331400", StatusActive, 0)
+	insertStudent(t, ctx, pool, crUser, "2023331400", true)
+	everyBatch, err := store.CreatePoll(ctx, NewPoll{
+		Question: "Which week for the seminar?", Scope: validate.PollScopeAll,
+		Batch: validate.BatchAll, Section: validate.SectionAll,
+		Options: []string{"First", "Second"}, CreatedBy: crUser,
+	})
+	if err != nil {
+		t.Fatalf("CreatePoll() returned an unexpected error: %v", err)
+	}
+	sectionPoll := seedPoll(t, ctx, store, crUser, 1)
+	outsider := insertUser(t, ctx, pool, "student", "2022331401", StatusActive, 0)
+	query := `INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES ($1, 'Other Batch', '2022331401', 'CSE-22', 'B', 'other401@student.sust.edu', '01700000401', 'O+')`
+	if _, err := pool.Exec(ctx, query, outsider); err != nil {
+		t.Fatalf("could not insert the outsider: %v", err)
+	}
+	if err := store.VoteInPoll(ctx, everyBatch.ID, []int64{everyBatch.Options[0].ID},
+		outsider, "CSE-22", "B"); err != nil {
+		t.Errorf("a student of another batch could not vote in an all batches poll: %v", err)
+	}
+	err = store.VoteInPoll(ctx, sectionPoll.ID, []int64{sectionPoll.Options[0].ID},
+		outsider, "CSE-22", "B")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("voting outside the audience: error = %v, want ErrNotFound", err)
 	}
 }

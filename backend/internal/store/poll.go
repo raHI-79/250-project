@@ -22,6 +22,7 @@ var (
 
 type NewPoll struct {
 	Question   string
+	Scope      string
 	Batch      string
 	Section    string
 	Options    []string
@@ -38,6 +39,7 @@ type PollOptionRow struct {
 type PollRow struct {
 	ID            int64
 	Question      string
+	Scope         string
 	Batch         string
 	Section       string
 	Status        string
@@ -50,8 +52,8 @@ type PollRow struct {
 }
 
 const (
-	insertPollSQL = `INSERT INTO polls (question, batch, section, max_choices, created_by)
-VALUES ($1, $2, $3, $4, $5)
+	insertPollSQL = `INSERT INTO polls (question, scope, batch, section, max_choices, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, created_at`
 	insertPollOptionSQL = `INSERT INTO poll_options (poll_id, option_text, position)
 VALUES ($1, $2, $3)
@@ -61,12 +63,14 @@ SET status = 'closed', closed_at = $3
 WHERE id = $1 AND created_by = $2 AND status = 'open'
 RETURNING id`
 	pollStatusSQL = `SELECT status FROM polls WHERE id = $1 AND created_by = $2`
-	pollColumns   = `p.id, p.question, p.batch, p.section, p.status, p.max_choices,
+	pollColumns   = `p.id, p.question, p.scope, p.batch, p.section, p.status, p.max_choices,
 COALESCE(s.full_name, t.name, CASE WHEN p.created_by IS NULL THEN 'Deleted user' ELSE 'Administration' END),
 p.created_at,
 (SELECT COUNT(DISTINCT v.student_id) FROM poll_votes v WHERE v.poll_id = p.id),
 ARRAY(SELECT v.option_id FROM poll_votes v JOIN students vs ON vs.id = v.student_id
       WHERE v.poll_id = p.id AND vs.user_id = $1 ORDER BY v.option_id)`
+	pollAudience = `(p.scope = 'all_batches'
+    OR (p.batch = $2::text AND (p.section = 'ALL' OR p.section = $3::text)))`
 	pollJoins = `FROM polls p
 LEFT JOIN users u ON u.id = p.created_by
 LEFT JOIN students s ON s.user_id = u.id
@@ -77,7 +81,7 @@ WHERE p.created_by = $2
 ORDER BY p.created_at DESC, p.id DESC`
 	listStudentPollsSQL = `SELECT ` + pollColumns + `
 ` + pollJoins + `
-WHERE p.batch = $2::text AND (p.section = 'ALL' OR p.section = $3::text)
+WHERE ` + pollAudience + `
 ORDER BY p.created_at DESC, p.id DESC`
 	listPollOptionsSQL = `SELECT o.poll_id, o.id, o.option_text,
 (SELECT COUNT(*) FROM poll_votes v WHERE v.option_id = o.id)
@@ -90,7 +94,8 @@ COALESCE((SELECT vs.id FROM students vs WHERE vs.user_id = $3), 0),
 EXISTS (SELECT 1 FROM poll_votes v JOIN students vs ON vs.id = v.student_id
         WHERE v.poll_id = p.id AND vs.user_id = $3)
 FROM polls p
-WHERE p.id = $1 AND p.batch = $4::text AND (p.section = 'ALL' OR p.section = $5::text)`
+WHERE p.id = $1 AND (p.scope = 'all_batches'
+    OR (p.batch = $4::text AND (p.section = 'ALL' OR p.section = $5::text)))`
 	insertPollVoteSQL = `INSERT INTO poll_votes (poll_id, option_id, student_id)
 VALUES ($1, $2, $3)
 RETURNING id`
@@ -107,6 +112,7 @@ func (s *Store) CreatePoll(ctx context.Context, poll NewPoll) (PollRow, error) {
 	defer func() { _ = tx.Rollback(ctx) }()
 	row := PollRow{
 		Question:    poll.Question,
+		Scope:       poll.Scope,
 		Batch:       poll.Batch,
 		Section:     poll.Section,
 		Status:      PollOpen,
@@ -115,7 +121,7 @@ func (s *Store) CreatePoll(ctx context.Context, poll NewPoll) (PollRow, error) {
 		MyOptionIDs: make([]int64, 0),
 	}
 	err = tx.QueryRow(ctx, insertPollSQL,
-		poll.Question, poll.Batch, poll.Section, poll.MaxChoices, poll.CreatedBy).
+		poll.Question, poll.Scope, poll.Batch, poll.Section, poll.MaxChoices, poll.CreatedBy).
 		Scan(&row.ID, &row.CreatedAt)
 	if err != nil {
 		return PollRow{}, fmt.Errorf("store: could not create the poll: %w", err)
@@ -227,6 +233,7 @@ func (s *Store) polls(ctx context.Context, query string, args ...any) ([]PollRow
 		err := rows.Scan(
 			&poll.ID,
 			&poll.Question,
+			&poll.Scope,
 			&poll.Batch,
 			&poll.Section,
 			&poll.Status,

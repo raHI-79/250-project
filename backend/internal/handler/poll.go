@@ -66,6 +66,7 @@ type pollOptionItem struct {
 type pollItem struct {
 	ID            int64            `json:"id"`
 	Question      string           `json:"question"`
+	Scope         string           `json:"scope"`
 	Batch         string           `json:"batch"`
 	Section       string           `json:"section"`
 	IsClosed      bool             `json:"is_closed"`
@@ -116,13 +117,11 @@ func (p *Poll) CRCreate() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		section := validate.SectionAll
-		if scope == validate.PollScopeSection {
-			section = profile.Section
-		}
+		batch, section := pollAudience(scope, profile)
 		created, err := p.polls.CreatePoll(r.Context(), store.NewPoll{
 			Question:   question,
-			Batch:      profile.Batch,
+			Scope:      scope,
+			Batch:      batch,
 			Section:    section,
 			Options:    options,
 			MaxChoices: maxChoices,
@@ -133,11 +132,8 @@ func (p *Poll) CRCreate() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		target := ""
-		if created.Section != validate.SectionAll {
-			target = created.Section
-		}
-		err = p.alerts.NotifyBroadcast(r.Context(), auth.RoleStudent, created.Batch, target,
+		audienceBatch, audienceSection := notifyAudience(created)
+		err = p.alerts.NotifyBroadcast(r.Context(), auth.RoleStudent, audienceBatch, audienceSection,
 			NotificationTypePoll, "New poll", created.Question, notify.Ref(notify.LinkPoll, created.ID))
 		if err != nil {
 			log.Printf("handler: could not notify the students of a poll: %v", err)
@@ -262,6 +258,7 @@ func newPollItem(poll store.PollRow) pollItem {
 	return pollItem{
 		ID:            poll.ID,
 		Question:      poll.Question,
+		Scope:         poll.Scope,
 		Batch:         poll.Batch,
 		Section:       poll.Section,
 		IsClosed:      poll.Status == store.PollClosed,
@@ -271,6 +268,28 @@ func newPollItem(poll store.PollRow) pollItem {
 		Options:       options,
 		TotalVoters:   poll.TotalVoters,
 		MyOptionIDs:   mine,
+	}
+}
+
+func pollAudience(scope string, profile store.StudentProfile) (string, string) {
+	switch scope {
+	case validate.PollScopeAll:
+		return validate.BatchAll, validate.SectionAll
+	case validate.PollScopeBatch:
+		return profile.Batch, validate.SectionAll
+	default:
+		return profile.Batch, profile.Section
+	}
+}
+
+func notifyAudience(poll store.PollRow) (string, string) {
+	switch poll.Scope {
+	case validate.PollScopeAll:
+		return "", ""
+	case validate.PollScopeBatch:
+		return poll.Batch, ""
+	default:
+		return poll.Batch, poll.Section
 	}
 }
 
