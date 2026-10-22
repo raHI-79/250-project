@@ -1,16 +1,21 @@
 export const MAX_MESSAGE_BODY = 4000
 
+export const EDIT_WINDOW = 2 * 60 * 1000
+
 export const THREAD_INTERVAL = 10000
 
 export const LIST_INTERVAL = 20000
 
-export const CONTACT_ROLES = [
-  { value: '', label: 'Everybody' },
-  { value: 'student', label: 'Students' },
-  { value: 'cr', label: 'Class representatives' },
+export const CONTACT_CHIPS = [
+  { value: '', label: 'All' },
   { value: 'teacher', label: 'Teachers' },
-  { value: 'admin', label: 'Administration' },
+  { value: 'cr', label: 'CRs' },
+  { value: 'student', label: 'Students' },
+  { value: 'admin', label: 'Office' },
 ]
+
+export const contactChips = (viewerRole) =>
+  viewerRole === 'student' ? CONTACT_CHIPS.filter((chip) => chip.value !== 'student') : CONTACT_CHIPS
 
 export const shortRoleLabel = (role) => {
   if (role === 'admin') return 'Admin'

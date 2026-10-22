@@ -1,16 +1,8 @@
 import { Search, UserSearch, X } from 'lucide-react'
 import { Avatar, Input, SkeletonLines, StatusBadge } from '../ui'
 import { useDebounced, useResource } from '../../lib/hooks'
-import { contactDetail, shortRoleLabel } from '../../lib/messages'
+import { contactChips, contactDetail, shortRoleLabel } from '../../lib/messages'
 import cx from '../../lib/cx'
-
-const CHIPS = [
-  { value: '', label: 'All' },
-  { value: 'teacher', label: 'Teachers' },
-  { value: 'cr', label: 'CRs' },
-  { value: 'student', label: 'Students' },
-  { value: 'admin', label: 'Office' },
-]
 
 export default function ContactSearch({
   search,
@@ -18,8 +10,10 @@ export default function ContactSearch({
   roleFilter,
   onRoleFilterChange,
   onPickPerson,
+  viewerRole,
   busy,
 }) {
+  const chips = contactChips(viewerRole)
   const text = search.trim()
   const settled = useDebounced(text, 300)
   const contacts = useResource(settled ? '/api/messages/contacts' : null, {
@@ -37,7 +31,7 @@ export default function ContactSearch({
         aria-label="Search people and conversations"
       />
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {CHIPS.map((chip) => (
+        {chips.map((chip) => (
           <button
             key={chip.value || 'all'}
             type="button"
