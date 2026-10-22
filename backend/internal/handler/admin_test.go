@@ -418,7 +418,7 @@ func TestAdminStudentsFilters(t *testing.T) {
 			wantFilter: store.StudentFilter{Status: store.StatusFilterAll, Limit: store.DefaultStudentPage},
 		},
 		{name: "bad batch", query: "?batch=CSE23", wantStatus: http.StatusBadRequest, wantError: "batch must look like CSE-23."},
-		{name: "bad section", query: "?section=AB", wantStatus: http.StatusBadRequest, wantError: "section must be a single letter from A to Z."},
+		{name: "bad section", query: "?section=AB", wantStatus: http.StatusBadRequest, wantError: "section must be A or B."},
 		{name: "bad status", query: "?status=deleted", wantStatus: http.StatusBadRequest, wantError: MessageInvalidStatus},
 		{name: "zero limit", query: "?limit=0", wantStatus: http.StatusBadRequest, wantError: MessageInvalidLimit},
 		{name: "limit over the maximum", query: "?limit=201", wantStatus: http.StatusBadRequest, wantError: MessageInvalidLimit},

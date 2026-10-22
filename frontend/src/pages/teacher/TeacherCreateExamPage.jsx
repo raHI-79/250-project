@@ -17,6 +17,7 @@ import {
 } from '../../components/ui'
 import api from '../../lib/api'
 import { useHighlight, useResource } from '../../lib/hooks'
+import { SECTIONS } from '../../lib/options'
 import { SECTION_ALL, courseLine, placeOf, sectionLabel, sectionShort } from '../../lib/schedule'
 import { formatDate, formatTimeRange, today } from '../../lib/time'
 import cx from '../../lib/cx'
@@ -41,7 +42,6 @@ export default function TeacherCreateExamPage() {
   const [cancelling, setCancelling] = useState(null)
   const courses = useResource('/api/lookups/courses')
   const batches = useResource('/api/lookups/batches')
-  const sections = useResource(form.batch ? '/api/lookups/sections' : null, { batch: form.batch })
   const exams = useResource('/api/teacher/exams')
   const highlight = useHighlight(Boolean(exams.data))
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
@@ -157,7 +157,7 @@ export default function TeacherCreateExamPage() {
             </Select>
             <Select label="Section" value={form.section} onChange={set('section')} disabled={Boolean(editing)}>
               <option value={SECTION_ALL}>{sectionLabel(SECTION_ALL)}</option>
-              {(sections.data?.items || []).map((section) => (
+              {SECTIONS.map((section) => (
                 <option key={section} value={section}>
                   {sectionLabel(section)}
                 </option>

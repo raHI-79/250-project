@@ -71,7 +71,7 @@ func TestNoticeTeacherCreate(t *testing.T) {
 			name:       "a broken section",
 			fields:     map[string]string{"title": "Quiz", "batch": "CSE-23", "section": "AB"},
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Section must be a single letter from A to Z.",
+			wantError:  "Section must be A or B.",
 		},
 		{
 			name:       "without a title",

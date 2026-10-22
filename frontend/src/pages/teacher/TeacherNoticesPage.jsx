@@ -21,6 +21,7 @@ import api from '../../lib/api'
 import { appendIf } from '../../lib/account'
 import { linkError } from '../../lib/files'
 import { useHighlight, useResource } from '../../lib/hooks'
+import { SECTIONS } from '../../lib/options'
 import cx from '../../lib/cx'
 import { formatDateTime } from '../../lib/time'
 
@@ -37,7 +38,6 @@ export default function TeacherNoticesPage() {
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(0)
   const batches = useResource('/api/lookups/batches')
-  const sections = useResource(batch ? '/api/lookups/sections' : null, { batch })
   const notices = useResource('/api/teacher/notices')
   const highlight = useHighlight(Boolean(notices.data))
   const publish = async (event) => {
@@ -131,7 +131,7 @@ export default function TeacherNoticesPage() {
               disabled={!batch}
             >
               <option value="">Whole batch</option>
-              {(sections.data?.items || []).map((entry) => (
+              {SECTIONS.map((entry) => (
                 <option key={entry} value={entry}>
                   Section {entry}
                 </option>

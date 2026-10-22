@@ -1,3 +1,23 @@
+export const SECTIONS = ['A', 'B']
+
+export const SEMESTERS = ['1-1', '1-2', '2-1', '2-2', '3-1', '3-2', '4-1', '4-2']
+
+const YEAR_NAMES = ['1st year', '2nd year', '3rd year', '4th year']
+
+const HALF_NAMES = ['1st semester', '2nd semester']
+
+export const semesterLabel = (value) => {
+  const [year, half] = String(value || '').split('-')
+  const yearName = YEAR_NAMES[Number(year) - 1]
+  const halfName = HALF_NAMES[Number(half) - 1]
+  return yearName && halfName ? `${yearName} ${halfName}` : value || ''
+}
+
+export const semesterOptions = (running) => {
+  if (!running || !SEMESTERS.includes(running)) return SEMESTERS
+  return [running, ...SEMESTERS.filter((semester) => semester !== running)]
+}
+
 export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
 export const ACCOUNT_STATUSES = ['active', 'pending', 'rejected', 'removed']
