@@ -6,6 +6,7 @@ import {
   Card,
   EmptyState,
   Input,
+  Modal,
   PageHeader,
   Select,
   SkeletonCard,
@@ -15,15 +16,17 @@ import {
 } from '../../components/ui'
 import TimeRangeFields from '../../components/forms/TimeRangeFields'
 import api from '../../lib/api'
-import { useResource } from '../../lib/hooks'
-import { WEEKDAYS, formatTimeRange, timeRangeError } from '../../lib/time'
-
-const SECTIONS = ['A', 'B', 'C', 'D']
+import { usePeriods, useResource } from '../../lib/hooks'
+import RoutineWeekGrid from '../../components/RoutineWeekGrid'
+import { SECTIONS, SEMESTERS, semesterLabel, semesterOptions } from '../../lib/options'
+import { periodRangeError } from '../../lib/schedule'
+import { WEEKDAYS, formatTimeRange } from '../../lib/time'
 
 const TYPE_LABELS = { class: 'Class', lab: 'Lab' }
 
 const EMPTY = {
   batch: '',
+  semester: '',
   section: '',
   courseId: '',
   teacherId: '',
@@ -34,37 +37,6 @@ const EMPTY = {
   type: 'class',
 }
 
-const groupRoutines = (items) => {
-  const batches = []
-  items.forEach((item) => {
-    let batch = batches.find((entry) => entry.batch === item.batch)
-    if (!batch) {
-      batch = { batch: item.batch, sections: [] }
-      batches.push(batch)
-    }
-    let section = batch.sections.find((entry) => entry.section === item.section)
-    if (!section) {
-      section = { section: item.section, days: [] }
-      batch.sections.push(section)
-    }
-    let day = section.days.find((entry) => entry.index === item.day_of_week)
-    if (!day) {
-      day = { index: item.day_of_week, items: [] }
-      section.days.push(day)
-    }
-    day.items.push(item)
-  })
-  batches.forEach((batch) =>
-    batch.sections.forEach((section) => {
-      section.days.sort((left, right) => left.index - right.index)
-      section.days.forEach((day) =>
-        day.items.sort((left, right) => left.start_time.localeCompare(right.start_time)),
-      )
-    }),
-  )
-  return batches
-}
-
 export default function AdminRoutinesPage() {
   const toast = useToast()
   const confirm = useConfirm()
@@ -73,17 +45,21 @@ export default function AdminRoutinesPage() {
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(0)
   const [batch, setBatch] = useState('')
-  const [section, setSection] = useState('')
+  const [semester, setSemester] = useState('')
+  const [running, setRunning] = useState('')
+  const [movingBatch, setMovingBatch] = useState(false)
   const batches = useResource('/api/lookups/batches')
+  const semesterList = useResource('/api/admin/batches/running-semester')
   const courses = useResource('/api/lookups/courses')
   const teachers = useResource('/api/lookups/teachers')
   const query = {}
   if (batch) query.batch = batch
-  if (section) query.section = section
+  if (semester) query.semester = semester
   const routines = useResource('/api/admin/routines', query)
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
   const setValue = (key) => (value) => setForm((current) => ({ ...current, [key]: value }))
-  const timeError = timeRangeError(form.start, form.end)
+  const periods = usePeriods()
+  const timeError = periodRangeError(periods, form.start, form.end)
   const save = async (event) => {
     event.preventDefault()
     setError('')
@@ -92,6 +68,7 @@ export default function AdminRoutinesPage() {
     try {
       await api.post('/api/admin/routines', {
         batch: form.batch.trim(),
+        semester: form.semester,
         section: form.section,
         course_id: Number(form.courseId),
         teacher_id: Number(form.teacherId),
@@ -129,7 +106,39 @@ export default function AdminRoutinesPage() {
     }
   }
   const items = routines.data?.items || []
-  const groups = groupRoutines(items)
+  const runningOf = (wanted) =>
+    (semesterList.data?.items || []).find((entry) => entry.batch === wanted)?.semester || ''
+  const runningHint = runningOf(batch)
+    ? `${semesterLabel(runningOf(batch))} is running now`
+    : 'No running semester set for this batch'
+  const openRunning = () => {
+    setRunning(runningOf(batch) || SEMESTERS[0])
+    setMovingBatch(true)
+  }
+  const saveRunning = async () => {
+    setMovingBatch(false)
+    try {
+      await api.put(`/api/admin/batches/${batch}/running-semester`, { semester: running })
+      toast.success(`${batch} now runs ${semesterLabel(running)}`)
+      semesterList.reload()
+      routines.reload()
+    } catch (failure) {
+      toast.error(failure.message)
+    }
+  }
+  const moveEntry = async (item, wanted) => {
+    if (!wanted || wanted === item.semester) return
+    setBusy(item.id)
+    try {
+      await api.patch(`/api/admin/routines/${item.id}`, { semester: wanted })
+      toast.success(`Moved to ${semesterLabel(wanted)}`)
+      routines.reload()
+    } catch (failure) {
+      toast.error(failure.message)
+    } finally {
+      setBusy(0)
+    }
+  }
   return (
     <>
       <PageHeader eyebrow="Weekly routine" title="Routines" subtitle="The fixed weekly routine of every batch" />
@@ -142,6 +151,14 @@ export default function AdminRoutinesPage() {
               {(batches.data?.items || []).map((entry) => (
                 <option key={entry} value={entry}>
                   {entry}
+                </option>
+              ))}
+            </Select>
+            <Select label="Semester" value={form.semester} onChange={set('semester')} required>
+              <option value="">Choose a semester</option>
+              {SEMESTERS.map((entry) => (
+                <option key={entry} value={entry}>
+                  {semesterLabel(entry)}
                 </option>
               ))}
             </Select>
@@ -183,6 +200,7 @@ export default function AdminRoutinesPage() {
             </Select>
           </div>
           <TimeRangeFields
+            periods={periods}
             start={form.start}
             end={form.end}
             onStartChange={setValue('start')}
@@ -205,7 +223,7 @@ export default function AdminRoutinesPage() {
         </form>
       </Card>
       <Card hover={false} className="mb-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <Select label="Batch" value={batch} onChange={(event) => setBatch(event.target.value)}>
             <option value="">Every batch</option>
             {(batches.data?.items || []).map((entry) => (
@@ -215,21 +233,29 @@ export default function AdminRoutinesPage() {
             ))}
           </Select>
           <Select
-            label="Section"
-            value={section}
-            onChange={(event) => setSection(event.target.value)}
+            label="Semester"
+            value={semester}
+            onChange={(event) => setSemester(event.target.value)}
+            hint={batch ? runningHint : 'Pick a batch to see its running semester'}
           >
-            <option value="">Every section</option>
-            {SECTIONS.map((entry) => (
+            <option value="">Every semester</option>
+            {semesterOptions(runningOf(batch)).map((entry) => (
               <option key={entry} value={entry}>
-                Section {entry}
+                {semesterLabel(entry)}
+                {entry === runningOf(batch) ? ' · running now' : ''}
               </option>
             ))}
-            <option value="ALL">Both sections only</option>
           </Select>
+          <Button variant="secondary" onClick={openRunning} disabled={!batch}>
+            Running semester
+          </Button>
         </div>
       </Card>
-      {routines.error && <Alert tone="error" className="mb-5">{routines.error}</Alert>}
+      {routines.error && (
+        <Alert tone="error" className="mb-5">
+          {routines.error}
+        </Alert>
+      )}
       {routines.loading ? (
         <SkeletonCard />
       ) : items.length === 0 ? (
@@ -238,57 +264,96 @@ export default function AdminRoutinesPage() {
           title="No routine entries"
           text="Nothing matches these filters yet."
         />
-      ) : (
-        <div className="flex flex-col gap-5">
-          {groups.map((group) => (
-            <Card key={group.batch} hover={false} className="animate-fade-in-up">
-              <p className="font-display text-lg font-bold text-ink">{group.batch}</p>
-              {group.sections.map((entry) => (
-                <div key={entry.section} className="mt-3">
-                  <p className="text-xs font-semibold tracking-wide text-muted uppercase">
-                    {entry.section === 'ALL' ? 'Both sections' : `Section ${entry.section}`}
-                  </p>
-                  {entry.days.map((day) => (
-                    <div key={day.index} className="mt-2">
-                      <p className="text-sm font-medium text-ink-soft">{WEEKDAYS[day.index]}</p>
-                      <ul className="flex flex-col">
-                        {day.items.map((item) => (
-                          <li
-                            key={item.id}
-                            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2 text-sm last:border-b-0"
-                          >
-                            <span className="font-medium tabular-nums text-brand-600">
-                              {formatTimeRange(item.start_time, item.end_time)}
-                            </span>
-                            <span className="font-medium text-ink">
-                              {item.course_code}
-                              {item.room ? ` @ ${item.room}` : ''}
-                            </span>
-                            <StatusBadge
-                              status="unavailable"
-                              label={TYPE_LABELS[item.type] || item.type}
-                            />
-                            <span className="text-muted">{item.teacher_name}</span>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              loading={busy === item.id}
-                              onClick={() => remove(item)}
-                              className="ml-auto"
-                            >
-                              Delete
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </Card>
+      ) : batch && semester ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {SECTIONS.map((entry) => (
+            <RoutineWeekGrid key={entry} items={items} periods={periods} section={entry} />
           ))}
         </div>
+      ) : (
+        <Card hover={false} className="animate-fade-in-up overflow-x-auto">
+          <p className="font-display text-lg font-bold text-ink">Routine entries</p>
+          <p className="mt-1 text-sm text-muted">
+            Pick one batch and one semester to read sections A and B side by side.
+          </p>
+          <ul className="mt-3 flex flex-col">
+            {items.map((item) => (
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2 text-sm last:border-b-0"
+              >
+                <span className="font-semibold text-ink">{item.batch}</span>
+                <span className="text-muted">
+                  {item.section === 'ALL' ? 'Both sections' : `Section ${item.section}`}
+                </span>
+                <span className="text-ink-soft">{WEEKDAYS[item.day_of_week]}</span>
+                <span className="font-medium tabular-nums text-brand-600">
+                  {formatTimeRange(item.start_time, item.end_time)}
+                </span>
+                <span className="font-medium text-ink">
+                  {item.course_code}
+                  {item.room ? ` @ ${item.room}` : ''}
+                </span>
+                <StatusBadge status="unavailable" label={TYPE_LABELS[item.type] || item.type} />
+                <span className="text-muted">{item.teacher_name}</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <select
+                    value={item.semester}
+                    disabled={busy === item.id}
+                    onChange={(event) => moveEntry(item, event.target.value)}
+                    aria-label={`Semester of ${item.course_code}`}
+                    className="rounded-md border border-line-strong bg-surface px-2 py-1 text-xs text-ink"
+                  >
+                    {SEMESTERS.map((entry) => (
+                      <option key={entry} value={entry}>
+                        {semesterLabel(entry)}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    loading={busy === item.id}
+                    onClick={() => remove(item)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
+      <Modal
+        open={movingBatch}
+        onClose={() => setMovingBatch(false)}
+        title={`Running semester of ${batch}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setMovingBatch(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveRunning}>Save</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">
+          Only the running semester creates dated classes, fills the course helper and counts as a
+          drop course.
+        </p>
+        <Select
+          label="Semester"
+          value={running}
+          onChange={(event) => setRunning(event.target.value)}
+          className="mt-4"
+        >
+          {SEMESTERS.map((entry) => (
+            <option key={entry} value={entry}>
+              {semesterLabel(entry)}
+            </option>
+          ))}
+        </Select>
+      </Modal>
     </>
   )
 }

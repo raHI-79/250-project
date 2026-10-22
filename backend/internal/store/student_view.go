@@ -55,6 +55,7 @@ type StudentExam struct {
 
 type RoutineFilter struct {
 	Batch      string
+	Semester   string
 	Section    string
 	DayOfWeek  int
 	CourseCode string
@@ -94,7 +95,7 @@ WHERE p.kind = 'exam' AND i.origin = 'cr' AND p.status <> 'cancelled'
   AND p.batch = $1 AND (p.section = $2::text OR p.section = 'ALL')
   AND p.item_date >= $3::date
 ORDER BY 2, 3`
-	listFilteredRoutinesSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title,
+	listFilteredRoutinesSQL = `SELECT r.id, r.batch, r.semester, r.section, r.course_id, c.code, c.title,
 COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
 FROM routines r
@@ -104,6 +105,7 @@ WHERE r.batch = $1
   AND ($2::text = '' OR r.section = $2::text OR r.section = 'ALL')
   AND ($3::int < 0 OR r.day_of_week = $3::int)
   AND ($4::text = '' OR replace(c.code, ' ', '') = $4::text)
+  AND r.semester = $5::text
 ORDER BY r.day_of_week, r.start_time, r.section, r.id`
 )
 
@@ -204,5 +206,6 @@ func (s *Store) ListFilteredRoutines(ctx context.Context, filter RoutineFilter) 
 		filter.Section,
 		filter.DayOfWeek,
 		filter.CourseCode,
+		filter.Semester,
 	)
 }

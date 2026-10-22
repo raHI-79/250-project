@@ -9,6 +9,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -21,6 +22,7 @@ const (
 
 type createRoutineRequest struct {
 	Batch     string `json:"batch"`
+	Semester  string `json:"semester"`
 	Section   string `json:"section"`
 	CourseID  int64  `json:"course_id"`
 	TeacherID int64  `json:"teacher_id"`
@@ -32,20 +34,22 @@ type createRoutineRequest struct {
 }
 
 type routineItem struct {
-	ID          int64  `json:"id"`
-	Batch       string `json:"batch"`
-	Section     string `json:"section"`
-	CourseID    int64  `json:"course_id"`
-	CourseCode  string `json:"course_code"`
-	CourseTitle string `json:"course_title"`
-	TeacherID   int64  `json:"teacher_id"`
-	TeacherName string `json:"teacher_name"`
-	DayOfWeek   int    `json:"day_of_week"`
-	Day         string `json:"day"`
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	Room        string `json:"room"`
-	Type        string `json:"type"`
+	ID            int64  `json:"id"`
+	Batch         string `json:"batch"`
+	Semester      string `json:"semester"`
+	SemesterLabel string `json:"semester_label"`
+	Section       string `json:"section"`
+	CourseID      int64  `json:"course_id"`
+	CourseCode    string `json:"course_code"`
+	CourseTitle   string `json:"course_title"`
+	TeacherID     int64  `json:"teacher_id"`
+	TeacherName   string `json:"teacher_name"`
+	DayOfWeek     int    `json:"day_of_week"`
+	Day           string `json:"day"`
+	StartTime     string `json:"start_time"`
+	EndTime       string `json:"end_time"`
+	Room          string `json:"room"`
+	Type          string `json:"type"`
 }
 
 type routinesResponse struct {
@@ -63,7 +67,13 @@ func (c *Catalog) CreateRoutine() http.HandlerFunc {
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		entry, err := request.toNewRoutine()
+		periods, err := c.catalog.ListPeriods(r.Context())
+		if err != nil {
+			log.Printf("handler: could not load the class periods: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		entry, err := request.toNewRoutine(store.PeriodRules(periods))
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -91,13 +101,18 @@ func (c *Catalog) CreateRoutine() http.HandlerFunc {
 	}
 }
 
-func (request createRoutineRequest) toNewRoutine() (store.NewRoutine, error) {
+func (request createRoutineRequest) toNewRoutine(periods []validate.Period) (store.NewRoutine, error) {
 	var entry store.NewRoutine
 	batch, err := validate.Batch("Batch", request.Batch)
 	if err != nil {
 		return store.NewRoutine{}, err
 	}
 	entry.Batch = batch
+	semester, err := validate.Semester("Semester", request.Semester)
+	if err != nil {
+		return store.NewRoutine{}, err
+	}
+	entry.Semester = semester
 	section, err := validate.RoutineSection("Section", request.Section)
 	if err != nil {
 		return store.NewRoutine{}, err
@@ -124,7 +139,7 @@ func (request createRoutineRequest) toNewRoutine() (store.NewRoutine, error) {
 	if err != nil {
 		return store.NewRoutine{}, err
 	}
-	if err := validate.ClassWindow(start, end); err != nil {
+	if err := validate.ClassWindow(periods, start, end); err != nil {
 		return store.NewRoutine{}, err
 	}
 	entry.StartTime, entry.EndTime = start, end
@@ -139,6 +154,102 @@ func (request createRoutineRequest) toNewRoutine() (store.NewRoutine, error) {
 	}
 	entry.Type = entryType
 	return entry, nil
+}
+
+type semesterRequest struct {
+	Semester string `json:"semester"`
+}
+
+type runningSemesterItem struct {
+	Batch         string `json:"batch"`
+	Semester      string `json:"semester"`
+	SemesterLabel string `json:"semester_label"`
+}
+
+type runningSemestersResponse struct {
+	Items []runningSemesterItem `json:"items"`
+}
+
+func (c *Catalog) MoveRoutine() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		routineID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request semesterRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		semester, err := validate.Semester("Semester", request.Semester)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		err = c.catalog.UpdateRoutineSemester(r.Context(), routineID, semester)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessageRoutineNotFound)
+		case err != nil:
+			log.Printf("handler: could not move a routine entry: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageRoutineMoved})
+		}
+	}
+}
+
+func (c *Catalog) RunningSemesters() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		running, err := c.catalog.ListRunningSemesters(r.Context())
+		if err != nil {
+			log.Printf("handler: could not list the running semesters: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		batches := make([]string, 0, len(running))
+		for batch := range running {
+			batches = append(batches, batch)
+		}
+		sort.Strings(batches)
+		items := make([]runningSemesterItem, 0, len(batches))
+		for _, batch := range batches {
+			items = append(items, runningSemesterItem{
+				Batch:         batch,
+				Semester:      running[batch],
+				SemesterLabel: validate.SemesterLabel(running[batch]),
+			})
+		}
+		httpx.WriteJSON(w, http.StatusOK, runningSemestersResponse{Items: items})
+	}
+}
+
+func (c *Catalog) SetRunningSemester() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		batch, err := validate.Batch("batch", r.PathValue("batch"))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		var request semesterRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		semester, err := validate.Semester("Semester", request.Semester)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := c.catalog.SetRunningSemester(r.Context(), batch, semester); err != nil {
+			log.Printf("handler: could not set a running semester: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, runningSemesterItem{
+			Batch:         batch,
+			Semester:      semester,
+			SemesterLabel: validate.SemesterLabel(semester),
+		})
+	}
 }
 
 func roomBookedMessage(booking store.RoomBooking) string {
@@ -159,20 +270,22 @@ func roomBookedMessage(booking store.RoomBooking) string {
 
 func newRoutineItem(entry store.RoutineRow) routineItem {
 	return routineItem{
-		ID:          entry.ID,
-		Batch:       entry.Batch,
-		Section:     entry.Section,
-		CourseID:    entry.CourseID,
-		CourseCode:  entry.CourseCode,
-		CourseTitle: entry.CourseTitle,
-		TeacherID:   entry.TeacherID,
-		TeacherName: entry.TeacherName,
-		DayOfWeek:   entry.DayOfWeek,
-		Day:         validate.DayName(entry.DayOfWeek),
-		StartTime:   entry.StartTime,
-		EndTime:     entry.EndTime,
-		Room:        entry.Room,
-		Type:        entry.Type,
+		ID:            entry.ID,
+		Batch:         entry.Batch,
+		Semester:      entry.Semester,
+		SemesterLabel: validate.SemesterLabel(entry.Semester),
+		Section:       entry.Section,
+		CourseID:      entry.CourseID,
+		CourseCode:    entry.CourseCode,
+		CourseTitle:   entry.CourseTitle,
+		TeacherID:     entry.TeacherID,
+		TeacherName:   entry.TeacherName,
+		DayOfWeek:     entry.DayOfWeek,
+		Day:           validate.DayName(entry.DayOfWeek),
+		StartTime:     entry.StartTime,
+		EndTime:       entry.EndTime,
+		Room:          entry.Room,
+		Type:          entry.Type,
 	}
 }
 
@@ -196,7 +309,16 @@ func (c *Catalog) Routines() http.HandlerFunc {
 			}
 			section = value
 		}
-		entries, err := c.catalog.ListRoutines(r.Context(), batch, section)
+		var semester string
+		if raw := strings.TrimSpace(query.Get("semester")); raw != "" {
+			value, err := validate.Semester("semester", raw)
+			if err != nil {
+				httpx.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			semester = value
+		}
+		entries, err := c.catalog.ListRoutines(r.Context(), batch, section, semester)
 		if err != nil {
 			log.Printf("handler: could not list the routine entries: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
