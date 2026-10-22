@@ -28,6 +28,7 @@ type Dependencies struct {
 	Tokens    TokenService
 	Users     middleware.UserStore
 	Auth      handler.AuthStore
+	Numbers   handler.PublicStore
 	People    handler.AdminStore
 	Catalog   handler.CatalogStore
 	Lookups   handler.LookupStore
@@ -86,6 +87,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	authenticated := AuthenticatedGroup(mux, deps)
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
 	mux.HandleFunc("GET /api/auth/config", authHandler.Config())
+	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
 	mux.HandleFunc("POST /api/auth/register", authHandler.Register())
 	throttled.Handle("GET /api/auth/drop-course-options", authHandler.DropCourseOptions())
 	throttled.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())

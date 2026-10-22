@@ -12,6 +12,7 @@ export class ApiError extends Error {
 }
 
 const PUBLIC_ENDPOINTS = [
+  '/api/public/stats',
   '/api/auth/config',
   '/api/auth/login',
   '/api/auth/admin/login',

@@ -90,6 +90,7 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 		Accounts:  userStore,
 		Users:     userStore,
 		Auth:      userStore,
+		Numbers:   userStore,
 		People:    userStore,
 		Catalog:   userStore,
 		Lookups:   userStore,
