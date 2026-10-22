@@ -88,19 +88,19 @@ export default function NotificationBell() {
         onClick={() => setOpen((current) => !current)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="relative rounded-lg p-2 text-brand-700 transition-colors hover:bg-brand-50 active:scale-95"
+        className="tap-target relative grid place-items-center rounded-md text-ink-soft transition-colors hover:bg-wash active:scale-95"
       >
         <Bell size={19} />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex min-w-4.5 items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-semibold text-white">
+          <span className="absolute -top-0.5 -right-0.5 flex min-w-4.5 items-center justify-center rounded-full bg-accent-600 px-1 text-xs font-semibold text-white">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
       {open && (
-        <div className="animate-scale-in absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] origin-top-right rounded-xl border border-brand-100 bg-surface shadow-xl">
-          <div className="flex items-center gap-2 border-b border-brand-100 px-4 py-3">
-            <p className="font-display text-sm font-semibold text-brand-900">Notifications</p>
+        <div className="animate-scale-in absolute right-0 z-50 mt-2 flex max-h-[80dvh] w-[min(22rem,calc(100vw-2rem))] origin-top-right flex-col border border-line bg-surface shadow-lg">
+          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+            <p className="font-display text-sm font-semibold text-ink">Notifications</p>
             {items.length > 0 && (
               <Button variant="ghost" size="sm" onClick={markAll} className="ml-auto">
                 <CheckCheck size={14} />
@@ -108,7 +108,7 @@ export default function NotificationBell() {
               </Button>
             )}
           </div>
-          <div className="max-h-80 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {items.length === 0 ? (
               <div className="p-3">
                 <EmptyState
@@ -126,8 +126,8 @@ export default function NotificationBell() {
                       type="button"
                       onClick={() => openItem(item)}
                       className={cx(
-                        'flex w-full items-start gap-2 border-b border-brand-50 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-brand-50/60',
-                        isUnread(item) && 'bg-brand-50/40',
+                        'flex w-full items-start gap-2 border-b border-line px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-wash',
+                        isUnread(item) && 'bg-wash/40',
                       )}
                     >
                       <span
@@ -137,13 +137,13 @@ export default function NotificationBell() {
                         )}
                       />
                       <span className="min-w-0">
-                        <span className="block text-sm font-medium text-brand-900">
+                        <span className="block text-sm font-medium text-ink">
                           {item.title}
                         </span>
                         {item.body && (
                           <span className="mt-0.5 block text-sm text-brand-600">{item.body}</span>
                         )}
-                        <span className="mt-1 block text-xs text-brand-400">
+                        <span className="mt-1 block text-xs text-faint">
                           {relativeTime(item.created_at)}
                         </span>
                       </span>
