@@ -370,20 +370,20 @@ VALUES ($1, $2, 'Here', '/uploads/files/0123456789abcdef0123456789abcdef.pdf')`,
 			wantCode: checkViolationCode,
 		},
 		{
-			name:     "group conversation without a scope",
+			name:     "group conversation with a blank title",
+			query:    "INSERT INTO conversations (kind, title, created_by) VALUES ('group', '', $1)",
+			args:     []any{studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "direct conversation with a title",
+			query:    "INSERT INTO conversations (kind, title, created_by) VALUES ('direct', 'Named chat', $1)",
+			args:     []any{studentUserID},
+			wantCode: checkViolationCode,
+		},
+		{
+			name:     "group conversation without a title",
 			query:    "INSERT INTO conversations (kind, created_by) VALUES ('group', $1)",
-			args:     []any{studentUserID},
-			wantCode: checkViolationCode,
-		},
-		{
-			name:     "section conversation without a section",
-			query:    "INSERT INTO conversations (kind, scope, batch, created_by) VALUES ('group', 'section', 'CSE-23', $1)",
-			args:     []any{studentUserID},
-			wantCode: checkViolationCode,
-		},
-		{
-			name:     "direct conversation with a scope",
-			query:    "INSERT INTO conversations (kind, scope, created_by) VALUES ('direct', 'all_students', $1)",
 			args:     []any{studentUserID},
 			wantCode: checkViolationCode,
 		},
@@ -466,5 +466,54 @@ func TestNotificationTargetsAreAccepted(t *testing.T) {
 				t.Errorf("insert was rejected unexpectedly: %v", err)
 			}
 		})
+	}
+}
+
+func TestGroupConversationsBecomeMemberGroups(t *testing.T) {
+	ctx, pool := migratedTestDB(t)
+	for _, column := range []string{"role", "added_by", "added_at"} {
+		query := `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_name = 'conversation_members' AND column_name = $1`
+		if countRows(t, ctx, pool, query, column) != 1 {
+			t.Errorf("conversation_members has no %q column", column)
+		}
+	}
+	titleQuery := `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_name = 'conversations' AND column_name = 'title'`
+	if countRows(t, ctx, pool, titleQuery) != 1 {
+		t.Error("conversations has no title column")
+	}
+	for _, column := range []string{"scope", "batch", "section"} {
+		query := `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_name = 'conversations' AND column_name = $1`
+		if countRows(t, ctx, pool, query, column) != 0 {
+			t.Errorf("conversations still carries the old %q column", column)
+		}
+	}
+	var userID int64
+	insertUser := `INSERT INTO users (role, identifier, password_hash, status)
+VALUES ('teacher', 'migration-teacher', 'stored-hash', 'active') RETURNING id`
+	if err := pool.QueryRow(ctx, insertUser).Scan(&userID); err != nil {
+		t.Fatalf("could not insert the teacher: %v", err)
+	}
+	untitled := `INSERT INTO conversations (kind, created_by) VALUES ('group', $1)`
+	if _, err := pool.Exec(ctx, untitled, userID); err == nil {
+		t.Error("a group without a title was accepted, want the shape constraint to refuse it")
+	}
+	titled := `INSERT INTO conversations (kind, title, created_by) VALUES ('group', 'CSE-23 section A', $1)
+RETURNING id`
+	var conversationID int64
+	if err := pool.QueryRow(ctx, titled, userID).Scan(&conversationID); err != nil {
+		t.Fatalf("could not insert the group: %v", err)
+	}
+	member := `INSERT INTO conversation_members (conversation_id, user_id, role, added_by)
+VALUES ($1, $2, 'admin', $2)`
+	if _, err := pool.Exec(ctx, member, conversationID, userID); err != nil {
+		t.Fatalf("could not insert the group admin: %v", err)
+	}
+	wrongRole := `INSERT INTO conversation_members (conversation_id, user_id, role)
+VALUES ($1, $2, 'owner')`
+	if _, err := pool.Exec(ctx, wrongRole, conversationID, userID); err == nil {
+		t.Error("an unknown member role was accepted, want the check constraint to refuse it")
 	}
 }

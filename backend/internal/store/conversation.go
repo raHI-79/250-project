@@ -11,13 +11,12 @@ import (
 const (
 	ConversationDirect = "direct"
 	ConversationGroup  = "group"
-	ScopeBatch         = "batch"
-	ScopeSection       = "section"
-	ScopeAllStudents   = "all_students"
-	ScopeAllTeachers   = "all_teachers"
+	MemberAdmin        = "admin"
+	MemberRegular      = "member"
 	ContactsLimit      = 20
 	MessagePageSize    = 50
 	MaxMessagePage     = 100
+	MaxGroupMembers    = 500
 )
 
 var (
@@ -25,6 +24,8 @@ var (
 	ErrNoRecipient    = errors.New("store: the conversation has no other member")
 	ErrSameUser       = errors.New("store: a direct conversation needs two different people")
 	ErrInactiveTarget = errors.New("store: the other account is not active")
+	ErrLastAdmin      = errors.New("store: a group keeps at least one admin")
+	ErrNotAGroup      = errors.New("store: this conversation is not a group")
 )
 
 type MessageViewer struct {
@@ -35,20 +36,10 @@ type MessageViewer struct {
 	Section string
 }
 
-func (v MessageViewer) learner() bool {
-	return v.Role == "student" || v.Role == "cr"
-}
-
-func (v MessageViewer) teacher() bool {
-	return v.Role == "teacher"
-}
-
 type Conversation struct {
 	ID            int64
 	Kind          string
-	Scope         string
-	Batch         string
-	Section       string
+	Title         string
 	CreatedBy     int64
 	CreatedAt     time.Time
 	LastMessageAt *time.Time
@@ -63,18 +54,36 @@ type ConversationRow struct {
 	LastBody       string
 	LastFileName   string
 	UnreadCount    int
+	MemberRole     string
+	MemberCount    int
 }
 
 type ConversationAccess struct {
 	Conversation
-	CanPost bool
+	MemberRole  string
+	MemberCount int
+}
+
+func (a ConversationAccess) IsAdmin() bool {
+	return a.MemberRole == MemberAdmin
 }
 
 type NewGroup struct {
-	Scope     string
-	Batch     string
-	Section   string
+	Title     string
 	CreatedBy int64
+	Members   []int64
+}
+
+type MemberRow struct {
+	UserID      int64
+	Name        string
+	Role        string
+	AccountRole string
+	Batch       string
+	Section     string
+	Designation string
+	PhotoPath   string
+	AddedAt     time.Time
 }
 
 type NewChatMessage struct {
@@ -113,45 +122,46 @@ type ContactRow struct {
 	PhotoPath   string
 }
 
-const visibleConversation = `(
-    c.created_by = $1
-    OR EXISTS (SELECT 1 FROM conversation_members cm WHERE cm.conversation_id = c.id AND cm.user_id = $1)
-    OR (c.kind = 'group' AND (
-        (c.scope = 'batch' AND $2::bool AND c.batch = $3::text)
-        OR (c.scope = 'section' AND $2::bool AND c.batch = $3::text AND c.section = $4::text)
-        OR (c.scope = 'all_students' AND $2::bool)
-        OR (c.scope = 'all_teachers' AND $5::bool)
-    ))
+const memberOfConversation = `EXISTS (
+    SELECT 1 FROM conversation_members cm WHERE cm.conversation_id = c.id AND cm.user_id = $1
 )`
 
+const conversationColumns = `c.id, c.kind, COALESCE(c.title, ''), COALESCE(c.created_by, 0),
+c.created_at, c.last_message_at`
+
+const personName = `COALESCE(s.full_name, t.name, u.identifier, '')`
+
+const effectiveRole = `CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END`
+
 const (
-	messageViewerSQL = `SELECT u.id,
-COALESCE(s.full_name, t.name, u.identifier, ''),
-CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END,
+	messageViewerSQL = `SELECT u.id, ` + personName + `, ` + effectiveRole + `,
 COALESCE(s.batch, ''), COALESCE(s.section, '')
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
 WHERE u.id = $1 AND u.status = 'active'`
-	searchContactsSQL = `SELECT u.id,
-COALESCE(s.full_name, t.name, u.identifier, ''),
-CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END AS effective_role,
+	searchContactsSQL = `SELECT u.id, ` + personName + `, ` + effectiveRole + ` AS role,
 COALESCE(s.batch, ''), COALESCE(s.section, ''), COALESCE(t.designation, ''),
 COALESCE(u.photo_path, '')
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
 WHERE u.status = 'active' AND u.id <> $1
-  AND ($2::text = '' OR COALESCE(s.full_name, t.name, u.identifier, '') ILIKE '%' || $2::text || '%'
+  AND ($2::text = '' OR ` + personName + ` ILIKE '%' || $2::text || '%'
        OR u.identifier ILIKE '%' || $2::text || '%')
-  AND ($3::text = '' OR $3::text =
-       CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END)
-ORDER BY effective_role, COALESCE(s.full_name, t.name, u.identifier, ''), u.id
+  AND ($3::text = '' OR $3::text = ` + effectiveRole + `)
+ORDER BY ` + effectiveRole + `, ` + personName + `, u.id
 LIMIT $4`
 	activeUserRoleSQL = `SELECT u.role FROM users u WHERE u.id = $1 AND u.status = 'active'`
+	activeUserIDsSQL  = `SELECT u.id FROM users u WHERE u.status = 'active' AND u.id = ANY($1::bigint[])`
+	batchMembersSQL   = `SELECT u.id
+FROM users u
+JOIN students s ON s.user_id = u.id
+WHERE u.status = 'active' AND s.batch = $1::text
+  AND ($2::text = '' OR s.section = $2::text)
+ORDER BY u.id`
 	lockDirectPairSQL = `SELECT pg_advisory_xact_lock(hashtext('direct:' || LEAST($1::bigint, $2::bigint) || ':' || GREATEST($1::bigint, $2::bigint)))`
-	findDirectSQL     = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-COALESCE(c.created_by, 0), c.created_at, c.last_message_at
+	findDirectSQL     = `SELECT ` + conversationColumns + `
 FROM conversations c
 JOIN conversation_members a ON a.conversation_id = c.id AND a.user_id = $1
 JOIN conversation_members b ON b.conversation_id = c.id AND b.user_id = $2
@@ -159,33 +169,27 @@ WHERE c.kind = 'direct'
 LIMIT 1`
 	insertDirectSQL = `INSERT INTO conversations (kind, created_by)
 VALUES ('direct', $1)
-RETURNING id, kind, COALESCE(scope, ''), COALESCE(batch, ''), COALESCE(section, ''),
-COALESCE(created_by, 0), created_at, last_message_at`
-	insertMemberSQL = `INSERT INTO conversation_members (conversation_id, user_id)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING`
-	findGroupSQL = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-COALESCE(c.created_by, 0), c.created_at, c.last_message_at
-FROM conversations c
-WHERE c.kind = 'group' AND c.created_by = $1 AND c.scope = $2
-  AND COALESCE(c.batch, '') = $3::text AND COALESCE(c.section, '') = $4::text`
-	insertGroupSQL = `INSERT INTO conversations (kind, scope, batch, section, created_by)
-VALUES ('group', $2, NULLIF($3::text, ''), NULLIF($4::text, ''), $1)
-RETURNING id, kind, COALESCE(scope, ''), COALESCE(batch, ''), COALESCE(section, ''),
-COALESCE(created_by, 0), created_at, last_message_at`
-	listConversationsSQL = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-COALESCE(c.created_by, 0), c.created_at, c.last_message_at,
+RETURNING id, kind, COALESCE(title, ''), COALESCE(created_by, 0), created_at, last_message_at`
+	insertMemberSQL = `INSERT INTO conversation_members (conversation_id, user_id, role, added_by)
+VALUES ($1, $2, $3, NULLIF($4::bigint, 0))
+ON CONFLICT (conversation_id, user_id) DO NOTHING`
+	insertGroupSQL = `INSERT INTO conversations (kind, title, created_by)
+VALUES ('group', $1, $2)
+RETURNING id, kind, COALESCE(title, ''), COALESCE(created_by, 0), created_at, last_message_at`
+	renameGroupSQL       = `UPDATE conversations SET title = $2 WHERE id = $1 AND kind = 'group' RETURNING id`
+	listConversationsSQL = `SELECT ` + conversationColumns + `,
 COALESCE(other.user_id, 0), COALESCE(other.name, ''), COALESCE(other.photo_path, ''),
 COALESCE(last.sender_name, ''), COALESCE(last.body, ''), COALESCE(last.file_name, ''),
 (SELECT COUNT(*) FROM messages m2
  WHERE m2.conversation_id = c.id AND COALESCE(m2.sender_id, 0) <> $1
-   AND (r.last_read_at IS NULL OR m2.created_at > r.last_read_at))
+   AND (r.last_read_at IS NULL OR m2.created_at > r.last_read_at)),
+COALESCE(mine.role, ''),
+(SELECT COUNT(*) FROM conversation_members cm2 WHERE cm2.conversation_id = c.id)
 FROM conversations c
+JOIN conversation_members mine ON mine.conversation_id = c.id AND mine.user_id = $1
 LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
 LEFT JOIN LATERAL (
-    SELECT cm.user_id,
-           COALESCE(s.full_name, t.name, u.identifier, '') AS name,
-           COALESCE(u.photo_path, '') AS photo_path
+    SELECT cm.user_id, ` + personName + ` AS name, COALESCE(u.photo_path, '') AS photo_path
     FROM conversation_members cm
     JOIN users u ON u.id = cm.user_id
     LEFT JOIN students s ON s.user_id = u.id
@@ -204,19 +208,36 @@ LEFT JOIN LATERAL (
     ORDER BY m.created_at DESC, m.id DESC
     LIMIT 1
 ) last ON TRUE
-WHERE ` + visibleConversation + `
 ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.id DESC
-LIMIT $6`
-	findConversationAccessSQL = `SELECT c.id, c.kind, COALESCE(c.scope, ''), COALESCE(c.batch, ''), COALESCE(c.section, ''),
-COALESCE(c.created_by, 0), c.created_at, c.last_message_at,
-CASE WHEN c.kind = 'direct'
-     THEN EXISTS (SELECT 1 FROM conversation_members cm WHERE cm.conversation_id = c.id AND cm.user_id = $1)
-     ELSE c.created_by = $1 END
+LIMIT $2`
+	findConversationAccessSQL = `SELECT ` + conversationColumns + `,
+COALESCE(mine.role, ''),
+(SELECT COUNT(*) FROM conversation_members cm2 WHERE cm2.conversation_id = c.id)
 FROM conversations c
-WHERE c.id = $6 AND ` + visibleConversation
+JOIN conversation_members mine ON mine.conversation_id = c.id AND mine.user_id = $1
+WHERE c.id = $2`
+	listMembersSQL = `SELECT cm.user_id, ` + personName + `, cm.role, ` + effectiveRole + `,
+COALESCE(s.batch, ''), COALESCE(s.section, ''), COALESCE(t.designation, ''),
+COALESCE(u.photo_path, ''), cm.added_at
+FROM conversation_members cm
+JOIN users u ON u.id = cm.user_id
+LEFT JOIN students s ON s.user_id = u.id
+LEFT JOIN teachers t ON t.user_id = u.id
+WHERE cm.conversation_id = $1
+ORDER BY cm.role, ` + personName + `, cm.user_id`
+	memberRoleSQL    = `SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2`
+	countAdminsSQL   = `SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1 AND role = 'admin'`
+	deleteMemberSQL  = `DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 RETURNING user_id`
+	setMemberRoleSQL = `UPDATE conversation_members SET role = $3
+WHERE conversation_id = $1 AND user_id = $2
+RETURNING user_id`
+	earliestMemberSQL = `SELECT user_id FROM conversation_members
+WHERE conversation_id = $1
+ORDER BY added_at, user_id
+LIMIT 1`
 	listChatMessagesSQL = `SELECT m.id, COALESCE(m.sender_id, 0),
 COALESCE(s.full_name, t.name, u.identifier, 'Deleted user'),
-COALESCE(CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END, ''),
+COALESCE(` + effectiveRole + `, ''),
 COALESCE(u.photo_path, ''),
 m.body, COALESCE(m.link_url, ''), COALESCE(m.file_path, ''), COALESCE(m.file_name, ''),
 COALESCE(m.file_mime, ''), COALESCE(m.file_size, 0), m.created_at
@@ -238,15 +259,14 @@ VALUES ($1, $2, $3)
 ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = EXCLUDED.last_read_at`
 	unreadCountSQL = `SELECT COUNT(*)
 FROM messages m
-JOIN conversations c ON c.id = m.conversation_id
-LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
+JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = $1
+LEFT JOIN conversation_reads r ON r.conversation_id = m.conversation_id AND r.user_id = $1
 WHERE COALESCE(m.sender_id, 0) <> $1
-  AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
-  AND ` + visibleConversation
-	directRecipientSQL = `SELECT cm.user_id
+  AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)`
+	recipientsSQL = `SELECT cm.user_id
 FROM conversation_members cm
 WHERE cm.conversation_id = $1 AND cm.user_id <> $2
-LIMIT 1`
+ORDER BY cm.user_id`
 )
 
 func (s *Store) GetMessageViewer(ctx context.Context, userID int64) (MessageViewer, error) {
@@ -296,6 +316,21 @@ func (s *Store) SearchContacts(ctx context.Context, viewerID int64, search, role
 	return contacts, nil
 }
 
+func (s *Store) ActiveUserIDs(ctx context.Context, userIDs []int64) ([]int64, error) {
+	if len(userIDs) == 0 {
+		return []int64{}, nil
+	}
+	return s.userIDs(ctx, activeUserIDsSQL, userIDs)
+}
+
+func (s *Store) BatchMembers(ctx context.Context, batch, section string) ([]int64, error) {
+	return s.userIDs(ctx, batchMembersSQL, batch, section)
+}
+
+func (s *Store) ConversationRecipients(ctx context.Context, conversationID, senderID int64) ([]int64, error) {
+	return s.userIDs(ctx, recipientsSQL, conversationID, senderID)
+}
+
 func (s *Store) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) (Conversation, error) {
 	if viewerID == otherID {
 		return Conversation{}, ErrSameUser
@@ -328,7 +363,7 @@ func (s *Store) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) 
 		return Conversation{}, fmt.Errorf("store: could not create the direct conversation: %w", err)
 	}
 	for _, member := range []int64{viewerID, otherID} {
-		if _, err := tx.Exec(ctx, insertMemberSQL, conversation.ID, member); err != nil {
+		if _, err := tx.Exec(ctx, insertMemberSQL, conversation.ID, member, MemberRegular, viewerID); err != nil {
 			return Conversation{}, fmt.Errorf("store: could not add the member %d: %w", member, err)
 		}
 	}
@@ -338,29 +373,27 @@ func (s *Store) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) 
 	return conversation, nil
 }
 
-func (s *Store) GetOrCreateGroup(ctx context.Context, group NewGroup) (Conversation, error) {
+func (s *Store) CreateGroup(ctx context.Context, group NewGroup) (Conversation, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Conversation{}, fmt.Errorf("store: could not start the group transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	conversation, err := scanConversation(
-		tx.QueryRow(ctx, findGroupSQL, group.CreatedBy, group.Scope, group.Batch, group.Section),
-	)
-	if err == nil {
-		return conversation, tx.Commit(ctx)
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return Conversation{}, fmt.Errorf("store: could not look for a group conversation: %w", err)
-	}
-	conversation, err = scanConversation(
-		tx.QueryRow(ctx, insertGroupSQL, group.CreatedBy, group.Scope, group.Batch, group.Section),
-	)
+	conversation, err := scanConversation(tx.QueryRow(ctx, insertGroupSQL, group.Title, group.CreatedBy))
 	if err != nil {
 		return Conversation{}, fmt.Errorf("store: could not create the group conversation: %w", err)
 	}
-	if _, err := tx.Exec(ctx, insertMemberSQL, conversation.ID, group.CreatedBy); err != nil {
-		return Conversation{}, fmt.Errorf("store: could not add the group creator: %w", err)
+	if _, err := tx.Exec(ctx, insertMemberSQL, conversation.ID, group.CreatedBy, MemberAdmin, group.CreatedBy); err != nil {
+		return Conversation{}, fmt.Errorf("store: could not add the group admin: %w", err)
+	}
+	for _, member := range group.Members {
+		if member == group.CreatedBy {
+			continue
+		}
+		_, err := tx.Exec(ctx, insertMemberSQL, conversation.ID, member, MemberRegular, group.CreatedBy)
+		if err != nil {
+			return Conversation{}, fmt.Errorf("store: could not add the member %d: %w", member, err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Conversation{}, fmt.Errorf("store: could not commit the group conversation: %w", err)
@@ -368,12 +401,179 @@ func (s *Store) GetOrCreateGroup(ctx context.Context, group NewGroup) (Conversat
 	return conversation, nil
 }
 
+func (s *Store) AddConversationMembers(ctx context.Context, conversationID, actorID int64,
+	userIDs []int64) (int, error) {
+	added := 0
+	for _, userID := range userIDs {
+		tag, err := s.pool.Exec(ctx, insertMemberSQL, conversationID, userID, MemberRegular, actorID)
+		if err != nil {
+			return added, fmt.Errorf("store: could not add the member %d: %w", userID, err)
+		}
+		added += int(tag.RowsAffected())
+	}
+	return added, nil
+}
+
+func (s *Store) ListConversationMembers(ctx context.Context, conversationID int64) ([]MemberRow, error) {
+	rows, err := s.pool.Query(ctx, listMembersSQL, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the members of the conversation %d: %w", conversationID, err)
+	}
+	defer rows.Close()
+	members := make([]MemberRow, 0)
+	for rows.Next() {
+		var member MemberRow
+		err := rows.Scan(
+			&member.UserID,
+			&member.Name,
+			&member.Role,
+			&member.AccountRole,
+			&member.Batch,
+			&member.Section,
+			&member.Designation,
+			&member.PhotoPath,
+			&member.AddedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("store: could not scan a member: %w", err)
+		}
+		members = append(members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the members: %w", err)
+	}
+	return members, nil
+}
+
+func (s *Store) RemoveConversationMember(ctx context.Context, conversationID, userID int64) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: could not start the member transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var role string
+	err = tx.QueryRow(ctx, memberRoleSQL, conversationID, userID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotAMember
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not load the member %d: %w", userID, err)
+	}
+	if role == MemberAdmin {
+		var admins int
+		if err := tx.QueryRow(ctx, countAdminsSQL, conversationID).Scan(&admins); err != nil {
+			return fmt.Errorf("store: could not count the group admins: %w", err)
+		}
+		if admins <= 1 {
+			return ErrLastAdmin
+		}
+	}
+	var removed int64
+	if err := tx.QueryRow(ctx, deleteMemberSQL, conversationID, userID).Scan(&removed); err != nil {
+		return fmt.Errorf("store: could not remove the member %d: %w", userID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: could not commit the member removal: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) SetConversationMemberAdmin(ctx context.Context, conversationID, userID int64, admin bool) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: could not start the member transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var role string
+	err = tx.QueryRow(ctx, memberRoleSQL, conversationID, userID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotAMember
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not load the member %d: %w", userID, err)
+	}
+	if !admin && role == MemberAdmin {
+		var admins int
+		if err := tx.QueryRow(ctx, countAdminsSQL, conversationID).Scan(&admins); err != nil {
+			return fmt.Errorf("store: could not count the group admins: %w", err)
+		}
+		if admins <= 1 {
+			return ErrLastAdmin
+		}
+	}
+	next := MemberRegular
+	if admin {
+		next = MemberAdmin
+	}
+	var changed int64
+	if err := tx.QueryRow(ctx, setMemberRoleSQL, conversationID, userID, next).Scan(&changed); err != nil {
+		return fmt.Errorf("store: could not change the role of the member %d: %w", userID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: could not commit the member role: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) LeaveConversation(ctx context.Context, conversationID, userID int64) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: could not start the leave transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var role string
+	err = tx.QueryRow(ctx, memberRoleSQL, conversationID, userID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotAMember
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not load the member %d: %w", userID, err)
+	}
+	var left int64
+	if err := tx.QueryRow(ctx, deleteMemberSQL, conversationID, userID).Scan(&left); err != nil {
+		return fmt.Errorf("store: could not remove the member %d: %w", userID, err)
+	}
+	var admins int
+	if err := tx.QueryRow(ctx, countAdminsSQL, conversationID).Scan(&admins); err != nil {
+		return fmt.Errorf("store: could not count the group admins: %w", err)
+	}
+	if admins == 0 {
+		var next int64
+		err := tx.QueryRow(ctx, earliestMemberSQL, conversationID).Scan(&next)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("store: could not find the next group admin: %w", err)
+		}
+		if err == nil {
+			var promoted int64
+			err := tx.QueryRow(ctx, setMemberRoleSQL, conversationID, next, MemberAdmin).Scan(&promoted)
+			if err != nil {
+				return fmt.Errorf("store: could not promote the next group admin: %w", err)
+			}
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: could not commit leaving the group: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) RenameConversation(ctx context.Context, conversationID int64, title string) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, renameGroupSQL, conversationID, title).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotAGroup
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not rename the conversation %d: %w", conversationID, err)
+	}
+	return nil
+}
+
 func (s *Store) ListConversations(ctx context.Context, viewer MessageViewer, limit int) ([]ConversationRow, error) {
 	if limit <= 0 || limit > MaxMessagePage {
 		limit = MaxMessagePage
 	}
-	args := append(viewerArgs(viewer), limit)
-	rows, err := s.pool.Query(ctx, listConversationsSQL, args...)
+	rows, err := s.pool.Query(ctx, listConversationsSQL, viewer.UserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the conversations: %w", err)
 	}
@@ -384,9 +584,7 @@ func (s *Store) ListConversations(ctx context.Context, viewer MessageViewer, lim
 		err := rows.Scan(
 			&row.ID,
 			&row.Kind,
-			&row.Scope,
-			&row.Batch,
-			&row.Section,
+			&row.Title,
 			&row.CreatedBy,
 			&row.CreatedAt,
 			&row.LastMessageAt,
@@ -397,6 +595,8 @@ func (s *Store) ListConversations(ctx context.Context, viewer MessageViewer, lim
 			&row.LastBody,
 			&row.LastFileName,
 			&row.UnreadCount,
+			&row.MemberRole,
+			&row.MemberCount,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a conversation: %w", err)
@@ -409,19 +609,18 @@ func (s *Store) ListConversations(ctx context.Context, viewer MessageViewer, lim
 	return conversations, nil
 }
 
-func (s *Store) FindConversationAccess(ctx context.Context, conversationID int64, viewer MessageViewer) (ConversationAccess, error) {
+func (s *Store) FindConversationAccess(ctx context.Context, conversationID int64,
+	viewer MessageViewer) (ConversationAccess, error) {
 	var access ConversationAccess
-	args := append(viewerArgs(viewer), conversationID)
-	err := s.pool.QueryRow(ctx, findConversationAccessSQL, args...).Scan(
+	err := s.pool.QueryRow(ctx, findConversationAccessSQL, viewer.UserID, conversationID).Scan(
 		&access.ID,
 		&access.Kind,
-		&access.Scope,
-		&access.Batch,
-		&access.Section,
+		&access.Title,
 		&access.CreatedBy,
 		&access.CreatedAt,
 		&access.LastMessageAt,
-		&access.CanPost,
+		&access.MemberRole,
+		&access.MemberCount,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ConversationAccess{}, ErrNotFound
@@ -432,7 +631,8 @@ func (s *Store) FindConversationAccess(ctx context.Context, conversationID int64
 	return access, nil
 }
 
-func (s *Store) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time, limit int) ([]ChatMessageRow, error) {
+func (s *Store) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time,
+	limit int) ([]ChatMessageRow, error) {
 	if limit <= 0 || limit > MaxMessagePage {
 		limit = MessagePageSize
 	}
@@ -521,26 +721,30 @@ func (s *Store) MarkConversationRead(ctx context.Context, userID, conversationID
 
 func (s *Store) CountUnreadMessages(ctx context.Context, viewer MessageViewer) (int, error) {
 	var count int
-	if err := s.pool.QueryRow(ctx, unreadCountSQL, viewerArgs(viewer)...).Scan(&count); err != nil {
+	if err := s.pool.QueryRow(ctx, unreadCountSQL, viewer.UserID).Scan(&count); err != nil {
 		return 0, fmt.Errorf("store: could not count the unread messages: %w", err)
 	}
 	return count, nil
 }
 
-func (s *Store) DirectRecipient(ctx context.Context, conversationID, senderID int64) (int64, error) {
-	var userID int64
-	err := s.pool.QueryRow(ctx, directRecipientSQL, conversationID, senderID).Scan(&userID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, ErrNoRecipient
-	}
+func (s *Store) userIDs(ctx context.Context, query string, args ...any) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
-		return 0, fmt.Errorf("store: could not load the recipient of the conversation %d: %w", conversationID, err)
+		return nil, fmt.Errorf("store: could not list the accounts: %w", err)
 	}
-	return userID, nil
-}
-
-func viewerArgs(viewer MessageViewer) []any {
-	return []any{viewer.UserID, viewer.learner(), viewer.Batch, viewer.Section, viewer.teacher()}
+	defer rows.Close()
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("store: could not scan an account id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the accounts: %w", err)
+	}
+	return ids, nil
 }
 
 func scanConversation(row pgx.Row) (Conversation, error) {
@@ -548,9 +752,7 @@ func scanConversation(row pgx.Row) (Conversation, error) {
 	err := row.Scan(
 		&conversation.ID,
 		&conversation.Kind,
-		&conversation.Scope,
-		&conversation.Batch,
-		&conversation.Section,
+		&conversation.Title,
 		&conversation.CreatedBy,
 		&conversation.CreatedAt,
 		&conversation.LastMessageAt,
