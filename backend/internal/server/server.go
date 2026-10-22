@@ -9,6 +9,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/upload"
+	"github.com/raHI-79/250-project/backend/internal/web"
 	"net/http"
 )
 
@@ -142,7 +143,11 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET "+upload.URLPrefix+"{"+upload.PathValueName+"}", files.Serve())
 	mux.HandleFunc("GET "+upload.AttachmentURLPrefix+"{"+upload.PathValueName+"}", shared.Serve())
 	mux.HandleFunc("GET "+upload.PhotoURLPrefix+"{"+upload.PathValueName+"}", photos.Serve())
-	mux.HandleFunc("/", notFound)
+	if deps.Config.ServesStatic() {
+		mux.Handle("/", web.Static(deps.Config.StaticDir, http.HandlerFunc(notFound)))
+	} else {
+		mux.HandleFunc("/", notFound)
+	}
 	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
 }
 

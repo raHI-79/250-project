@@ -28,6 +28,13 @@ const (
 	defaultSMTPPort       = 587
 	defaultStudentDomain  = "student.sust.edu"
 	minJWTSecretLength    = 32
+	defaultMailFromName   = "SUST CSE Portal"
+	defaultMaxConns       = 10
+	maxDatabaseConns      = 100
+	FileStorageDisk       = "disk"
+	FileStorageDatabase   = "database"
+	MailProviderSMTP      = "smtp"
+	MailProviderBrevo     = "brevo"
 )
 
 var (
@@ -53,6 +60,12 @@ type Config struct {
 	DaysAhead       int
 	UploadDir       string
 	MaxUploadMB     int
+	FileStorage     string
+	StaticDir       string
+	MailProvider    string
+	MailFromName    string
+	BrevoAPIKey     string
+	DBMaxConns      int
 	AdminIdentifier string
 	AdminPassword   string
 	AdminEmail      string
@@ -86,6 +99,11 @@ func Load() (*Config, error) {
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		FrontendOrigin:  getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
 		UploadDir:       getEnv("UPLOAD_DIR", defaultUploadDir),
+		FileStorage:     strings.ToLower(getEnv("FILE_STORAGE", FileStorageDisk)),
+		StaticDir:       strings.TrimSpace(os.Getenv("STATIC_DIR")),
+		MailProvider:    strings.ToLower(getEnv("MAIL_PROVIDER", MailProviderSMTP)),
+		MailFromName:    getEnv("MAIL_FROM_NAME", defaultMailFromName),
+		BrevoAPIKey:     strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
 		AdminIdentifier: os.Getenv("ADMIN_IDENTIFIER"),
 		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
 		AdminEmail:      os.Getenv("ADMIN_EMAIL"),
@@ -142,6 +160,21 @@ func Load() (*Config, error) {
 			maxDaysAhead, rawDaysAhead)
 	}
 	cfg.DaysAhead = daysAhead
+	if cfg.FileStorage != FileStorageDisk && cfg.FileStorage != FileStorageDatabase {
+		return nil, fmt.Errorf("config: FILE_STORAGE must be %s or %s, got %q",
+			FileStorageDisk, FileStorageDatabase, cfg.FileStorage)
+	}
+	if cfg.MailProvider != MailProviderSMTP && cfg.MailProvider != MailProviderBrevo {
+		return nil, fmt.Errorf("config: MAIL_PROVIDER must be %s or %s, got %q",
+			MailProviderSMTP, MailProviderBrevo, cfg.MailProvider)
+	}
+	rawMaxConns := getEnv("DB_MAX_CONNS", strconv.Itoa(defaultMaxConns))
+	maxConns, err := strconv.Atoi(rawMaxConns)
+	if err != nil || maxConns < 1 || maxConns > maxDatabaseConns {
+		return nil, fmt.Errorf("config: DB_MAX_CONNS must be a number between 1 and %d, got %q",
+			maxDatabaseConns, rawMaxConns)
+	}
+	cfg.DBMaxConns = maxConns
 	rawMaxUpload := getEnv("MAX_UPLOAD_MB", strconv.Itoa(defaultMaxUploadMB))
 	maxUpload, err := strconv.Atoi(rawMaxUpload)
 	if err != nil {
@@ -166,6 +199,14 @@ func Load() (*Config, error) {
 	}
 	cfg.Location = loc
 	return cfg, nil
+}
+
+func (c *Config) FilesInDatabase() bool {
+	return c.FileStorage == FileStorageDatabase
+}
+
+func (c *Config) ServesStatic() bool {
+	return c.StaticDir != ""
 }
 
 func (c *Config) Now() time.Time {

@@ -32,6 +32,12 @@ func setEnv(t *testing.T, overrides map[string]string) {
 		"DECISION_WINDOW_END":   "",
 		"SCHEDULE_DAYS_AHEAD":   "",
 		"GOOGLE_CLIENT_ID":      "",
+		"FILE_STORAGE":          "",
+		"STATIC_DIR":            "",
+		"MAIL_PROVIDER":         "",
+		"MAIL_FROM_NAME":        "",
+		"BREVO_API_KEY":         "",
+		"DB_MAX_CONNS":          "",
 	}
 	for key, value := range overrides {
 		env[key] = value
@@ -70,6 +76,14 @@ func TestLoadDefaults(t *testing.T) {
 		{name: "DecisionFrom", got: cfg.DecisionFrom, want: 16 * 60},
 		{name: "DecisionTo", got: cfg.DecisionTo, want: 23 * 60},
 		{name: "DaysAhead", got: cfg.DaysAhead, want: 7},
+		{name: "FileStorage", got: cfg.FileStorage, want: FileStorageDisk},
+		{name: "FilesInDatabase", got: cfg.FilesInDatabase(), want: false},
+		{name: "StaticDir", got: cfg.StaticDir, want: ""},
+		{name: "ServesStatic", got: cfg.ServesStatic(), want: false},
+		{name: "MailProvider", got: cfg.MailProvider, want: MailProviderSMTP},
+		{name: "MailFromName", got: cfg.MailFromName, want: defaultMailFromName},
+		{name: "BrevoAPIKey", got: cfg.BrevoAPIKey, want: ""},
+		{name: "DBMaxConns", got: cfg.DBMaxConns, want: defaultMaxConns},
 		{name: "GoogleClientID", got: cfg.GoogleClientID, want: ""},
 		{name: "GoogleEnabled", got: cfg.GoogleEnabled(), want: false},
 		{name: "StudentEmailSuffix", got: cfg.StudentEmailSuffix(), want: "@student.sust.edu"},
@@ -358,6 +372,61 @@ func TestLoadRejectsABrokenDaysAhead(t *testing.T) {
 			setEnv(t, map[string]string{"SCHEDULE_DAYS_AHEAD": value})
 			if _, err := Load(); err == nil {
 				t.Fatalf("Load() accepted SCHEDULE_DAYS_AHEAD=%q", value)
+			}
+		})
+	}
+}
+
+func TestLoadReadsTheDeploymentSettings(t *testing.T) {
+	setEnv(t, map[string]string{
+		"FILE_STORAGE":   "database",
+		"STATIC_DIR":     "  /app/static  ",
+		"MAIL_PROVIDER":  "BREVO",
+		"MAIL_FROM_NAME": "CSE Office",
+		"BREVO_API_KEY":  "  secret-key  ",
+		"DB_MAX_CONNS":   "5",
+	})
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned an unexpected error: %v", err)
+	}
+	checks := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{name: "FileStorage", got: cfg.FileStorage, want: FileStorageDatabase},
+		{name: "FilesInDatabase", got: cfg.FilesInDatabase(), want: true},
+		{name: "StaticDir", got: cfg.StaticDir, want: "/app/static"},
+		{name: "ServesStatic", got: cfg.ServesStatic(), want: true},
+		{name: "MailProvider", got: cfg.MailProvider, want: MailProviderBrevo},
+		{name: "MailFromName", got: cfg.MailFromName, want: "CSE Office"},
+		{name: "BrevoAPIKey", got: cfg.BrevoAPIKey, want: "secret-key"},
+		{name: "DBMaxConns", got: cfg.DBMaxConns, want: 5},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			t.Errorf("%s = %v, want %v", check.name, check.got, check.want)
+		}
+	}
+}
+
+func TestLoadRefusesBadDeploymentSettings(t *testing.T) {
+	tests := []struct {
+		name      string
+		overrides map[string]string
+	}{
+		{name: "an unknown file storage", overrides: map[string]string{"FILE_STORAGE": "s3"}},
+		{name: "an unknown mail provider", overrides: map[string]string{"MAIL_PROVIDER": "postman"}},
+		{name: "no connections", overrides: map[string]string{"DB_MAX_CONNS": "0"}},
+		{name: "too many connections", overrides: map[string]string{"DB_MAX_CONNS": "500"}},
+		{name: "connections that are not a number", overrides: map[string]string{"DB_MAX_CONNS": "five"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setEnv(t, test.overrides)
+			if _, err := Load(); err == nil {
+				t.Fatal("Load() accepted a setting it should refuse")
 			}
 		})
 	}
