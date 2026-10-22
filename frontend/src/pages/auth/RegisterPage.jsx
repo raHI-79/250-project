@@ -6,6 +6,7 @@ import CourseMultiSelect from '../../components/forms/CourseMultiSelect'
 import GoogleVerifyButton from '../../components/forms/GoogleVerifyButton'
 import PhoneInput from '../../components/forms/PhoneInput'
 import PhotoPicker from '../../components/forms/PhotoPicker'
+import SectionPicker from '../../components/forms/SectionPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
 import api from '../../lib/api'
 import { HERO_IMAGES } from '../../lib/campus'
@@ -288,18 +289,22 @@ export default function RegisterPage() {
                       <Input
                         label="Batch"
                         value={form.batch}
-                        onChange={set('batch')}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            batch: event.target.value.toUpperCase(),
+                          }))
+                        }
                         error={errors.batch}
-                        hint="For example CSE-23"
+                        hint="Like CSE-23"
+                        placeholder="CSE-23"
                         required
                       />
-                      <Input
-                        label="Section"
+                      <SectionPicker
+                        batch={form.batch}
                         value={form.section}
-                        onChange={set('section')}
                         error={errors.section}
-                        maxLength={1}
-                        required
+                        onChange={(section) => setForm((current) => ({ ...current, section }))}
                       />
                     </div>
                     <Field label="Do you have any drop course?">

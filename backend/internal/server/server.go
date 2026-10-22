@@ -90,6 +90,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
 	mux.HandleFunc("POST /api/auth/register", authHandler.Register())
 	throttled.Handle("GET /api/auth/drop-course-options", authHandler.DropCourseOptions())
+	throttled.Handle("GET /api/auth/sections", authHandler.Sections())
 	throttled.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())
 	throttled.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
 	throttled.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())

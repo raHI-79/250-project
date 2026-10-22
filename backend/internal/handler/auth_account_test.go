@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/googleauth"
@@ -248,6 +249,76 @@ func TestDropCourseOptions(t *testing.T) {
 				if item["code"] == nil || item["title"] == nil || item["id"] == nil {
 					t.Errorf("item = %v, want an id, a code and a title", item)
 				}
+			}
+		})
+	}
+}
+
+func TestSectionSuggestions(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name        string
+		query       string
+		sections    map[string][]string
+		sectionsErr error
+		wantStatus  int
+		wantItems   []string
+	}{
+		{
+			name:       "sections of a batch",
+			query:      "?batch=cse-23",
+			sections:   map[string][]string{"CSE-23": {"A", "B"}},
+			wantStatus: http.StatusOK,
+			wantItems:  []string{"A", "B"},
+		},
+		{
+			name:       "a batch nobody joined yet",
+			query:      "?batch=CSE-29",
+			wantStatus: http.StatusOK,
+			wantItems:  []string{},
+		},
+		{name: "a missing batch", query: "", wantStatus: http.StatusBadRequest},
+		{name: "a batch of the wrong shape", query: "?batch=23", wantStatus: http.StatusBadRequest},
+		{
+			name:        "a broken store",
+			query:       "?batch=CSE-23",
+			sectionsErr: errors.New("database is down"),
+			wantStatus:  http.StatusInternalServerError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			users := newAccountStore()
+			if test.sections != nil {
+				users.sections = test.sections
+			}
+			users.sectionsErr = test.sectionsErr
+			handler := newAccountAuth(t, users, testPhotos(t), &fakeGoogle{}, &fakeMailer{})
+			request := jsonRequest(t, http.MethodGet, "/api/auth/sections"+test.query, "", 0, "")
+			rec := serve(handler.Sections(), request)
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantStatus != http.StatusOK {
+				return
+			}
+			var payload struct {
+				Batch string   `json:"batch"`
+				Items []string `json:"items"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("body is not valid JSON: %v", err)
+			}
+			if len(payload.Items) != len(test.wantItems) {
+				t.Fatalf("items = %v, want %v", payload.Items, test.wantItems)
+			}
+			for index, want := range test.wantItems {
+				if payload.Items[index] != want {
+					t.Errorf("items[%d] = %q, want %q", index, payload.Items[index], want)
+				}
+			}
+			if payload.Batch == "" {
+				t.Error("the response does not echo the batch")
 			}
 		})
 	}

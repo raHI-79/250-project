@@ -77,6 +77,7 @@ type AuthStore interface {
 	ClearInvite(ctx context.Context, userID int64) error
 	ActivateTeacher(ctx context.Context, userID int64, chosenID, passwordHash, photoPath string) error
 	IdentifierTaken(ctx context.Context, chosenID string) (bool, error)
+	ListSections(ctx context.Context, batch string) ([]string, error)
 }
 
 type TokenIssuer interface {
@@ -107,6 +108,11 @@ type Auth struct {
 func NewAuth(cfg *config.Config, users AuthStore, tokens TokenIssuer, mail mailer.Sender,
 	proofs ProofIssuer, google googleauth.Validator, photos PhotoStore) *Auth {
 	return &Auth{cfg: cfg, users: users, tokens: tokens, mail: mail, proofs: proofs, google: google, photos: photos}
+}
+
+type sectionsResponse struct {
+	Batch string   `json:"batch"`
+	Items []string `json:"items"`
 }
 
 type messageResponse struct {

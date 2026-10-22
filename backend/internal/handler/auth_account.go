@@ -70,6 +70,23 @@ func (a *Auth) DropCourseOptions() http.HandlerFunc {
 	}
 }
 
+func (a *Auth) Sections() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		batch, err := validate.Batch("batch", r.URL.Query().Get("batch"))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sections, err := a.users.ListSections(r.Context(), batch)
+		if err != nil {
+			log.Printf("handler: could not list the sections of a batch: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, sectionsResponse{Batch: batch, Items: sections})
+	}
+}
+
 func (a *Auth) GoogleVerifyEmail() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request googleVerifyRequest
