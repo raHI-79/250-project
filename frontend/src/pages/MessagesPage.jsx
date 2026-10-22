@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Info, Plus, Users } from 'lucide-react'
+import { ArrowLeft, Info, Plus, Trash2, Users } from 'lucide-react'
 import ContactSearch from '../components/messages/ContactSearch'
 import ConversationList from '../components/messages/ConversationList'
 import GroupCreateModal from '../components/messages/GroupCreateModal'
 import GroupInfoPanel from '../components/messages/GroupInfoPanel'
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
-import { Alert, Avatar, Button, EmptyState, PageHeader } from '../components/ui'
+import { Alert, Avatar, Button, EmptyState, PageHeader, useConfirm, useToast } from '../components/ui'
 import { useAuth } from '../context/auth'
 import api from '../lib/api'
 import cx from '../lib/cx'
@@ -16,6 +16,8 @@ import { LIST_INTERVAL, THREAD_INTERVAL, conversationDetail } from '../lib/messa
 
 export default function MessagesPage() {
   const { user } = useAuth()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [items, setItems] = useState([])
   const [listError, setListError] = useState('')
   const [listLoading, setListLoading] = useState(true)
@@ -101,6 +103,52 @@ export default function MessagesPage() {
       { user_id: contact.user_id },
       { title: contact.name, photo_url: contact.photo_url, kind: 'direct', can_post: true },
     )
+  const editMessage = async (item, body) => {
+    try {
+      await api.patch(`/api/messages/${item.id}`, { body })
+      await loadThread()
+      loadList()
+    } catch (failure) {
+      toast.error(failure.message)
+      throw failure
+    }
+  }
+  const deleteMessage = async (item) => {
+    const ok = await confirm({
+      title: 'Delete this message?',
+      message: 'The thread will show that the message was deleted.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
+    try {
+      await api.delete(`/api/messages/${item.id}`)
+      await loadThread()
+      loadList()
+    } catch (failure) {
+      toast.error(failure.message)
+    }
+  }
+  const clearChat = async () => {
+    const ok = await confirm({
+      title: 'Delete this chat?',
+      message:
+        'The messages so far leave your list for you only. Everybody else keeps the whole chat, you stay in a group you are a member of, and the chat comes back when a new message arrives.',
+      confirmLabel: 'Delete for me',
+      tone: 'danger',
+    })
+    if (!ok) return
+    try {
+      await api.delete(`/api/messages/conversations/${activeId}`)
+      toast.success('Chat deleted for you')
+      setMessages([])
+      close()
+      loadList()
+      refreshUnread()
+    } catch (failure) {
+      toast.error(failure.message)
+    }
+  }
   const send = async ({ body, link, file }) => {
     const payload = new FormData()
     if (body) payload.set('body', body)
@@ -165,6 +213,7 @@ export default function MessagesPage() {
                 onSearchChange={setSearch}
                 roleFilter={roleFilter}
                 onRoleFilterChange={setRoleFilter}
+                viewerRole={user?.role}
                 onPickPerson={pickPerson}
                 busy={starting}
               />
@@ -219,6 +268,10 @@ export default function MessagesPage() {
                     {showInfo ? 'Hide members' : 'Members'}
                   </Button>
                 )}
+                <Button variant="ghost" size="sm" onClick={clearChat} aria-label="Delete this chat">
+                  <Trash2 size={15} />
+                  Delete chat
+                </Button>
               </div>
               {threadError && (
                 <Alert tone="error" className="m-3">
@@ -226,7 +279,13 @@ export default function MessagesPage() {
                 </Alert>
               )}
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <MessageThread items={messages} meId={user?.id} loading={threadLoading} />
+                <MessageThread
+                  items={messages}
+                  meId={user?.id}
+                  loading={threadLoading}
+                  onEdit={editMessage}
+                  onDelete={deleteMessage}
+                />
               </div>
               <MessageComposer onSend={send} />
             </div>
