@@ -9,6 +9,16 @@ const build = (...parts) => join(prefix, ...parts)
 
 export const routePattern = (...parts) => join(prefix, ...parts)
 
+const query = (path, params) => {
+  const search = new URLSearchParams()
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    search.set(key, String(value))
+  })
+  const text = search.toString()
+  return text ? `${path}?${text}` : path
+}
+
 export const paths = {
   root: () => build(),
   profile: () => build('profile'),
@@ -26,32 +36,31 @@ export const paths = {
   adminForgotPassword: () => build('portal-admin', 'forgot-password'),
   student: {
     home: () => build('student'),
-    today: () => build('student', 'today'),
-    upcomingRoutine: () => build('student', 'upcoming-routine'),
-    exams: () => build('student', 'exams'),
+    today: (params) => query(build('student', 'today'), params),
+    upcomingRoutine: (params) => query(build('student', 'upcoming-routine'), params),
+    exams: (params) => query(build('student', 'exams'), params),
     fixedRoutine: () => build('student', 'fixed-routine'),
-    notices: () => build('student', 'notices'),
+    notices: (params) => query(build('student', 'notices'), params),
     materials: () => build('student', 'materials'),
     students: () => build('student', 'students'),
-    polls: () => build('student', 'polls'),
+    polls: (params) => query(build('student', 'polls'), params),
     teachers: () => build('student', 'teachers'),
-    messages: () => build('student', 'messages'),
+    messages: (params) => query(build('student', 'messages'), params),
   },
   cr: {
     home: () => build('cr'),
-    createClass: () => build('cr', 'create-class'),
-    extraClass: () => build('cr', 'extra-class'),
+    schedule: (params) => query(build('cr', 'create-class'), params),
     postNotices: () => build('cr', 'post-notices'),
     driveLink: () => build('cr', 'drive-link'),
-    polls: () => build('cr', 'polls'),
+    polls: (params) => query(build('cr', 'polls'), params),
   },
   teacher: {
     home: () => build('teacher'),
-    schedule: () => build('teacher', 'schedule'),
-    requests: () => build('teacher', 'requests'),
-    cancelClass: () => build('teacher', 'cancel-class'),
-    notices: () => build('teacher', 'notices'),
-    messages: () => build('teacher', 'messages'),
+    fixedRoutine: () => build('teacher', 'fixed-routine'),
+    upcoming: (params) => query(build('teacher', 'upcoming-routine'), params),
+    createExam: (params) => query(build('teacher', 'create-exam'), params),
+    notices: (params) => query(build('teacher', 'notices'), params),
+    messages: (params) => query(build('teacher', 'messages'), params),
   },
   admin: {
     home: () => build('portal-admin', 'overview'),
@@ -62,8 +71,8 @@ export const paths = {
     teachers: () => build('portal-admin', 'teachers'),
     courses: () => build('portal-admin', 'courses'),
     routines: () => build('portal-admin', 'routines'),
-    notices: () => build('portal-admin', 'notices'),
-    messages: () => build('portal-admin', 'messages'),
+    notices: (params) => query(build('portal-admin', 'notices'), params),
+    messages: (params) => query(build('portal-admin', 'messages'), params),
     activity: () => build('portal-admin', 'activity'),
   },
 }
@@ -97,6 +106,59 @@ export const forgotPasswordForPortal = (portal) => {
   if (portal === PORTAL_ADMIN) return paths.adminForgotPassword()
   if (portal === PORTAL_TEACHER) return paths.teacherForgotPassword()
   return paths.studentForgotPassword()
+}
+
+export const messagesFor = (role, params) => {
+  if (role === 'admin') return paths.admin.messages(params)
+  if (role === 'teacher') return paths.teacher.messages(params)
+  return paths.student.messages(params)
+}
+
+export const noticesFor = (role, params) => {
+  if (role === 'admin') return paths.admin.notices(params)
+  if (role === 'teacher') return paths.teacher.notices(params)
+  return paths.student.notices(params)
+}
+
+export const pollsFor = (role, params) => {
+  if (role === 'cr') return paths.cr.polls(params)
+  return paths.student.polls(params)
+}
+
+export const CR_TAB_CREATE = 'create'
+
+export const CR_TAB_ROOMS = 'rooms'
+
+export const CR_TAB_UPCOMING = 'upcoming'
+
+export const CR_TAB_FINAL = 'final'
+
+export const TEACHER_TAB_NEXT_DAY = 'next-day'
+
+export const TEACHER_TAB_FINAL = 'final'
+
+export const notificationTarget = (link, role) => {
+  const kind = link?.kind || ''
+  const ref = link?.ref || ''
+  const date = link?.date || ''
+  if (kind === 'teacher_next_day') {
+    return paths.teacher.upcoming({ tab: TEACHER_TAB_NEXT_DAY, item: ref })
+  }
+  if (kind === 'teacher_final') {
+    return paths.teacher.upcoming({ tab: TEACHER_TAB_FINAL, item: ref })
+  }
+  if (kind === 'cr_upcoming') return paths.cr.schedule({ tab: CR_TAB_UPCOMING, item: ref })
+  if (kind === 'cr_final') return paths.cr.schedule({ tab: CR_TAB_FINAL, item: ref })
+  if (kind === 'routine') return paths.student.upcomingRoutine({ date })
+  if (kind === 'exam') {
+    if (role === 'teacher') return paths.teacher.createExam({ highlight: ref })
+    return paths.student.exams({ highlight: ref })
+  }
+  if (kind === 'notice') return noticesFor(role, { highlight: ref })
+  if (kind === 'message') return messagesFor(role, { c: ref })
+  if (kind === 'poll') return pollsFor(role, { highlight: ref })
+  if (kind === 'cr_role') return paths.profile()
+  return homeFor(role)
 }
 
 export const homeFor = (role) => {

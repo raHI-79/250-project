@@ -20,7 +20,8 @@ import LinkInput from '../../components/forms/LinkInput'
 import api from '../../lib/api'
 import { appendIf } from '../../lib/account'
 import { linkError } from '../../lib/files'
-import { useResource } from '../../lib/hooks'
+import { useHighlight, useResource } from '../../lib/hooks'
+import cx from '../../lib/cx'
 import { formatDateTime } from '../../lib/time'
 
 export default function TeacherNoticesPage() {
@@ -38,6 +39,7 @@ export default function TeacherNoticesPage() {
   const batches = useResource('/api/lookups/batches')
   const sections = useResource(batch ? '/api/lookups/sections' : null, { batch })
   const notices = useResource('/api/teacher/notices')
+  const highlight = useHighlight(Boolean(notices.data))
   const publish = async (event) => {
     event.preventDefault()
     const problem = linkError(link)
@@ -160,7 +162,15 @@ export default function TeacherNoticesPage() {
       ) : (
         <div className="flex flex-col gap-4">
           {items.map((item) => (
-            <Card key={item.id} hover={false} className="animate-fade-in-up">
+            <Card
+              key={item.id}
+              ref={highlight.register(item.id)}
+              hover={false}
+              className={cx(
+                'animate-fade-in-up',
+                highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
+              )}
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-display text-base font-semibold text-brand-900">{item.title}</p>
                 <StatusBadge status="unavailable" label={item.batch} />

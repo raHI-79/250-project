@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Plus, Reply, Users } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Reply, Users } from 'lucide-react'
+import ContactSearch from '../components/messages/ContactSearch'
 import ConversationList from '../components/messages/ConversationList'
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
-import NewConversationModal from '../components/messages/NewConversationModal'
 import { Alert, Avatar, Button, EmptyState, PageHeader } from '../components/ui'
 import { useAuth } from '../context/auth'
 import api from '../lib/api'
@@ -22,8 +23,10 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState([])
   const [threadError, setThreadError] = useState('')
   const [threadLoading, setThreadLoading] = useState(false)
-  const [newOpen, setNewOpen] = useState(false)
+  const [roleFilter, setRoleFilter] = useState('')
+  const [starting, setStarting] = useState(false)
   const [creator, setCreator] = useState({ id: 0, name: '' })
+  const [params, setParams] = useSearchParams()
   const loadList = useCallback(
     () =>
       api
@@ -94,10 +97,34 @@ export default function MessagesPage() {
     )
   }
   const openConversation = (conversation) => {
-    setNewOpen(false)
     select(conversation)
+    setSearch('')
     loadList()
   }
+  const startWith = async (path, payload, extra) => {
+    setStarting(true)
+    setListError('')
+    try {
+      const data = await api.post(path, payload)
+      openConversation({ ...data, ...extra })
+    } catch (failure) {
+      setListError(failure.message)
+    } finally {
+      setStarting(false)
+    }
+  }
+  const pickPerson = (contact) =>
+    startWith(
+      '/api/messages/direct',
+      { user_id: contact.user_id },
+      { title: contact.name, photo_url: contact.photo_url, kind: 'direct', can_post: true },
+    )
+  const pickGroup = (group) =>
+    startWith(
+      '/api/messages/groups',
+      { scope: group.scope, batch: group.batch, section: group.section },
+      { title: group.title, kind: 'group', can_post: true },
+    )
   const send = async ({ body, link, file }) => {
     const payload = new FormData()
     if (body) payload.set('body', body)
@@ -114,17 +141,32 @@ export default function MessagesPage() {
     })
     if (data) openConversation({ ...data, title: creator.name, kind: 'direct', can_post: true })
   }
+  useEffect(() => {
+    const wanted = Number(params.get('c') || 0)
+    if (!wanted || wanted === activeId) return
+    const found = items.find((entry) => entry.id === wanted)
+    if (found) {
+      select(found)
+      return
+    }
+    if (items.length > 0) setActiveId(wanted)
+  }, [params, items, activeId])
+  const close = () => {
+    setActiveId(0)
+    setParams(
+      (current) => {
+        const copy = new URLSearchParams(current)
+        copy.delete('c')
+        return copy
+      },
+      { replace: true },
+    )
+  }
   return (
     <>
       <PageHeader
         title="Messages"
-        subtitle="Write to one person or to a group you are allowed to start"
-        actions={
-          <Button onClick={() => setNewOpen(true)}>
-            <Plus size={16} />
-            New message
-          </Button>
-        }
+        subtitle="Search for a person or a group, then write"
       />
       {listError && (
         <Alert tone="error" className="mb-5">
@@ -138,8 +180,21 @@ export default function MessagesPage() {
             activeId={activeId}
             onSelect={select}
             search={search}
-            onSearchChange={setSearch}
             loading={listLoading}
+            header={
+              <ContactSearch
+                search={search}
+                onSearchChange={setSearch}
+                role={user?.role}
+                roleFilter={roleFilter}
+                onRoleFilterChange={setRoleFilter}
+                batch={user?.batch}
+                section={user?.section}
+                onPickPerson={pickPerson}
+                onPickGroup={pickGroup}
+                busy={starting}
+              />
+            }
           />
         </div>
         <div className={cx('min-w-0 flex-1', !activeId && 'hidden md:block')}>
@@ -149,7 +204,7 @@ export default function MessagesPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setActiveId(0)}
+                  onClick={close}
                   className="md:hidden"
                   aria-label="Back to the conversations"
                 >
@@ -193,20 +248,12 @@ export default function MessagesPage() {
             <EmptyState
               icon={Users}
               title="Pick a conversation"
-              text="Choose one on the left or start a new message."
+              text="Choose one on the left or search for a person to start a new chat."
               className="h-full"
             />
           )}
         </div>
       </div>
-      <NewConversationModal
-        open={newOpen}
-        onClose={() => setNewOpen(false)}
-        role={user?.role}
-        batch={user?.batch}
-        section={user?.section}
-        onOpened={openConversation}
-      />
     </>
   )
 }

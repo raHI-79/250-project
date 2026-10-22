@@ -19,14 +19,13 @@ import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
 import TeachersPage from './pages/student/TeachersPage'
 import MessagesPage from './pages/MessagesPage'
-import CreateClassPage from './pages/cr/CreateClassPage'
-import ExtraClassPage from './pages/cr/ExtraClassPage'
+import CreateClassExamPage from './pages/cr/CreateClassExamPage'
 import CRPostNoticesPage from './pages/cr/CRNoticesPage'
 import CRDriveLinkPage from './pages/cr/CRDriveLinkPage'
 import CRPollsPage from './pages/cr/CRPollsPage'
-import DailySchedulePage from './pages/teacher/DailySchedulePage'
-import ApprovalRequestsPage from './pages/teacher/ApprovalRequestsPage'
-import CancelClassPage from './pages/teacher/CancelClassPage'
+import TeacherFixedRoutinePage from './pages/teacher/TeacherFixedRoutinePage'
+import TeacherUpcomingPage from './pages/teacher/TeacherUpcomingPage'
+import TeacherCreateExamPage from './pages/teacher/TeacherCreateExamPage'
 import TeacherNoticesPage from './pages/teacher/TeacherNoticesPage'
 import OverviewPage from './pages/admin/OverviewPage'
 import RegistrationsPage from './pages/admin/RegistrationsPage'
@@ -99,8 +98,7 @@ export default function Router() {
             path={paths.cr.home()}
             element={<Navigate to={paths.student.today()} replace />}
           />
-          <Route path={paths.cr.createClass()} element={<CreateClassPage />} />
-          <Route path={paths.cr.extraClass()} element={<ExtraClassPage />} />
+          <Route path={paths.cr.schedule()} element={<CreateClassExamPage />} />
           <Route path={paths.cr.postNotices()} element={<CRPostNoticesPage />} />
           <Route path={paths.cr.driveLink()} element={<CRDriveLinkPage />} />
           <Route path={paths.cr.polls()} element={<CRPollsPage />} />
@@ -110,11 +108,11 @@ export default function Router() {
         <Route element={<AppLayout />}>
           <Route
             path={paths.teacher.home()}
-            element={<Navigate to={paths.teacher.schedule()} replace />}
+            element={<Navigate to={paths.teacher.upcoming()} replace />}
           />
-          <Route path={paths.teacher.schedule()} element={<DailySchedulePage />} />
-          <Route path={paths.teacher.requests()} element={<ApprovalRequestsPage />} />
-          <Route path={paths.teacher.cancelClass()} element={<CancelClassPage />} />
+          <Route path={paths.teacher.fixedRoutine()} element={<TeacherFixedRoutinePage />} />
+          <Route path={paths.teacher.upcoming()} element={<TeacherUpcomingPage />} />
+          <Route path={paths.teacher.createExam()} element={<TeacherCreateExamPage />} />
           <Route path={paths.teacher.notices()} element={<TeacherNoticesPage />} />
           <Route path={paths.teacher.messages()} element={<MessagesPage />} />
         </Route>

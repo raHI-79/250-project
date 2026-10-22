@@ -16,7 +16,8 @@ import {
 } from '../../components/ui'
 import PollResults from '../../components/PollResults'
 import api from '../../lib/api'
-import { useResource } from '../../lib/hooks'
+import { useHighlight, useResource } from '../../lib/hooks'
+import cx from '../../lib/cx'
 import { formatDateTime } from '../../lib/time'
 
 const MIN_OPTIONS = 2
@@ -33,6 +34,7 @@ export default function CRPollsPage() {
   const [sending, setSending] = useState(false)
   const [closing, setClosing] = useState(0)
   const polls = useResource('/api/cr/polls')
+  const highlight = useHighlight(Boolean(polls.data))
   const setOption = (index) => (event) => {
     const { value } = event.target
     setOptions((current) => current.map((entry, position) => (position === index ? value : entry)))
@@ -155,7 +157,15 @@ export default function CRPollsPage() {
       ) : (
         <div className="flex flex-col gap-4">
           {items.map((poll) => (
-            <Card key={poll.id} hover={false} className="animate-fade-in-up">
+            <Card
+              key={poll.id}
+              ref={highlight.register(poll.id)}
+              hover={false}
+              className={cx(
+                'animate-fade-in-up',
+                highlight.highlighted(poll.id) && 'border-accent-300 bg-accent-50/60',
+              )}
+            >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="font-display text-base font-semibold text-brand-900">
                   {poll.question}

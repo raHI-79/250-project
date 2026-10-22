@@ -11,7 +11,8 @@ import {
   SkeletonCard,
   StatusBadge,
 } from '../components/ui'
-import { useResource } from '../lib/hooks'
+import { useHighlight, useResource } from '../lib/hooks'
+import cx from '../lib/cx'
 import { formatDateTime } from '../lib/time'
 
 const TABS = [
@@ -31,6 +32,7 @@ const SOURCE_LABELS = { admin: 'Department', teacher: 'Teacher', cr: 'CR' }
 export default function NoticesPage() {
   const [source, setSource] = useState('all')
   const [scope, setScope] = useState('my')
+  const highlight = useHighlight(true)
   const { data, loading, error } = useResource('/api/students/notices', {
     source,
     scope: source === 'cr' ? scope : '',
@@ -86,7 +88,15 @@ export default function NoticesPage() {
       ) : (
         <div className="flex flex-col gap-4">
           {items.map((item) => (
-            <Card key={`${item.source}-${item.id}`} hover={false} className="animate-fade-in-up">
+            <Card
+              key={`${item.source}-${item.id}`}
+              ref={highlight.register(item.id)}
+              hover={false}
+              className={cx(
+                'animate-fade-in-up',
+                highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
+              )}
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-display text-base font-semibold text-brand-900">{item.title}</p>
                 <StatusBadge

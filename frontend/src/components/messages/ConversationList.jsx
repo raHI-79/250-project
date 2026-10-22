@@ -1,31 +1,16 @@
 import { MessageSquare, Users } from 'lucide-react'
-import { Avatar, EmptyState, Input, SkeletonLines } from '../ui'
+import { Avatar, EmptyState, SkeletonLines } from '../ui'
 import cx from '../../lib/cx'
 import { relativeTime } from '../../lib/time'
 
-export default function ConversationList({
-  items,
-  activeId,
-  onSelect,
-  search,
-  onSearchChange,
-  loading,
-}) {
+export default function ConversationList({ items, activeId, onSelect, search, loading, header }) {
   const text = search.trim().toLowerCase()
   const shown = text
     ? items.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(text))
     : items
   return (
     <div className="flex h-full min-h-0 flex-col rounded-xl border border-brand-100 bg-surface">
-      <div className="border-b border-brand-100 p-3">
-        <Input
-          type="search"
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search the conversations"
-          aria-label="Search the conversations"
-        />
-      </div>
+      {header}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <SkeletonLines lines={6} className="p-4" />
@@ -33,7 +18,7 @@ export default function ConversationList({
           <EmptyState
             icon={MessageSquare}
             title="No conversations"
-            text="Start one with the New message button."
+            text="Search for a person above to start one."
             className="m-3 border-0 py-8"
           />
         ) : (

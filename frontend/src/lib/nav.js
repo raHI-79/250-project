@@ -3,9 +3,6 @@ import {
   CalendarClock,
   CalendarDays,
   CalendarPlus,
-  CalendarRange,
-  CalendarX,
-  ClipboardCheck,
   ClipboardList,
   FolderOpen,
   GaugeCircle,
@@ -59,8 +56,7 @@ export const crNav = [
   {
     label: 'Class representative',
     items: [
-      { label: 'Create class / exam', to: paths.cr.createClass, icon: CalendarPlus },
-      { label: 'Extra class', to: paths.cr.extraClass, icon: CalendarRange },
+      { label: 'Create Class & Exam', to: paths.cr.schedule, icon: CalendarPlus },
       { label: 'Post notice', to: paths.cr.postNotices, icon: Send },
       { label: 'Batch Drive link', to: paths.cr.driveLink, icon: Link2 },
       { label: 'Polls', to: paths.cr.polls, icon: Vote },
@@ -72,9 +68,9 @@ export const crNav = [
 export const teacherNav = [
   {
     items: [
-      { label: 'Daily Schedule', to: paths.teacher.schedule, icon: CalendarDays },
-      { label: 'Approval Requests', to: paths.teacher.requests, icon: ClipboardCheck },
-      { label: 'Cancel Class', to: paths.teacher.cancelClass, icon: CalendarX },
+      { label: 'Fixed weekly routine', to: paths.teacher.fixedRoutine, icon: CalendarDays },
+      { label: 'Upcoming routine', to: paths.teacher.upcoming, icon: CalendarClock },
+      { label: 'Create exam', to: paths.teacher.createExam, icon: ClipboardList },
       { label: 'Notices', to: paths.teacher.notices, icon: Megaphone },
       { label: 'Messages', to: paths.teacher.messages, icon: Mail, badge: MESSAGES_BADGE },
     ],

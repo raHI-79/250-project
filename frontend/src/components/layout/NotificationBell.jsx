@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, BellOff } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Bell, BellOff, CheckCheck } from 'lucide-react'
 import api from '../../lib/api'
 import cx from '../../lib/cx'
+import { notificationTarget } from '../../lib/paths'
 import { readRaw, writeRaw } from '../../lib/storage'
 import { relativeTime } from '../../lib/time'
 import { useAuth } from '../../context/auth'
+import Button from '../ui/Button'
 import EmptyState from '../ui/EmptyState'
 
 const POLL_INTERVAL = 30000
@@ -13,12 +16,12 @@ const lastSeenKey = (userId) => `sustcse.notifications.lastSeen.${userId}`
 
 export default function NotificationBell() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const userId = user?.id
   const [items, setItems] = useState([])
   const [open, setOpen] = useState(false)
-  const [lastSeen, setLastSeen] = useState(() =>
-    userId ? readRaw(lastSeenKey(userId)) : null,
-  )
+  const [readIds, setReadIds] = useState([])
+  const [lastSeen, setLastSeen] = useState(() => (userId ? readRaw(lastSeenKey(userId)) : null))
   const containerRef = useRef(null)
   const load = useCallback(async () => {
     const data = await api.get('/api/notifications', { query: { limit: 30 } }).catch(() => null)
@@ -58,26 +61,31 @@ export default function NotificationBell() {
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [open])
-  const unread = useMemo(() => {
-    if (!items.length) return 0
-    const since = lastSeen ? new Date(lastSeen).getTime() : 0
-    if (!since) return items.length
-    return items.filter((item) => new Date(item.created_at).getTime() > since).length
-  }, [items, lastSeen])
-  const toggle = () => {
-    const next = !open
-    setOpen(next)
-    if (next && userId) {
-      const now = new Date().toISOString()
-      writeRaw(lastSeenKey(userId), now)
-      setLastSeen(now)
-    }
+  const seenAt = lastSeen ? new Date(lastSeen).getTime() : 0
+  const isUnread = useCallback(
+    (item) =>
+      !readIds.includes(item.id) &&
+      (!seenAt || new Date(item.created_at).getTime() > seenAt),
+    [readIds, seenAt],
+  )
+  const unread = useMemo(() => items.filter(isUnread).length, [items, isUnread])
+  const markAll = () => {
+    if (!userId) return
+    const now = new Date().toISOString()
+    writeRaw(lastSeenKey(userId), now)
+    setLastSeen(now)
+    setReadIds(items.map((item) => item.id))
+  }
+  const openItem = (item) => {
+    setReadIds((current) => (current.includes(item.id) ? current : [...current, item.id]))
+    setOpen(false)
+    navigate(notificationTarget(item.link, user?.role))
   }
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => setOpen((current) => !current)}
         aria-label="Notifications"
         aria-expanded={open}
         className="relative rounded-lg p-2 text-brand-700 transition-colors hover:bg-brand-50 active:scale-95"
@@ -90,13 +98,15 @@ export default function NotificationBell() {
         )}
       </button>
       {open && (
-        <div
-          className={cx(
-            'animate-scale-in absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] origin-top-right rounded-xl border border-brand-100 bg-surface shadow-xl',
-          )}
-        >
-          <div className="border-b border-brand-100 px-4 py-3">
+        <div className="animate-scale-in absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] origin-top-right rounded-xl border border-brand-100 bg-surface shadow-xl">
+          <div className="flex items-center gap-2 border-b border-brand-100 px-4 py-3">
             <p className="font-display text-sm font-semibold text-brand-900">Notifications</p>
+            {items.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={markAll} className="ml-auto">
+                <CheckCheck size={14} />
+                Mark all as read
+              </Button>
+            )}
           </div>
           <div className="max-h-80 overflow-y-auto">
             {items.length === 0 ? (
@@ -111,13 +121,33 @@ export default function NotificationBell() {
             ) : (
               <ul>
                 {items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="border-b border-brand-50 px-4 py-3 last:border-b-0 hover:bg-brand-50/60"
-                  >
-                    <p className="text-sm font-medium text-brand-900">{item.title}</p>
-                    {item.body && <p className="mt-0.5 text-sm text-brand-600">{item.body}</p>}
-                    <p className="mt-1 text-xs text-brand-400">{relativeTime(item.created_at)}</p>
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => openItem(item)}
+                      className={cx(
+                        'flex w-full items-start gap-2 border-b border-brand-50 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-brand-50/60',
+                        isUnread(item) && 'bg-brand-50/40',
+                      )}
+                    >
+                      <span
+                        className={cx(
+                          'mt-1.5 size-2 shrink-0 rounded-full',
+                          isUnread(item) ? 'bg-accent-600' : 'bg-transparent',
+                        )}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-brand-900">
+                          {item.title}
+                        </span>
+                        {item.body && (
+                          <span className="mt-0.5 block text-sm text-brand-600">{item.body}</span>
+                        )}
+                        <span className="mt-1 block text-xs text-brand-400">
+                          {relativeTime(item.created_at)}
+                        </span>
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
