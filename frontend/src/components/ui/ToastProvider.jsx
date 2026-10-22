@@ -7,9 +7,9 @@ const MAX_TOASTS = 4
 const DISMISS_AFTER = 4000
 
 const tones = {
-  success: { icon: CheckCircle2, className: 'border-brand-200 bg-white text-brand-800' },
-  error: { icon: XCircle, className: 'border-accent-200 bg-white text-accent-800' },
-  info: { icon: Info, className: 'border-brand-100 bg-white text-brand-800' },
+  success: { icon: CheckCircle2, className: 'border-l-emerald-600 text-ink' },
+  error: { icon: XCircle, className: 'border-l-accent-600 text-accent-700' },
+  info: { icon: Info, className: 'border-l-brand-600 text-ink' },
 }
 
 export default function ToastProvider({ children }) {
@@ -57,7 +57,7 @@ export default function ToastProvider({ children }) {
               key={toast.id}
               role="status"
               className={cx(
-                'animate-slide-in-right pointer-events-auto flex items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg',
+                'animate-slide-in-right pointer-events-auto flex items-start gap-3 border-l-[3px] border border-line bg-surface px-4 py-3 text-sm shadow-lg',
                 config.className,
               )}
             >
@@ -67,7 +67,7 @@ export default function ToastProvider({ children }) {
                 type="button"
                 onClick={() => dismiss(toast.id)}
                 aria-label="Dismiss"
-                className="rounded p-0.5 text-brand-400 transition-colors hover:bg-brand-50 hover:text-brand-700"
+                className="rounded p-0.5 text-faint transition-colors hover:bg-wash hover:text-ink-soft"
               >
                 <X size={15} />
               </button>

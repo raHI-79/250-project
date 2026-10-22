@@ -4,8 +4,8 @@ export default function StatusTabs({ tabs, value, onChange, className }) {
   return (
     <div
       role="tablist"
-      aria-label="Status filter"
-      className={cx('flex flex-wrap gap-1 rounded-lg border border-brand-100 bg-brand-50/60 p-1', className)}
+      aria-label="Tabs"
+      className={cx('flex flex-wrap border-b border-line bg-surface', className)}
     >
       {tabs.map((tab) => {
         const active = tab.value === value
@@ -17,10 +17,10 @@ export default function StatusTabs({ tabs, value, onChange, className }) {
             aria-selected={active}
             onClick={() => onChange(tab.value)}
             className={cx(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'tap-target border-b-2 px-4 py-3 text-sm whitespace-nowrap transition-colors',
               active
-                ? 'bg-white text-brand-800 shadow-sm'
-                : 'text-brand-500 hover:bg-white/70 hover:text-brand-700',
+                ? 'border-brand-600 bg-brand-50 font-semibold text-brand-600'
+                : 'border-transparent font-medium text-muted hover:bg-wash hover:text-ink-soft',
             )}
           >
             {tab.label}

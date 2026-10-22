@@ -1,24 +1,25 @@
 import { Link } from 'react-router-dom'
-import Card from './ui/Card'
+import cx from '../lib/cx'
 import { useCountUp } from '../lib/hooks'
 
 export default function StatCard({ icon: Icon, label, value, to, hint }) {
   const shown = useCountUp(value)
   const body = (
-    <Card className="animate-fade-in-up h-full">
+    <div
+      className={cx(
+        'h-full border border-line bg-surface p-4',
+        to && 'card-hover',
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-brand-500">{label}</p>
-          <p className="font-display mt-2 text-3xl font-semibold tabular-nums text-brand-900">
-            {shown}
-          </p>
-          {hint && <p className="mt-1 text-xs text-brand-500">{hint}</p>}
-        </div>
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-          <Icon size={22} />
-        </span>
+        <p className="label-caps">{label}</p>
+        {Icon && <Icon size={16} className="shrink-0 text-brand-600" />}
       </div>
-    </Card>
+      <p className="font-numeral mt-2 text-[34px] leading-none font-bold text-brand-600">
+        {shown}
+      </p>
+      {hint && <p className="mt-2 text-xs text-muted">{hint}</p>}
+    </div>
   )
   if (!to) return body
   return (

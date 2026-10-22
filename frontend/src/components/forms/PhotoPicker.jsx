@@ -81,16 +81,16 @@ export default function PhotoPicker({
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={cx(
-            'relative size-28 shrink-0 overflow-hidden rounded-xl border-2 border-dashed transition-colors',
-            dragging ? 'border-brand-500 bg-brand-50' : 'border-brand-200 bg-brand-50/50',
+            'relative size-28 shrink-0 overflow-hidden border-2 border-dashed transition-colors',
+            dragging ? 'border-brand-500 bg-wash' : 'border-line-strong bg-wash/50',
           )}
         >
           {shown ? (
             <img src={shown} alt="Profile photo preview" className="size-full object-cover" />
           ) : (
-            <span className="flex size-full flex-col items-center justify-center gap-1 text-brand-400">
+            <span className="flex size-full flex-col items-center justify-center gap-1 text-faint">
               <ImagePlus size={22} />
-              <span className="px-2 text-center text-[11px] leading-tight">Click or drop</span>
+              <span className="px-2 text-center text-xs leading-tight">Click or drop</span>
             </span>
           )}
           <button
@@ -111,7 +111,7 @@ export default function PhotoPicker({
               </Button>
             )}
           </div>
-          {file && <p className="truncate text-xs text-brand-500">{file.name}</p>}
+          {file && <p className="truncate text-xs text-muted">{file.name}</p>}
         </div>
       </div>
       <input

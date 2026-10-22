@@ -1,34 +1,52 @@
 import { useId } from 'react'
 import cx from '../../lib/cx'
 
-const controlClass = (invalid) =>
+const controlClass = (invalid, tone) =>
   cx(
-    'w-full rounded-lg border bg-white px-3 py-2 text-sm text-brand-950 transition-colors placeholder:text-brand-300 focus:outline-none focus:ring-2',
+    'h-11 w-full rounded-md border px-3 text-base transition-colors focus:outline-none focus:ring-3',
+    tone === 'dark'
+      ? 'bg-white/5 text-white placeholder:text-white/35'
+      : 'bg-surface text-ink placeholder:text-faint',
     invalid
-      ? 'border-accent-400 focus:border-accent-500 focus:ring-accent-200'
-      : 'border-brand-200 focus:border-brand-500 focus:ring-brand-100',
+      ? 'border-accent-500 focus:border-accent-600 focus:ring-accent-100'
+      : tone === 'dark'
+        ? 'border-white/20 focus:border-gold-300 focus:ring-white/10'
+        : 'border-line-strong focus:border-brand-600 focus:ring-brand-100',
   )
 
-export function Field({ label, error, hint, htmlFor, required = false, className, children }) {
+export function Field({
+  label,
+  error,
+  hint,
+  htmlFor,
+  required = false,
+  tone,
+  className,
+  children,
+}) {
+  const dark = tone === 'dark'
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
       {label && (
-        <label htmlFor={htmlFor} className="text-sm font-medium text-brand-800">
+        <label
+          htmlFor={htmlFor}
+          className={cx('text-sm font-semibold', dark ? 'text-white/80' : 'text-ink-soft')}
+        >
           {label}
-          {required && <span className="ml-1 text-accent-600">*</span>}
+          {required && <span className={cx('ml-1', dark ? 'text-gold-300' : 'text-brand-600')}>*</span>}
         </label>
       )}
       {children}
       {error ? (
-        <p className="animate-fade-in text-xs text-accent-700">{error}</p>
+        <p className="animate-fade-in text-sm text-accent-600">{error}</p>
       ) : (
-        hint && <p className="text-xs text-brand-400">{hint}</p>
+        hint && <p className={cx('text-sm', dark ? 'text-white/60' : 'text-muted')}>{hint}</p>
       )}
     </div>
   )
 }
 
-export function Input({ label, error, hint, required, className, id, ...rest }) {
+export function Input({ label, error, hint, required, tone, className, id, ...rest }) {
   const generated = useId()
   const fieldId = id || generated
   return (
@@ -38,14 +56,15 @@ export function Input({ label, error, hint, required, className, id, ...rest }) 
       hint={hint}
       required={required}
       htmlFor={fieldId}
+      tone={tone}
       className={className}
     >
-      <input id={fieldId} className={controlClass(Boolean(error))} {...rest} />
+      <input id={fieldId} className={controlClass(Boolean(error), tone)} {...rest} />
     </Field>
   )
 }
 
-export function Select({ label, error, hint, required, className, id, children, ...rest }) {
+export function Select({ label, error, hint, required, tone, className, id, children, ...rest }) {
   const generated = useId()
   const fieldId = id || generated
   return (
@@ -55,16 +74,17 @@ export function Select({ label, error, hint, required, className, id, children, 
       hint={hint}
       required={required}
       htmlFor={fieldId}
+      tone={tone}
       className={className}
     >
-      <select id={fieldId} className={controlClass(Boolean(error))} {...rest}>
+      <select id={fieldId} className={controlClass(Boolean(error), tone)} {...rest}>
         {children}
       </select>
     </Field>
   )
 }
 
-export function Textarea({ label, error, hint, required, className, id, rows = 4, ...rest }) {
+export function Textarea({ label, error, hint, required, tone, className, id, rows = 4, ...rest }) {
   const generated = useId()
   const fieldId = id || generated
   return (
@@ -74,12 +94,13 @@ export function Textarea({ label, error, hint, required, className, id, rows = 4
       hint={hint}
       required={required}
       htmlFor={fieldId}
+      tone={tone}
       className={className}
     >
       <textarea
         id={fieldId}
         rows={rows}
-        className={cx(controlClass(Boolean(error)), 'resize-y')}
+        className={cx(controlClass(Boolean(error), tone), 'h-auto resize-y py-2.5 leading-relaxed')}
         {...rest}
       />
     </Field>

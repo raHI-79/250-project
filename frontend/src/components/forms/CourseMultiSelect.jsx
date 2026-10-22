@@ -65,7 +65,7 @@ export default function CourseMultiSelect({
           {value.map((course) => (
             <span
               key={course.id}
-              className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pr-1 pl-3 text-xs font-medium text-brand-700"
+              className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-wash py-1 pr-1 pl-3 text-xs font-medium text-ink-soft"
             >
               <span>
                 {course.code}
@@ -75,7 +75,7 @@ export default function CourseMultiSelect({
                 type="button"
                 onClick={() => drop(course)}
                 aria-label={`Remove ${course.code}`}
-                className="rounded-full p-0.5 text-brand-500 transition-colors hover:bg-brand-200 hover:text-brand-800"
+                className="rounded-full p-0.5 text-muted transition-colors hover:bg-brand-200 hover:text-ink"
               >
                 <X size={13} />
               </button>
@@ -90,27 +90,27 @@ export default function CourseMultiSelect({
           placeholder="CSE 2243 7637D or a title"
           aria-label="Search drop courses"
         />
-        <span className="pointer-events-none absolute top-2.5 right-3 text-brand-400">
+        <span className="pointer-events-none absolute top-2.5 right-3 text-faint">
           {loading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
         </span>
         {available.length > 0 && (
-          <ul className="animate-fade-in absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-brand-200 bg-surface py-1 shadow-lg">
+          <ul className="animate-fade-in absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto border border-line-strong bg-surface py-1 shadow-lg">
             {available.map((course) => (
               <li key={course.id}>
                 <button
                   type="button"
                   onClick={() => add(course)}
-                  className="flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-brand-50"
+                  className="flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-wash"
                 >
-                  <span className="text-sm font-medium text-brand-900">{course.code}</span>
-                  <span className="text-xs text-brand-500">{course.title}</span>
+                  <span className="text-sm font-medium text-ink">{course.code}</span>
+                  <span className="text-xs text-muted">{course.title}</span>
                 </button>
               </li>
             ))}
           </ul>
         )}
         {!loading && settled.trim() && available.length === 0 && options.length === 0 && (
-          <p className="mt-1 text-xs text-brand-400">
+          <p className="mt-1 text-xs text-faint">
             No course in a fixed routine matches this search.
           </p>
         )}
