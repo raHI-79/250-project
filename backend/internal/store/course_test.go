@@ -11,8 +11,9 @@ func insertRoutineFor(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cou
 	t.Helper()
 	userID := insertUser(t, ctx, pool, "teacher", teacherID, StatusActive, 0)
 	row := insertPublicTeacher(t, ctx, pool, userID, teacherID)
-	query := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
-VALUES ('CSE-23', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
+	setRunningSemester(t, ctx, pool, "CSE-23", "1-1")
+	query := `INSERT INTO routines (batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-23', '1-1', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
 	if _, err := pool.Exec(ctx, query, courseID, row); err != nil {
 		t.Fatalf("could not insert the routine entry: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestDeleteCourseOnlyWhenNothingUsesIt(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			course, err := store.CreateCourse(ctx, test.code, "Test Course")
+			course, err := store.CreateCourse(ctx, test.code, "Test Course", 3.0)
 			if err != nil {
 				t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 			}
@@ -100,7 +101,7 @@ func TestDeleteCourseOnlyWhenNothingUsesIt(t *testing.T) {
 
 func TestDeleteCourseKeepsThePublishedCopies(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	course, err := store.CreateCourse(ctx, "CSE 210", "Algorithms")
+	course, err := store.CreateCourse(ctx, "CSE 210", "Algorithms", 3.0)
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}

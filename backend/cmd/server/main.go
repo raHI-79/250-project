@@ -94,6 +94,7 @@ func run() error {
 			People:   userStore,
 			Catalog:  userStore,
 			Lookups:  userStore,
+			Periods:  userStore,
 			Alerts:   alerts,
 			Classes:  userStore,
 			Items:    userStore,

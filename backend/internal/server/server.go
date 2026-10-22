@@ -33,6 +33,7 @@ type Dependencies struct {
 	People    handler.AdminStore
 	Catalog   handler.CatalogStore
 	Lookups   handler.LookupStore
+	Periods   handler.PeriodStore
 	Alerts    handler.NotificationService
 	Classes   handler.CRStore
 	Notifier  handler.BroadcastNotifier
@@ -107,8 +108,11 @@ func NewRouter(deps Dependencies) http.Handler {
 	authenticated.Handle("GET /api/me", handler.Me())
 	registerProfileRoutes(authenticated, handler.NewProfile(deps.Config, deps.Accounts, photos))
 	admin := handler.NewAdmin(deps.Config, deps.People, deps.Notifier, mail, photos)
+	periods := handler.NewPeriods(deps.Periods)
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
+	registerPeriodRoutes(AdminGroup(mux, deps), periods)
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
+	authenticated.Handle("GET /api/lookups/periods", periods.List())
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
 	registerPushRoutes(mux, deps, handler.NewPush(deps.Config, deps.Devices))
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Alarms))
@@ -230,6 +234,7 @@ func registerStudentRoutes(group RouteGroup, student *handler.Student) {
 	group.Handle("GET /api/students/upcoming-routine", student.UpcomingRoutine())
 	group.Handle("GET /api/students/exams", student.Exams())
 	group.Handle("GET /api/students/routine", student.Routine())
+	group.Handle("GET /api/students/courses", student.Courses())
 }
 
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {
@@ -286,6 +291,9 @@ func registerMessageRoutes(mux *http.ServeMux, deps Dependencies, messages *hand
 	group.Handle("POST /api/messages/conversations/{id}/members/{user_id}/admin", messages.SetMemberAdmin(true))
 	group.Handle("DELETE /api/messages/conversations/{id}/members/{user_id}/admin", messages.SetMemberAdmin(false))
 	group.Handle("POST /api/messages/conversations/{id}/leave", messages.Leave())
+	group.Handle("DELETE /api/messages/conversations/{id}", messages.ClearChat())
+	group.Handle("PATCH /api/messages/{id}", messages.Edit())
+	group.Handle("DELETE /api/messages/{id}", messages.Delete())
 }
 
 func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Poll) {
@@ -308,6 +316,14 @@ func registerProfileRoutes(group RouteGroup, profile *handler.Profile) {
 	group.Handle("PATCH /api/profile", profile.Patch())
 	group.Handle("POST /api/profile/password", profile.ChangePassword())
 	group.Handle("GET /api/people/{user_id}", profile.Person())
+}
+
+func registerPeriodRoutes(group RouteGroup, periods *handler.Periods) {
+	group.Handle("GET /api/admin/periods", periods.List())
+	group.Handle("POST /api/admin/periods", periods.Create())
+	group.Handle("PATCH /api/admin/periods/{id}", periods.Update())
+	group.Handle("DELETE /api/admin/periods/{id}", periods.Delete())
+	group.Handle("POST /api/admin/periods/reorder", periods.Reorder())
 }
 
 func registerLookupRoutes(group RouteGroup, lookups *handler.Lookups) {
@@ -353,7 +369,10 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("DELETE /api/admin/courses/{id}", catalog.DeleteCourse())
 	group.Handle("POST /api/admin/routines", catalog.CreateRoutine())
 	group.Handle("GET /api/admin/routines", catalog.Routines())
+	group.Handle("PATCH /api/admin/routines/{id}", catalog.MoveRoutine())
 	group.Handle("DELETE /api/admin/routines/{id}", catalog.DeleteRoutine())
+	group.Handle("GET /api/admin/batches/running-semester", catalog.RunningSemesters())
+	group.Handle("PUT /api/admin/batches/{batch}/running-semester", catalog.SetRunningSemester())
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
