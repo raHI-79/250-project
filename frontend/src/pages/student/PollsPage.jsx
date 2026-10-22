@@ -11,14 +11,18 @@ import {
 } from '../../components/ui'
 import PollResults from '../../components/PollResults'
 import api from '../../lib/api'
-import { useResource } from '../../lib/hooks'
+import { useHighlight, useResource } from '../../lib/hooks'
+import cx from '../../lib/cx'
 import { formatDateTime } from '../../lib/time'
 
-function PollCard({ poll, busy, onVote }) {
+function PollCard({ poll, busy, onVote, flash }) {
   const voted = poll.my_option_id !== null && poll.my_option_id !== undefined
   const showResults = voted || poll.is_closed
   return (
-    <Card hover={false} className="animate-fade-in-up">
+    <Card
+      hover={false}
+      className={cx('animate-fade-in-up', flash && 'border-accent-300 bg-accent-50/60')}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="font-display text-base font-semibold text-brand-900">{poll.question}</p>
         <StatusBadge
@@ -60,6 +64,7 @@ function PollCard({ poll, busy, onVote }) {
 export default function PollsPage() {
   const toast = useToast()
   const { data, loading, error, reload } = useResource('/api/students/polls')
+  const highlight = useHighlight(Boolean(data))
   const [busy, setBusy] = useState(0)
   const items = data?.items || []
   const onVote = async (pollId, optionId) => {
@@ -89,7 +94,14 @@ export default function PollsPage() {
       ) : (
         <div className="flex flex-col gap-4">
           {items.map((poll) => (
-            <PollCard key={poll.id} poll={poll} busy={busy === poll.id} onVote={onVote} />
+            <div key={poll.id} ref={highlight.register(poll.id)}>
+              <PollCard
+                poll={poll}
+                busy={busy === poll.id}
+                onVote={onVote}
+                flash={highlight.highlighted(poll.id)}
+              />
+            </div>
           ))}
         </div>
       )}

@@ -272,6 +272,50 @@ code.
 Students, CRs and teachers log in at `/login`. The administration logs in at
 `/portal-admin`, which is never linked from any normal page.
 
+### The pages of the scheduling engine
+
+Every route and every link is built in `src/lib/paths.js`, which also holds the
+query-string helpers, so no page writes a URL by hand.
+
+**The class representative** works on one page, `Create Class & Exam`, with four
+tabs that the URL remembers (`?tab=`, `?date=`, `?item=`):
+
+| Tab | What it does |
+|---|---|
+| Create | A class or an exam with the course, the section, the date, the times, a room or an online link, and the syllabus and instructions of an exam. A refused rule comes back inline. |
+| Room availability | Seven days per managed room, green free and red booked with the batch, course and status in the tooltip. Clicking a free cell fills the create form. |
+| Upcoming routine | The batch's items by date with their status, the teacher's message and a proposed slot, and only the actions the API allows on each one. |
+| Final routine | Items grouped by date with `Needs time` and `Changed since publish`, inline editing of the time, place, link and note, checkboxes, a timetable preview and Publish All behind a confirm. |
+
+**The teacher** has `Fixed weekly routine`, `Upcoming routine` and
+`Create exam`. The upcoming page has two tabs: `Next day`, which opens with the
+decision window and a live countdown and offers Confirm, Cancel and
+Request reschedule per item plus Accept and Decline on a request from the class
+representative, and `Final routine`, which lists what the batches published
+from today with a `By teacher` or `By CR` badge and the link editor for an
+online class.
+
+**A student** reads only the published routine. `Today` and `Upcoming routine`
+show date chips, an `Online` badge with a `Join` button when a link exists,
+cancelled classes struck through, and the notes. `Exams` lists every exam with
+its syllabus and instructions, and either the time and the place or
+`Time to be announced`. A class representative sees exactly the same pages.
+
+### Messaging and notifications
+
+The conversation list carries a WhatsApp-like search bar with the filter chips
+`All · Teachers · CRs · Students · Office`. Typing shows the people who match
+with their role and batch or designation, plus the groups the caller is allowed
+to start; clicking one opens or reuses that conversation. `?c=` opens a
+conversation straight from a link, which is how a message notification lands.
+
+Every notification is a button. `notificationTarget(link, role)` turns the
+`link` the API sends into the right page for the reader, so a teacher and a
+student following the same kind of notification each land on their own page.
+Opening one marks it read, closes the panel and navigates; `Mark all as read`
+clears the dot. The target pages honour `?date`, `?item`, `?tab` and
+`?highlight`, scrolling the row into view and flashing it for a moment.
+
 ### Campus photos
 
 The login heroes and the dashboard banner read their images from
