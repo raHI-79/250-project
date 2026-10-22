@@ -36,9 +36,11 @@ export default function ConfirmProvider({ children }) {
         title={state?.title}
         footer={
           <>
-            <Button variant="secondary" onClick={() => settle(false)}>
-              {state?.cancelLabel}
-            </Button>
+            {state?.cancelLabel && (
+              <Button variant="secondary" onClick={() => settle(false)}>
+                {state.cancelLabel}
+              </Button>
+            )}
             <Button variant={state?.tone === 'danger' ? 'danger' : 'primary'} onClick={() => settle(true)}>
               {state?.confirmLabel}
             </Button>

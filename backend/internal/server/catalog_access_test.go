@@ -37,6 +37,10 @@ func (emptyCatalogStore) DeleteRoutine(ctx context.Context, routineID int64) err
 	return store.ErrNotFound
 }
 
+func (emptyCatalogStore) DeleteCourse(ctx context.Context, courseID int64) (store.CourseUsage, error) {
+	return store.CourseUsage{}, store.ErrNotFound
+}
+
 type emptyLookupStore struct{}
 
 func (emptyLookupStore) ListBatches(ctx context.Context) ([]string, error) {

@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 )
 
-var ErrDuplicateCourse = errors.New("store: a course with this code already exists")
+var (
+	ErrDuplicateCourse = errors.New("store: a course with this code already exists")
+	ErrCourseInUse     = errors.New("store: this course is still used by the department")
+)
 
 type Course struct {
 	ID    int64
@@ -123,4 +127,61 @@ func (s *Store) ListBatchCourseSlots(ctx context.Context, batch, section string)
 		return nil, fmt.Errorf("store: could not read the course slots: %w", err)
 	}
 	return slots, nil
+}
+
+type CourseUsage struct {
+	Routines    int
+	Items       int
+	DropCourses int
+}
+
+func (u CourseUsage) InUse() bool {
+	return u.Routines > 0 || u.Items > 0 || u.DropCourses > 0
+}
+
+const (
+	courseUsageSQL = `SELECT
+(SELECT COUNT(*) FROM routines WHERE course_id = $1),
+(SELECT COUNT(*) FROM schedule_items WHERE course_id = $1),
+(SELECT COUNT(*) FROM student_drop_courses WHERE course_id = $1)`
+	deleteCourseSQL = `DELETE FROM courses WHERE id = $1 RETURNING id`
+)
+
+func (s *Store) CourseUsage(ctx context.Context, courseID int64) (CourseUsage, error) {
+	var usage CourseUsage
+	err := s.pool.QueryRow(ctx, courseUsageSQL, courseID).
+		Scan(&usage.Routines, &usage.Items, &usage.DropCourses)
+	if err != nil {
+		return CourseUsage{}, fmt.Errorf("store: could not count what uses the course %d: %w", courseID, err)
+	}
+	return usage, nil
+}
+
+func (s *Store) DeleteCourse(ctx context.Context, courseID int64) (CourseUsage, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return CourseUsage{}, fmt.Errorf("store: could not start the course transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var usage CourseUsage
+	err = tx.QueryRow(ctx, courseUsageSQL, courseID).
+		Scan(&usage.Routines, &usage.Items, &usage.DropCourses)
+	if err != nil {
+		return CourseUsage{}, fmt.Errorf("store: could not count what uses the course %d: %w", courseID, err)
+	}
+	if usage.InUse() {
+		return usage, ErrCourseInUse
+	}
+	var id int64
+	err = tx.QueryRow(ctx, deleteCourseSQL, courseID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CourseUsage{}, ErrNotFound
+	}
+	if err != nil {
+		return CourseUsage{}, fmt.Errorf("store: could not delete the course %d: %w", courseID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return CourseUsage{}, fmt.Errorf("store: could not commit the course deletion: %w", err)
+	}
+	return usage, nil
 }

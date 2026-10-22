@@ -333,6 +333,7 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("GET /api/admin/stats", admin.Stats())
 	group.Handle("POST /api/admin/courses", catalog.CreateCourse())
 	group.Handle("GET /api/admin/courses", catalog.Courses())
+	group.Handle("DELETE /api/admin/courses/{id}", catalog.DeleteCourse())
 	group.Handle("POST /api/admin/routines", catalog.CreateRoutine())
 	group.Handle("GET /api/admin/routines", catalog.Routines())
 	group.Handle("DELETE /api/admin/routines/{id}", catalog.DeleteRoutine())
