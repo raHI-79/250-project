@@ -1,8 +1,19 @@
 import { ClipboardList, Video } from 'lucide-react'
-import { Alert, Button, Card, EmptyState, PageHeader, SkeletonCard, StatusBadge } from '../../components/ui'
+import { Link } from 'react-router-dom'
+import DateBlock from '../../components/DateBlock'
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  SkeletonCard,
+  StatusBadge,
+} from '../../components/ui'
 import { useHighlight, useResource } from '../../lib/hooks'
+import paths from '../../lib/paths'
 import { courseLine, isOnline, sectionShort } from '../../lib/schedule'
-import { formatDate, formatTimeRange } from '../../lib/time'
+import { formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
 
 export default function ExamsPage() {
@@ -12,6 +23,7 @@ export default function ExamsPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Examinations"
         title="Exams"
         subtitle="Every exam ahead with its syllabus; the time and the room arrive with the published routine"
       />
@@ -27,6 +39,11 @@ export default function ExamsPage() {
           icon={ClipboardList}
           title="No exams ahead"
           text="Nothing has been filed for your section yet."
+          action={
+            <Button as={Link} to={paths.student.upcomingRoutine()} variant="secondary" size="sm">
+              Read the upcoming routine
+            </Button>
+          }
         />
       ) : (
         <ul className="flex flex-col gap-3">
@@ -36,58 +53,63 @@ export default function ExamsPage() {
                 hover={false}
                 className={cx(
                   'animate-fade-in-up',
-                  highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
+                  highlight.highlighted(item.id) && 'animate-flash border-gold-300',
                 )}
               >
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="font-display text-base font-semibold text-brand-800">
-                    {formatDate(item.item_date)}
-                  </span>
-                  <span className="font-medium text-brand-900">{courseLine(item)}</span>
-                  <span className="text-brand-500">
-                    {item.batch} {sectionShort(item.section)}
-                  </span>
-                  {isOnline(item) && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
-                      <Video size={12} />
-                      Online
-                    </span>
-                  )}
-                  {!item.published && <StatusBadge status="pending" label="Time to be announced" />}
-                </div>
-                <p className="mt-2 text-sm text-brand-700">
-                  {item.start_time ? (
-                    <>
-                      <span className="font-medium tabular-nums">
-                        {formatTimeRange(item.start_time, item.end_time)}
+                <div className="flex gap-4">
+                  <DateBlock value={item.item_date} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                      <span className="font-display text-lg font-bold text-ink">
+                        {courseLine(item)}
                       </span>
-                      {isOnline(item) ? ' · Online' : item.room ? ` · Room ${item.room}` : ''}
-                    </>
-                  ) : (
-                    'Time to be announced'
-                  )}
-                </p>
-                {isOnline(item) && item.meeting_link && (
-                  <a
-                    href={item.meeting_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-block"
-                  >
-                    <Button size="sm">Join</Button>
-                  </a>
-                )}
-                {item.syllabus && (
-                  <p className="mt-2 text-sm text-brand-600">
-                    <span className="font-medium text-brand-700">Syllabus: </span>
-                    <span className="whitespace-pre-line">{item.syllabus}</span>
-                  </p>
-                )}
-                {item.instructions && (
-                  <p className="mt-1 text-sm text-brand-600 whitespace-pre-line">
-                    {item.instructions}
-                  </p>
-                )}
+                      <StatusBadge
+                        status="unavailable"
+                        label={`${item.batch} ${sectionShort(item.section)}`}
+                      />
+                      {isOnline(item) && <StatusBadge status="gold" label="Online" />}
+                      {!item.published && (
+                        <StatusBadge status="pending" label="Time to be announced" />
+                      )}
+                    </div>
+                    <p className="font-numeral mt-1.5 text-sm text-ink-soft">
+                      {item.start_time ? (
+                        <>
+                          {formatTimeRange(item.start_time, item.end_time)}
+                          {isOnline(item) ? ' · Online' : item.room ? ` · Room ${item.room}` : ''}
+                        </>
+                      ) : (
+                        'Time to be announced'
+                      )}
+                    </p>
+                    {isOnline(item) && item.meeting_link && (
+                      <a
+                        href={item.meeting_link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-block"
+                      >
+                        <Button size="sm" variant="secondary">
+                          <Video size={13} />
+                          Join
+                        </Button>
+                      </a>
+                    )}
+                    {item.syllabus && (
+                      <div className="mt-3 border-l-[3px] border-gold-500 bg-gold-50 px-3 py-2">
+                        <p className="label-caps text-gold-700">Syllabus</p>
+                        <p className="mt-1 text-sm leading-relaxed whitespace-pre-line text-gold-800">
+                          {item.syllabus}
+                        </p>
+                      </div>
+                    )}
+                    {item.instructions && (
+                      <p className="mt-2 text-sm leading-relaxed whitespace-pre-line text-muted">
+                        {item.instructions}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </Card>
             </li>
           ))}

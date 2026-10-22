@@ -8,7 +8,7 @@ export default function ItemBadges({ item, showOrigin = false, showFinal = false
       <StatusBadge status={statusTone(item.status)} label={statusLabel(item.status)} />
       {item.kind !== 'class' && <StatusBadge status="unavailable" label={kindLabel(item.kind)} />}
       {isOnline(item) && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
+        <span className="inline-flex items-center gap-1 rounded-full border border-line-strong bg-wash px-2.5 py-0.5 text-xs font-medium text-ink-soft">
           <Video size={12} />
           Online
         </span>

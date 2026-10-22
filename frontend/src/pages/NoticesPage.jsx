@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { Megaphone } from 'lucide-react'
 import AttachmentView from '../components/AttachmentView'
+import DateBlock from '../components/DateBlock'
 import {
   Alert,
   Avatar,
-  Button,
   Card,
   EmptyState,
   PageHeader,
   SkeletonCard,
   StatusBadge,
+  StatusTabs,
 } from '../components/ui'
 import { useHighlight, useResource } from '../lib/hooks'
 import cx from '../lib/cx'
@@ -41,36 +42,13 @@ export default function NoticesPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Notice board"
         title="Notices"
         subtitle="Everything the department, your teachers and the class representatives posted"
-        actions={
-          <div className="inline-flex flex-wrap rounded-lg border border-brand-200 bg-surface p-1">
-            {TABS.map((entry) => (
-              <Button
-                key={entry.value}
-                size="sm"
-                variant={source === entry.value ? 'primary' : 'ghost'}
-                onClick={() => setSource(entry.value)}
-              >
-                {entry.label}
-              </Button>
-            ))}
-          </div>
-        }
       />
+      <StatusTabs tabs={TABS} value={source} onChange={setSource} className="mb-5" />
       {source === 'cr' && (
-        <div className="mb-5 inline-flex rounded-lg border border-brand-200 bg-surface p-1">
-          {SCOPES.map((entry) => (
-            <Button
-              key={entry.value}
-              size="sm"
-              variant={scope === entry.value ? 'primary' : 'ghost'}
-              onClick={() => setScope(entry.value)}
-            >
-              {entry.label}
-            </Button>
-          ))}
-        </div>
+        <StatusTabs tabs={SCOPES} value={scope} onChange={setScope} className="mb-5" />
       )}
       {error && (
         <Alert tone="error" className="mb-5">
@@ -97,48 +75,49 @@ export default function NoticesPage() {
                 highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
               )}
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-display text-base font-semibold text-brand-900">{item.title}</p>
-                <StatusBadge
-                  status={item.source === 'admin' ? 'approved' : 'unavailable'}
-                  label={SOURCE_LABELS[item.source] || item.source}
-                />
-                {item.batch && (
-                  <StatusBadge
-                    status="unavailable"
-                    label={item.batch === 'ALL' ? 'All batches' : item.batch}
+              <div className="flex gap-4">
+                <DateBlock value={item.created_at} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-display wrap-long text-lg font-bold text-ink">{item.title}</p>
+                    <StatusBadge
+                      status={item.source === 'admin' ? 'approved' : 'unavailable'}
+                      label={SOURCE_LABELS[item.source] || item.source}
+                    />
+                    {item.batch && (
+                      <StatusBadge
+                        status="unavailable"
+                        label={item.batch === 'ALL' ? 'All batches' : item.batch}
+                      />
+                    )}
+                    {item.section && (
+                      <StatusBadge status="unavailable" label={`Section ${item.section}`} />
+                    )}
+                    <span className="ml-auto text-xs whitespace-nowrap text-muted">
+                      {formatDateTime(item.created_at)}
+                    </span>
+                  </div>
+                  {item.description && (
+                    <p className="wrap-long mt-2 text-sm leading-relaxed whitespace-pre-line text-ink-soft">
+                      {item.description}
+                    </p>
+                  )}
+                  <AttachmentView
+                    fileUrl={item.file_url}
+                    fileName={item.file_name}
+                    fileMime={item.file_mime}
+                    fileSize={item.file_size}
+                    linkUrl={item.link_url}
+                    className="mt-3"
                   />
-                )}
-                {item.section && (
-                  <StatusBadge status="unavailable" label={`Section ${item.section}`} />
-                )}
-                <span className="ml-auto text-xs whitespace-nowrap text-brand-500">
-                  {formatDateTime(item.created_at)}
-                </span>
-              </div>
-              {item.description && (
-                <p className="mt-2 text-sm whitespace-pre-line text-brand-700">
-                  {item.description}
-                </p>
-              )}
-              <AttachmentView
-                fileUrl={item.file_url}
-                fileName={item.file_name}
-                fileMime={item.file_mime}
-                fileSize={item.file_size}
-                linkUrl={item.link_url}
-                className="mt-3"
-              />
-              {item.created_by_name && (
-                <div className="mt-3 flex items-center gap-2 text-xs text-brand-500">
-                  <Avatar
-                    src={item.posted_by_photo_url}
-                    name={item.created_by_name}
-                    size="sm"
-                  />
-                  {item.created_by_name}
+                  {item.created_by_name && (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-muted">
+                      <Avatar src={item.posted_by_photo_url} name={item.created_by_name} size="xs" />
+                      {item.created_by_name}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </Card>
           ))}
         </div>

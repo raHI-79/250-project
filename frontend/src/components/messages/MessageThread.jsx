@@ -36,24 +36,24 @@ export default function MessageThread({ items, meId, loading }) {
             <div className={cx('flex min-w-0 max-w-[85%] flex-col', mine && 'items-end')}>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {mine ? (
-                  <span className="font-semibold text-brand-800">You</span>
+                  <span className="font-semibold text-ink">You</span>
                 ) : (
                   <Link
                     to={paths.person(item.sender_id)}
-                    className="font-semibold text-brand-800 hover:underline"
+                    className="font-semibold text-ink hover:underline"
                   >
                     {item.sender_name}
                   </Link>
                 )}
                 <StatusBadge status="unavailable" label={shortRoleLabel(item.sender_role)} />
-                <span className="text-brand-400">{relativeTime(item.created_at)}</span>
+                <span className="text-faint">{relativeTime(item.created_at)}</span>
               </div>
               <div
                 className={cx(
-                  'mt-1 rounded-xl px-3 py-2 text-sm',
+                  'mt-1 rounded-md px-3 py-2 text-sm',
                   mine
                     ? 'bg-brand-600 text-white'
-                    : 'border border-brand-100 bg-white text-brand-800',
+                    : 'border border-line bg-surface text-ink',
                 )}
               >
                 {item.body && <p className="break-words whitespace-pre-line">{item.body}</p>}

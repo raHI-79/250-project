@@ -13,7 +13,7 @@ export default function TeacherFixedRoutinePage() {
   return (
     <>
       <PageHeader
-        title="Fixed weekly routine"
+        eyebrow="Teaching schedule" title="Fixed weekly routine"
         subtitle="The slots the department gave you, week after week"
       />
       {error && (
@@ -33,28 +33,28 @@ export default function TeacherFixedRoutinePage() {
         <div className="grid gap-4 lg:grid-cols-2">
           {days.map((day) => (
             <Card key={day.name} hover={false} className="animate-fade-in-up">
-              <p className="font-display text-base font-semibold text-brand-800">{day.name}</p>
+              <p className="font-display text-lg font-bold text-ink">{day.name}</p>
               <ul className="mt-2 flex flex-col">
                 {items
                   .filter((item) => item.day_of_week === day.index)
                   .map((item) => (
                     <li
                       key={item.id}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-brand-50 py-2 text-sm last:border-b-0"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2 text-sm last:border-b-0"
                     >
                       <span className="w-32 shrink-0 font-medium tabular-nums text-brand-600">
                         {formatTimeRange(item.start_time, item.end_time)}
                       </span>
-                      <span className="font-medium text-brand-900">
+                      <span className="font-medium text-ink">
                         {item.course_code}
                         {item.course_title ? ` ${item.course_title}` : ''}
                       </span>
-                      <span className="text-brand-500">
+                      <span className="text-muted">
                         {item.batch} {sectionShort(item.section)}
                         {item.room ? ` · ${item.room}` : ''}
                       </span>
                       {item.type !== 'class' && (
-                        <span className="text-xs text-brand-400">{kindLabel(item.type)}</span>
+                        <span className="text-xs text-faint">{kindLabel(item.type)}</span>
                       )}
                     </li>
                   ))}

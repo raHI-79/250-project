@@ -131,7 +131,7 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
           />
         </div>
         {course?.teacher?.name && (
-          <p className="text-xs text-brand-500">
+          <p className="text-xs text-muted">
             {course.code} is taught by {course.teacher.name}.
             {routineSlot && (
               <Button variant="ghost" size="sm" onClick={useRoutineSlot} className="ml-1 align-baseline">

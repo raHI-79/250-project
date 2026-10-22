@@ -132,7 +132,7 @@ export default function UpcomingTab({ upcoming, highlight }) {
       <div className="flex flex-col gap-4">
         {byDate(items).map((day) => (
           <Card key={day.date} hover={false} className="animate-fade-in-up">
-            <p className="font-display text-base font-semibold text-brand-800">
+            <p className="font-display text-lg font-bold text-ink">
               {formatDate(day.date)}
             </p>
             <ul className="mt-2 flex flex-col gap-3">
@@ -141,7 +141,7 @@ export default function UpcomingTab({ upcoming, highlight }) {
                   key={item.id}
                   ref={highlight.register(item.id)}
                   className={cx(
-                    'rounded-lg border border-brand-100 p-3 transition-colors',
+                    'rounded-md border border-line p-3 transition-colors',
                     highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
                   )}
                 >
@@ -149,8 +149,8 @@ export default function UpcomingTab({ upcoming, highlight }) {
                     <span className="font-medium tabular-nums text-brand-600">
                       {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                     </span>
-                    <span className="font-medium text-brand-900">{courseLine(item)}</span>
-                    <span className="text-brand-500">
+                    <span className="font-medium text-ink">{courseLine(item)}</span>
+                    <span className="text-muted">
                       {sectionShort(item.section)}
                       {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                     </span>
@@ -162,14 +162,14 @@ export default function UpcomingTab({ upcoming, highlight }) {
                     </Alert>
                   )}
                   {item.proposed && (
-                    <p className="mt-2 text-xs text-brand-500">
+                    <p className="mt-2 text-xs text-muted">
                       Proposed: {formatDate(item.proposed.item_date)}{' '}
                       {formatTimeRange(item.proposed.start_time, item.proposed.end_time)}
                       {item.proposed.room ? ` · ${item.proposed.room}` : ''}
                     </p>
                   )}
                   {item.cancel_reason && (
-                    <p className="mt-2 text-xs text-brand-500">Reason: {item.cancel_reason}</p>
+                    <p className="mt-2 text-xs text-muted">Reason: {item.cancel_reason}</p>
                   )}
                   <div className="mt-2.5 flex flex-wrap gap-2">
                     {allows(item, ACTION_ADD_TO_FINAL) && (

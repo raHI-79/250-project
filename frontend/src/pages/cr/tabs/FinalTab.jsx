@@ -160,7 +160,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
       <div className="flex flex-col gap-4">
         {days.map((day) => (
           <Card key={day.date} hover={false} className="animate-fade-in-up">
-            <p className="font-display text-base font-semibold text-brand-800">
+            <p className="font-display text-lg font-bold text-ink">
               {formatDate(day.date)} · {day.weekday}
             </p>
             <ul className="mt-2 flex flex-col gap-3">
@@ -169,7 +169,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
                   key={item.id}
                   ref={highlight.register(item.id)}
                   className={cx(
-                    'rounded-lg border border-brand-100 p-3 transition-colors',
+                    'rounded-md border border-line p-3 transition-colors',
                     highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
                   )}
                 >
@@ -179,23 +179,23 @@ export default function FinalTab({ final, highlight, onPublished }) {
                       checked={picked.includes(item.id)}
                       onChange={() => toggle(item.id)}
                       aria-label={`Pick ${courseLine(item)}`}
-                      className="mt-1 size-4 rounded border-brand-300 text-brand-600"
+                      className="mt-1 size-4 rounded border-line-strong text-brand-600"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                         <span className="font-medium tabular-nums text-brand-600">
                           {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                         </span>
-                        <span className="font-medium text-brand-900">{courseLine(item)}</span>
-                        <span className="text-brand-500">
+                        <span className="font-medium text-ink">{courseLine(item)}</span>
+                        <span className="text-muted">
                           {sectionShort(item.section)}
                           {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                         </span>
                         <ItemBadges item={item} showOrigin showFinal />
                       </div>
-                      {item.note && <p className="mt-1 text-xs text-brand-500">{item.note}</p>}
+                      {item.note && <p className="mt-1 text-xs text-muted">{item.note}</p>}
                       {editing === item.id ? (
-                        <div className="mt-3 flex flex-col gap-4 rounded-lg border border-brand-100 bg-brand-50/40 p-3">
+                        <div className="mt-3 flex flex-col gap-4 rounded-md border border-line bg-wash/40 p-3">
                           <TimeRangeFields
                             start={draft.start}
                             end={draft.end}
@@ -221,7 +221,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
                               exam. You set the time, the place and the extra information.
                             </Alert>
                           )}
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <Button size="sm" loading={busy === item.id} onClick={() => saveEdit(item)}>
                               Save
                             </Button>

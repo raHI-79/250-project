@@ -75,7 +75,7 @@ export default function CRNoticesPage() {
   const items = notices.data?.items || []
   return (
     <>
-      <PageHeader title="Notices" subtitle="Post a notice for your batch or another batch" />
+      <PageHeader eyebrow="Notice board" title="Notices" subtitle="Post a notice for your batch or another batch" />
       <Card hover={false} className="mb-6">
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
@@ -96,7 +96,7 @@ export default function CRNoticesPage() {
               {TARGETS.map((entry) => (
                 <label
                   key={entry.value}
-                  className="inline-flex items-center gap-2 text-sm text-brand-800"
+                  className="inline-flex items-center gap-2 text-sm text-ink"
                 >
                   <input
                     type="radio"
@@ -134,7 +134,7 @@ export default function CRNoticesPage() {
           </Button>
         </form>
       </Card>
-      <p className="font-display mb-3 text-lg font-semibold text-brand-800">My notices</p>
+      <p className="font-display mb-3 text-lg font-semibold text-ink">My notices</p>
       {notices.error && <Alert tone="error" className="mb-5">{notices.error}</Alert>}
       {notices.loading ? (
         <SkeletonCard />
@@ -149,14 +149,14 @@ export default function CRNoticesPage() {
           {items.map((item) => (
             <Card key={item.id} hover={false} className="animate-fade-in-up">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-display text-base font-semibold text-brand-900">{item.title}</p>
+                <p className="font-display text-lg font-bold text-ink">{item.title}</p>
                 <StatusBadge status="unavailable" label={item.batch} />
-                <span className="ml-auto text-xs text-brand-500">
+                <span className="ml-auto text-xs text-muted">
                   {formatDateTime(item.created_at)}
                 </span>
               </div>
               {item.description && (
-                <p className="mt-2 text-sm whitespace-pre-line text-brand-700">
+                <p className="mt-2 text-sm whitespace-pre-line text-ink-soft">
                   {item.description}
                 </p>
               )}

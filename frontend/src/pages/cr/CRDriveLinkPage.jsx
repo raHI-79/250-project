@@ -63,7 +63,7 @@ export default function CRDriveLinkPage() {
   return (
     <>
       <PageHeader
-        title="Batch Drive link"
+        eyebrow="Course materials" title="Batch Drive link"
         subtitle="One Drive folder for your batch, shown to every student on the materials page"
       />
       {current.error && (
@@ -76,21 +76,16 @@ export default function CRDriveLinkPage() {
       ) : saved?.link ? (
         <Card hover={false} className="mb-6 flex flex-col gap-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="font-display text-2xl font-semibold text-brand-900">{saved.title}</p>
+            <p className="font-display wrap-long text-lg font-bold text-ink">{saved.title}</p>
             <Button variant="danger" size="sm" loading={removing} onClick={remove}>
               Remove
             </Button>
           </div>
-          <p className="text-xs text-brand-500">Updated {relativeTime(saved.updated_at)}</p>
-          <a
-            href={saved.link}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex w-fit items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700"
-          >
+          <p className="text-xs text-muted">Updated {relativeTime(saved.updated_at)}</p>
+          <Button as="a" href={saved.link} target="_blank" rel="noreferrer" className="w-fit">
             <ExternalLink size={16} />
             Open Drive
-          </a>
+          </Button>
         </Card>
       ) : (
         <EmptyState

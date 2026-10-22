@@ -43,9 +43,9 @@ export default function PreviewModal({ open, days, onClose, onPublish, busy, cou
           </Alert>
           <DataTable>
             <thead>
-              <tr className="border-b border-brand-100 bg-brand-50/60">
+              <tr className="border-b border-line bg-wash">
                 {HEADINGS.map((heading) => (
-                  <th key={heading} className="px-3 py-2 font-semibold text-brand-700">
+                  <th key={heading} className="px-3 py-2 font-semibold text-ink-soft">
                     {heading}
                   </th>
                 ))}
@@ -53,18 +53,18 @@ export default function PreviewModal({ open, days, onClose, onPublish, busy, cou
             </thead>
             <tbody>
               {rows.map((item) => (
-                <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
-                  <td className="px-3 py-2 whitespace-nowrap text-brand-700">
+                <tr key={item.id} className="border-b border-line last:border-b-0">
+                  <td className="px-3 py-2 whitespace-nowrap text-ink-soft">
                     {formatDate(item.item_date)}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-brand-500">{item.weekday}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted">{item.weekday}</td>
                   <td className="px-3 py-2 whitespace-nowrap tabular-nums text-brand-600">
                     {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                   </td>
-                  <td className="px-3 py-2 text-brand-900">{courseLine(item)}</td>
-                  <td className="px-3 py-2 text-brand-700">{sectionShort(item.section)}</td>
-                  <td className="px-3 py-2 text-brand-700">{placeOf(item) || '—'}</td>
-                  <td className="px-3 py-2 text-brand-500">{infoOf(item) || '—'}</td>
+                  <td className="px-3 py-2 text-ink">{courseLine(item)}</td>
+                  <td className="px-3 py-2 text-ink-soft">{sectionShort(item.section)}</td>
+                  <td className="px-3 py-2 text-ink-soft">{placeOf(item) || '—'}</td>
+                  <td className="px-3 py-2 text-muted">{infoOf(item) || '—'}</td>
                 </tr>
               ))}
             </tbody>

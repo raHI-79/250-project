@@ -26,7 +26,7 @@ export default function TeachersPage() {
   const items = data?.items || []
   return (
     <>
-      <PageHeader title="Teachers" subtitle="Contact details of the department teachers" />
+      <PageHeader eyebrow="Department directory" title="Teachers" subtitle="Contact details of the department teachers" />
       <Card hover={false} className="mb-5">
         <Input
           label="Search"
@@ -48,9 +48,9 @@ export default function TeachersPage() {
       ) : (
         <DataTable className="animate-fade-in">
           <thead>
-            <tr className="border-b border-brand-100 bg-brand-50/60">
+            <tr className="border-b border-line bg-wash">
               {HEADINGS.map((heading) => (
-                <th key={heading} className="px-4 py-3 font-semibold text-brand-700">
+                <th key={heading} className="px-4 py-3 font-semibold text-ink-soft">
                   {heading}
                 </th>
               ))}
@@ -58,20 +58,20 @@ export default function TeachersPage() {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.email} className="border-b border-brand-50 last:border-b-0">
-                <td className="px-4 py-3 text-brand-900">
+              <tr key={item.email} className="border-b border-line last:border-b-0">
+                <td className="px-4 py-3 text-ink">
                   <span className="flex items-center gap-2.5">
                     <Avatar src={item.photo_url} name={item.name} size="sm" />
                     <Link
                       to={paths.person(item.user_id)}
-                      className="font-medium text-brand-900 hover:text-brand-600 hover:underline"
+                      className="font-medium text-ink hover:text-brand-600 hover:underline"
                     >
                       {item.name}
                     </Link>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-brand-700">{item.designation || '—'}</td>
-                <td className="px-4 py-3 text-brand-700">{item.office_room || '—'}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.designation || '—'}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.office_room || '—'}</td>
                 <td className="px-4 py-3">
                   <a href={`tel:${item.phone}`} className="text-brand-600 hover:underline">
                     {item.phone}

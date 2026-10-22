@@ -129,7 +129,7 @@ export default function TeacherCreateExamPage() {
   return (
     <>
       <PageHeader
-        title="Create exam"
+        eyebrow="Examinations" title="Create exam"
         subtitle="File an exam with its syllabus; the class representative sets the time and the room"
       />
       <Card hover={false} className="mb-5">
@@ -186,7 +186,7 @@ export default function TeacherCreateExamPage() {
             rows={2}
             hint="What to bring, where to sit"
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button type="submit" loading={saving}>
               <Plus size={15} />
               {editing ? 'Save the exam' : 'Add the exam'}
@@ -224,14 +224,14 @@ export default function TeacherCreateExamPage() {
                 )}
               >
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="text-sm font-medium text-brand-700">
+                  <span className="text-sm font-medium text-ink-soft">
                     {formatDate(item.item_date)}
                   </span>
                   <span className="font-medium tabular-nums text-brand-600">
                     {formatTimeRange(item.start_time, item.end_time) || 'Time to be announced'}
                   </span>
-                  <span className="font-medium text-brand-900">{courseLine(item)}</span>
-                  <span className="text-brand-500">
+                  <span className="font-medium text-ink">{courseLine(item)}</span>
+                  <span className="text-muted">
                     {item.batch} {sectionShort(item.section)}
                     {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                   </span>

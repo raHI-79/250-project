@@ -91,7 +91,7 @@ export default function TeacherNoticesPage() {
   const items = notices.data?.items || []
   return (
     <>
-      <PageHeader title="Notices" subtitle="Post a notice for a batch or for one section" />
+      <PageHeader eyebrow="Notice board" title="Notices" subtitle="Post a notice for a batch or for one section" />
       <Card hover={false} className="mb-6">
         <form onSubmit={publish} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
@@ -145,7 +145,7 @@ export default function TeacherNoticesPage() {
           </Button>
         </form>
       </Card>
-      <p className="font-display mb-3 text-lg font-semibold text-brand-800">My notices</p>
+      <p className="font-display mb-3 text-lg font-semibold text-ink">My notices</p>
       {notices.error && (
         <Alert tone="error" className="mb-5">
           {notices.error}
@@ -172,17 +172,17 @@ export default function TeacherNoticesPage() {
               )}
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-display text-base font-semibold text-brand-900">{item.title}</p>
+                <p className="font-display text-lg font-bold text-ink">{item.title}</p>
                 <StatusBadge status="unavailable" label={item.batch} />
                 {item.section && (
                   <StatusBadge status="unavailable" label={`Section ${item.section}`} />
                 )}
-                <span className="ml-auto text-xs text-brand-500">
+                <span className="ml-auto text-xs text-muted">
                   {formatDateTime(item.created_at)}
                 </span>
               </div>
               {item.description && (
-                <p className="mt-2 text-sm whitespace-pre-line text-brand-700">
+                <p className="mt-2 text-sm whitespace-pre-line text-ink-soft">
                   {item.description}
                 </p>
               )}

@@ -309,7 +309,7 @@ export function RescheduleModal({ item, title, taken, onClose, onConfirm, busy }
             </Alert>
           )
         )}
-        <p className="text-xs text-brand-400">
+        <p className="text-xs text-faint">
           Classes run from {CLASS_START} to {CLASS_END}.
         </p>
       </div>

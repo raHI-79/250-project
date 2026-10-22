@@ -51,7 +51,7 @@ export default function CreateClassExamPage() {
   return (
     <>
       <PageHeader
-        title="Create Class & Exam"
+        eyebrow="Class representative" title="Create Class & Exam"
         subtitle="Add classes and exams, find a free room, decide what your batch sees"
       />
       <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
