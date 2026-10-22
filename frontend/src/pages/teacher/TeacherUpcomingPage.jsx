@@ -23,15 +23,18 @@ import api from '../../lib/api'
 import { useHighlight, useQueryTab, useResource } from '../../lib/hooks'
 import paths, { TEACHER_TAB_FINAL, TEACHER_TAB_NEXT_DAY } from '../../lib/paths'
 import {
+  STATUS_AWAITING,
   STATUS_CR_ASK,
+  STATUS_NO_RESPONSE,
   countdownText,
   courseLine,
   isOnline,
+  needsLink,
   placeOf,
   secondsUntilClock,
   sectionShort,
 } from '../../lib/schedule'
-import { formatDate, formatTimeRange } from '../../lib/time'
+import { formatClock, formatDate, formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
 
 const TABS = [
@@ -41,26 +44,37 @@ const TABS = [
 
 const TAB_VALUES = TABS.map((entry) => entry.value)
 
-function WindowBanner({ open, start, end }) {
+const lockedHint = 'The decision window is closed for a first decision on this class.'
+
+function WindowBanner({ state, start, end }) {
   const [seconds, setSeconds] = useState(() => secondsUntilClock(end))
   useEffect(() => {
     setSeconds(secondsUntilClock(end))
     const timer = window.setInterval(() => setSeconds(secondsUntilClock(end)), 1000)
     return () => window.clearInterval(timer)
   }, [end])
-  if (!open) {
+  if (state === 'before') {
     return (
-      <Alert tone="warning" title="The decision window is closed" className="mb-5">
-        You can decide on tomorrow between {start} and {end}. Outside it the class representative
-        decides, and you can still change a class you already confirmed until it starts.
+      <Alert tone="info" className="mb-5">
+        <span className="inline-flex items-center gap-1.5">
+          <Clock size={14} />
+          Opens at {formatClock(start)} for tomorrow's classes
+        </span>
+      </Alert>
+    )
+  }
+  if (state === 'closed') {
+    return (
+      <Alert tone="warning" className="mb-5">
+        Closed for tomorrow — undecided classes are marked No response
       </Alert>
     )
   }
   return (
-    <Alert tone="info" title={`The window is open until ${end}`} className="mb-5">
+    <Alert tone="info" className="mb-5">
       <span className="inline-flex items-center gap-1.5">
         <Clock size={14} />
-        {countdownText(seconds)} to confirm or move tomorrow's classes.
+        Open until {formatClock(end)} · {countdownText(seconds)}
       </span>
     </Alert>
   )
@@ -132,6 +146,9 @@ export default function TeacherUpcomingPage() {
       accept ? 'The new slot is in place' : 'The original slot stays',
     )
   const items = nextDay.data?.items || []
+  const windowOpen = Boolean(nextDay.data?.decision_open)
+  const locked = (item) =>
+    !windowOpen && (item.status === STATUS_AWAITING || item.status === STATUS_NO_RESPONSE)
   const finalItems = final.data?.items || []
   return (
     <>
@@ -147,7 +164,7 @@ export default function TeacherUpcomingPage() {
           ) : (
             <>
               <WindowBanner
-                open={nextDay.data.decision_open}
+                state={nextDay.data.decision_state}
                 start={nextDay.data.window_start}
                 end={nextDay.data.window_end}
               />
@@ -227,17 +244,30 @@ export default function TeacherUpcomingPage() {
                           ) : (
                             item.status !== 'cancelled' && (
                               <>
-                                <Button size="sm" onClick={() => setConfirming(item)}>
+                                <Button
+                                  size="sm"
+                                  disabled={locked(item)}
+                                  title={locked(item) ? lockedHint : undefined}
+                                  onClick={() => setConfirming(item)}
+                                >
                                   Confirm
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="secondary"
+                                  disabled={locked(item)}
+                                  title={locked(item) ? lockedHint : undefined}
                                   onClick={() => setAsking(item)}
                                 >
                                   Request reschedule
                                 </Button>
-                                <Button size="sm" variant="danger" onClick={() => setCancelling(item)}>
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  disabled={locked(item)}
+                                  title={locked(item) ? lockedHint : undefined}
+                                  onClick={() => setCancelling(item)}
+                                >
                                   Cancel
                                 </Button>
                               </>
@@ -246,7 +276,7 @@ export default function TeacherUpcomingPage() {
                           {isOnline(item) && item.status !== 'cancelled' && (
                             <Button size="sm" variant="secondary" onClick={() => setLinking(item)}>
                               <Link2 size={14} />
-                              Edit link
+                              {needsLink(item) ? 'Add link' : 'Edit link'}
                             </Button>
                           )}
                         </div>
@@ -303,7 +333,7 @@ export default function TeacherUpcomingPage() {
                           onClick={() => setLinking(item)}
                         >
                           <Link2 size={14} />
-                          Edit link
+                          {needsLink(item) ? 'Add link' : 'Edit link'}
                         </Button>
                       )}
                     </div>

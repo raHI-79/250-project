@@ -18,19 +18,18 @@ import (
 )
 
 const (
-	MessageNotACR            = "No class representative profile found for this account."
-	MessageDateRequired      = "date is required."
-	MessageItemCreated       = "Added to your batch schedule."
-	MessageItemUpdated       = "Schedule item updated."
-	MessageItemRemoved       = "Schedule item deleted."
-	MessageAskedTeacher      = "The teacher was asked for the new slot."
-	MessageAddedToFinal      = "Added to the final routine."
-	MessageRemovedFromFinal  = "Removed from the final routine."
-	MessageRoutinePublished  = "Routine published."
-	MessageTimesTogether     = "Send the start time and the end time together."
-	MessageRoomForRoomMode   = "Room is required for a class in a room."
-	MessageLinkForOnlineMode = "Meeting link is required for an online class."
-	MessageIDsRequired       = "item_ids is required."
+	MessageNotACR           = "No class representative profile found for this account."
+	MessageDateRequired     = "date is required."
+	MessageItemCreated      = "Added to your batch schedule."
+	MessageItemUpdated      = "Schedule item updated."
+	MessageItemRemoved      = "Schedule item deleted."
+	MessageAskedTeacher     = "The teacher was asked for the new slot."
+	MessageAddedToFinal     = "Added to the final routine."
+	MessageRemovedFromFinal = "Removed from the final routine."
+	MessageRoutinePublished = "Routine published."
+	MessageTimesTogether    = "Send the start time and the end time together."
+	MessageRoomForRoomMode  = "Room is required for a class in a room."
+	MessageIDsRequired      = "item_ids is required."
 
 	titleRoutinePublished = "Routine published"
 	titleRoutineChanged   = "Routine changed"
@@ -44,9 +43,10 @@ const (
 
 type CRStore interface {
 	GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error)
-	ListSectionRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error)
+	ListSectionRoutines(ctx context.Context, batch, section, semester string) ([]store.RoutineRow, error)
 	ListBatchCourseSlots(ctx context.Context, batch, section string) ([]store.CourseSlotRow, error)
 	ListRoomAvailability(ctx context.Context, from, to string) ([]store.RoomSlot, error)
+	ListPeriods(ctx context.Context) ([]store.Period, error)
 	TeacherOfCourse(ctx context.Context, batch, section string, courseID int64) (int64, error)
 	CreateCRItem(ctx context.Context, item store.NewScheduleItem) (store.ScheduleItem, error)
 	ListBatchItems(ctx context.Context, batch, from string) ([]store.ScheduleItem, error)
@@ -94,9 +94,10 @@ type roomBody struct {
 }
 
 type availabilityResponse struct {
-	From  string     `json:"from"`
-	To    string     `json:"to"`
-	Rooms []roomBody `json:"rooms"`
+	From    string       `json:"from"`
+	To      string       `json:"to"`
+	Periods []periodItem `json:"periods"`
+	Rooms   []roomBody   `json:"rooms"`
 }
 
 type crItemRequest struct {
@@ -187,7 +188,7 @@ func (c *CR) Routine() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		entries, err := c.classes.ListSectionRoutines(r.Context(), profile.Batch, profile.Section)
+		entries, err := c.classes.ListSectionRoutines(r.Context(), profile.Batch, profile.Section, "")
 		if err != nil {
 			log.Printf("handler: could not list the routine of a class representative: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -240,12 +241,29 @@ func (c *CR) RoomAvailability() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		periods, err := c.classes.ListPeriods(r.Context())
+		if err != nil {
+			log.Printf("handler: could not load the class periods: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
 		httpx.WriteJSON(w, http.StatusOK, availabilityResponse{
-			From:  validate.DateString(from),
-			To:    validate.DateString(to),
-			Rooms: groupRoomSlots(slots, profile.Batch, c.cfg.Location),
+			From:    validate.DateString(from),
+			To:      validate.DateString(to),
+			Periods: periodItems(periods),
+			Rooms:   groupRoomSlots(slots, profile.Batch, c.cfg.Location),
 		})
 	}
+}
+
+func (c *CR) periods(w http.ResponseWriter, r *http.Request) ([]validate.Period, bool) {
+	periods, err := c.classes.ListPeriods(r.Context())
+	if err != nil {
+		log.Printf("handler: could not load the class periods: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return nil, false
+	}
+	return store.PeriodRules(periods), true
 }
 
 func (c *CR) CreateItem() http.HandlerFunc {
@@ -258,7 +276,11 @@ func (c *CR) CreateItem() http.HandlerFunc {
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		item, err := c.itemFrom(request, profile)
+		periods, ok := c.periods(w, r)
+		if !ok {
+			return
+		}
+		item, err := c.itemFrom(request, profile, periods)
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -282,7 +304,8 @@ func (c *CR) CreateItem() http.HandlerFunc {
 	}
 }
 
-func (c *CR) itemFrom(request crItemRequest, profile store.StudentProfile) (store.NewScheduleItem, error) {
+func (c *CR) itemFrom(request crItemRequest, profile store.StudentProfile,
+	periods []validate.Period) (store.NewScheduleItem, error) {
 	kind, err := validate.ClassOrExam("kind", request.Kind)
 	if err != nil {
 		return store.NewScheduleItem{}, err
@@ -301,7 +324,7 @@ func (c *CR) itemFrom(request crItemRequest, profile store.StudentProfile) (stor
 	if err != nil {
 		return store.NewScheduleItem{}, err
 	}
-	start, end, err := clockRange(request.StartTime, request.EndTime)
+	start, end, err := clockRange(periods, request.StartTime, request.EndTime)
 	if err != nil {
 		return store.NewScheduleItem{}, err
 	}
@@ -382,7 +405,11 @@ func (c *CR) RequestReschedule() http.HandlerFunc {
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		proposal, err := c.proposalFrom(request)
+		periods, ok := c.periods(w, r)
+		if !ok {
+			return
+		}
+		proposal, err := c.proposalFrom(request, periods)
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -396,12 +423,12 @@ func (c *CR) RequestReschedule() http.HandlerFunc {
 	}
 }
 
-func (c *CR) proposalFrom(request proposalRequest) (store.Proposal, error) {
+func (c *CR) proposalFrom(request proposalRequest, periods []validate.Period) (store.Proposal, error) {
 	date, err := validate.Date("Date", request.ItemDate, c.cfg.Location)
 	if err != nil {
 		return store.Proposal{}, err
 	}
-	start, end, err := clockRange(request.StartTime, request.EndTime)
+	start, end, err := clockRange(periods, request.StartTime, request.EndTime)
 	if err != nil {
 		return store.Proposal{}, err
 	}
@@ -436,7 +463,11 @@ func (c *CR) UpdateItem() http.HandlerFunc {
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		patch, err := c.patchFrom(request)
+		periods, ok := c.periods(w, r)
+		if !ok {
+			return
+		}
+		patch, err := c.patchFrom(request, periods)
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -451,7 +482,7 @@ func (c *CR) UpdateItem() http.HandlerFunc {
 	}
 }
 
-func (c *CR) patchFrom(request crPatchRequest) (store.ItemPatch, error) {
+func (c *CR) patchFrom(request crPatchRequest, periods []validate.Period) (store.ItemPatch, error) {
 	var patch store.ItemPatch
 	if request.ItemDate != nil {
 		date, err := validate.Date("Date", *request.ItemDate, c.cfg.Location)
@@ -465,7 +496,7 @@ func (c *CR) patchFrom(request crPatchRequest) (store.ItemPatch, error) {
 		return store.ItemPatch{}, errors.New(MessageTimesTogether)
 	}
 	if request.StartTime != nil {
-		start, end, err := clockRange(*request.StartTime, *request.EndTime)
+		start, end, err := clockRange(periods, *request.StartTime, *request.EndTime)
 		if err != nil {
 			return store.ItemPatch{}, err
 		}
@@ -708,7 +739,7 @@ func text(value *string) string {
 	return *value
 }
 
-func clockRange(rawStart, rawEnd string) (string, string, error) {
+func clockRange(periods []validate.Period, rawStart, rawEnd string) (string, string, error) {
 	if strings.TrimSpace(rawStart) == "" && strings.TrimSpace(rawEnd) == "" {
 		return "", "", nil
 	}
@@ -720,7 +751,7 @@ func clockRange(rawStart, rawEnd string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if err := validate.ClassWindow(start, end); err != nil {
+	if err := validate.ClassWindow(periods, start, end); err != nil {
 		return "", "", err
 	}
 	return start, end, nil
@@ -736,9 +767,6 @@ func slotFields(rawMode, rawRoom, rawLink string) (string, string, string, error
 		return "", "", "", err
 	}
 	if mode == validate.ModeOnline {
-		if link == "" {
-			return "", "", "", errors.New(MessageLinkForOnlineMode)
-		}
 		return mode, "", link, nil
 	}
 	room, err := validate.Room("Room", rawRoom)

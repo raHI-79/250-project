@@ -16,6 +16,7 @@ import {
   allows,
   courseLine,
   isOnline,
+  needsLink,
   placeOf,
   sectionShort,
 } from '../../../lib/schedule'
@@ -210,7 +211,7 @@ export default function UpcomingTab({ upcoming, highlight }) {
                     {isOnline(item) && item.status !== 'cancelled' && (
                       <Button size="sm" variant="secondary" onClick={() => setLinking(item)}>
                         <Link2 size={14} />
-                        Edit link
+                        {needsLink(item) ? 'Add link' : 'Edit link'}
                       </Button>
                     )}
                     {allows(item, ACTION_CANCEL) && (

@@ -16,7 +16,10 @@ const (
 	defaultTimezone       = "Asia/Dhaka"
 	defaultJWTTTL         = "24h"
 	defaultFrontendOrigin = "http://localhost:5173"
-	defaultDecisionStart  = "17:00"
+	DecisionStateBefore   = "before"
+	DecisionStateOpen     = "open"
+	DecisionStateClosed   = "closed"
+	defaultDecisionStart  = "16:00"
 	defaultDecisionEnd    = "23:00"
 	defaultDaysAhead      = 7
 	defaultUploadDir      = "uploads"
@@ -176,6 +179,24 @@ func (c *Config) DecisionOpen(now time.Time) bool {
 
 func (c *Config) DecisionClosed(now time.Time) bool {
 	return now.Hour()*60+now.Minute() >= c.DecisionTo
+}
+
+func (c *Config) DecisionState(now time.Time) string {
+	switch {
+	case c.DecisionOpen(now):
+		return DecisionStateOpen
+	case c.DecisionClosed(now):
+		return DecisionStateClosed
+	default:
+		return DecisionStateBefore
+	}
+}
+
+func (c *Config) DecisionMinutesLeft(now time.Time) int {
+	if !c.DecisionOpen(now) {
+		return 0
+	}
+	return c.DecisionTo - (now.Hour()*60 + now.Minute())
 }
 
 func clockMinutes(key, value string) (int, error) {
