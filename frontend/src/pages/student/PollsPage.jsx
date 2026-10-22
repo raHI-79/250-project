@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check, Vote } from 'lucide-react'
 import {
   Alert,
+  Button,
   Card,
   EmptyState,
   PageHeader,
@@ -15,47 +16,82 @@ import { useHighlight, useResource } from '../../lib/hooks'
 import cx from '../../lib/cx'
 import { formatDateTime } from '../../lib/time'
 
+const limitLine = (max) => (max > 1 ? `Pick up to ${max} options` : 'Pick one option')
+
 function PollCard({ poll, busy, onVote, flash }) {
-  const voted = poll.my_option_id !== null && poll.my_option_id !== undefined
+  const [picked, setPicked] = useState([])
+  const mine = poll.my_option_ids || []
+  const voted = mine.length > 0
   const showResults = voted || poll.is_closed
+  const max = poll.max_choices || 1
+  const toggle = (optionId) => {
+    setPicked((current) => {
+      if (current.includes(optionId)) return current.filter((entry) => entry !== optionId)
+      if (current.length >= max) return max === 1 ? [optionId] : current
+      return [...current, optionId]
+    })
+  }
   return (
-    <Card
-      hover={false}
-      className={cx('animate-fade-in-up', flash && 'border-accent-300 bg-accent-50/60')}
-    >
+    <Card hover={false} className={cx('animate-fade-in-up', flash && 'animate-flash border-gold-300')}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="font-display text-lg font-bold text-ink">{poll.question}</p>
+        <p className="font-display wrap-long text-lg font-bold text-ink">{poll.question}</p>
         <StatusBadge
           status={poll.is_closed ? 'cancelled' : 'active'}
           label={poll.is_closed ? 'Closed' : 'Open'}
         />
       </div>
       <p className="mt-1 text-xs text-muted">
-        {poll.created_by_name} · {formatDateTime(poll.created_at)} · {poll.total_votes} vote
-        {poll.total_votes === 1 ? '' : 's'}
+        {poll.created_by_name} · {formatDateTime(poll.created_at)} · {poll.total_voters} voter
+        {poll.total_voters === 1 ? '' : 's'}
       </p>
       {showResults ? (
-        <PollResults
-          options={poll.options}
-          total={poll.total_votes}
-          myOptionId={poll.my_option_id}
-        />
+        <>
+          <PollResults options={poll.options} total={poll.total_voters} myOptionIds={mine} />
+          <p className="mt-3 text-xs text-muted">
+            Only the counts are kept. Nobody, not even your class representative, sees who picked
+            what.
+          </p>
+        </>
       ) : (
-        <ul className="mt-4 flex flex-col gap-2">
-          {poll.options.map((option) => (
-            <li key={option.id}>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onVote(poll.id, option.id)}
-                className="flex w-full items-center justify-between gap-3 rounded-md border border-line-strong bg-surface px-4 py-2.5 text-left text-sm text-ink transition-colors hover:border-line-strong hover:bg-wash disabled:cursor-not-allowed disabled:text-faint"
-              >
-                {option.text}
-                <Check size={16} className="text-faint" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="mt-3 label-caps">{limitLine(max)}</p>
+          <ul className="mt-2 flex flex-col gap-2">
+            {poll.options.map((option) => {
+              const chosen = picked.includes(option.id)
+              return (
+                <li key={option.id}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-pressed={chosen}
+                    onClick={() => toggle(option.id)}
+                    className={cx(
+                      'tap-target flex w-full items-center justify-between gap-3 rounded-md border px-4 py-2.5 text-left text-sm transition-colors disabled:cursor-not-allowed',
+                      chosen
+                        ? 'border-brand-600 bg-brand-50 font-semibold text-ink'
+                        : 'border-line-strong bg-surface text-ink hover:bg-wash',
+                    )}
+                  >
+                    <span className="wrap-long">{option.text}</span>
+                    <Check size={16} className={chosen ? 'text-brand-600' : 'text-faint'} />
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted">
+              {picked.length} of {max} picked
+            </p>
+            <Button
+              loading={busy}
+              disabled={picked.length === 0}
+              onClick={() => onVote(poll.id, picked)}
+            >
+              Send my vote
+            </Button>
+          </div>
+        </>
       )}
     </Card>
   )
@@ -67,10 +103,10 @@ export default function PollsPage() {
   const highlight = useHighlight(Boolean(data))
   const [busy, setBusy] = useState(0)
   const items = data?.items || []
-  const onVote = async (pollId, optionId) => {
+  const onVote = async (pollId, optionIds) => {
     setBusy(pollId)
     try {
-      await api.post(`/api/students/polls/${pollId}/vote`, { option_id: optionId })
+      await api.post(`/api/students/polls/${pollId}/vote`, { option_ids: optionIds })
       toast.success('Your vote is recorded.')
       reload()
     } catch (failure) {

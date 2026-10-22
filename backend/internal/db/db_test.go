@@ -175,7 +175,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestPollVotesRejectASecondVote(t *testing.T) {
+func TestPollVotesAllowSeveralOptionsOnce(t *testing.T) {
 	ctx, pool := migratedTestDB(t)
 	crUserID := insertUser(t, ctx, pool, "student", "2023331001")
 	studentUserID := insertUser(t, ctx, pool, "student", "2023331002")
@@ -197,13 +197,20 @@ func TestPollVotesRejectASecondVote(t *testing.T) {
 	if _, err := pool.Exec(ctx, voteQuery, pollID, firstOptionID, studentID); err != nil {
 		t.Fatalf("the first vote was rejected: %v", err)
 	}
-	_, err := pool.Exec(ctx, voteQuery, pollID, secondOptionID, studentID)
+	if _, err := pool.Exec(ctx, voteQuery, pollID, secondOptionID, studentID); err != nil {
+		t.Fatalf("a second option of the same poll was rejected: %v", err)
+	}
+	_, err := pool.Exec(ctx, voteQuery, pollID, firstOptionID, studentID)
 	if code := pgErrorCode(t, err); code != uniqueViolationCode {
-		t.Errorf("second vote error code = %s, want %s (unique violation)", code, uniqueViolationCode)
+		t.Errorf("repeating one option error code = %s, want %s (unique violation)", code, uniqueViolationCode)
 	}
 	votes := countRows(t, ctx, pool, "SELECT count(*) FROM poll_votes WHERE poll_id = $1", pollID)
-	if votes != 1 {
-		t.Errorf("poll has %d votes, want 1", votes)
+	if votes != 2 {
+		t.Errorf("poll has %d votes, want 2", votes)
+	}
+	badChoices := "UPDATE polls SET max_choices = 0 WHERE id = $1"
+	if _, err := pool.Exec(ctx, badChoices, pollID); pgErrorCode(t, err) != checkViolationCode {
+		t.Errorf("max_choices 0 was accepted, want the check constraint to refuse it")
 	}
 }
 

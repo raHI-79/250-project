@@ -16,13 +16,15 @@ import (
 )
 
 const (
-	MessagePollCreated   = "Poll created."
-	MessagePollClosed    = "This poll is closed."
-	MessagePollUnknown   = "No poll found with this ID."
-	MessageAlreadyVoted  = "You have already voted in this poll."
-	MessageOptionUnknown = "This option does not belong to this poll."
-	MessageVoteSaved     = "Your vote is saved."
-	NotificationTypePoll = "poll"
+	MessagePollCreated    = "Poll created."
+	MessagePollClosed     = "This poll is closed."
+	MessagePollUnknown    = "No poll found with this ID."
+	MessageAlreadyVoted   = "You have already voted in this poll."
+	MessageOptionUnknown  = "This option does not belong to this poll."
+	MessageVoteSaved      = "Your vote is saved."
+	MessageTooManyChoices = "This poll allows fewer choices than that."
+	MessagePickAnOption   = "Pick at least one option."
+	NotificationTypePoll  = "poll"
 )
 
 type PollStore interface {
@@ -31,7 +33,7 @@ type PollStore interface {
 	ClosePoll(ctx context.Context, pollID, createdBy int64, now time.Time) error
 	ListCreatorPolls(ctx context.Context, viewerUserID, createdBy int64) ([]store.PollRow, error)
 	ListStudentPolls(ctx context.Context, viewerUserID int64, batch, section string) ([]store.PollRow, error)
-	VoteInPoll(ctx context.Context, pollID, optionID, userID int64, batch, section string) error
+	VoteInPoll(ctx context.Context, pollID int64, optionIDs []int64, userID int64, batch, section string) error
 }
 
 type Poll struct {
@@ -45,13 +47,14 @@ func NewPoll(cfg *config.Config, polls PollStore, alerts BroadcastNotifier) *Pol
 }
 
 type createPollRequest struct {
-	Question string   `json:"question"`
-	Options  []string `json:"options"`
-	Scope    string   `json:"scope"`
+	Question   string   `json:"question"`
+	Options    []string `json:"options"`
+	Scope      string   `json:"scope"`
+	MaxChoices int      `json:"max_choices"`
 }
 
 type voteRequest struct {
-	OptionID int64 `json:"option_id"`
+	OptionIDs []int64 `json:"option_ids"`
 }
 
 type pollOptionItem struct {
@@ -66,11 +69,12 @@ type pollItem struct {
 	Batch         string           `json:"batch"`
 	Section       string           `json:"section"`
 	IsClosed      bool             `json:"is_closed"`
+	MaxChoices    int              `json:"max_choices"`
 	CreatedByName string           `json:"created_by_name"`
 	CreatedAt     string           `json:"created_at"`
 	Options       []pollOptionItem `json:"options"`
-	TotalVotes    int              `json:"total_votes"`
-	MyOptionID    *int64           `json:"my_option_id"`
+	TotalVoters   int              `json:"total_voters"`
+	MyOptionIDs   []int64          `json:"my_option_ids"`
 }
 
 type pollsResponse struct {
@@ -107,16 +111,22 @@ func (p *Poll) CRCreate() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		maxChoices, err := validate.PollChoices("Choices", request.MaxChoices, len(options))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		section := validate.SectionAll
 		if scope == validate.PollScopeSection {
 			section = profile.Section
 		}
 		created, err := p.polls.CreatePoll(r.Context(), store.NewPoll{
-			Question:  question,
-			Batch:     profile.Batch,
-			Section:   section,
-			Options:   options,
-			CreatedBy: profile.UserID,
+			Question:   question,
+			Batch:      profile.Batch,
+			Section:    section,
+			Options:    options,
+			MaxChoices: maxChoices,
+			CreatedBy:  profile.UserID,
 		})
 		if err != nil {
 			log.Printf("handler: could not create a poll: %v", err)
@@ -197,16 +207,19 @@ func (p *Poll) StudentVote() http.HandlerFunc {
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		if request.OptionID <= 0 {
-			httpx.WriteError(w, http.StatusBadRequest, MessageOptionUnknown)
+		choices, err := distinctChoices(request.OptionIDs)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		err := p.polls.VoteInPoll(r.Context(), pollID, request.OptionID, profile.UserID, profile.Batch, profile.Section)
+		err = p.polls.VoteInPoll(r.Context(), pollID, choices, profile.UserID, profile.Batch, profile.Section)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			httpx.WriteError(w, http.StatusNotFound, MessagePollUnknown)
 		case errors.Is(err, store.ErrPollClosed):
 			httpx.WriteError(w, http.StatusConflict, MessagePollClosed)
+		case errors.Is(err, store.ErrTooManyChoices):
+			httpx.WriteError(w, http.StatusBadRequest, MessageTooManyChoices)
 		case errors.Is(err, store.ErrOptionNotInPoll):
 			httpx.WriteError(w, http.StatusBadRequest, MessageOptionUnknown)
 		case errors.Is(err, store.ErrAlreadyVoted):
@@ -242,20 +255,40 @@ func newPollItem(poll store.PollRow) pollItem {
 	for _, option := range poll.Options {
 		options = append(options, pollOptionItem{ID: option.ID, Text: option.Text, Votes: option.Votes})
 	}
-	item := pollItem{
+	mine := poll.MyOptionIDs
+	if mine == nil {
+		mine = make([]int64, 0)
+	}
+	return pollItem{
 		ID:            poll.ID,
 		Question:      poll.Question,
 		Batch:         poll.Batch,
 		Section:       poll.Section,
 		IsClosed:      poll.Status == store.PollClosed,
+		MaxChoices:    poll.MaxChoices,
 		CreatedByName: poll.CreatedByName,
 		CreatedAt:     poll.CreatedAt.Format(time.RFC3339),
 		Options:       options,
-		TotalVotes:    poll.TotalVotes,
+		TotalVoters:   poll.TotalVoters,
+		MyOptionIDs:   mine,
 	}
-	if poll.MyOptionID != 0 {
-		mine := poll.MyOptionID
-		item.MyOptionID = &mine
+}
+
+func distinctChoices(raw []int64) ([]int64, error) {
+	seen := make(map[int64]bool, len(raw))
+	choices := make([]int64, 0, len(raw))
+	for _, id := range raw {
+		if id <= 0 {
+			return nil, errors.New(MessageOptionUnknown)
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		choices = append(choices, id)
 	}
-	return item
+	if len(choices) == 0 {
+		return nil, errors.New(MessagePickAnOption)
+	}
+	return choices, nil
 }

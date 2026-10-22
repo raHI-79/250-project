@@ -90,7 +90,8 @@ func (emptyPollStore) ListStudentPolls(ctx context.Context, viewerUserID int64, 
 	return nil, nil
 }
 
-func (emptyPollStore) VoteInPoll(ctx context.Context, pollID, optionID, userID int64, batch, section string) error {
+func (emptyPollStore) VoteInPoll(ctx context.Context, pollID int64, optionIDs []int64, userID int64,
+	batch, section string) error {
 	return store.ErrNotFound
 }
 

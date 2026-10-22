@@ -17,14 +17,16 @@ var (
 	ErrPollClosed      = errors.New("store: this poll is already closed")
 	ErrAlreadyVoted    = errors.New("store: this student has already voted in this poll")
 	ErrOptionNotInPoll = errors.New("store: this option does not belong to this poll")
+	ErrTooManyChoices  = errors.New("store: this poll allows fewer choices than that")
 )
 
 type NewPoll struct {
-	Question  string
-	Batch     string
-	Section   string
-	Options   []string
-	CreatedBy int64
+	Question   string
+	Batch      string
+	Section    string
+	Options    []string
+	MaxChoices int
+	CreatedBy  int64
 }
 
 type PollOptionRow struct {
@@ -39,16 +41,17 @@ type PollRow struct {
 	Batch         string
 	Section       string
 	Status        string
+	MaxChoices    int
 	CreatedByName string
 	CreatedAt     time.Time
 	Options       []PollOptionRow
-	TotalVotes    int
-	MyOptionID    int64
+	TotalVoters   int
+	MyOptionIDs   []int64
 }
 
 const (
-	insertPollSQL = `INSERT INTO polls (question, batch, section, created_by)
-VALUES ($1, $2, $3, $4)
+	insertPollSQL = `INSERT INTO polls (question, batch, section, max_choices, created_by)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, created_at`
 	insertPollOptionSQL = `INSERT INTO poll_options (poll_id, option_text, position)
 VALUES ($1, $2, $3)
@@ -58,12 +61,12 @@ SET status = 'closed', closed_at = $3
 WHERE id = $1 AND created_by = $2 AND status = 'open'
 RETURNING id`
 	pollStatusSQL = `SELECT status FROM polls WHERE id = $1 AND created_by = $2`
-	pollColumns   = `p.id, p.question, p.batch, p.section, p.status,
+	pollColumns   = `p.id, p.question, p.batch, p.section, p.status, p.max_choices,
 COALESCE(s.full_name, t.name, CASE WHEN p.created_by IS NULL THEN 'Deleted user' ELSE 'Administration' END),
 p.created_at,
-(SELECT COUNT(*) FROM poll_votes v WHERE v.poll_id = p.id),
-COALESCE((SELECT v.option_id FROM poll_votes v JOIN students vs ON vs.id = v.student_id
-          WHERE v.poll_id = p.id AND vs.user_id = $1), 0)`
+(SELECT COUNT(DISTINCT v.student_id) FROM poll_votes v WHERE v.poll_id = p.id),
+ARRAY(SELECT v.option_id FROM poll_votes v JOIN students vs ON vs.id = v.student_id
+      WHERE v.poll_id = p.id AND vs.user_id = $1 ORDER BY v.option_id)`
 	pollJoins = `FROM polls p
 LEFT JOIN users u ON u.id = p.created_by
 LEFT JOIN students s ON s.user_id = u.id
@@ -81,9 +84,11 @@ ORDER BY p.created_at DESC, p.id DESC`
 FROM poll_options o
 WHERE o.poll_id = ANY($1)
 ORDER BY o.poll_id, o.position, o.id`
-	votablePollSQL = `SELECT p.status,
-EXISTS (SELECT 1 FROM poll_options o WHERE o.poll_id = p.id AND o.id = $2),
-COALESCE((SELECT vs.id FROM students vs WHERE vs.user_id = $3), 0)
+	votablePollSQL = `SELECT p.status, p.max_choices,
+(SELECT COUNT(*) FROM poll_options o WHERE o.poll_id = p.id AND o.id = ANY($2::bigint[])),
+COALESCE((SELECT vs.id FROM students vs WHERE vs.user_id = $3), 0),
+EXISTS (SELECT 1 FROM poll_votes v JOIN students vs ON vs.id = v.student_id
+        WHERE v.poll_id = p.id AND vs.user_id = $3)
 FROM polls p
 WHERE p.id = $1 AND p.batch = $4::text AND (p.section = 'ALL' OR p.section = $5::text)`
 	insertPollVoteSQL = `INSERT INTO poll_votes (poll_id, option_id, student_id)
@@ -92,19 +97,25 @@ RETURNING id`
 )
 
 func (s *Store) CreatePoll(ctx context.Context, poll NewPoll) (PollRow, error) {
+	if poll.MaxChoices < 1 {
+		poll.MaxChoices = 1
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return PollRow{}, fmt.Errorf("store: could not start the poll transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	row := PollRow{
-		Question: poll.Question,
-		Batch:    poll.Batch,
-		Section:  poll.Section,
-		Status:   PollOpen,
-		Options:  make([]PollOptionRow, 0, len(poll.Options)),
+		Question:    poll.Question,
+		Batch:       poll.Batch,
+		Section:     poll.Section,
+		Status:      PollOpen,
+		MaxChoices:  poll.MaxChoices,
+		Options:     make([]PollOptionRow, 0, len(poll.Options)),
+		MyOptionIDs: make([]int64, 0),
 	}
-	err = tx.QueryRow(ctx, insertPollSQL, poll.Question, poll.Batch, poll.Section, poll.CreatedBy).
+	err = tx.QueryRow(ctx, insertPollSQL,
+		poll.Question, poll.Batch, poll.Section, poll.MaxChoices, poll.CreatedBy).
 		Scan(&row.ID, &row.CreatedAt)
 	if err != nil {
 		return PollRow{}, fmt.Errorf("store: could not create the poll: %w", err)
@@ -150,12 +161,17 @@ func (s *Store) ListStudentPolls(ctx context.Context, viewerUserID int64, batch,
 	return s.polls(ctx, listStudentPollsSQL, viewerUserID, batch, section)
 }
 
-func (s *Store) VoteInPoll(ctx context.Context, pollID, optionID, userID int64, batch, section string) error {
+func (s *Store) VoteInPoll(ctx context.Context, pollID int64, optionIDs []int64, userID int64,
+	batch, section string) error {
+	if len(optionIDs) == 0 {
+		return ErrOptionNotInPoll
+	}
 	var status string
-	var optionBelongs bool
+	var maxChoices, belonging int
 	var studentID int64
-	err := s.pool.QueryRow(ctx, votablePollSQL, pollID, optionID, userID, batch, section).
-		Scan(&status, &optionBelongs, &studentID)
+	var voted bool
+	err := s.pool.QueryRow(ctx, votablePollSQL, pollID, optionIDs, userID, batch, section).
+		Scan(&status, &maxChoices, &belonging, &studentID, &voted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -168,16 +184,32 @@ func (s *Store) VoteInPoll(ctx context.Context, pollID, optionID, userID int64, 
 	if status == PollClosed {
 		return ErrPollClosed
 	}
-	if !optionBelongs {
-		return ErrOptionNotInPoll
-	}
-	var voteID int64
-	err = s.pool.QueryRow(ctx, insertPollVoteSQL, pollID, optionID, studentID).Scan(&voteID)
-	if isUniqueViolation(err) {
+	if voted {
 		return ErrAlreadyVoted
 	}
+	if belonging != len(optionIDs) {
+		return ErrOptionNotInPoll
+	}
+	if len(optionIDs) > maxChoices {
+		return ErrTooManyChoices
+	}
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("store: could not save the vote in the poll %d: %w", pollID, err)
+		return fmt.Errorf("store: could not start the vote transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, optionID := range optionIDs {
+		var voteID int64
+		err := tx.QueryRow(ctx, insertPollVoteSQL, pollID, optionID, studentID).Scan(&voteID)
+		if isUniqueViolation(err) {
+			return ErrAlreadyVoted
+		}
+		if err != nil {
+			return fmt.Errorf("store: could not save the vote in the poll %d: %w", pollID, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: could not commit the vote in the poll %d: %w", pollID, err)
 	}
 	return nil
 }
@@ -198,10 +230,11 @@ func (s *Store) polls(ctx context.Context, query string, args ...any) ([]PollRow
 			&poll.Batch,
 			&poll.Section,
 			&poll.Status,
+			&poll.MaxChoices,
 			&poll.CreatedByName,
 			&poll.CreatedAt,
-			&poll.TotalVotes,
-			&poll.MyOptionID,
+			&poll.TotalVoters,
+			&poll.MyOptionIDs,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a poll: %w", err)
