@@ -26,7 +26,7 @@ func newRegistration(regNo, email string) Registration {
 
 func newDropCourse(t *testing.T, ctx context.Context, store *Store, code, title string) int64 {
 	t.Helper()
-	course, err := store.CreateCourse(ctx, code, title)
+	course, err := store.CreateCourse(ctx, code, title, 3.0)
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}

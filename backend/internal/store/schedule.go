@@ -216,6 +216,7 @@ start_time, end_time, mode, room, status)
 SELECT r.batch, r.section, r.course_id, r.teacher_id, r.type, 'fixed', r.id, day::date,
 r.start_time, r.end_time, 'room', r.room, 'awaiting_teacher'
 FROM routines r
+JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
 CROSS JOIN generate_series($1::date, $2::date, interval '1 day') AS day
 WHERE EXTRACT(DOW FROM day)::int = r.day_of_week
 ON CONFLICT DO NOTHING`

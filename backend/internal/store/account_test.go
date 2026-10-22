@@ -10,7 +10,7 @@ import (
 
 func seedRoutineCourse(t *testing.T, ctx context.Context, store *Store, pool *pgxpool.Pool, code, title string) int64 {
 	t.Helper()
-	course, err := store.CreateCourse(ctx, code, title)
+	course, err := store.CreateCourse(ctx, code, title, 3.0)
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
@@ -21,8 +21,9 @@ VALUES ($1, $2, 'Routine Teacher', $2 || '@sust.edu', '01800000000') RETURNING i
 	if err := pool.QueryRow(ctx, query, teacherUserID, "T-"+code).Scan(&teacherID); err != nil {
 		t.Fatalf("could not insert the routine teacher: %v", err)
 	}
-	routine := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
-VALUES ('CSE-22', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
+	setRunningSemester(t, ctx, pool, "CSE-22", "1-1")
+	routine := `INSERT INTO routines (batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-22', '1-1', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
 	if _, err := pool.Exec(ctx, routine, course.ID, teacherID); err != nil {
 		t.Fatalf("could not insert the routine entry: %v", err)
 	}
@@ -32,7 +33,7 @@ VALUES ('CSE-22', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
 func TestSearchDropCourseOptions(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	routineCourse := seedRoutineCourse(t, ctx, store, pool, "CSE 245", "Databases")
-	if _, err := store.CreateCourse(ctx, "CSE-299", "Project Work"); err != nil {
+	if _, err := store.CreateCourse(ctx, "CSE-299", "Project Work", 3.0); err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
 	tests := []struct {
@@ -68,7 +69,7 @@ func TestSearchDropCourseOptions(t *testing.T) {
 func TestFilterDropCourseIDs(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	routineCourse := seedRoutineCourse(t, ctx, store, pool, "CSE 245", "Databases")
-	plain, err := store.CreateCourse(ctx, "CSE-299", "Project Work")
+	plain, err := store.CreateCourse(ctx, "CSE-299", "Project Work", 3.0)
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
