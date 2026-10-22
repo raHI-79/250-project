@@ -1,16 +1,15 @@
 package upload
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -78,20 +77,23 @@ type Attachment struct {
 
 type Attachments struct {
 	dir      string
+	files    Store
 	maxBytes int64
 }
 
 func NewAttachments(uploadDir string, maxMB int) *Attachments {
-	if uploadDir == "" {
-		uploadDir = "uploads"
-	}
+	return NewAttachmentsIn(NewDisk(uploadDir), maxMB)
+}
+
+func NewAttachmentsIn(files Store, maxMB int) *Attachments {
 	if maxMB <= 0 {
 		maxMB = DefaultAttachmentMB
 	}
-	return &Attachments{
-		dir:      filepath.Join(uploadDir, AttachmentDirName),
-		maxBytes: int64(maxMB) << 20,
+	attachments := &Attachments{files: files, maxBytes: int64(maxMB) << 20}
+	if disk, ok := files.(*Disk); ok {
+		attachments.dir = disk.Dir(KindAttachment)
 	}
+	return attachments
 }
 
 func (a *Attachments) Dir() string {
@@ -140,40 +142,31 @@ func (a *Attachments) Save(r *http.Request) (Attachment, error) {
 	if err := checkAttachmentContent(file, extension); err != nil {
 		return Attachment{}, err
 	}
-	stored, size, err := a.store(file, extension)
+	stored, size, err := a.store(r.Context(), file, extension)
 	if err != nil {
 		return Attachment{}, err
 	}
 	return Attachment{Path: stored, Name: safeOriginalName(header.Filename, extension), Mime: mime, Size: size}, nil
 }
 
-func (a *Attachments) store(file multipart.File, extension string) (string, int64, error) {
-	if err := os.MkdirAll(a.dir, directoryMode); err != nil {
-		return "", 0, fmt.Errorf("upload: could not create the attachment folder: %w", err)
+func (a *Attachments) store(ctx context.Context, file multipart.File,
+	extension string) (string, int64, error) {
+	data, tooLarge, err := readLimited(file, a.maxBytes)
+	if err != nil {
+		return "", 0, fmt.Errorf("upload: could not read the attachment: %w", err)
+	}
+	if tooLarge {
+		return "", 0, ErrTooLarge
 	}
 	name, err := randomName()
 	if err != nil {
 		return "", 0, err
 	}
 	name = strings.TrimSuffix(name, Extension) + "." + extension
-	target := filepath.Join(a.dir, name)
-	destination, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
-	if err != nil {
-		return "", 0, fmt.Errorf("upload: could not create the attachment: %w", err)
+	if err := a.files.Put(ctx, KindAttachment, name, attachmentTypes[extension], data); err != nil {
+		return "", 0, err
 	}
-	written, err := io.Copy(destination, io.LimitReader(file, a.maxBytes+1))
-	if closeErr := destination.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		_ = os.Remove(target)
-		return "", 0, fmt.Errorf("upload: could not write the attachment: %w", err)
-	}
-	if written > a.maxBytes {
-		_ = os.Remove(target)
-		return "", 0, ErrTooLarge
-	}
-	return AttachmentURLPrefix + name, written, nil
+	return AttachmentURLPrefix + name, int64(len(data)), nil
 }
 
 func (a *Attachments) Delete(storedPath string) error {
@@ -181,10 +174,7 @@ func (a *Attachments) Delete(storedPath string) error {
 	if !attachmentNamePattern.MatchString(name) {
 		return nil
 	}
-	if err := os.Remove(filepath.Join(a.dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("upload: could not delete the attachment %s: %w", name, err)
-	}
-	return nil
+	return a.files.Delete(context.Background(), KindAttachment, name)
 }
 
 func (a *Attachments) Serve() http.HandlerFunc {
@@ -194,14 +184,8 @@ func (a *Attachments) Serve() http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		file, err := os.Open(filepath.Join(a.dir, name))
+		blob, err := a.files.Get(r.Context(), KindAttachment, name)
 		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer func() { _ = file.Close() }()
-		info, err := file.Stat()
-		if err != nil || info.IsDir() {
 			http.NotFound(w, r)
 			return
 		}
@@ -209,7 +193,7 @@ func (a *Attachments) Serve() http.HandlerFunc {
 		w.Header().Set("Content-Type", attachmentTypes[extension])
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Disposition", disposition(extension, r.URL.Query().Get(downloadNameQuery)))
-		http.ServeContent(w, r, name, info.ModTime(), file)
+		http.ServeContent(w, r, name, blob.ModTime, bytes.NewReader(blob.Data))
 	}
 }
 

@@ -42,6 +42,7 @@ var expectedTables = []string{
 	"conversations",
 	"schema_migrations",
 	"student_drop_courses",
+	"stored_files",
 	"students",
 	"teachers",
 	"users",

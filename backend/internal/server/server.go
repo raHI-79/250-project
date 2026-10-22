@@ -69,7 +69,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux := http.NewServeMux()
 	mail := deps.Mailer
 	if mail == nil {
-		mail = mailer.NewSMTP(mailer.Options{})
+		mail = mailer.New(deps.Config.MailProvider, mailer.Options{})
 	}
 	photos := deps.Photos
 	if photos == nil {

@@ -1,9 +1,8 @@
 package upload
 
 import (
+	"bytes"
 	"net/http"
-	"os"
-	"path/filepath"
 )
 
 const (
@@ -18,20 +17,14 @@ func (s *Saver) Serve() http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		file, err := os.Open(filepath.Join(s.dir, name))
+		blob, err := s.files.Get(r.Context(), KindFile, name)
 		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer func() { _ = file.Close() }()
-		info, err := file.Stat()
-		if err != nil || info.IsDir() {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", ContentType)
 		w.Header().Set("Content-Disposition", dispositionValue)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		http.ServeContent(w, r, name, info.ModTime(), file)
+		http.ServeContent(w, r, name, blob.ModTime, bytes.NewReader(blob.Data))
 	}
 }

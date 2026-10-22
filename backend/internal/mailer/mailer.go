@@ -17,8 +17,13 @@ const (
 	dialTimeout = 10 * time.Second
 )
 
+const (
+	ProviderSMTP  = "smtp"
+	ProviderBrevo = "brevo"
+)
+
 var (
-	ErrNotConfigured = errors.New("mailer: SMTP_HOST is not set, so no mail can be sent")
+	ErrNotConfigured = errors.New("mailer: the mail provider has no settings, so no mail can be sent")
 	ErrNoRecipient   = errors.New("mailer: a message needs a recipient")
 )
 
@@ -33,6 +38,16 @@ type Options struct {
 	Username string
 	Password string
 	From     string
+	FromName string
+	APIKey   string
+	Endpoint string
+}
+
+func New(provider string, options Options) Sender {
+	if strings.EqualFold(strings.TrimSpace(provider), ProviderBrevo) {
+		return NewBrevo(options)
+	}
+	return NewSMTP(options)
 }
 
 type SMTP struct {
