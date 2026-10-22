@@ -15,6 +15,8 @@ import (
 
 const (
 	MessageCourseCreated    = "Course added."
+	MessageRoutineMoved     = "Routine entry moved."
+	MessageRunningSemester  = "Running semester updated."
 	MessageCourseDeleted    = "Course deleted."
 	MessageDuplicateCourse  = "A course with this code already exists."
 	MessageCourseUnknown    = "No course found with this ID."
@@ -22,13 +24,17 @@ const (
 )
 
 type CatalogStore interface {
-	CreateCourse(ctx context.Context, code, title string) (store.Course, error)
+	CreateCourse(ctx context.Context, code, title string, credit float64) (store.Course, error)
 	ListCourses(ctx context.Context) ([]store.Course, error)
 	SearchCourses(ctx context.Context, search string) ([]store.Course, error)
 	CreateRoutine(ctx context.Context, routine store.NewRoutine) (store.RoutineRow, error)
-	ListRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error)
+	ListRoutines(ctx context.Context, batch, section, semester string) ([]store.RoutineRow, error)
+	UpdateRoutineSemester(ctx context.Context, routineID int64, semester string) error
+	ListRunningSemesters(ctx context.Context) (map[string]string, error)
+	SetRunningSemester(ctx context.Context, batch, semester string) error
 	DeleteRoutine(ctx context.Context, routineID int64) error
 	DeleteCourse(ctx context.Context, courseID int64) (store.CourseUsage, error)
+	ListPeriods(ctx context.Context) ([]store.Period, error)
 }
 
 type Catalog struct {
@@ -40,14 +46,16 @@ func NewCatalog(catalog CatalogStore) *Catalog {
 }
 
 type createCourseRequest struct {
-	Code  string `json:"code"`
-	Title string `json:"title"`
+	Code   string  `json:"code"`
+	Title  string  `json:"title"`
+	Credit float64 `json:"credit"`
 }
 
 type courseItem struct {
-	ID    int64  `json:"id"`
-	Code  string `json:"code"`
-	Title string `json:"title"`
+	ID     int64   `json:"id"`
+	Code   string  `json:"code"`
+	Title  string  `json:"title"`
+	Credit float64 `json:"credit"`
 }
 
 type coursesResponse struct {
@@ -55,9 +63,7 @@ type coursesResponse struct {
 }
 
 type courseResponse struct {
-	ID      int64  `json:"id"`
-	Code    string `json:"code"`
-	Title   string `json:"title"`
+	courseItem
 	Message string `json:"message"`
 }
 
@@ -77,7 +83,12 @@ func (c *Catalog) CreateCourse() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		course, err := c.catalog.CreateCourse(r.Context(), code, title)
+		credit, err := validate.Credit("Credit", request.Credit)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		course, err := c.catalog.CreateCourse(r.Context(), code, title, credit)
 		if err != nil {
 			if errors.Is(err, store.ErrDuplicateCourse) {
 				httpx.WriteError(w, http.StatusConflict, MessageDuplicateCourse)
@@ -88,10 +99,8 @@ func (c *Catalog) CreateCourse() http.HandlerFunc {
 			return
 		}
 		httpx.WriteJSON(w, http.StatusCreated, courseResponse{
-			ID:      course.ID,
-			Code:    course.Code,
-			Title:   course.Title,
-			Message: MessageCourseCreated,
+			courseItem: newCourseItem(course),
+			Message:    MessageCourseCreated,
 		})
 	}
 }
@@ -116,9 +125,13 @@ func (c *Catalog) Courses() http.HandlerFunc {
 func courseItems(courses []store.Course) []courseItem {
 	items := make([]courseItem, 0, len(courses))
 	for _, course := range courses {
-		items = append(items, courseItem{ID: course.ID, Code: course.Code, Title: course.Title})
+		items = append(items, newCourseItem(course))
 	}
 	return items
+}
+
+func newCourseItem(course store.Course) courseItem {
+	return courseItem{ID: course.ID, Code: course.Code, Title: course.Title, Credit: course.Credit}
 }
 
 func (c *Catalog) DeleteCourse() http.HandlerFunc {

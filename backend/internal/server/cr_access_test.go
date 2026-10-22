@@ -17,7 +17,8 @@ func (emptyCRStore) GetStudentProfile(ctx context.Context, userID int64) (store.
 	return store.StudentProfile{UserID: userID, Batch: "CSE-23", Section: "A", IsCR: true}, nil
 }
 
-func (emptyCRStore) ListSectionRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error) {
+func (emptyCRStore) ListSectionRoutines(ctx context.Context, batch, section,
+	semester string) ([]store.RoutineRow, error) {
 	return nil, nil
 }
 
@@ -26,6 +27,10 @@ func (emptyCRStore) ListBatchCourseSlots(ctx context.Context, batch, section str
 }
 
 func (emptyCRStore) ListRoomAvailability(ctx context.Context, from, to string) ([]store.RoomSlot, error) {
+	return nil, nil
+}
+
+func (emptyCRStore) ListPeriods(ctx context.Context) ([]store.Period, error) {
 	return nil, nil
 }
 

@@ -104,6 +104,7 @@ type fakeScheduleStore struct {
 	publishIDs  []int64
 	deleted     []int64
 	windowOpen  bool
+	periods     []store.Period
 	linkUser    int64
 	links       []string
 }
@@ -124,7 +125,8 @@ func (f *fakeScheduleStore) ListTeacherRoutine(ctx context.Context, teacherID in
 	return f.routines, f.err
 }
 
-func (f *fakeScheduleStore) ListSectionRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error) {
+func (f *fakeScheduleStore) ListSectionRoutines(ctx context.Context, batch, section,
+	semester string) ([]store.RoutineRow, error) {
 	return f.routines, f.err
 }
 
@@ -168,11 +170,19 @@ func (f *fakeScheduleStore) ConfirmItem(ctx context.Context, itemID, teacherID i
 	return item, nil
 }
 
+func (f *fakeScheduleStore) ListPeriods(ctx context.Context) ([]store.Period, error) {
+	if len(f.periods) > 0 {
+		return f.periods, nil
+	}
+	return testPeriods(), nil
+}
+
 func (f *fakeScheduleStore) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64,
-	reason string) (store.ScheduleItem, error) {
+	reason string, windowOpen bool) (store.ScheduleItem, error) {
 	if f.err != nil {
 		return store.ScheduleItem{}, f.err
 	}
+	f.windowOpen = windowOpen
 	f.cancelled = append(f.cancelled, reason)
 	item := f.item
 	item.Status = store.ItemCancelled
@@ -181,10 +191,11 @@ func (f *fakeScheduleStore) CancelItemAsTeacher(ctx context.Context, itemID, tea
 }
 
 func (f *fakeScheduleStore) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64,
-	message string) (store.ScheduleItem, error) {
+	message string, windowOpen bool) (store.ScheduleItem, error) {
 	if f.err != nil {
 		return store.ScheduleItem{}, f.err
 	}
+	f.windowOpen = windowOpen
 	item := f.item
 	item.Status = store.ItemTeacherAsk
 	item.TeacherMessage = message

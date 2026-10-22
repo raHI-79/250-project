@@ -8,11 +8,9 @@ import (
 )
 
 const (
-	SectionAll     = "ALL"
-	OpeningMinutes = 8 * 60
-	ClosingMinutes = 17 * 60
-	RoutineClass   = "class"
-	RoutineLab     = "lab"
+	SectionAll   = "ALL"
+	RoutineClass = "class"
+	RoutineLab   = "lab"
 )
 
 var (
@@ -29,7 +27,15 @@ func RoutineSection(label, value string) (string, error) {
 	if trimmed == SectionAll || sectionPattern.MatchString(trimmed) {
 		return trimmed, nil
 	}
-	return "", fmt.Errorf("%s must be a single letter from A to Z or ALL.", label)
+	return "", fmt.Errorf("%s must be A, B or ALL.", label)
+}
+
+func Sections() []string {
+	return []string{SectionA, SectionB}
+}
+
+func SectionsWithAll() []string {
+	return []string{SectionA, SectionB, SectionAll}
 }
 
 func ClockTime(label, value string) (string, error) {
@@ -57,20 +63,6 @@ func Minutes(clock string) int {
 		return -1
 	}
 	return hours*60 + minutes
-}
-
-func ClassWindow(start, end string) error {
-	from, to := Minutes(start), Minutes(end)
-	if from < 0 || to < 0 {
-		return fmt.Errorf("Start time and end time must look like 09:30.")
-	}
-	if from >= to {
-		return fmt.Errorf("Start time must be earlier than end time.")
-	}
-	if from < OpeningMinutes || to > ClosingMinutes {
-		return fmt.Errorf("Classes must be between %s and %s.", Clock(OpeningMinutes), Clock(ClosingMinutes))
-	}
-	return nil
 }
 
 func Clock(minutes int) string {

@@ -13,8 +13,8 @@ func TestRoutineSection(t *testing.T) {
 		{name: "all", value: "all", want: "ALL"},
 		{name: "already upper", value: "B", want: "B"},
 		{name: "empty", value: "  ", wantError: "Section is required."},
-		{name: "two letters", value: "AB", wantError: "Section must be a single letter from A to Z or ALL."},
-		{name: "number", value: "1", wantError: "Section must be a single letter from A to Z or ALL."},
+		{name: "two letters", value: "AB", wantError: "Section must be A, B or ALL."},
+		{name: "number", value: "1", wantError: "Section must be A, B or ALL."},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -69,36 +69,6 @@ func TestClockTimeAndMinutes(t *testing.T) {
 			}
 			if minutes := Minutes(got); minutes != test.wantMinutes {
 				t.Errorf("minutes = %d, want %d", minutes, test.wantMinutes)
-			}
-		})
-	}
-}
-
-func TestClassWindow(t *testing.T) {
-	tests := []struct {
-		name      string
-		start     string
-		end       string
-		wantError string
-	}{
-		{name: "inside the window", start: "10:30", end: "12:45"},
-		{name: "exactly the window", start: "08:00", end: "17:00"},
-		{name: "too early", start: "07:00", end: "09:00", wantError: "Classes must be between 08:00 and 17:00."},
-		{name: "too late", start: "16:00", end: "17:30", wantError: "Classes must be between 08:00 and 17:00."},
-		{name: "equal times", start: "10:00", end: "10:00", wantError: "Start time must be earlier than end time."},
-		{name: "end before start", start: "12:00", end: "11:00", wantError: "Start time must be earlier than end time."},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			err := ClassWindow(test.start, test.end)
-			if test.wantError == "" {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				return
-			}
-			if err == nil || err.Error() != test.wantError {
-				t.Fatalf("error = %v, want %q", err, test.wantError)
 			}
 		})
 	}
