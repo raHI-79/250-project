@@ -13,8 +13,8 @@ self.addEventListener('push', (event) => {
   const options = {
     body: payload.body || '',
     tag: payload.tag || 'sustcse',
-    icon: '/icon-192.svg',
-    badge: '/icon-192.svg',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     data: { url: payload.url || '/' },
   }
   event.waitUntil(self.registration.showNotification(title, options))

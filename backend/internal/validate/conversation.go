@@ -19,14 +19,26 @@ const (
 	SourceAdmin      = "admin"
 	SourceTeacher    = "teacher"
 	SourceCR         = "cr"
+	RoleStudent      = "student"
+	RoleCR           = "cr"
+	RoleTeacher      = "teacher"
+	RoleAdmin        = "admin"
 )
 
 var (
 	conversationScopes = []string{ScopeBatch, ScopeSection, ScopeAllStudents, ScopeAllTeachers}
 	noteAudiences      = []string{NoteTeacher, NoteStudents, NoteBoth}
 	noticeSources      = []string{SourceAll, SourceAdmin, SourceTeacher, SourceCR}
-	messageRoles       = []string{"student", "cr", "teacher", "admin"}
+	messageRoles       = []string{RoleStudent, RoleCR, RoleTeacher, RoleAdmin}
 )
+
+func CanStartDirect(viewerRole, targetRole string) bool {
+	return !(viewerRole == RoleStudent && targetRole == RoleStudent)
+}
+
+func ListsPlainStudents(viewerRole string) bool {
+	return viewerRole != RoleStudent
+}
 
 func MessageBody(label, value string, hasAttachment bool) (string, error) {
 	trimmed := strings.TrimSpace(value)

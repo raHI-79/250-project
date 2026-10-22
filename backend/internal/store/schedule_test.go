@@ -18,7 +18,7 @@ type engineFixture struct {
 
 func seedEngine(t *testing.T, ctx context.Context, store *Store, pool *pgxpool.Pool, day int) engineFixture {
 	t.Helper()
-	course, err := store.CreateCourse(ctx, "CSE 2243 7637D", "Compilers")
+	course, err := store.CreateCourse(ctx, "CSE 2243 7637D", "Compilers", 3.0)
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
@@ -31,8 +31,9 @@ VALUES ($1, 'karim.cse', 'Engine Teacher', 'engine@sust.edu', '01800000000') RET
 	}
 	crUserID := insertUser(t, ctx, pool, "student", "2023331500", StatusActive, 0)
 	insertStudent(t, ctx, pool, crUserID, "2023331500", true)
-	routine := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
-VALUES ('CSE-23', 'A', $1, $2, $3, TIME '08:00', TIME '09:30', '1003', 'class') RETURNING id`
+	setRunningSemester(t, ctx, pool, "CSE-23", "1-1")
+	routine := `INSERT INTO routines (batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-23', '1-1', 'A', $1, $2, $3, TIME '08:00', TIME '09:30', '1003', 'class') RETURNING id`
 	var routineID int64
 	if err := pool.QueryRow(ctx, routine, course.ID, teacherID, day).Scan(&routineID); err != nil {
 		t.Fatalf("could not insert the routine entry: %v", err)
@@ -127,9 +128,9 @@ func TestSlotRulesOnCreate(t *testing.T) {
 			mode: ModeRoom, room: "1003"},
 		{name: "an unmanaged room is never checked", section: "B", start: "11:00", end: "12:00",
 			mode: ModeRoom, room: "Library Hall"},
-		{name: "online skips the room check", section: "C", start: "11:00", end: "12:00",
+		{name: "online skips the room check", section: "B", start: "14:00", end: "15:00",
 			mode: ModeOnline, room: ""},
-		{name: "touching slots do not overlap", section: "D", start: "09:00", end: "10:00",
+		{name: "touching slots do not overlap", section: "ALL", start: "09:00", end: "10:00",
 			mode: ModeRoom, room: "1003"},
 	}
 	for _, test := range tests {
@@ -618,10 +619,10 @@ func TestUpdateItemLinkPermissions(t *testing.T) {
 
 func TestCourseSearchIgnoresSpaces(t *testing.T) {
 	ctx, store, _ := newTestStore(t)
-	if _, err := store.CreateCourse(ctx, "cse 2243 7637d", "Compilers"); err != nil {
+	if _, err := store.CreateCourse(ctx, "cse 2243 7637d", "Compilers", 3.0); err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
-	if _, err := store.CreateCourse(ctx, "CSE-1111", "Introduction"); err != nil {
+	if _, err := store.CreateCourse(ctx, "CSE-1111", "Introduction", 3.0); err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
 	tests := []struct {

@@ -124,7 +124,7 @@ func TestBatch(t *testing.T) {
 }
 
 func TestSection(t *testing.T) {
-	const message = "Section must be a single letter from A to Z."
+	const message = "Section must be A or B."
 	tests := []struct {
 		name    string
 		value   string
@@ -134,8 +134,9 @@ func TestSection(t *testing.T) {
 		{name: "section A", value: "A", want: "A"},
 		{name: "lowercase is raised", value: "b", want: "B"},
 		{name: "spaces are trimmed", value: " A ", want: "A"},
-		{name: "last letter", value: "Z", want: "Z"},
 		{name: "empty", value: "", wantErr: "Section is required."},
+		{name: "a third section", value: "C", wantErr: message},
+		{name: "last letter", value: "Z", wantErr: message},
 		{name: "two letters", value: "AB", wantErr: message},
 		{name: "digit", value: "1", wantErr: message},
 		{name: "symbol", value: "-", wantErr: message},

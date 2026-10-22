@@ -33,6 +33,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 ```
 250-project/
 ├── backend/                  Go module (the API server)
+│   ├── cmd/seed/             go run ./cmd/seed -demo — the demo department
 │   ├── cmd/server/           main.go — program entry point
 │   ├── internal/
 │   │   ├── auth/             bcrypt hashing, JWT issuing and parsing, roles
@@ -49,6 +50,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 │   ├── .env.example          copy to .env and fill in your values
 │   └── go.mod
 ├── frontend/                 React + Vite app (the browser client)
+│   ├── public/brand/         sust-logo.png and cse-logo.png when you have them
 │   ├── public/campus/        campus photos used by the banners and heroes
 │   └── src/
 │       ├── components/ui/    Button, Card, Field, Alert, Toast, Modal, Skeleton
@@ -57,8 +59,9 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 │       ├── lib/              paths, API client, navigation, helpers
 │       └── pages/            one file per screen
 ├── docs/
-│   ├── SPEC.md               full requirements (do not edit)
+│   ├── SPEC.md               the final specification of the product
 │   └── ROADMAP.md            the development steps and their status
+├── .github/workflows/ci.yml  the backend and frontend checks
 ├── .gitignore
 └── README.md
 ```
@@ -211,7 +214,7 @@ go run ./cmd/server
 | `TEST_DATABASE_URL` | none — optional | Connection string used by the database integration tests |
 | `JWT_SECRET` | none — **required** | Key that signs the login tokens, at least 32 characters |
 | `JWT_TTL` | `24h` | How long a login token stays valid, as a Go duration (`24h`, `90m`) |
-| `DECISION_WINDOW_START` | `17:00` | When a teacher may start deciding on the next day's classes |
+| `DECISION_WINDOW_START` | `16:00` | When a teacher may start deciding on the next day's classes |
 | `DECISION_WINDOW_END` | `23:00` | When that window closes and undecided classes become `no_response` |
 | `SCHEDULE_DAYS_AHEAD` | `7` | How many days of dated schedule items the job keeps ahead of today |
 | `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs and profile photos are saved, created when it is missing |
@@ -228,9 +231,48 @@ go run ./cmd/server
 | `SMTP_USERNAME` | none — optional | SMTP user; when it is empty the server connects without authenticating |
 | `SMTP_PASSWORD` | none — optional | SMTP password |
 | `MAIL_FROM` | the SMTP username | Address the reset emails come from |
+| `VAPID_PUBLIC_KEY` | none — optional | Public key the browser subscribes to push with |
+| `VAPID_PRIVATE_KEY` | none — optional | Private push key; keep it out of git and out of logs |
+| `VAPID_SUBJECT` | none — optional | A `mailto:` address the push services can reach you at |
+| `DEMO_PASSWORD` | none — optional | Password every account the demo seeder creates shares |
 
 Never commit real values. `backend/.env` is gitignored; only
 `backend/.env.example` is tracked.
+
+### Loading the demo data
+
+With the database migrated, one command fills the department with a believable
+term:
+
+```powershell
+cd backend
+go run ./cmd/seed -demo
+```
+
+It creates batches `CSE-21` to `CSE-24` with sections A and B, each on its own
+running semester (`4-1`, `3-1`, `2-1` and `1-2`) with an older semester behind
+it, courses with real looking codes and credits, five teachers with chosen User
+IDs, students and one class representative per batch and section, a fixed
+routine built on the class periods, schedule items in every state, a published
+final routine, teacher exams, notices, polls, a group chat and messages.
+
+- It refuses to run while `APP_ENV` is `production`.
+- It is safe to run twice: a second run changes nothing.
+- Every account it creates signs in with `DEMO_PASSWORD` from `backend/.env`,
+  so set that before running it. The seeder prints the identifiers it created
+  and never prints the password.
+
+The identifiers follow a pattern, so you can sign in without reading the output:
+
+| Role | Sign in with | Example |
+|---|---|---|
+| Teacher | the User ID on the teacher sign-in page | `mrahman`, `fsultana`, `nhasan` |
+| Class representative | `s<year><section>1` | `s23a1` is the CR of CSE-23 section A |
+| Student | `s<year><section><2..4>` | `s23a2`, `s23b3`, `s21a4` |
+| Office | your own `ADMIN_IDENTIFIER` on the office portal | `admin` |
+
+Teachers sign in on the teacher page, students and class representatives on the
+student page, and the office on the hidden office portal.
 
 ### The admin account
 
@@ -287,18 +329,24 @@ tabs that the URL remembers (`?tab=`, `?date=`, `?item=`):
 
 | Tab | What it does |
 |---|---|
-| Create | A class or an exam with the course, the section, the date, the times, a room or an online link, and the syllabus and instructions of an exam. A refused rule comes back inline. |
-| Room availability | Seven days per managed room, green free and red booked with the batch, course and status in the tooltip. Clicking a free cell fills the create form. |
+| Create | A class or an exam with the course, the section, the date, a From period and a To period, a room or an online link, and the syllabus and instructions of an exam. A refused rule comes back inline. |
+| Room availability | Every managed room against the class periods, one table per date: a shaded break column, green free and red booked with the batch, course and status in the tooltip. Clicking a free period fills the create form. |
 | Upcoming routine | The batch's items by date with their status, the teacher's message and a proposed slot, and only the actions the API allows on each one. |
 | Final routine | Items grouped by date with `Needs time` and `Changed since publish`, inline editing of the time, place, link and note, checkboxes, a timetable preview and Publish All behind a confirm. |
 
 **The teacher** has `Fixed weekly routine`, `Upcoming routine` and
 `Create exam`. The upcoming page has two tabs: `Next day`, which opens with the
-decision window and a live countdown and offers Confirm, Cancel and
-Request reschedule per item plus Accept and Decline on a request from the class
-representative, and `Final routine`, which lists what the batches published
-from today with a `By teacher` or `By CR` badge and the link editor for an
-online class.
+decision window banner — *Opens at 4:00 PM for tomorrow's classes* before it,
+*Open until 11:00 PM · `<h m>` left* inside it, and
+*Closed for tomorrow — undecided classes are marked No response* after it — and
+offers Confirm, Cancel and Request reschedule per item plus Accept and Decline
+on a request from the class representative. Those three buttons are disabled
+outside the window for a **first** decision; a later change to a class the
+teacher already confirmed stays allowed until it starts, and the class
+representative is never limited. The second tab, `Final routine`, lists what the
+batches published from today with a `By teacher` or `By CR` badge and the link
+editor for an online class. An online class with no link yet reads
+`Link coming soon` and offers `Add link` to the teacher and to the CR.
 
 **A student** reads only the published routine. `Today` and `Upcoming routine`
 show date chips, an `Online` badge with a `Join` button when a link exists,
@@ -314,6 +362,24 @@ with their role and batch or designation; clicking one opens or reuses that
 direct conversation. `?c=` opens a conversation straight from a link, which is
 how a message notification lands.
 
+A plain student may start a chat with teachers, class representatives and the
+department office, never with another plain student: the attempt answers `403`
+and the search never lists plain students for them. A CR may message students,
+and teachers and the office may message anyone.
+
+Any member may delete a whole chat, direct or group, **for themselves only**.
+The messages up to that moment stop showing for them, the chat leaves their list
+and their unread count, everybody else keeps the full history, and in a group
+they stay a member. The chat comes back carrying only the newer messages as soon
+as somebody writes again.
+
+The sender may edit the body of their own message, or delete it, within two
+minutes of sending; after that both answer `409`. An edited message shows
+`Edited` next to its time and a deleted one reads
+`This message was deleted`, with its body, link and file cleared and the file
+removed from disk. The Edit and Delete buttons appear only while the two
+minutes last.
+
 Group chats have real members. Only a teacher or a class representative starts
 one, with a name, a people picker and an `Add whole batch` picker; a CR may add
 whole batches only for their own batch, a teacher any batch. The creator becomes
@@ -323,9 +389,30 @@ rename the group; a group always keeps at least one admin, and when the last one
 leaves, the earliest member takes over. Nobody outside the member list can read
 or post, and each message notifies every member except its sender.
 
+### Semesters and the running semester
+
+A batch studies eight semesters, stored as `1-1` to `4-2` and shown as
+*1st year 1st semester* and so on. Every routine entry belongs to one of them,
+and each batch has one running semester. The first routine entry the office
+enters for a batch sets it; after that the **Running semester** control on the
+admin Routines page moves the batch on.
+
+Only the running semester becomes dated classes, fills the class
+representative's course helper, offers drop courses at registration and is
+checked for room clashes — so the same room may hold a class in two semesters.
+Older entries stay readable: the admin Routines page and the student
+`Weekly routine` page both carry a semester picker and show sections A and B
+side by side, as tabs on a phone.
+
+`Courses` in the student and CR navigation reads the running semester of a
+batch: a heading with the semester, a `<n> courses · <total> credits` summary
+and one card per course with its code, title, credit, teachers (each linking to
+their person page), the sections it runs for and the weekly class and lab counts.
+
 ### Polls
 
-A class representative sets how many options each student may pick
+A class representative picks who votes — their own section, their whole batch
+or every batch — and how many options each student may pick
 (`Each student may choose up to N options`, 1 to the number of options). A vote
 carries 1 to `max_choices` distinct options of that poll and is accepted once
 per student; a second attempt answers `409`.
@@ -410,24 +497,74 @@ window. After signing in, students, CRs and teachers see one dismissible
 switch for this device. Signing out removes that device's subscription.
 
 Browsers only allow push on `https://`, with `http://localhost` as the single
-exception, so test on a phone through a tunnel or a real certificate, not
-through `http://192.168.x.x`. On an iPhone, Safari only delivers push after the
-site is installed: open it in Safari, use `Share → Add to Home Screen`, open it
-from that icon and turn the switch on there. `public/manifest.webmanifest` gives
-the installed app its name (`SUST CSE Portal`), its maroon theme and its icons.
+exception — see *Showing the site on a phone over HTTPS* below.
 
-### Campus photos
+### Installing the site on a phone or a desktop
 
-The public hero and the sign-in pages read their images from
-`frontend/public/campus/`. The folder is empty on purpose — drop the real
-photos in with exactly these names and nothing else has to change:
+`frontend/public/manifest.webmanifest` gives the installed app its name
+(`SUST CSE Portal`), its short name (`CSE Portal`), the maroon theme, the cream
+background and the two monogram icons in `frontend/public/`. `index.html` links
+the manifest, so any browser that supports installing offers it.
+
+- **Android and desktop Chrome** — open the site and choose `Install app` from
+  the address bar or the browser menu.
+- **iPhone** — open the site in Safari and choose `Share → Add to Home Screen`.
+  Safari only delivers push to an installed site, so this step is required
+  before the notification switch works there.
+
+### Campus photos and logos
+
+The public hero, the sign-in pages and the crest read their images from
+`frontend/public/`. Both folders are empty on purpose — drop the real files in
+with exactly these names and nothing else has to change:
 
 | File | Size | Used by |
 |---|---|---|
-| `hero-monument.jpg`, `hero-building.jpg`, `hero-entrance.jpg` | 1920 × 1080 | the home hero slideshow and the sign-in pages |
+| `campus/hero-monument.jpg`, `campus/hero-building.jpg`, `campus/hero-entrance.jpg` | 1920 × 1080 | the home hero slideshow and the sign-in pages |
+| `brand/sust-logo.png` | 512 × 512, transparent | the home page header |
+| `brand/cse-logo.png` | 512 × 512, transparent | the crest in every masthead, and the favicon |
 
-When a photo is missing the hero falls back to its maroon gradient, so the app
-still looks finished without them.
+When a campus photo is missing the hero falls back to its maroon gradient. When
+a logo is missing the crest falls back to the `CS` monogram and the favicon
+stays on the bundled one, so the app still looks finished without them.
+
+### Showing the site on a phone over HTTPS
+
+Browsers only allow push on `https://`, with `http://localhost` as the single
+exception, so `http://192.168.x.x` will not do for a demo. The quickest way to
+get a real certificate is a Cloudflare Tunnel:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+cloudflared tunnel --url http://localhost:5173
+```
+
+`cloudflared` prints a `https://<something>.trycloudflare.com` address. Then:
+
+1. Put that address in `FRONTEND_ORIGIN` in `backend/.env` so CORS and the push
+   links point at it, and restart the backend.
+2. Run a second tunnel for the API, or run the frontend dev server with
+   `--host` and proxy `/api` to the backend, whichever your setup already does.
+3. Open the printed address on the phone and sign in.
+
+The tunnel address changes every run, so update `FRONTEND_ORIGIN` each time.
+
+### Testing push notifications
+
+1. Make sure `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` are set
+   in `backend/.env`, and that the site is on `https://` or `http://localhost`.
+2. Sign in as a student, a CR or a teacher. Accept the
+   `Get notifications on this device` banner, or use the switch in
+   `My profile → Security`.
+3. Allow notifications when the browser asks. The switch now reads as on.
+4. From another account, do something that notifies that person: post a notice
+   for their batch, send them a message, publish a routine, or open a poll.
+5. The notification arrives even with the tab closed. Clicking it focuses an
+   open tab and navigates to the item, or opens a new window.
+
+To check the cleanup path, remove the site's notification permission in the
+browser and send another notification: the push service answers `410`, and the
+worker deletes that subscription.
 
 ## How to run tests
 
@@ -456,6 +593,24 @@ they refuse to run unless the database name ends with `_test`, and they drop and
 recreate the `public` schema before each test — so never point them at
 `sust_coord`.
 
+The frontend has its own two checks:
+
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull
+request, in two jobs:
+
+- **Backend** — a PostgreSQL service, then the `gofmt` check, `go vet ./...` and
+  `go test ./...` with `TEST_DATABASE_URL` pointing at that service, so the
+  integration tests really run.
+- **Frontend** — `npm ci`, `npm run lint` and `npm run build`.
+
 ## API endpoints
 
 Every route lives under `/api`. Errors always use the same shape:
@@ -466,7 +621,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/health` | public | `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
 | `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
 | `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
-| `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students |
+| `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students, out of `A` and `B` |
 | `GET` | `/api/push/public-key` | public | `enabled` and the VAPID `public_key` when web push is set up |
 | `POST` | `/api/auth/register` | public | `multipart/form-data` student registration with a required photo; `201` on success |
 | `POST` | `/api/auth/verify-email` | public, rate limited | `{reg_no, code}` turns an `unverified` account into `pending` |
@@ -505,8 +660,8 @@ Every route lives under `/api`. Errors always use the same shape:
 | `DELETE` | `/api/admin/users/{id}/permanent` | admin | `{confirm}` deletes a `removed` or `rejected` account for good; `400` on a wrong confirmation, `403` for an admin or the caller, `409` otherwise |
 | `GET` | `/api/admin/audit` | admin | The latest 100 removals, restores and permanent deletions |
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
-| `POST` | `/api/admin/courses` | admin | Adds a course; the code is stored in upper case, `409` on a duplicate |
-| `GET` | `/api/admin/courses` | admin | Every course, sorted by code |
+| `POST` | `/api/admin/courses` | admin | Adds a course with `code`, `title` and a required `credit` of 0.5 to 6.0 in steps of 0.25; the code is stored in upper case, `409` on a duplicate |
+| `GET` | `/api/admin/courses` | admin | Every course with its credit, sorted by code |
 | `DELETE` | `/api/admin/courses/{id}` | admin | Deletes a course nothing uses; `409` naming the routine entries, classes, exams and drop course students that still hold it |
 | `POST` | `/api/admin/routines` | admin | Adds a fixed routine entry; `400` on a broken rule, `409` on a room clash |
 | `GET` | `/api/admin/routines` | admin | Routine entries with the `batch` and `section` filters |
@@ -515,6 +670,16 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/lookups/sections` | any signed-in role | Sections of one `batch` (required), without `ALL` |
 | `GET` | `/api/lookups/courses` | any signed-in role | `id`, `code` and `title` of every course |
 | `GET` | `/api/lookups/teachers` | any signed-in role | `id`, `user_id` and `name` of the active teachers |
+| `GET` | `/api/lookups/periods` | any signed-in role | The class periods of the teaching day in order |
+| `PATCH` | `/api/admin/routines/{id}` | admin | `{semester}` moves one routine entry to another semester |
+| `GET` | `/api/admin/batches/running-semester` | admin | Every batch with the semester it is running now |
+| `PUT` | `/api/admin/batches/{batch}/running-semester` | admin | `{semester}` sets what that batch runs now |
+| `GET` | `/api/students/courses` | student, CR | `?batch=` (own batch by default): the running semester, the total credits and one entry per course |
+| `GET` | `/api/admin/periods` | admin | The same list for the Class periods page |
+| `POST` | `/api/admin/periods` | admin | `{label, start_time, end_time, is_break}`; `409` when it overlaps another period |
+| `PATCH` | `/api/admin/periods/{id}` | admin | Changes any of those fields; `409` on an overlap, `404` when unknown |
+| `DELETE` | `/api/admin/periods/{id}` | admin | Removes a period; `409` when it is the last one left |
+| `POST` | `/api/admin/periods/reorder` | admin | `{ids}` holding every period exactly once, in the new order |
 | `GET` | `/api/notifications` | student, CR, teacher | Newest first; `limit` defaults to 30 and may not exceed 100 |
 | `GET` | `/api/notifications/unread-count` | student, CR, teacher | How many matching notifications arrived after `since` |
 | `GET` | `/api/cr/routine` | CR | Fixed routine of the CR's own batch and section, including the `ALL` entries |
@@ -575,6 +740,9 @@ Every route lives under `/api`. Errors always use the same shape:
 | `DELETE` | `/api/messages/conversations/{id}/members/{user_id}/admin` | group admins | Takes the group admin role back; `409` on the last one |
 | `PATCH` | `/api/messages/conversations/{id}` | group admins | `{title}` renames the group |
 | `POST` | `/api/messages/conversations/{id}/leave` | members | Leaves the group; the earliest member becomes admin if the last admin leaves |
+| `DELETE` | `/api/messages/conversations/{id}` | members | Deletes the chat for the caller only: the messages so far stop showing, the chat leaves their list, and membership is untouched |
+| `PATCH` | `/api/messages/{id}` | the sender | `{body}` within two minutes of sending; sets `edited_at`, `409` after |
+| `DELETE` | `/api/messages/{id}` | the sender | Soft-deletes within two minutes: body, link and file cleared, file removed from disk, `409` after |
 | `GET` | `/api/messages/conversations/{id}/messages` | any signed-in role | Newest first with `before` and `limit`; marks the conversation read |
 | `POST` | `/api/messages/conversations/{id}/messages` | any signed-in role | `multipart/form-data` with `body`, `link` and `file`; at least one is required |
 | `GET` | `/api/messages/unread-count` | any signed-in role | How many unread messages the caller has across every conversation |
@@ -897,15 +1065,15 @@ find `CSE 2243 7637D`.
 "Compilers"}` and answers the stored code.
 
 `POST /api/admin/routines` takes `batch`, `section`, `course_id`, `teacher_id`
-(the **`teachers.id`** from the teacher lookup), `day_of_week` (`0` is Sunday,
-`6` is Saturday), `start_time` and `end_time` as `HH:MM`, `room` and `type`
-(`class` or `lab`). `section` is a single letter or **`ALL`**, which means both
-sections. The backend answers `400` unless the start is before the end and both
-sides stay inside **08:00 to 17:00**, and unless the course exists and the
-teacher exists and is still active.
+(the **`teachers.id`** from the teacher lookup), `semester` (`1-1` to `4-2`),
+`day_of_week` (`0` is Sunday, `6` is Saturday), `start_time` and `end_time` as
+`HH:MM`, `room` and `type` (`class` or `lab`). `section` is **`A`**, **`B`** or
+**`ALL`**, which means both sections. The backend answers `400` unless the start is before the end, the
+times sit inside the class periods and miss every break, and unless the course
+exists and the teacher exists and is still active.
 
-A second entry for the **same room on the same weekday at an overlapping time**
-answers `409` and names the booking it clashes with:
+A second entry for the **same room on the same weekday at an overlapping time in
+the same semester** answers `409` and names the booking it clashes with:
 
 ```json
 {"error": "Room 1003 is already booked on Monday 10:30–12:45 by CSE-23 section A (CSE 233)."}
@@ -1008,9 +1176,10 @@ either side being `ALL`:
 ```
 
 An item is *active* unless it is `cancelled`, so cancelling frees both the room
-and the batch slot, and an accepted reschedule frees the old one. Times stay
-inside **08:00 to 17:00** with the start before the end, and `meeting_link` is
-optional but has to be a full `http://` or `https://` address.
+and the batch slot, and an accepted reschedule frees the old one. Times run from
+the first class period to the last, never cross a break, and start before they
+end. `meeting_link` is optional for both modes but has to be a full `http://` or
+`https://` address when it is given.
 
 Both checks and the write run in **one transaction** behind
 `pg_advisory_xact_lock` on the batch and date and, for a managed room, on the
@@ -1208,9 +1377,15 @@ These are settled. Do not swap them for something else without agreeing first.
 - **`backend/internal/config` imports `time/tzdata` (blank import) so
   Asia/Dhaka works on Windows. Never remove it.**
 - Dates are **`YYYY-MM-DD`**, times are **`HH:MM` in 24-hour form**.
-- **Class hours are 08:00–17:00**, and start time must be before end time.
-  Enforced on the backend, with `min`/`max` on the frontend time inputs as a
-  convenience only.
+- **The teaching day is the class periods table**: a class runs from the first
+  period's start to the last period's end, never inside a break, and starts
+  before it ends. Enforced on the backend, with period pickers on the frontend
+  as a convenience only.
+- **Only sections `A` and `B` exist**, plus `ALL` for items that target both.
+- **Every routine entry carries a semester** (`1-1` to `4-2`), and each batch has
+  one running semester in `batch_semesters`. Only the running semester generates
+  dated items, fills the course helper, offers drop courses and is checked for
+  room clashes.
 
 **Frontend**
 

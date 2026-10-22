@@ -60,6 +60,15 @@ type fakeChatStore struct {
 	directErr    error
 	searchRole   string
 	searchText   string
+	searchViewer string
+	owned        store.OwnMessage
+	ownedErr     error
+	edited       string
+	editErr      error
+	deletedMsg   int64
+	deleteErr    error
+	cleared      []int64
+	clearErr     error
 	err          error
 }
 
@@ -90,17 +99,46 @@ func (f *fakeChatStore) GetMessageViewer(ctx context.Context, userID int64) (sto
 	return viewer, nil
 }
 
-func (f *fakeChatStore) SearchContacts(ctx context.Context, viewerID int64, search, role string) ([]store.ContactRow, error) {
-	f.searchText, f.searchRole = search, role
+func (f *fakeChatStore) SearchContacts(ctx context.Context, viewerID int64, viewerRole, search,
+	role string) ([]store.ContactRow, error) {
+	f.searchText, f.searchRole, f.searchViewer = search, role, viewerRole
 	return f.contacts, f.err
 }
 
-func (f *fakeChatStore) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) (store.Conversation, error) {
+func (f *fakeChatStore) GetOrCreateDirect(ctx context.Context, viewerID int64, viewerRole string,
+	otherID int64) (store.Conversation, error) {
 	if f.directErr != nil {
 		return store.Conversation{}, f.directErr
 	}
 	f.directWith = append(f.directWith, otherID)
 	return store.Conversation{ID: 7, Kind: store.ConversationDirect, CreatedBy: viewerID}, nil
+}
+
+func (f *fakeChatStore) FindOwnMessage(ctx context.Context, messageID, senderID int64) (store.OwnMessage, error) {
+	if f.ownedErr != nil {
+		return store.OwnMessage{}, f.ownedErr
+	}
+	return f.owned, nil
+}
+
+func (f *fakeChatStore) EditChatMessage(ctx context.Context, messageID, senderID int64, body string,
+	now time.Time) (store.ChatMessageRow, error) {
+	if f.editErr != nil {
+		return store.ChatMessageRow{}, f.editErr
+	}
+	f.edited = body
+	edited := now
+	return store.ChatMessageRow{ID: messageID, SenderID: senderID, Body: body, CreatedAt: now,
+		EditedAt: &edited}, nil
+}
+
+func (f *fakeChatStore) DeleteChatMessage(ctx context.Context, messageID, senderID int64,
+	now time.Time) (int64, error) {
+	if f.deleteErr != nil {
+		return 0, f.deleteErr
+	}
+	f.deletedMsg = messageID
+	return 1, nil
 }
 
 func (f *fakeChatStore) CreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error) {
@@ -188,7 +226,8 @@ func (f *fakeChatStore) FindConversationAccess(ctx context.Context, conversation
 	return f.access, nil
 }
 
-func (f *fakeChatStore) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time, limit int) ([]store.ChatMessageRow, error) {
+func (f *fakeChatStore) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time,
+	limit int, viewerID int64) ([]store.ChatMessageRow, error) {
 	return f.messages, f.err
 }
 
@@ -209,6 +248,15 @@ func (f *fakeChatStore) CreateChatMessage(ctx context.Context, message store.New
 		FilePath: message.FilePath, FileName: message.FileName, FileMime: message.FileMime,
 		FileSize: message.FileSize, CreatedAt: time.Now(),
 	}, nil
+}
+
+func (f *fakeChatStore) ClearConversation(ctx context.Context, userID, conversationID int64,
+	at time.Time) error {
+	if f.clearErr != nil {
+		return f.clearErr
+	}
+	f.cleared = append(f.cleared, conversationID)
+	return nil
 }
 
 func (f *fakeChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error {

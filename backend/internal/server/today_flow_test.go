@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	todayCourse  = `{"code":"cse233","title":"Digital Logic Design"}`
-	todayDropped = `{"code":"cse211","title":"Data Structures"}`
+	todayCourse  = `{"code":"cse233","title":"Digital Logic Design","credit":3}`
+	todayDropped = `{"code":"cse211","title":"Data Structures","credit":3}`
 	todayTeacher = `{"name":"Today Teacher","user_id":"T-600","email":"todayteacher@sust.edu",
 "phone":"01712345600","password":"sust-250-project","confirm_password":"sust-250-project"}`
 	todayStudent = `{"full_name":"Today Student","reg_no":"2023331600","batch":"CSE-23","section":"A",
@@ -40,7 +40,7 @@ func lookupTeacherID(t *testing.T, router http.Handler, adminToken string, teach
 }
 
 func otherBatchRoutineBody(section string, courseID, teacherID int64, day int, start, end, room string) string {
-	return `{"batch":"CSE-22","section":"` + section +
+	return `{"batch":"CSE-22","semester":"1-1","section":"` + section +
 		`","course_id":` + strconv.FormatInt(courseID, 10) +
 		`,"teacher_id":` + strconv.FormatInt(teacherID, 10) +
 		`,"day_of_week":` + strconv.Itoa(day) +
@@ -70,7 +70,7 @@ func TestTodayAndDropCourseRoutineFlow(t *testing.T) {
 	}
 	teacherID := lookupTeacherID(t, router, adminToken, int64(number(t, createdTeacher, "id")))
 	own := call(t, router, http.MethodPost, "/api/admin/routines",
-		routineBody("A", courseID, teacherID, weekday, "08:00", "09:00", "1003", "class"), adminToken)
+		routineBody("A", courseID, teacherID, weekday, "09:00", "09:45", "1003", "class"), adminToken)
 	if own.Code != http.StatusCreated {
 		t.Fatalf("own routine status = %d, want 201 (body = %q)", own.Code, own.Body.String())
 	}

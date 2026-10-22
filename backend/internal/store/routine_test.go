@@ -37,7 +37,7 @@ VALUES ($1, $2, $3, $4, $5, $6, '01712345678', 'O+', $7)`,
 
 func seedCourseAndTeacher(t *testing.T, ctx context.Context, store *Store, pool *pgxpool.Pool) (int64, int64) {
 	t.Helper()
-	course, err := store.CreateCourse(ctx, "CSE 233", "Digital Logic Design")
+	course, err := store.CreateCourse(ctx, "CSE 233", "Digital Logic Design", 3.0)
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
@@ -54,6 +54,7 @@ func TestCreateRoutineRejectsRoomClashes(t *testing.T) {
 	courseID, teacherID := seedCourseAndTeacher(t, ctx, store, pool)
 	base := NewRoutine{
 		Batch:     "CSE-23",
+		Semester:  "1-1",
 		Section:   "A",
 		CourseID:  courseID,
 		TeacherID: teacherID,
@@ -133,6 +134,7 @@ func TestCreateRoutineChecksTheCourseAndTeacher(t *testing.T) {
 	}
 	base := NewRoutine{
 		Batch:     "CSE-23",
+		Semester:  "1-1",
 		Section:   "ALL",
 		CourseID:  courseID,
 		TeacherID: teacherID,
@@ -186,6 +188,7 @@ func TestDeleteRoutine(t *testing.T) {
 	courseID, teacherID := seedCourseAndTeacher(t, ctx, store, pool)
 	created, err := store.CreateRoutine(ctx, NewRoutine{
 		Batch:     "CSE-23",
+		Semester:  "1-1",
 		Section:   "A",
 		CourseID:  courseID,
 		TeacherID: teacherID,
@@ -204,7 +207,7 @@ func TestDeleteRoutine(t *testing.T) {
 	if err := store.DeleteRoutine(ctx, created.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("second DeleteRoutine() error = %v, want %v", err, ErrNotFound)
 	}
-	entries, err := store.ListRoutines(ctx, "", "")
+	entries, err := store.ListRoutines(ctx, "", "", "")
 	if err != nil {
 		t.Fatalf("ListRoutines() returned an unexpected error: %v", err)
 	}

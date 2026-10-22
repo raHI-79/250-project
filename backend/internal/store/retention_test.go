@@ -153,13 +153,13 @@ func TestDeleteAccountKeepsTheContentOthersRelyOn(t *testing.T) {
 		t.Fatalf("CreateNotice() returned an unexpected error: %v", err)
 	}
 	poll, err := store.CreatePoll(ctx, NewPoll{
-		Question: "Which day suits the extra class?", Batch: "CSE-23", Section: "A",
+		Question: "Which day suits the extra class?", Scope: "section", Batch: "CSE-23", Section: "A",
 		Options: []string{"Monday", "Tuesday"}, CreatedBy: crID,
 	})
 	if err != nil {
 		t.Fatalf("CreatePoll() returned an unexpected error: %v", err)
 	}
-	conversation, err := store.GetOrCreateDirect(ctx, crID, readerID)
+	conversation, err := store.GetOrCreateDirect(ctx, crID, "cr", readerID)
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestDeleteAccountKeepsTheContentOthersRelyOn(t *testing.T) {
 	if polls[0].TotalVoters != 0 {
 		t.Errorf("total voters = %d, want 0 once the voter is deleted", polls[0].TotalVoters)
 	}
-	messages, err := store.ListChatMessages(ctx, conversation.ID, nil, 20)
+	messages, err := store.ListChatMessages(ctx, conversation.ID, nil, 20, readerID)
 	if err != nil {
 		t.Fatalf("ListChatMessages() returned an unexpected error: %v", err)
 	}

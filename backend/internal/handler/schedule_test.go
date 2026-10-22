@@ -357,7 +357,7 @@ func TestCRCreateItem(t *testing.T) {
 			name:       "outside the class hours",
 			body:       base(`,"start_time":"07:00","end_time":"08:00","mode":"room","room":"1003"`),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Classes must be between 08:00 and 17:00.",
+			wantError:  "Classes must be between 09:00 and 16:45.",
 		},
 		{
 			name:       "the end before the start",
@@ -368,8 +368,7 @@ func TestCRCreateItem(t *testing.T) {
 		{
 			name:       "online without a link",
 			body:       base(`,"start_time":"10:00","end_time":"11:30","mode":"online"`),
-			wantStatus: http.StatusBadRequest,
-			wantError:  MessageLinkForOnlineMode,
+			wantStatus: http.StatusCreated,
 		},
 		{
 			name:       "a room mode without a room",
@@ -440,8 +439,6 @@ func TestCRPatchValidation(t *testing.T) {
 		{name: "only an end time", body: `{"end_time":"15:30"}`, wantStatus: http.StatusBadRequest,
 			wantError: MessageTimesTogether},
 		{name: "nothing", body: `{}`, wantStatus: http.StatusBadRequest, wantError: MessageNothingToUpdate},
-		{name: "online without a link", body: `{"mode":"online"}`, wantStatus: http.StatusBadRequest,
-			wantError: MessageLinkForOnlineMode},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -28,7 +28,7 @@ export default function BatchPicker({ batches, onAdd, onDrop, lockedBatch }) {
     setSection('')
   }
   return (
-    <Field label="Add a whole batch" error={error} hint="Leave the section empty to add the batch">
+    <Field label="Add a whole batch" error={error} hint="Pick both sections or just one">
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <Input
           aria-label="Batch"
@@ -37,7 +37,13 @@ export default function BatchPicker({ batches, onAdd, onDrop, lockedBatch }) {
           placeholder="CSE-23"
           disabled={Boolean(lockedBatch)}
         />
-        <SectionPicker batch={batch} value={section} onChange={setSection} />
+        <SectionPicker
+          value={section}
+          onChange={setSection}
+          emptyLabel="Both sections"
+          hint="Both sections, or one of them"
+          required={false}
+        />
         <Button variant="secondary" onClick={add}>
           <Plus size={15} />
           Add
@@ -51,7 +57,7 @@ export default function BatchPicker({ batches, onAdd, onDrop, lockedBatch }) {
               className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 py-1 pr-1 pl-2 text-xs text-ink"
             >
               {entry.batch}
-              {entry.section ? ` section ${entry.section}` : ' (whole batch)'}
+              {entry.section ? ` section ${entry.section}` : ' (both sections)'}
               <button
                 type="button"
                 onClick={() => onDrop(entry)}

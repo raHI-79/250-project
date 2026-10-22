@@ -8,9 +8,10 @@ import { Button } from '../ui'
 const ROTATE_AFTER = 7000
 
 const CAPTIONS = [
-  'Shaheed Minar, SUST campus',
-  'Department of Computer Science and Engineering',
+  'SUST Iconic Old Gate, Kumargaon',
+  'IICT Building, SUST campus',
   'University main entrance, Kumargaon',
+  'Shaheed Minar, SUST campus',
 ]
 
 export default function HomeHero() {

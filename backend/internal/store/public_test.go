@@ -27,15 +27,16 @@ func TestPublicStatsCountsActivePeopleAndBatches(t *testing.T) {
 	teacherRow := insertPublicTeacher(t, ctx, pool, activeTeacher, "T-100")
 	invitedTeacher := insertUser(t, ctx, pool, "teacher", "rumana", StatusInvited, 0)
 	insertPublicTeacher(t, ctx, pool, invitedTeacher, "T-101")
-	course, err := store.CreateCourse(ctx, "CSE 245", "Databases")
+	course, err := store.CreateCourse(ctx, "CSE 245", "Databases", 3.0)
 	if err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
-	if _, err := store.CreateCourse(ctx, "CSE-299", "Project Work"); err != nil {
+	if _, err := store.CreateCourse(ctx, "CSE-299", "Project Work", 3.0); err != nil {
 		t.Fatalf("CreateCourse() returned an unexpected error: %v", err)
 	}
-	routine := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
-VALUES ('CSE-22', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
+	setRunningSemester(t, ctx, pool, "CSE-22", "1-1")
+	routine := `INSERT INTO routines (batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-22', '1-1', 'A', $1, $2, 1, '08:00', '09:00', '1003', 'class')`
 	if _, err := pool.Exec(ctx, routine, course.ID, teacherRow); err != nil {
 		t.Fatalf("could not insert the routine entry: %v", err)
 	}

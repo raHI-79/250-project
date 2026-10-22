@@ -1,30 +1,56 @@
-import { Input } from '../ui'
-import { CLASS_END, CLASS_START } from '../../lib/time'
+import { Select } from '../ui'
+import { periodEndOptions, teachingPeriods } from '../../lib/schedule'
+import { formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
 
-export default function TimeRangeFields({ start, end, onStartChange, onEndChange, error, className }) {
+export default function TimeRangeFields({
+  periods,
+  start,
+  end,
+  onStartChange,
+  onEndChange,
+  error,
+  className,
+}) {
+  const starts = teachingPeriods(periods)
+  const ends = periodEndOptions(periods, start)
+  const pickStart = (value) => {
+    onStartChange(value)
+    const first = periodEndOptions(periods, value)[0]
+    onEndChange(first ? first.end_time : '')
+  }
   return (
     <div className={cx('grid gap-4 sm:grid-cols-2', className)}>
-      <Input
-        label="Start time"
-        type="time"
+      <Select
+        label="From period"
         value={start}
-        min={CLASS_START}
-        max={CLASS_END}
-        onChange={(event) => onStartChange(event.target.value)}
-        hint="Class hours are 8:00 AM to 5:00 PM"
+        onChange={(event) => pickStart(event.target.value)}
+        hint="Pick the period the class starts in"
         required
-      />
-      <Input
-        label="End time"
-        type="time"
+      >
+        <option value="">Choose a period</option>
+        {starts.map((period) => (
+          <option key={period.id} value={period.start_time}>
+            {period.label} · {formatTimeRange(period.start_time, period.end_time)}
+          </option>
+        ))}
+      </Select>
+      <Select
+        label="To period"
         value={end}
-        min={CLASS_START}
-        max={CLASS_END}
         onChange={(event) => onEndChange(event.target.value)}
         error={error}
+        hint="A lab may run over several periods"
+        disabled={!start}
         required
-      />
+      >
+        <option value="">Choose a period</option>
+        {ends.map((period) => (
+          <option key={period.id} value={period.end_time}>
+            {period.label} · ends {formatTimeRange(period.start_time, period.end_time).split(' – ')[1]}
+          </option>
+        ))}
+      </Select>
     </div>
   )
 }

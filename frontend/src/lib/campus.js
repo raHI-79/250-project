@@ -1,6 +1,7 @@
 export const HERO_IMAGES = [
-  '/campus/hero-monument.jpg',
+  '/campus/hero-oldGate.jpg',
   '/campus/hero-building.jpg',
+  '/campus/hero-monument.jpg',
   '/campus/hero-entrance.jpg',
 ]
 

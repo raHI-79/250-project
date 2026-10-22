@@ -22,6 +22,8 @@ const (
 var expectedTables = []string{
 	"admin_audit",
 	"batch_drive_links",
+	"batch_semesters",
+	"class_periods",
 	"courses",
 	"messages",
 	"notices",
@@ -34,6 +36,7 @@ var expectedTables = []string{
 	"published_items",
 	"schedule_items",
 	"routines",
+	"conversation_clears",
 	"conversation_members",
 	"conversation_reads",
 	"conversations",
@@ -182,7 +185,8 @@ func TestPollVotesAllowSeveralOptionsOnce(t *testing.T) {
 	studentUserID := insertUser(t, ctx, pool, "student", "2023331002")
 	studentID := insertStudent(t, ctx, pool, studentUserID, "2023331002")
 	var pollID int64
-	pollQuery := "INSERT INTO polls (question, batch, section, created_by) VALUES ('Lab on Friday?', 'CSE-23', 'A', $1) RETURNING id"
+	pollQuery := `INSERT INTO polls (question, scope, batch, section, created_by)
+VALUES ('Lab on Friday?', 'section', 'CSE-23', 'A', $1) RETURNING id`
 	if err := pool.QueryRow(ctx, pollQuery, crUserID).Scan(&pollID); err != nil {
 		t.Fatalf("could not insert the poll: %v", err)
 	}
@@ -221,8 +225,8 @@ func TestRoutineAndClassEventTimeChecks(t *testing.T) {
 	teacherUserID := insertUser(t, ctx, pool, "teacher", "T-001")
 	teacherRowID := insertTeacher(t, ctx, pool, teacherUserID, "T-001")
 	courseID := insertCourse(t, ctx, pool, "CSE 250")
-	routineQuery := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
-VALUES ('CSE-23', 'A', $1, $2, 1, $3, $4, '1003', 'class')`
+	routineQuery := `INSERT INTO routines (batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-23', '1-1', 'A', $1, $2, 1, $3, $4, '1003', 'class')`
 	itemQuery := `INSERT INTO schedule_items
 (batch, section, course_id, teacher_id, kind, origin, item_date, start_time, end_time, room, status, created_by)
 VALUES ('CSE-23', 'A', $1, $2, 'class', 'cr', DATE '2026-10-20', $3, $4, '1003', 'scheduled', $5)`
@@ -234,10 +238,8 @@ VALUES ('CSE-23', 'A', $1, $2, 'class', 'cr', DATE '2026-10-20', $3, $4, '1003',
 		itemCode  string
 	}{
 		{name: "inside class hours is accepted", startTime: "08:00", endTime: "09:30"},
-		{name: "starting at 07:00 is rejected", startTime: "07:00", endTime: "09:30", wantCode: checkViolationCode,
-			itemCode: ""},
-		{name: "ending after 17:00 is rejected", startTime: "16:00", endTime: "17:30", wantCode: checkViolationCode,
-			itemCode: ""},
+		{name: "starting at 07:00 is left to the class periods", startTime: "07:00", endTime: "09:30"},
+		{name: "ending after 17:00 is left to the class periods", startTime: "16:00", endTime: "17:30"},
 		{name: "end before start is rejected", startTime: "11:00", endTime: "10:00", wantCode: checkViolationCode,
 			itemCode: checkViolationCode},
 		{name: "end equal to start is rejected", startTime: "11:00", endTime: "11:00", wantCode: checkViolationCode,
@@ -269,8 +271,8 @@ VALUES ('CSE-23', 'A', $1, $2, 'class', 'cr', DATE '2026-10-20', $3, $4, '1003',
 			}
 		})
 	}
-	outOfRange := `INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
-VALUES ('CSE-23', 'A', $1, $2, 7, TIME '08:00', TIME '09:30', '1003', 'class')`
+	outOfRange := `INSERT INTO routines (batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-23', '1-1', 'A', $1, $2, 7, TIME '08:00', TIME '09:30', '1003', 'class')`
 	if _, err := pool.Exec(ctx, outOfRange, courseID, teacherRowID); pgErrorCode(t, err) != checkViolationCode {
 		t.Errorf("day_of_week = 7 error = %v, want a check violation", err)
 	}
@@ -425,7 +427,7 @@ VALUES ('CSE-23', 'A', $1, $2, 'class', 'office', CURRENT_DATE + 1, 'scheduled',
 		},
 		{
 			name:     "routine referencing a missing course",
-			query:    "INSERT INTO routines (batch, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type) VALUES ('CSE-23', 'A', 999999, 999999, 1, TIME '08:00', TIME '09:30', '1003', 'class')",
+			query:    "INSERT INTO routines (batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type) VALUES ('CSE-23', '1-1', 'A', 999999, 999999, 1, TIME '08:00', TIME '09:30', '1003', 'class')",
 			wantCode: foreignKeyViolationCode,
 		},
 	}

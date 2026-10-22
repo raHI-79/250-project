@@ -301,7 +301,6 @@ export default function RegisterPage() {
                         required
                       />
                       <SectionPicker
-                        batch={form.batch}
                         value={form.section}
                         error={errors.section}
                         onChange={(section) => setForm((current) => ({ ...current, section }))}

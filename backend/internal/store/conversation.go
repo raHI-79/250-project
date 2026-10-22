@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"time"
 )
 
@@ -17,6 +18,7 @@ const (
 	MessagePageSize    = 50
 	MaxMessagePage     = 100
 	MaxGroupMembers    = 500
+	EditWindow         = 2 * time.Minute
 )
 
 var (
@@ -26,6 +28,8 @@ var (
 	ErrInactiveTarget = errors.New("store: the other account is not active")
 	ErrLastAdmin      = errors.New("store: a group keeps at least one admin")
 	ErrNotAGroup      = errors.New("store: this conversation is not a group")
+	ErrContactBlocked = errors.New("store: this account may not start a chat with that one")
+	ErrEditWindowOver = errors.New("store: this message can no longer be edited or deleted")
 )
 
 type MessageViewer struct {
@@ -110,6 +114,16 @@ type ChatMessageRow struct {
 	FileMime        string
 	FileSize        int64
 	CreatedAt       time.Time
+	EditedAt        *time.Time
+	DeletedAt       *time.Time
+}
+
+type OwnMessage struct {
+	ConversationID int64
+	CreatedAt      time.Time
+	Deleted        bool
+	HasAttachment  bool
+	FilePath       string
 }
 
 type ContactRow struct {
@@ -150,11 +164,15 @@ WHERE u.status = 'active' AND u.id <> $1
   AND ($2::text = '' OR ` + personName + ` ILIKE '%' || $2::text || '%'
        OR u.identifier ILIKE '%' || $2::text || '%')
   AND ($3::text = '' OR $3::text = ` + effectiveRole + `)
+  AND ($5::text <> 'student' OR ` + effectiveRole + ` <> 'student')
 ORDER BY ` + effectiveRole + `, ` + personName + `, u.id
 LIMIT $4`
-	activeUserRoleSQL = `SELECT u.role FROM users u WHERE u.id = $1 AND u.status = 'active'`
-	activeUserIDsSQL  = `SELECT u.id FROM users u WHERE u.status = 'active' AND u.id = ANY($1::bigint[])`
-	batchMembersSQL   = `SELECT u.id
+	activeUserRoleSQL = `SELECT ` + effectiveRole + `
+FROM users u
+LEFT JOIN students s ON s.user_id = u.id
+WHERE u.id = $1 AND u.status = 'active'`
+	activeUserIDsSQL = `SELECT u.id FROM users u WHERE u.status = 'active' AND u.id = ANY($1::bigint[])`
+	batchMembersSQL  = `SELECT u.id
 FROM users u
 JOIN students s ON s.user_id = u.id
 WHERE u.status = 'active' AND s.batch = $1::text
@@ -182,12 +200,14 @@ COALESCE(other.user_id, 0), COALESCE(other.name, ''), COALESCE(other.photo_path,
 COALESCE(last.sender_name, ''), COALESCE(last.body, ''), COALESCE(last.file_name, ''),
 (SELECT COUNT(*) FROM messages m2
  WHERE m2.conversation_id = c.id AND COALESCE(m2.sender_id, 0) <> $1
-   AND (r.last_read_at IS NULL OR m2.created_at > r.last_read_at)),
+   AND (r.last_read_at IS NULL OR m2.created_at > r.last_read_at)
+   AND m2.created_at > COALESCE(cleared.cleared_at, '-infinity'::timestamptz)),
 COALESCE(mine.role, ''),
 (SELECT COUNT(*) FROM conversation_members cm2 WHERE cm2.conversation_id = c.id)
 FROM conversations c
 JOIN conversation_members mine ON mine.conversation_id = c.id AND mine.user_id = $1
 LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
+LEFT JOIN conversation_clears cleared ON cleared.conversation_id = c.id AND cleared.user_id = $1
 LEFT JOIN LATERAL (
     SELECT cm.user_id, ` + personName + ` AS name, COALESCE(u.photo_path, '') AS photo_path
     FROM conversation_members cm
@@ -198,17 +218,21 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) other ON c.kind = 'direct'
 LEFT JOIN LATERAL (
-    SELECT m.body, m.file_name,
+    SELECT m.body, m.file_name, m.created_at,
            COALESCE(s.full_name, t.name, u.identifier, 'Deleted user') AS sender_name
     FROM messages m
     LEFT JOIN users u ON u.id = m.sender_id
     LEFT JOIN students s ON s.user_id = u.id
     LEFT JOIN teachers t ON t.user_id = u.id
     WHERE m.conversation_id = c.id
+      AND m.created_at > COALESCE(cleared.cleared_at, '-infinity'::timestamptz)
     ORDER BY m.created_at DESC, m.id DESC
     LIMIT 1
 ) last ON TRUE
-ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.id DESC
+WHERE cleared.cleared_at IS NULL
+   OR EXISTS (SELECT 1 FROM messages m3
+              WHERE m3.conversation_id = c.id AND m3.created_at > cleared.cleared_at)
+ORDER BY COALESCE(last.created_at, c.created_at) DESC, c.id DESC
 LIMIT $2`
 	findConversationAccessSQL = `SELECT ` + conversationColumns + `,
 COALESCE(mine.role, ''),
@@ -235,19 +259,42 @@ RETURNING user_id`
 WHERE conversation_id = $1
 ORDER BY added_at, user_id
 LIMIT 1`
-	listChatMessagesSQL = `SELECT m.id, COALESCE(m.sender_id, 0),
+	chatMessageColumns = `m.id, COALESCE(m.sender_id, 0),
 COALESCE(s.full_name, t.name, u.identifier, 'Deleted user'),
 COALESCE(` + effectiveRole + `, ''),
 COALESCE(u.photo_path, ''),
 m.body, COALESCE(m.link_url, ''), COALESCE(m.file_path, ''), COALESCE(m.file_name, ''),
-COALESCE(m.file_mime, ''), COALESCE(m.file_size, 0), m.created_at
-FROM messages m
+COALESCE(m.file_mime, ''), COALESCE(m.file_size, 0), m.created_at, m.edited_at, m.deleted_at`
+	chatMessageJoins = `FROM messages m
 LEFT JOIN users u ON u.id = m.sender_id
 LEFT JOIN students s ON s.user_id = u.id
-LEFT JOIN teachers t ON t.user_id = u.id
+LEFT JOIN teachers t ON t.user_id = u.id`
+	clearedAtSQL = `(SELECT cc.cleared_at FROM conversation_clears cc
+    WHERE cc.conversation_id = $1 AND cc.user_id = $4)`
+	listChatMessagesSQL = `SELECT ` + chatMessageColumns + `
+` + chatMessageJoins + `
 WHERE m.conversation_id = $1 AND ($2::timestamptz IS NULL OR m.created_at < $2::timestamptz)
+  AND m.created_at > COALESCE(` + clearedAtSQL + `, '-infinity'::timestamptz)
 ORDER BY m.created_at DESC, m.id DESC
 LIMIT $3`
+	clearConversationSQL = `INSERT INTO conversation_clears (user_id, conversation_id, cleared_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, conversation_id) DO UPDATE SET cleared_at = EXCLUDED.cleared_at`
+	getChatMessageSQL = `SELECT ` + chatMessageColumns + `
+` + chatMessageJoins + `
+WHERE m.id = $1`
+	ownMessageSQL = `SELECT conversation_id, created_at, deleted_at IS NOT NULL,
+COALESCE(link_url, '') <> '' OR COALESCE(file_path, '') <> '', COALESCE(file_path, '')
+FROM messages
+WHERE id = $1 AND sender_id = $2`
+	editChatMessageSQL = `UPDATE messages SET body = $2, edited_at = $3
+WHERE id = $1 AND sender_id = $4 AND deleted_at IS NULL AND created_at > $5::timestamptz
+RETURNING id`
+	deleteChatMessageSQL = `UPDATE messages
+SET body = '', link_url = NULL, file_path = NULL, file_name = NULL, file_mime = NULL,
+    file_size = NULL, deleted_at = $2
+WHERE id = $1 AND sender_id = $3 AND deleted_at IS NULL AND created_at > $4::timestamptz
+RETURNING conversation_id`
 	insertChatMessageSQL = `INSERT INTO messages
 (conversation_id, sender_id, body, link_url, file_path, file_name, file_mime, file_size)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), NULLIF($5::text, ''), NULLIF($6::text, ''),
@@ -261,8 +308,10 @@ ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = EXCLUDED.las
 FROM messages m
 JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = $1
 LEFT JOIN conversation_reads r ON r.conversation_id = m.conversation_id AND r.user_id = $1
+LEFT JOIN conversation_clears cc ON cc.conversation_id = m.conversation_id AND cc.user_id = $1
 WHERE COALESCE(m.sender_id, 0) <> $1
-  AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)`
+  AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
+  AND m.created_at > COALESCE(cc.cleared_at, '-infinity'::timestamptz)`
 	recipientsSQL = `SELECT cm.user_id
 FROM conversation_members cm
 WHERE cm.conversation_id = $1 AND cm.user_id <> $2
@@ -287,8 +336,9 @@ func (s *Store) GetMessageViewer(ctx context.Context, userID int64) (MessageView
 	return viewer, nil
 }
 
-func (s *Store) SearchContacts(ctx context.Context, viewerID int64, search, role string) ([]ContactRow, error) {
-	rows, err := s.pool.Query(ctx, searchContactsSQL, viewerID, search, role, ContactsLimit)
+func (s *Store) SearchContacts(ctx context.Context, viewerID int64, viewerRole, search,
+	role string) ([]ContactRow, error) {
+	rows, err := s.pool.Query(ctx, searchContactsSQL, viewerID, search, role, ContactsLimit, viewerRole)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not search the contacts: %w", err)
 	}
@@ -331,7 +381,8 @@ func (s *Store) ConversationRecipients(ctx context.Context, conversationID, send
 	return s.userIDs(ctx, recipientsSQL, conversationID, senderID)
 }
 
-func (s *Store) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) (Conversation, error) {
+func (s *Store) GetOrCreateDirect(ctx context.Context, viewerID int64, viewerRole string,
+	otherID int64) (Conversation, error) {
 	if viewerID == otherID {
 		return Conversation{}, ErrSameUser
 	}
@@ -342,6 +393,9 @@ func (s *Store) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) 
 	}
 	if err != nil {
 		return Conversation{}, fmt.Errorf("store: could not load the other account %d: %w", otherID, err)
+	}
+	if !validate.CanStartDirect(viewerRole, role) {
+		return Conversation{}, ErrContactBlocked
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -632,11 +686,11 @@ func (s *Store) FindConversationAccess(ctx context.Context, conversationID int64
 }
 
 func (s *Store) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time,
-	limit int) ([]ChatMessageRow, error) {
+	limit int, viewerID int64) ([]ChatMessageRow, error) {
 	if limit <= 0 || limit > MaxMessagePage {
 		limit = MessagePageSize
 	}
-	rows, err := s.pool.Query(ctx, listChatMessagesSQL, conversationID, before, limit)
+	rows, err := s.pool.Query(ctx, listChatMessagesSQL, conversationID, before, limit, viewerID)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the messages of the conversation %d: %w", conversationID, err)
 	}
@@ -657,6 +711,8 @@ func (s *Store) ListChatMessages(ctx context.Context, conversationID int64, befo
 			&row.FileMime,
 			&row.FileSize,
 			&row.CreatedAt,
+			&row.EditedAt,
+			&row.DeletedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a message: %w", err)
@@ -710,6 +766,86 @@ func (s *Store) CreateChatMessage(ctx context.Context, message NewChatMessage) (
 		FileSize:  message.FileSize,
 		CreatedAt: createdAt,
 	}, nil
+}
+
+func (s *Store) FindOwnMessage(ctx context.Context, messageID, senderID int64) (OwnMessage, error) {
+	var own OwnMessage
+	err := s.pool.QueryRow(ctx, ownMessageSQL, messageID, senderID).Scan(
+		&own.ConversationID,
+		&own.CreatedAt,
+		&own.Deleted,
+		&own.HasAttachment,
+		&own.FilePath,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OwnMessage{}, ErrNotFound
+	}
+	if err != nil {
+		return OwnMessage{}, fmt.Errorf("store: could not load the message %d: %w", messageID, err)
+	}
+	return own, nil
+}
+
+func (s *Store) EditChatMessage(ctx context.Context, messageID, senderID int64, body string,
+	now time.Time) (ChatMessageRow, error) {
+	var id int64
+	err := s.pool.QueryRow(ctx, editChatMessageSQL, messageID, body, now, senderID, now.Add(-EditWindow)).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ChatMessageRow{}, ErrEditWindowOver
+	}
+	if err != nil {
+		return ChatMessageRow{}, fmt.Errorf("store: could not edit the message %d: %w", messageID, err)
+	}
+	return s.chatMessage(ctx, messageID)
+}
+
+func (s *Store) DeleteChatMessage(ctx context.Context, messageID, senderID int64,
+	now time.Time) (int64, error) {
+	var conversationID int64
+	err := s.pool.QueryRow(ctx, deleteChatMessageSQL, messageID, now, senderID, now.Add(-EditWindow)).
+		Scan(&conversationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrEditWindowOver
+	}
+	if err != nil {
+		return 0, fmt.Errorf("store: could not delete the message %d: %w", messageID, err)
+	}
+	return conversationID, nil
+}
+
+func (s *Store) chatMessage(ctx context.Context, messageID int64) (ChatMessageRow, error) {
+	var row ChatMessageRow
+	err := s.pool.QueryRow(ctx, getChatMessageSQL, messageID).Scan(
+		&row.ID,
+		&row.SenderID,
+		&row.SenderName,
+		&row.SenderRole,
+		&row.SenderPhotoPath,
+		&row.Body,
+		&row.LinkURL,
+		&row.FilePath,
+		&row.FileName,
+		&row.FileMime,
+		&row.FileSize,
+		&row.CreatedAt,
+		&row.EditedAt,
+		&row.DeletedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ChatMessageRow{}, ErrNotFound
+	}
+	if err != nil {
+		return ChatMessageRow{}, fmt.Errorf("store: could not load the message %d: %w", messageID, err)
+	}
+	return row, nil
+}
+
+func (s *Store) ClearConversation(ctx context.Context, userID, conversationID int64, at time.Time) error {
+	_, err := s.pool.Exec(ctx, clearConversationSQL, userID, conversationID, at)
+	if err != nil {
+		return fmt.Errorf("store: could not clear the conversation %d: %w", conversationID, err)
+	}
+	return nil
 }
 
 func (s *Store) MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error {

@@ -3,6 +3,7 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -14,6 +15,9 @@ const (
 	MinPasswordLength = 8
 	MinCourseCode     = 3
 	MaxCourseCode     = 25
+	MinCredit         = 0.5
+	MaxCredit         = 6.0
+	CreditStep        = 0.25
 	MinUserIDLength   = 4
 	MaxUserIDLength   = 20
 	MinAge            = 15
@@ -27,13 +31,16 @@ const (
 	MessageUserIDDigitsOnly = "User ID cannot be digits only."
 	MessageUserIDStart      = "User ID must start with a letter."
 	MessageUserIDReserved   = "This User ID is reserved."
+	SectionA                = "A"
+	SectionB                = "B"
+	LabelBothSections       = "Both sections"
 )
 
 var (
 	emailPattern      = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s.]{2,}$`)
 	phonePattern      = regexp.MustCompile(`^01[3-9][0-9]{8}$`)
 	batchPattern      = regexp.MustCompile(`^[A-Z]{2,6}-[0-9]{2}$`)
-	sectionPattern    = regexp.MustCompile(`^[A-Z]$`)
+	sectionPattern    = regexp.MustCompile(`^[AB]$`)
 	courseCodePattern = regexp.MustCompile(`^[A-Z0-9 ]+$`)
 	courseCodeDigit   = regexp.MustCompile(`[0-9]`)
 	userIDPattern     = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
@@ -156,7 +163,7 @@ func Section(label, value string) (string, error) {
 	}
 	trimmed = strings.ToUpper(trimmed)
 	if !sectionPattern.MatchString(trimmed) {
-		return "", fmt.Errorf("%s must be a single letter from A to Z.", label)
+		return "", fmt.Errorf("%s must be A or B.", label)
 	}
 	return trimmed, nil
 }
@@ -200,6 +207,21 @@ func CourseCode(label, value string) (string, error) {
 		return "", fmt.Errorf("%s must contain at least one digit.", label)
 	}
 	return normalized, nil
+}
+
+func Credit(label string, value float64) (float64, error) {
+	if value == 0 {
+		return 0, fmt.Errorf("%s is required.", label)
+	}
+	steps := math.Round(value / CreditStep)
+	if math.Abs(value-steps*CreditStep) > 1e-9 {
+		return 0, fmt.Errorf("%s must move in steps of %.2f.", label, CreditStep)
+	}
+	rounded := steps * CreditStep
+	if rounded < MinCredit || rounded > MaxCredit {
+		return 0, fmt.Errorf("%s must be between %.1f and %.1f.", label, MinCredit, MaxCredit)
+	}
+	return rounded, nil
 }
 
 func UserID(value string) (string, error) {

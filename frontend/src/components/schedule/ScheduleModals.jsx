@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Alert, Button, Input, Modal, Textarea } from '../ui'
 import SlotFields from './SlotFields'
 import TimeRangeFields from '../forms/TimeRangeFields'
-import { MODE_ROOM, courseLine, slotError } from '../../lib/schedule'
-import { CLASS_END, CLASS_START, formatDate, formatTimeRange, timeRangeError, today } from '../../lib/time'
+import { MODE_ROOM, courseLine, periodRangeError, slotError } from '../../lib/schedule'
+import { usePeriods } from '../../lib/hooks'
+import { formatDate, formatTimeRange, today } from '../../lib/time'
 
 const emptySlot = { mode: MODE_ROOM, room: '', meeting_link: '' }
 
@@ -214,6 +215,7 @@ export function LinkModal({ item, onClose, onConfirm, busy }) {
 }
 
 export function RescheduleModal({ item, title, taken, onClose, onConfirm, busy }) {
+  const periods = usePeriods()
   const [form, setForm] = useState({ date: today(), start: '', end: '' })
   const [slot, setSlot] = useState(emptySlot)
   const [problem, setProblem] = useState('')
@@ -231,7 +233,7 @@ export function RescheduleModal({ item, title, taken, onClose, onConfirm, busy }
     })
     setProblem('')
   }, [item])
-  const timeProblem = timeRangeError(form.start, form.end)
+  const timeProblem = periodRangeError(periods, form.start, form.end)
   const clashes = (taken || []).filter(
     (entry) =>
       entry.item_date === form.date &&
@@ -283,6 +285,7 @@ export function RescheduleModal({ item, title, taken, onClose, onConfirm, busy }
           required
         />
         <TimeRangeFields
+          periods={periods}
           start={form.start}
           end={form.end}
           onStartChange={(value) => setForm((current) => ({ ...current, start: value }))}
@@ -309,9 +312,6 @@ export function RescheduleModal({ item, title, taken, onClose, onConfirm, busy }
             </Alert>
           )
         )}
-        <p className="text-xs text-faint">
-          Classes run from {CLASS_START} to {CLASS_END}.
-        </p>
       </div>
     </Modal>
   )

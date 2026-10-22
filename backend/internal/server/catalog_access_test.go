@@ -13,8 +13,13 @@ import (
 
 type emptyCatalogStore struct{}
 
-func (emptyCatalogStore) CreateCourse(ctx context.Context, code, title string) (store.Course, error) {
+func (emptyCatalogStore) CreateCourse(ctx context.Context, code, title string,
+	credit float64) (store.Course, error) {
 	return store.Course{}, store.ErrDuplicateCourse
+}
+
+func (emptyCatalogStore) ListPeriods(ctx context.Context) ([]store.Period, error) {
+	return nil, nil
 }
 
 func (emptyCatalogStore) ListCourses(ctx context.Context) ([]store.Course, error) {
@@ -29,8 +34,21 @@ func (emptyCatalogStore) CreateRoutine(ctx context.Context, routine store.NewRou
 	return store.RoutineRow{}, store.ErrCourseNotFound
 }
 
-func (emptyCatalogStore) ListRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error) {
+func (emptyCatalogStore) ListRoutines(ctx context.Context, batch, section,
+	semester string) ([]store.RoutineRow, error) {
 	return nil, nil
+}
+
+func (emptyCatalogStore) UpdateRoutineSemester(ctx context.Context, routineID int64, semester string) error {
+	return store.ErrNotFound
+}
+
+func (emptyCatalogStore) ListRunningSemesters(ctx context.Context) (map[string]string, error) {
+	return nil, nil
+}
+
+func (emptyCatalogStore) SetRunningSemester(ctx context.Context, batch, semester string) error {
+	return nil
 }
 
 func (emptyCatalogStore) DeleteRoutine(ctx context.Context, routineID int64) error {

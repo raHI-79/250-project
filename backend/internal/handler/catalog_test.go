@@ -11,28 +11,70 @@ import (
 )
 
 type fakeCatalogStore struct {
-	search        string
-	courses       []store.Course
-	created       store.RoutineRow
-	entries       []store.RoutineRow
-	err           error
-	createdCourse []store.Course
-	routines      []store.NewRoutine
-	deleted       []int64
-	batchFilter   string
-	sectionFilter string
-	usage         store.CourseUsage
-	usageErr      error
-	deletedCourse []int64
+	search         string
+	courses        []store.Course
+	created        store.RoutineRow
+	entries        []store.RoutineRow
+	err            error
+	createdCourse  []store.Course
+	routines       []store.NewRoutine
+	deleted        []int64
+	batchFilter    string
+	sectionFilter  string
+	usage          store.CourseUsage
+	usageErr       error
+	deletedCourse  []int64
+	periods        []store.Period
+	semesterFilter string
+	movedSemester  string
+	running        map[string]string
+	runningSet     map[string]string
 }
 
-func (f *fakeCatalogStore) CreateCourse(ctx context.Context, code, title string) (store.Course, error) {
+func (f *fakeCatalogStore) UpdateRoutineSemester(ctx context.Context, routineID int64, semester string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.movedSemester = semester
+	return nil
+}
+
+func (f *fakeCatalogStore) ListRunningSemesters(ctx context.Context) (map[string]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.running == nil {
+		return map[string]string{"CSE-23": "2-1"}, nil
+	}
+	return f.running, nil
+}
+
+func (f *fakeCatalogStore) SetRunningSemester(ctx context.Context, batch, semester string) error {
+	if f.err != nil {
+		return f.err
+	}
+	if f.runningSet == nil {
+		f.runningSet = make(map[string]string)
+	}
+	f.runningSet[batch] = semester
+	return nil
+}
+
+func (f *fakeCatalogStore) CreateCourse(ctx context.Context, code, title string,
+	credit float64) (store.Course, error) {
 	if f.err != nil {
 		return store.Course{}, f.err
 	}
-	course := store.Course{ID: int64(len(f.createdCourse) + 1), Code: code, Title: title}
+	course := store.Course{ID: int64(len(f.createdCourse) + 1), Code: code, Title: title, Credit: credit}
 	f.createdCourse = append(f.createdCourse, course)
 	return course, nil
+}
+
+func (f *fakeCatalogStore) ListPeriods(ctx context.Context) ([]store.Period, error) {
+	if len(f.periods) > 0 {
+		return f.periods, nil
+	}
+	return testPeriods(), nil
 }
 
 func (f *fakeCatalogStore) ListCourses(ctx context.Context) ([]store.Course, error) {
@@ -66,8 +108,9 @@ func (f *fakeCatalogStore) CreateRoutine(ctx context.Context, routine store.NewR
 	return created, nil
 }
 
-func (f *fakeCatalogStore) ListRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error) {
-	f.batchFilter, f.sectionFilter = batch, section
+func (f *fakeCatalogStore) ListRoutines(ctx context.Context, batch, section,
+	semester string) ([]store.RoutineRow, error) {
+	f.batchFilter, f.sectionFilter, f.semesterFilter = batch, section, semester
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -90,8 +133,8 @@ func (f *fakeCatalogStore) DeleteRoutine(ctx context.Context, routineID int64) e
 	return nil
 }
 
-const validRoutine = `{"batch":"CSE-23","section":"A","course_id":4,"teacher_id":6,"day_of_week":1,
-"start_time":"10:30","end_time":"12:45","room":"1003","type":"lab"}`
+const validRoutine = `{"batch":"CSE-23","semester":"2-1","section":"A","course_id":4,"teacher_id":6,
+"day_of_week":1,"start_time":"10:30","end_time":"12:45","room":"1003","type":"lab"}`
 
 func TestCreateCourse(t *testing.T) {
 	silenceLog(t)
@@ -103,46 +146,56 @@ func TestCreateCourse(t *testing.T) {
 		wantError  string
 		wantCode   string
 	}{
-		{name: "created", body: `{"code":"cse-233","title":"Digital Logic Design"}`, wantStatus: http.StatusCreated, wantCode: "CSE 233"},
-		{name: "created without a hyphen", body: `{"code":"cse233","title":"Digital Logic Design"}`, wantStatus: http.StatusCreated, wantCode: "CSE233"},
+		{name: "created", body: `{"code":"cse-233","title":"Digital Logic Design","credit":3}`, wantStatus: http.StatusCreated, wantCode: "CSE 233"},
+		{name: "created without a hyphen", body: `{"code":"cse233","title":"Digital Logic Design","credit":3}`, wantStatus: http.StatusCreated, wantCode: "CSE233"},
+		{name: "no credit", body: `{"code":"CSE-233","title":"Digital Logic Design"}`,
+			wantStatus: http.StatusBadRequest, wantError: "Credit is required."},
+		{name: "a credit off the quarter step", body: `{"code":"CSE-233","title":"Digital Logic Design","credit":1.3}`,
+			wantStatus: http.StatusBadRequest, wantError: "Credit must move in steps of 0.25."},
+		{name: "a credit below the floor", body: `{"code":"CSE-233","title":"Digital Logic Design","credit":0.25}`,
+			wantStatus: http.StatusBadRequest, wantError: "Credit must be between 0.5 and 6.0."},
+		{name: "a credit above the ceiling", body: `{"code":"CSE-233","title":"Digital Logic Design","credit":6.5}`,
+			wantStatus: http.StatusBadRequest, wantError: "Credit must be between 0.5 and 6.0."},
+		{name: "a half credit lab", body: `{"code":"CSE-234","title":"Digital Logic Lab","credit":1.5}`,
+			wantStatus: http.StatusCreated, wantCode: "CSE 234"},
 		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
 		{name: "unknown field", body: `{"code":"CSE-233","title":"A","credits":3}`, wantStatus: http.StatusBadRequest, wantError: "Invalid request body"},
-		{name: "missing code", body: `{"code":"","title":"Digital Logic Design"}`, wantStatus: http.StatusBadRequest, wantError: "Course code is required."},
+		{name: "missing code", body: `{"code":"","title":"Digital Logic Design","credit":3}`, wantStatus: http.StatusBadRequest, wantError: "Course code is required."},
 		{
 			name:       "a code without a digit",
-			body:       `{"code":"CSE CODE","title":"Digital Logic Design"}`,
+			body:       `{"code":"CSE CODE","title":"Digital Logic Design","credit":3}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "Course code must contain at least one digit.",
 		},
 		{
 			name:       "a code with an underscore",
-			body:       `{"code":"CSE_2243","title":"Digital Logic Design"}`,
+			body:       `{"code":"CSE_2243","title":"Digital Logic Design","credit":3}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  validate.MessageCourseCode,
 		},
 		{
 			name:       "a long code with spaces",
-			body:       `{"code":"cse 2243 7637d","title":"Compilers"}`,
+			body:       `{"code":"cse 2243 7637d","title":"Compilers","credit":3}`,
 			wantStatus: http.StatusCreated,
 			wantCode:   "CSE 2243 7637D",
 		},
 		{
 			name:       "a code without the letter prefix",
-			body:       `{"code":"2243 7637D","title":"Compilers"}`,
+			body:       `{"code":"2243 7637D","title":"Compilers","credit":3}`,
 			wantStatus: http.StatusCreated,
 			wantCode:   "2243 7637D",
 		},
-		{name: "missing title", body: `{"code":"CSE-233","title":"  "}`, wantStatus: http.StatusBadRequest, wantError: "Title is required."},
+		{name: "missing title", body: `{"code":"CSE-233","title":"  ","credit":3}`, wantStatus: http.StatusBadRequest, wantError: "Title is required."},
 		{
 			name:       "duplicate",
-			body:       `{"code":"CSE-233","title":"Digital Logic Design"}`,
+			body:       `{"code":"CSE-233","title":"Digital Logic Design","credit":3}`,
 			storeErr:   store.ErrDuplicateCourse,
 			wantStatus: http.StatusConflict,
 			wantError:  MessageDuplicateCourse,
 		},
 		{
 			name:       "store failure",
-			body:       `{"code":"CSE-233","title":"Digital Logic Design"}`,
+			body:       `{"code":"CSE-233","title":"Digital Logic Design","credit":3}`,
 			storeErr:   errors.New("database is down"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  "Internal server error",
@@ -214,7 +267,7 @@ func TestCreateRoutineValidation(t *testing.T) {
 			name:       "bad section",
 			body:       strings.Replace(validRoutine, `"section":"A"`, `"section":"AB"`, 1),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Section must be a single letter from A to Z or ALL.",
+			wantError:  "Section must be A, B or ALL.",
 		},
 		{
 			name:       "missing course",
@@ -238,13 +291,13 @@ func TestCreateRoutineValidation(t *testing.T) {
 			name:       "before opening",
 			body:       strings.Replace(validRoutine, `"start_time":"10:30"`, `"start_time":"07:00"`, 1),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Classes must be between 08:00 and 17:00.",
+			wantError:  "Classes must be between 09:00 and 16:45.",
 		},
 		{
 			name:       "after closing",
 			body:       strings.Replace(validRoutine, `"end_time":"12:45"`, `"end_time":"17:30"`, 1),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Classes must be between 08:00 and 17:00.",
+			wantError:  "Classes must be between 09:00 and 16:45.",
 		},
 		{
 			name:       "start after end",
@@ -366,7 +419,7 @@ func TestRoutinesListFilters(t *testing.T) {
 		{name: "section filter", query: "?section=a", wantStatus: http.StatusOK, wantSection: "A"},
 		{name: "both filters", query: "?batch=CSE-23&section=ALL", wantStatus: http.StatusOK, wantBatch: "CSE-23", wantSection: "ALL"},
 		{name: "bad batch", query: "?batch=23", wantStatus: http.StatusBadRequest, wantError: "batch must look like CSE-23."},
-		{name: "bad section", query: "?section=AB", wantStatus: http.StatusBadRequest, wantError: "section must be a single letter from A to Z or ALL."},
+		{name: "bad section", query: "?section=AB", wantStatus: http.StatusBadRequest, wantError: "section must be A, B or ALL."},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

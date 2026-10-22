@@ -101,7 +101,9 @@ VALUES ($1, $2)
 ON CONFLICT DO NOTHING`
 	searchDropCourseOptionsSQL = `SELECT c.id, c.code, c.title
 FROM courses c
-WHERE EXISTS (SELECT 1 FROM routines r WHERE r.course_id = c.id)
+WHERE EXISTS (SELECT 1 FROM routines r
+              JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+              WHERE r.course_id = c.id)
   AND ($1::text = ''
        OR replace(c.code, ' ', '') ILIKE '%' || replace(replace(upper($1::text), '-', ''), ' ', '') || '%'
        OR c.title ILIKE '%' || $1::text || '%')

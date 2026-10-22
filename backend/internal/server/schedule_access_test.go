@@ -42,12 +42,12 @@ func (emptyTeacherStore) ConfirmItem(ctx context.Context, itemID, teacherID int6
 }
 
 func (emptyTeacherStore) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64,
-	reason string) (store.ScheduleItem, error) {
+	reason string, windowOpen bool) (store.ScheduleItem, error) {
 	return store.ScheduleItem{}, store.ErrItemNotFound
 }
 
 func (emptyTeacherStore) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64,
-	message string) (store.ScheduleItem, error) {
+	message string, windowOpen bool) (store.ScheduleItem, error) {
 	return store.ScheduleItem{}, store.ErrItemNotFound
 }
 
@@ -99,6 +99,14 @@ func (emptyStudentStore) ListPublishedDay(ctx context.Context, batch, date strin
 
 func (emptyStudentStore) ListStudentExams(ctx context.Context, batch, section string,
 	now time.Time) ([]store.StudentExam, error) {
+	return nil, nil
+}
+
+func (emptyStudentStore) RunningSemester(ctx context.Context, batch string) (string, error) {
+	return "1-1", nil
+}
+
+func (emptyStudentStore) ListRunningCourseSlots(ctx context.Context, batch string) ([]store.RunningCourseSlot, error) {
 	return nil, nil
 }
 

@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	engineCourse  = `{"code":"cse 2243 7637d","title":"Compilers"}`
-	engineSecond  = `{"code":"CSE-2211","title":"Operating Systems"}`
+	engineCourse  = `{"code":"cse 2243 7637d","title":"Compilers","credit":3}`
+	engineSecond  = `{"code":"CSE-2211","title":"Operating Systems","credit":3}`
 	engineTeacher = `{"name":"Engine Teacher","user_id":"T-500","email":"engineteacher@sust.edu",
 "phone":"01712345500"}`
 	engineCR = `{"full_name":"Engine CR","reg_no":"2023331500","batch":"CSE-23","section":"A",
@@ -137,8 +137,8 @@ func seedEngine(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	tomorrow := flowConfig(t).Now().AddDate(0, 0, 1)
 	weekday := int(tomorrow.Weekday())
 	for _, routine := range []string{
-		routineBody("A", firstID, teacherRowID, weekday, "08:00", "09:30", "1003", "class"),
-		routineBody("A", secondID, teacherRowID, weekday, "10:00", "11:30", "1004", "class"),
+		routineBody("A", firstID, teacherRowID, weekday, "09:00", "10:30", "1003", "class"),
+		routineBody("A", secondID, teacherRowID, weekday, "10:30", "12:00", "1004", "class"),
 	} {
 		rec := call(t, router, http.MethodPost, "/api/admin/routines", routine, adminToken)
 		if rec.Code != http.StatusCreated {
@@ -363,7 +363,7 @@ func TestScheduleEngineRoomAndBatchRules(t *testing.T) {
 	}
 	clash := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
 		`,"section":"A","item_date":"` + tomorrow +
-		`","start_time":"08:30","end_time":"09:00","mode":"room","room":"2104"}`
+		`","start_time":"09:45","end_time":"10:30","mode":"room","room":"2104"}`
 	rec := call(t, router, http.MethodPost, "/api/cr/items", clash, crToken)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("batch clash status = %d, want 409 (body = %q)", rec.Code, rec.Body.String())
@@ -373,7 +373,7 @@ func TestScheduleEngineRoomAndBatchRules(t *testing.T) {
 	}
 	roomClash := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
 		`,"section":"B","item_date":"` + tomorrow +
-		`","start_time":"08:30","end_time":"09:00","mode":"room","room":"1003"}`
+		`","start_time":"09:45","end_time":"10:30","mode":"room","room":"1003"}`
 	roomRec := call(t, router, http.MethodPost, "/api/cr/items", roomClash, crToken)
 	if roomRec.Code != http.StatusConflict {
 		t.Fatalf("room clash status = %d, want 409 (body = %q)", roomRec.Code, roomRec.Body.String())
@@ -383,14 +383,14 @@ func TestScheduleEngineRoomAndBatchRules(t *testing.T) {
 	}
 	unmanaged := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
 		`,"section":"B","item_date":"` + tomorrow +
-		`","start_time":"08:30","end_time":"09:00","mode":"room","room":"Library Hall"}`
+		`","start_time":"09:45","end_time":"10:30","mode":"room","room":"Library Hall"}`
 	free := call(t, router, http.MethodPost, "/api/cr/items", unmanaged, crToken)
 	if free.Code != http.StatusCreated {
 		t.Fatalf("unmanaged room status = %d, want 201 (body = %q)", free.Code, free.Body.String())
 	}
 	online := `{"kind":"class","course_id":` + strconv.FormatInt(courseID, 10) +
-		`,"section":"C","item_date":"` + tomorrow +
-		`","start_time":"08:30","end_time":"09:00","mode":"online","meeting_link":"https://meet.example.com/extra"}`
+		`,"section":"B","item_date":"` + tomorrow +
+		`","start_time":"10:30","end_time":"11:15","mode":"online","meeting_link":"https://meet.example.com/extra"}`
 	onlineRec := call(t, router, http.MethodPost, "/api/cr/items", online, crToken)
 	if onlineRec.Code != http.StatusCreated {
 		t.Fatalf("online class status = %d, want 201 (body = %q)", onlineRec.Code, onlineRec.Body.String())

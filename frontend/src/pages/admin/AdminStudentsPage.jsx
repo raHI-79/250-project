@@ -22,11 +22,9 @@ import useAccountActions from '../../components/admin/useAccountActions'
 import api from '../../lib/api'
 import { useDebounced, useResource } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
-import { PEOPLE_STATUS_TABS, canRestore } from '../../lib/options'
+import { PEOPLE_STATUS_TABS, SECTIONS, canRestore } from '../../lib/options'
 
 const PAGE_SIZE = 50
-
-const SECTIONS = ['A', 'B', 'C', 'D']
 
 const HEADINGS = ['Name', 'Reg No', 'Batch', 'Section', 'Email', 'Phone', 'Status', '']
 

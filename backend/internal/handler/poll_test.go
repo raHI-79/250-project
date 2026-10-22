@@ -44,6 +44,7 @@ func (f *fakePollStore) CreatePoll(ctx context.Context, poll store.NewPoll) (sto
 	return store.PollRow{
 		ID:            3,
 		Question:      poll.Question,
+		Scope:         poll.Scope,
 		Batch:         poll.Batch,
 		Section:       poll.Section,
 		Status:        store.PollOpen,
@@ -94,8 +95,10 @@ func TestPollCRCreate(t *testing.T) {
 		body        string
 		isCR        bool
 		wantStatus  int
+		wantBatch   string
 		wantSection string
 		wantAlert   string
+		wantAlertTo string
 		wantError   string
 	}{
 		{
@@ -112,6 +115,15 @@ func TestPollCRCreate(t *testing.T) {
 			isCR:        true,
 			wantStatus:  http.StatusCreated,
 			wantSection: "ALL",
+		},
+		{
+			name:        "for every batch",
+			body:        `{"question":"Which week suits the seminar?","options":["First","Second"],"scope":"all_batches"}`,
+			isCR:        true,
+			wantStatus:  http.StatusCreated,
+			wantBatch:   "ALL",
+			wantSection: "ALL",
+			wantAlertTo: "",
 		},
 		{
 			name:       "without a question",
@@ -154,7 +166,7 @@ func TestPollCRCreate(t *testing.T) {
 			body:       `{"question":"Which day?","options":["Sunday","Monday"],"scope":"everyone"}`,
 			isCR:       true,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Scope must be one of section, batch.",
+			wantError:  "Scope must be one of section, batch, all_batches.",
 		},
 		{
 			name:       "as a student who is not a class representative",
@@ -182,16 +194,24 @@ func TestPollCRCreate(t *testing.T) {
 				}
 				return
 			}
+			wantBatch := tc.wantBatch
+			if wantBatch == "" {
+				wantBatch = noticeBatch
+			}
 			saved := polls.created[0]
-			if saved.Batch != noticeBatch || saved.Section != tc.wantSection || saved.CreatedBy != noticeCRID {
-				t.Errorf("stored poll = %+v, want %q/%q by %d", saved, noticeBatch, tc.wantSection, noticeCRID)
+			if saved.Batch != wantBatch || saved.Section != tc.wantSection || saved.CreatedBy != noticeCRID {
+				t.Errorf("stored poll = %+v, want %q/%q by %d", saved, wantBatch, tc.wantSection, noticeCRID)
 			}
 			if len(saved.Options) != 2 {
 				t.Errorf("stored %d options, want 2", len(saved.Options))
 			}
-			if alerts.calls != 1 || alerts.batch != noticeBatch || alerts.section != tc.wantAlert {
+			alertBatch := noticeBatch
+			if tc.wantBatch == "ALL" {
+				alertBatch = tc.wantAlertTo
+			}
+			if alerts.calls != 1 || alerts.batch != alertBatch || alerts.section != tc.wantAlert {
 				t.Errorf("broadcast = %d to %q/%q, want one to %q/%q",
-					alerts.calls, alerts.batch, alerts.section, noticeBatch, tc.wantAlert)
+					alerts.calls, alerts.batch, alerts.section, alertBatch, tc.wantAlert)
 			}
 		})
 	}
@@ -408,12 +428,13 @@ func TestPollStudentVote(t *testing.T) {
 
 func TestPollResponsesHideWhoVoted(t *testing.T) {
 	allowed := map[string]bool{
-		"id": true, "question": true, "batch": true, "section": true, "is_closed": true,
+		"id": true, "question": true, "scope": true, "batch": true, "section": true, "is_closed": true,
 		"max_choices": true, "created_by_name": true, "created_at": true, "options": true,
 		"total_voters": true, "my_option_ids": true,
 	}
 	rows := []store.PollRow{{
-		ID: 3, Question: "Which day?", Batch: noticeBatch, Section: "ALL", Status: store.PollOpen,
+		ID: 3, Question: "Which day?", Scope: "batch", Batch: noticeBatch,
+		Section: "ALL", Status: store.PollOpen,
 		MaxChoices: 2, CreatedByName: "Board CR", CreatedAt: time.Now(), TotalVoters: 4,
 		MyOptionIDs: []int64{2},
 		Options:     []store.PollOptionRow{{ID: 1, Text: "Sunday", Votes: 3}, {ID: 2, Text: "Monday", Votes: 1}},

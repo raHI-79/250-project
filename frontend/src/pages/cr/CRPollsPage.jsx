@@ -24,6 +24,12 @@ const MIN_OPTIONS = 2
 
 const MAX_OPTIONS = 10
 
+const pollAudience = (poll) => {
+  if (poll.scope === 'all_batches') return 'Every batch'
+  if (poll.scope === 'batch' || poll.section === 'ALL') return `${poll.batch} · whole batch`
+  return `${poll.batch} · section ${poll.section}`
+}
+
 export default function CRPollsPage() {
   const toast = useToast()
   const confirm = useConfirm()
@@ -108,7 +114,7 @@ export default function CRPollsPage() {
   )
   return (
     <>
-      <PageHeader eyebrow="Ask your batch" title="Polls" subtitle="Ask your section or your whole batch a question" />
+      <PageHeader eyebrow="Ask your batch" title="Polls" subtitle="Ask your section, your batch or every batch a question" />
       <Card hover={false} className="mb-6">
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
@@ -154,6 +160,7 @@ export default function CRPollsPage() {
             <Select label="Who votes" value={scope} onChange={(event) => setScope(event.target.value)}>
               <option value="section">My section</option>
               <option value="batch">Whole batch</option>
+              <option value="all_batches">Every batch</option>
             </Select>
             <Select
               label="Each student may choose up to"
@@ -201,7 +208,7 @@ export default function CRPollsPage() {
                 />
               </div>
               <p className="mt-1 text-xs text-muted">
-                {poll.section === 'ALL' ? `${poll.batch} · whole batch` : `${poll.batch} · section ${poll.section}`}{' '}
+                {pollAudience(poll)}{' '}
                 · {formatDateTime(poll.created_at)} · {poll.total_voters} voter
                 {poll.total_voters === 1 ? '' : 's'} ·{' '}
                 {poll.max_choices > 1 ? `up to ${poll.max_choices} choices` : 'one choice'}

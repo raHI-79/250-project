@@ -11,9 +11,10 @@ const (
 	MaxPollOptions    = 10
 	PollScopeSection  = "section"
 	PollScopeBatch    = "batch"
+	PollScopeAll      = "all_batches"
 )
 
-var pollScopes = []string{PollScopeSection, PollScopeBatch}
+var pollScopes = []string{PollScopeSection, PollScopeBatch, PollScopeAll}
 
 func PollScope(label, value string) (string, error) {
 	return oneOf(label, value, pollScopes)

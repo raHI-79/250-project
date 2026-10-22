@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	flowCourse  = `{"code":"cse233","title":"Digital Logic Design"}`
+	flowCourse  = `{"code":"cse233","title":"Digital Logic Design","credit":3}`
 	flowTeacher = `{"name":"Routine Teacher","user_id":"T-700","email":"routineteacher@sust.edu",
 "phone":"01712345700","password":"sust-250-project","confirm_password":"sust-250-project"}`
 	flowStudentOne = `{"full_name":"Routine Student","reg_no":"2023331700","batch":"CSE-23","section":"A",
@@ -38,7 +38,7 @@ func listItems(t *testing.T, rec *httptest.ResponseRecorder) []map[string]any {
 }
 
 func routineBody(section string, courseID, teacherID int64, day int, start, end, room, kind string) string {
-	return `{"batch":"CSE-23","section":"` + section +
+	return `{"batch":"CSE-23","semester":"1-1","section":"` + section +
 		`","course_id":` + strconv.FormatInt(courseID, 10) +
 		`,"teacher_id":` + strconv.FormatInt(teacherID, 10) +
 		`,"day_of_week":` + strconv.Itoa(day) +
@@ -133,7 +133,7 @@ func TestRoutineFlow(t *testing.T) {
 		body string
 	}{
 		{name: "same time in another room", body: routineBody("A", courseID, teacherID, 1, "11:00", "12:00", "1004", "class")},
-		{name: "right after the first class", body: routineBody("A", courseID, teacherID, 1, "12:45", "14:00", "1003", "class")},
+		{name: "right after the break", body: routineBody("A", courseID, teacherID, 1, "13:45", "14:30", "1003", "class")},
 		{name: "same room on another day", body: routineBody("A", courseID, teacherID, 2, "10:30", "12:45", "1003", "lab")},
 		{name: "both sections", body: routineBody("ALL", courseID, teacherID, 3, "09:00", "10:00", "2001", "class")},
 	}
@@ -160,7 +160,7 @@ func TestRoutineFlow(t *testing.T) {
 	}{
 		{section: "A", day: 1, start: "10:30"},
 		{section: "A", day: 1, start: "11:00"},
-		{section: "A", day: 1, start: "12:45"},
+		{section: "A", day: 1, start: "13:45"},
 		{section: "A", day: 2, start: "10:30"},
 		{section: "ALL", day: 3, start: "09:00"},
 	}

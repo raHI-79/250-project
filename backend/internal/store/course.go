@@ -14,17 +14,18 @@ var (
 )
 
 type Course struct {
-	ID    int64
-	Code  string
-	Title string
+	ID     int64
+	Code   string
+	Title  string
+	Credit float64
 }
 
 const (
-	insertCourseSQL = `INSERT INTO courses (code, title)
-VALUES ($1, $2)
-RETURNING id, code, title`
-	listCoursesSQL   = `SELECT id, code, title FROM courses ORDER BY code`
-	searchCoursesSQL = `SELECT id, code, title
+	insertCourseSQL = `INSERT INTO courses (code, title, credit)
+VALUES ($1, $2, $3)
+RETURNING id, code, title, credit`
+	listCoursesSQL   = `SELECT id, code, title, credit FROM courses ORDER BY code`
+	searchCoursesSQL = `SELECT id, code, title, credit
 FROM courses
 WHERE $1::text = ''
    OR replace(code, ' ', '') ILIKE '%' || replace(replace(upper($1::text), '-', ''), ' ', '') || '%'
@@ -32,10 +33,11 @@ WHERE $1::text = ''
 ORDER BY code`
 )
 
-func (s *Store) CreateCourse(ctx context.Context, code, title string) (Course, error) {
+func (s *Store) CreateCourse(ctx context.Context, code, title string, credit float64) (Course, error) {
 	var course Course
 	normalised := validate.NormalizeCourseCode(code)
-	err := s.pool.QueryRow(ctx, insertCourseSQL, normalised, title).Scan(&course.ID, &course.Code, &course.Title)
+	err := s.pool.QueryRow(ctx, insertCourseSQL, normalised, title, credit).
+		Scan(&course.ID, &course.Code, &course.Title, &course.Credit)
 	if isUniqueViolation(err) {
 		return Course{}, ErrDuplicateCourse
 	}
@@ -62,7 +64,7 @@ func (s *Store) courses(ctx context.Context, query string, args ...any) ([]Cours
 	courses := make([]Course, 0)
 	for rows.Next() {
 		var course Course
-		if err := rows.Scan(&course.ID, &course.Code, &course.Title); err != nil {
+		if err := rows.Scan(&course.ID, &course.Code, &course.Title, &course.Credit); err != nil {
 			return nil, fmt.Errorf("store: could not scan a course: %w", err)
 		}
 		courses = append(courses, course)
@@ -92,6 +94,7 @@ COALESCE(r.teacher_id, 0), COALESCE(t.user_id, 0), COALESCE(t.name, 'Deleted use
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
 FROM routines r
 JOIN courses c ON c.id = r.course_id
+JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
 LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE r.batch = $1 AND (r.section = $2 OR r.section = 'ALL')
 ORDER BY c.code, r.day_of_week, r.start_time`
@@ -184,4 +187,57 @@ func (s *Store) DeleteCourse(ctx context.Context, courseID int64) (CourseUsage, 
 		return CourseUsage{}, fmt.Errorf("store: could not commit the course deletion: %w", err)
 	}
 	return usage, nil
+}
+
+type RunningCourseSlot struct {
+	CourseID           int64
+	CourseCode         string
+	CourseTitle        string
+	Credit             float64
+	TeacherUserID      int64
+	TeacherName        string
+	TeacherDesignation string
+	Section            string
+	Type               string
+}
+
+const listRunningCourseSlotsSQL = `SELECT r.course_id, c.code, c.title, c.credit,
+COALESCE(t.user_id, 0), COALESCE(t.name, 'Deleted user'), COALESCE(t.designation, ''),
+r.section, r.type
+FROM routines r
+JOIN courses c ON c.id = r.course_id
+JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+LEFT JOIN teachers t ON t.id = r.teacher_id
+WHERE r.batch = $1
+ORDER BY c.code, r.section, r.day_of_week, r.start_time`
+
+func (s *Store) ListRunningCourseSlots(ctx context.Context, batch string) ([]RunningCourseSlot, error) {
+	rows, err := s.pool.Query(ctx, listRunningCourseSlotsSQL, batch)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the running courses of %s: %w", batch, err)
+	}
+	defer rows.Close()
+	slots := make([]RunningCourseSlot, 0)
+	for rows.Next() {
+		var slot RunningCourseSlot
+		err := rows.Scan(
+			&slot.CourseID,
+			&slot.CourseCode,
+			&slot.CourseTitle,
+			&slot.Credit,
+			&slot.TeacherUserID,
+			&slot.TeacherName,
+			&slot.TeacherDesignation,
+			&slot.Section,
+			&slot.Type,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("store: could not scan a running course slot: %w", err)
+		}
+		slots = append(slots, slot)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the running courses: %w", err)
+	}
+	return slots, nil
 }

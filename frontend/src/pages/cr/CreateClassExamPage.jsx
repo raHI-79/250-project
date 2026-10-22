@@ -37,7 +37,7 @@ export default function CreateClassExamPage() {
   const upcomingHighlight = useHighlight(Boolean(upcoming.data), 'item')
   const finalHighlight = useHighlight(Boolean(final.data), 'item')
   const pickSlot = (slot) => {
-    setPrefill({ ...slot, end: null })
+    setPrefill(slot)
     setParams(
       (current) => {
         const copy = new URLSearchParams(current)
@@ -87,7 +87,11 @@ export default function CreateClassExamPage() {
           {rooms.loading ? (
             <SkeletonCard />
           ) : (
-            <AvailabilityGrid rooms={rooms.data?.rooms || []} onPick={pickSlot} />
+            <AvailabilityGrid
+              rooms={rooms.data?.rooms || []}
+              periods={rooms.data?.periods || []}
+              onPick={pickSlot}
+            />
           )}
         </>
       )}

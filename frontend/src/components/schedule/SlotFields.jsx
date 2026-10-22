@@ -8,7 +8,7 @@ const MODES = [
   { value: MODE_ONLINE, label: 'Online', icon: Link2 },
 ]
 
-export default function SlotFields({ value, onChange, error, linkRequired = true, className }) {
+export default function SlotFields({ value, onChange, error, className }) {
   const mode = value.mode || MODE_ROOM
   const set = (patch) => onChange({ ...value, ...patch })
   return (
@@ -52,8 +52,7 @@ export default function SlotFields({ value, onChange, error, linkRequired = true
           onChange={(event) => set({ meeting_link: event.target.value })}
           placeholder="https://meet.example.com/your-class"
           error={error}
-          hint={linkRequired ? undefined : 'Optional, you can add it later'}
-          required={linkRequired}
+          hint="Optional, you can add it later"
         />
       )}
       {mode === MODE_ROOM && (

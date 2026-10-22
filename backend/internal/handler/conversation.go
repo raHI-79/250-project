@@ -24,6 +24,12 @@ const (
 	MessageUnknownContact      = "No active account found with this ID."
 	MessageSelfConversation    = "You cannot start a conversation with yourself."
 	MessageGroupNotAllowed     = "Only teachers and class representatives can start a group."
+	MessageContactBlocked      = "Students can only message teachers, class representatives and the department office."
+	MessageMessageMissing      = "No message of yours found with this ID."
+	MessageEditWindowOver      = "A message can only be edited or deleted within two minutes of sending it."
+	MessageEdited              = "Message updated."
+	MessageDeleted             = "Message deleted."
+	MessageChatCleared         = "Chat deleted for you."
 	MessageSent                = "Message sent."
 	MessageFileNotAllowed      = "This file type is not allowed."
 	fieldBody                  = "body"
@@ -33,13 +39,17 @@ const (
 
 type ConversationStore interface {
 	GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error)
-	SearchContacts(ctx context.Context, viewerID int64, search, role string) ([]store.ContactRow, error)
-	GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) (store.Conversation, error)
+	SearchContacts(ctx context.Context, viewerID int64, viewerRole, search, role string) ([]store.ContactRow, error)
+	GetOrCreateDirect(ctx context.Context, viewerID int64, viewerRole string, otherID int64) (store.Conversation, error)
 	CreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error)
 	ListConversations(ctx context.Context, viewer store.MessageViewer, limit int) ([]store.ConversationRow, error)
 	FindConversationAccess(ctx context.Context, conversationID int64, viewer store.MessageViewer) (store.ConversationAccess, error)
-	ListChatMessages(ctx context.Context, conversationID int64, before *time.Time, limit int) ([]store.ChatMessageRow, error)
+	ListChatMessages(ctx context.Context, conversationID int64, before *time.Time, limit int, viewerID int64) ([]store.ChatMessageRow, error)
 	CreateChatMessage(ctx context.Context, message store.NewChatMessage) (store.ChatMessageRow, error)
+	FindOwnMessage(ctx context.Context, messageID, senderID int64) (store.OwnMessage, error)
+	EditChatMessage(ctx context.Context, messageID, senderID int64, body string, now time.Time) (store.ChatMessageRow, error)
+	DeleteChatMessage(ctx context.Context, messageID, senderID int64, now time.Time) (int64, error)
+	ClearConversation(ctx context.Context, userID, conversationID int64, at time.Time) error
 	MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error
 	CountUnreadMessages(ctx context.Context, viewer store.MessageViewer) (int, error)
 	ConversationRecipients(ctx context.Context, conversationID, senderID int64) ([]int64, error)
@@ -126,6 +136,8 @@ type chatMessageItem struct {
 	FileMime   string `json:"file_mime,omitempty"`
 	FileSize   int64  `json:"file_size,omitempty"`
 	CreatedAt  string `json:"created_at"`
+	EditedAt   string `json:"edited_at,omitempty"`
+	IsDeleted  bool   `json:"is_deleted,omitempty"`
 }
 
 type chatMessagesResponse struct {
@@ -138,6 +150,10 @@ type unreadResponse struct {
 
 type directRequest struct {
 	UserID int64 `json:"user_id"`
+}
+
+type editMessageRequest struct {
+	Body string `json:"body"`
 }
 
 func (c *Conversations) viewer(w http.ResponseWriter, r *http.Request) (store.MessageViewer, bool) {
@@ -179,7 +195,7 @@ func (c *Conversations) Contacts() http.HandlerFunc {
 				return
 			}
 		}
-		contacts, err := c.chats.SearchContacts(r.Context(), viewer.UserID, search, role)
+		contacts, err := c.chats.SearchContacts(r.Context(), viewer.UserID, viewer.Role, search, role)
 		if err != nil {
 			log.Printf("handler: could not search the contacts: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -255,8 +271,11 @@ func (c *Conversations) StartDirect() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidUserID)
 			return
 		}
-		conversation, err := c.chats.GetOrCreateDirect(r.Context(), viewer.UserID, request.UserID)
+		conversation, err := c.chats.GetOrCreateDirect(r.Context(), viewer.UserID, viewer.Role, request.UserID)
 		switch {
+		case errors.Is(err, store.ErrContactBlocked):
+			httpx.WriteError(w, http.StatusForbidden, MessageContactBlocked)
+			return
 		case errors.Is(err, store.ErrSameUser):
 			httpx.WriteError(w, http.StatusBadRequest, MessageSelfConversation)
 			return
@@ -305,7 +324,7 @@ func (c *Conversations) Messages() http.HandlerFunc {
 			}
 			limit = parsed
 		}
-		messages, err := c.chats.ListChatMessages(r.Context(), access.ID, before, limit)
+		messages, err := c.chats.ListChatMessages(r.Context(), access.ID, before, limit, viewer.UserID)
 		if err != nil {
 			log.Printf("handler: could not list the messages: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -316,20 +335,7 @@ func (c *Conversations) Messages() http.HandlerFunc {
 		}
 		items := make([]chatMessageItem, 0, len(messages))
 		for _, message := range messages {
-			items = append(items, chatMessageItem{
-				ID:         message.ID,
-				SenderID:   message.SenderID,
-				SenderName: message.SenderName,
-				SenderRole: message.SenderRole,
-				PhotoURL:   message.SenderPhotoPath,
-				Body:       message.Body,
-				LinkURL:    message.LinkURL,
-				FileURL:    upload.AttachmentURL(message.FilePath, message.FileName),
-				FileName:   message.FileName,
-				FileMime:   message.FileMime,
-				FileSize:   message.FileSize,
-				CreatedAt:  timestamp(message.CreatedAt),
-			})
+			items = append(items, newChatMessageItem(message))
 		}
 		httpx.WriteJSON(w, http.StatusOK, chatMessagesResponse{Items: items})
 	}
@@ -384,20 +390,139 @@ func (c *Conversations) Send() http.HandlerFunc {
 			return
 		}
 		c.announce(r.Context(), access, viewer, created)
-		httpx.WriteJSON(w, http.StatusCreated, chatMessageItem{
-			ID:         created.ID,
-			SenderID:   created.SenderID,
-			SenderName: viewer.Name,
-			SenderRole: viewer.Role,
-			Body:       created.Body,
-			LinkURL:    created.LinkURL,
-			FileURL:    upload.AttachmentURL(created.FilePath, created.FileName),
-			FileName:   created.FileName,
-			FileMime:   created.FileMime,
-			FileSize:   created.FileSize,
-			CreatedAt:  timestamp(created.CreatedAt),
-		})
+		item := newChatMessageItem(created)
+		item.SenderName = viewer.Name
+		item.SenderRole = viewer.Role
+		httpx.WriteJSON(w, http.StatusCreated, item)
 	}
+}
+
+func (c *Conversations) ClearChat() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		viewer, ok := c.viewer(w, r)
+		if !ok {
+			return
+		}
+		access, ok := c.access(w, r, viewer)
+		if !ok {
+			return
+		}
+		if err := c.chats.ClearConversation(r.Context(), viewer.UserID, access.ID, c.cfg.Now()); err != nil {
+			log.Printf("handler: could not clear a conversation: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageChatCleared})
+	}
+}
+
+func (c *Conversations) Edit() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		viewer, ok := c.viewer(w, r)
+		if !ok {
+			return
+		}
+		messageID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request editMessageRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		own, ok := c.ownMessage(w, r, viewer, messageID)
+		if !ok {
+			return
+		}
+		body, err := validate.MessageBody("Message", request.Body, own.HasAttachment)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		updated, err := c.chats.EditChatMessage(r.Context(), messageID, viewer.UserID, body, c.cfg.Now())
+		switch {
+		case errors.Is(err, store.ErrEditWindowOver):
+			httpx.WriteError(w, http.StatusConflict, MessageEditWindowOver)
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessageMessageMissing)
+		case err != nil:
+			log.Printf("handler: could not edit a message: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			httpx.WriteJSON(w, http.StatusOK, newChatMessageItem(updated))
+		}
+	}
+}
+
+func (c *Conversations) Delete() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		viewer, ok := c.viewer(w, r)
+		if !ok {
+			return
+		}
+		messageID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		own, ok := c.ownMessage(w, r, viewer, messageID)
+		if !ok {
+			return
+		}
+		_, err := c.chats.DeleteChatMessage(r.Context(), messageID, viewer.UserID, c.cfg.Now())
+		switch {
+		case errors.Is(err, store.ErrEditWindowOver):
+			httpx.WriteError(w, http.StatusConflict, MessageEditWindowOver)
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessageMessageMissing)
+		case err != nil:
+			log.Printf("handler: could not delete a message: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			c.removeAttachment(own.FilePath)
+			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageDeleted})
+		}
+	}
+}
+
+func (c *Conversations) ownMessage(w http.ResponseWriter, r *http.Request, viewer store.MessageViewer,
+	messageID int64) (store.OwnMessage, bool) {
+	own, err := c.chats.FindOwnMessage(r.Context(), messageID, viewer.UserID)
+	if errors.Is(err, store.ErrNotFound) {
+		httpx.WriteError(w, http.StatusNotFound, MessageMessageMissing)
+		return store.OwnMessage{}, false
+	}
+	if err != nil {
+		log.Printf("handler: could not load a message: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return store.OwnMessage{}, false
+	}
+	if own.Deleted || !c.cfg.Now().Before(own.CreatedAt.Add(store.EditWindow)) {
+		httpx.WriteError(w, http.StatusConflict, MessageEditWindowOver)
+		return store.OwnMessage{}, false
+	}
+	return own, true
+}
+
+func newChatMessageItem(message store.ChatMessageRow) chatMessageItem {
+	item := chatMessageItem{
+		ID:         message.ID,
+		SenderID:   message.SenderID,
+		SenderName: message.SenderName,
+		SenderRole: message.SenderRole,
+		PhotoURL:   message.SenderPhotoPath,
+		Body:       message.Body,
+		LinkURL:    message.LinkURL,
+		FileURL:    upload.AttachmentURL(message.FilePath, message.FileName),
+		FileName:   message.FileName,
+		FileMime:   message.FileMime,
+		FileSize:   message.FileSize,
+		CreatedAt:  timestamp(message.CreatedAt),
+		IsDeleted:  message.DeletedAt != nil,
+	}
+	if message.EditedAt != nil {
+		item.EditedAt = timestamp(*message.EditedAt)
+	}
+	return item
 }
 
 func (c *Conversations) UnreadCount() http.HandlerFunc {

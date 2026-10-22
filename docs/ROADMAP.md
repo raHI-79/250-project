@@ -2,7 +2,7 @@
 
 The project is built in 24 development steps. Each step is owned by one team
 member, is worked on alone, and ends with reviewed Git commits. The last step is
-shared.
+shared by both members.
 
 - **Owner A** — Ratul Islam ([@raHI-79](https://github.com/raHI-79))
 - **Owner B** — Rakibul Hasan ([@niloySapiens](https://github.com/niloySapiens))
@@ -38,5 +38,4 @@ Full requirements: [SPEC.md](SPEC.md)
 | 21 | A | Scheduling engine, notification links, course codes and verification paths | done |
 | 22 | B | Scheduling pages, messaging search and clickable notifications | done |
 | 23 | A | Interface redesign: design system, public home, sign-in and dashboard pages | done |
-| 24 | B | Course delete, section hints, multi-choice secret polls, group chats and push notifications | done |
-| 25 | A | Requirement updates, demo data, docs and CI | todo |
+| 24 | A+B | Polls, messaging rules, group chats, push notifications, class periods, sections, course credits, demo data, docs and CI, semesters, course list and chat delete | done |

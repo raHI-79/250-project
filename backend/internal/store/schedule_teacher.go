@@ -12,11 +12,12 @@ const (
 	lockItemSQL = selectItem + `
 WHERE i.id = $1
 FOR UPDATE OF i`
-	listTeacherRoutineSQL = `SELECT r.id, r.batch, r.section, r.course_id, c.code, c.title,
+	listTeacherRoutineSQL = `SELECT r.id, r.batch, r.semester, r.section, r.course_id, c.code, c.title,
 COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
 FROM routines r
 JOIN courses c ON c.id = r.course_id
+JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
 LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE r.teacher_id = $1
 ORDER BY r.day_of_week, r.start_time, r.batch, r.section`
@@ -115,6 +116,7 @@ func (s *Store) ListTeacherRoutine(ctx context.Context, teacherID int64) ([]Rout
 		err := rows.Scan(
 			&entry.ID,
 			&entry.Batch,
+			&entry.Semester,
 			&entry.Section,
 			&entry.CourseID,
 			&entry.CourseCode,
@@ -157,6 +159,10 @@ func ownedByTeacher(item ScheduleItem, teacherID int64) error {
 	return nil
 }
 
+func firstDecision(item ScheduleItem) bool {
+	return item.Status == ItemAwaiting || item.Status == ItemNoResponse
+}
+
 func started(item ScheduleItem, now time.Time) bool {
 	if !item.HasTimes() {
 		return false
@@ -170,7 +176,7 @@ func (s *Store) ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, 
 		if err := ownedByTeacher(item, teacherID); err != nil {
 			return err
 		}
-		first := item.Status == ItemAwaiting || item.Status == ItemNoResponse
+		first := firstDecision(item)
 		switch item.Status {
 		case ItemAwaiting, ItemNoResponse, ItemTeacherAsk, ItemConfirmed, ItemDeclined, ItemRescheduled:
 		default:
@@ -206,7 +212,8 @@ func (s *Store) ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, 
 	})
 }
 
-func (s *Store) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64, reason string) (ScheduleItem, error) {
+func (s *Store) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64, reason string,
+	windowOpen bool) (ScheduleItem, error) {
 	return s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
 		if err := ownedByTeacher(item, teacherID); err != nil {
 			return err
@@ -214,11 +221,15 @@ func (s *Store) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64
 		if item.Status == ItemCancelled {
 			return ErrItemState
 		}
+		if firstDecision(item) && !windowOpen {
+			return ErrDecisionClosed
+		}
 		return cancelAndSync(ctx, tx, item, reason)
 	})
 }
 
-func (s *Store) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64, message string) (ScheduleItem, error) {
+func (s *Store) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64, message string,
+	windowOpen bool) (ScheduleItem, error) {
 	return s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
 		if err := ownedByTeacher(item, teacherID); err != nil {
 			return err
@@ -227,6 +238,9 @@ func (s *Store) TeacherRequestReschedule(ctx context.Context, itemID, teacherID 
 		case ItemAwaiting, ItemNoResponse, ItemConfirmed, ItemDeclined:
 		default:
 			return ErrItemState
+		}
+		if firstDecision(item) && !windowOpen {
+			return ErrDecisionClosed
 		}
 		if _, err := tx.Exec(ctx, teacherAskRescheduleSQL, item.ID, message, item.Status); err != nil {
 			return fmt.Errorf("store: could not ask for a reschedule of the item %d: %w", item.ID, err)

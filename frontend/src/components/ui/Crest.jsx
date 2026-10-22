@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { CSE_LOGO } from '../../lib/brand'
 import cx from '../../lib/cx'
 
 const SIZES = {
@@ -7,6 +9,18 @@ const SIZES = {
 }
 
 export default function Crest({ size = 'md', tone = 'brand', className }) {
+  const [broken, setBroken] = useState(false)
+  if (!broken) {
+    return (
+      <img
+        src={CSE_LOGO}
+        alt=""
+        aria-hidden="true"
+        onError={() => setBroken(true)}
+        className={cx('shrink-0 object-contain', SIZES[size] || SIZES.md, className)}
+      />
+    )
+  }
   return (
     <span
       aria-hidden="true"

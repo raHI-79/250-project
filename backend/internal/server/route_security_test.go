@@ -39,12 +39,33 @@ func (emptyChatStore) GetMessageViewer(ctx context.Context, userID int64) (store
 	}
 }
 
-func (emptyChatStore) SearchContacts(ctx context.Context, viewerID int64, search, role string) ([]store.ContactRow, error) {
+func (emptyChatStore) SearchContacts(ctx context.Context, viewerID int64, viewerRole, search,
+	role string) ([]store.ContactRow, error) {
 	return nil, nil
 }
 
-func (emptyChatStore) GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) (store.Conversation, error) {
+func (emptyChatStore) GetOrCreateDirect(ctx context.Context, viewerID int64, viewerRole string,
+	otherID int64) (store.Conversation, error) {
 	return store.Conversation{}, store.ErrInactiveTarget
+}
+
+func (emptyChatStore) ClearConversation(ctx context.Context, userID, conversationID int64,
+	at time.Time) error {
+	return nil
+}
+
+func (emptyChatStore) FindOwnMessage(ctx context.Context, messageID, senderID int64) (store.OwnMessage, error) {
+	return store.OwnMessage{}, store.ErrNotFound
+}
+
+func (emptyChatStore) EditChatMessage(ctx context.Context, messageID, senderID int64, body string,
+	now time.Time) (store.ChatMessageRow, error) {
+	return store.ChatMessageRow{}, store.ErrNotFound
+}
+
+func (emptyChatStore) DeleteChatMessage(ctx context.Context, messageID, senderID int64,
+	now time.Time) (int64, error) {
+	return 0, store.ErrNotFound
 }
 
 func (emptyChatStore) CreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error) {
@@ -93,7 +114,8 @@ func (emptyChatStore) FindConversationAccess(ctx context.Context, conversationID
 	return store.ConversationAccess{}, store.ErrNotFound
 }
 
-func (emptyChatStore) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time, limit int) ([]store.ChatMessageRow, error) {
+func (emptyChatStore) ListChatMessages(ctx context.Context, conversationID int64, before *time.Time,
+	limit int, viewerID int64) ([]store.ChatMessageRow, error) {
 	return nil, nil
 }
 

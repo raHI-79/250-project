@@ -16,7 +16,7 @@ const (
 "password":"sust-250-project","confirm_password":"sust-250-project"}`
 	accountTeacher = `{"name":"Account Teacher","user_id":"T-950","email":"accountteacher@sust.edu",
 "phone":"01712345951"}`
-	accountCourse = `{"code":"cse245","title":"Databases"}`
+	accountCourse = `{"code":"cse245","title":"Databases","credit":3}`
 )
 
 func TestAccountFlowFromRegistrationToLogin(t *testing.T) {
@@ -33,7 +33,7 @@ func TestAccountFlowFromRegistrationToLogin(t *testing.T) {
 	teacherUserID := onboardTeacherForAccounts(t, router, adminToken)
 	teacherRowID := teacherRowOf(t, router, adminToken, teacherUserID)
 	weekday := 1
-	routine := routineBody("A", courseID, teacherRowID, weekday, "08:00", "09:00", "2104", "class")
+	routine := routineBody("A", courseID, teacherRowID, weekday, "09:00", "09:45", "2104", "class")
 	if rec := mustCreate(t, router, adminToken, "/api/admin/routines", routine); rec.Code != http.StatusCreated {
 		t.Fatalf("routine status = %d, want 201", rec.Code)
 	}

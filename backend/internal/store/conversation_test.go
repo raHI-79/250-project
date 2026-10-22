@@ -105,22 +105,27 @@ func TestSearchContacts(t *testing.T) {
 	removed := insertUser(t, ctx, pool, "student", "2023331098", StatusRemoved, 0)
 	insertStudent(t, ctx, pool, removed, "2023331098", false)
 	tests := []struct {
-		name      string
-		search    string
-		role      string
-		wantFound bool
-		wantMiss  int64
+		name       string
+		viewerRole string
+		search     string
+		role       string
+		wantFound  bool
+		wantMiss   int64
 	}{
-		{name: "everybody else", wantFound: true, wantMiss: people["student"]},
-		{name: "only teachers", role: "teacher", wantFound: true},
-		{name: "only class representatives", role: "cr", wantFound: true},
-		{name: "only admins", role: "admin", wantFound: true},
-		{name: "by registration number", search: "2023331002", wantFound: true},
-		{name: "no match", search: "nobody-at-all", wantFound: false},
+		{name: "everybody else", viewerRole: "cr", wantFound: true, wantMiss: people["student"]},
+		{name: "only teachers", viewerRole: "cr", role: "teacher", wantFound: true},
+		{name: "only class representatives", viewerRole: "cr", role: "cr", wantFound: true},
+		{name: "only admins", viewerRole: "cr", role: "admin", wantFound: true},
+		{name: "by registration number", viewerRole: "cr", search: "2023331002", wantFound: true},
+		{name: "no match", viewerRole: "cr", search: "nobody-at-all", wantFound: false},
+		{name: "a plain student sees no plain student", viewerRole: "student", role: "student",
+			wantFound: false},
+		{name: "a plain student still sees the teachers", viewerRole: "student", role: "teacher",
+			wantFound: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			contacts, err := store.SearchContacts(ctx, people["student"], tc.search, tc.role)
+			contacts, err := store.SearchContacts(ctx, people["student"], tc.viewerRole, tc.search, tc.role)
 			if err != nil {
 				t.Fatalf("SearchContacts() returned an unexpected error: %v", err)
 			}
@@ -143,7 +148,7 @@ func TestSearchContacts(t *testing.T) {
 			}
 		})
 	}
-	if _, err := store.SearchContacts(ctx, people["student"], "", ""); err != nil {
+	if _, err := store.SearchContacts(ctx, people["student"], "cr", "", ""); err != nil {
 		t.Fatalf("SearchContacts() returned an unexpected error: %v", err)
 	}
 }
@@ -151,31 +156,31 @@ func TestSearchContacts(t *testing.T) {
 func TestGetOrCreateDirect(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	people := seedChatPeople(t, ctx, pool)
-	first, err := store.GetOrCreateDirect(ctx, people["student"], people["teacher"])
+	first, err := store.GetOrCreateDirect(ctx, people["student"], "cr", people["teacher"])
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
 	if first.Kind != ConversationDirect {
 		t.Errorf("kind = %q, want %q", first.Kind, ConversationDirect)
 	}
-	again, err := store.GetOrCreateDirect(ctx, people["student"], people["teacher"])
+	again, err := store.GetOrCreateDirect(ctx, people["student"], "cr", people["teacher"])
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
 	if again.ID != first.ID {
 		t.Errorf("second call made conversation %d, want %d", again.ID, first.ID)
 	}
-	swapped, err := store.GetOrCreateDirect(ctx, people["teacher"], people["student"])
+	swapped, err := store.GetOrCreateDirect(ctx, people["teacher"], "cr", people["student"])
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
 	if swapped.ID != first.ID {
 		t.Errorf("the reversed pair made conversation %d, want %d", swapped.ID, first.ID)
 	}
-	if _, err := store.GetOrCreateDirect(ctx, people["student"], people["student"]); !errors.Is(err, ErrSameUser) {
+	if _, err := store.GetOrCreateDirect(ctx, people["student"], "cr", people["student"]); !errors.Is(err, ErrSameUser) {
 		t.Errorf("a conversation with yourself error = %v, want ErrSameUser", err)
 	}
-	if _, err := store.GetOrCreateDirect(ctx, people["student"], 999999); !errors.Is(err, ErrInactiveTarget) {
+	if _, err := store.GetOrCreateDirect(ctx, people["student"], "cr", 999999); !errors.Is(err, ErrInactiveTarget) {
 		t.Errorf("an unknown target error = %v, want ErrInactiveTarget", err)
 	}
 	recipients, err := store.ConversationRecipients(ctx, first.ID, people["student"])
@@ -293,7 +298,7 @@ func TestGroupMembershipRules(t *testing.T) {
 func TestConversationListAndUnreadCounts(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	people := seedChatPeople(t, ctx, pool)
-	direct, err := store.GetOrCreateDirect(ctx, people["teacher"], people["student"])
+	direct, err := store.GetOrCreateDirect(ctx, people["teacher"], "cr", people["student"])
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
@@ -379,7 +384,7 @@ func TestConversationListAndUnreadCounts(t *testing.T) {
 func TestListChatMessagesPaging(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	people := seedChatPeople(t, ctx, pool)
-	direct, err := store.GetOrCreateDirect(ctx, people["teacher"], people["student"])
+	direct, err := store.GetOrCreateDirect(ctx, people["teacher"], "cr", people["student"])
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
@@ -390,7 +395,7 @@ func TestListChatMessagesPaging(t *testing.T) {
 			t.Fatalf("CreateChatMessage() returned an unexpected error: %v", err)
 		}
 	}
-	newest, err := store.ListChatMessages(ctx, direct.ID, nil, 2)
+	newest, err := store.ListChatMessages(ctx, direct.ID, nil, 2, people["cr"])
 	if err != nil {
 		t.Fatalf("ListChatMessages() returned an unexpected error: %v", err)
 	}
@@ -400,7 +405,7 @@ func TestListChatMessagesPaging(t *testing.T) {
 	if newest[0].SenderName == "" || newest[0].SenderRole != "teacher" {
 		t.Errorf("message = %+v, want the sender name and role", newest[0])
 	}
-	older, err := store.ListChatMessages(ctx, direct.ID, &newest[1].CreatedAt, 10)
+	older, err := store.ListChatMessages(ctx, direct.ID, &newest[1].CreatedAt, 10, people["cr"])
 	if err != nil {
 		t.Fatalf("ListChatMessages() returned an unexpected error: %v", err)
 	}
@@ -412,7 +417,7 @@ func TestListChatMessagesPaging(t *testing.T) {
 func TestCreateChatMessageKeepsTheAttachment(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	people := seedChatPeople(t, ctx, pool)
-	direct, err := store.GetOrCreateDirect(ctx, people["cr"], people["teacher"])
+	direct, err := store.GetOrCreateDirect(ctx, people["cr"], "cr", people["teacher"])
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
@@ -432,7 +437,7 @@ func TestCreateChatMessageKeepsTheAttachment(t *testing.T) {
 	if created.ID == 0 || created.CreatedAt.IsZero() {
 		t.Fatalf("created message = %+v, want an id and a timestamp", created)
 	}
-	messages, err := store.ListChatMessages(ctx, direct.ID, nil, 10)
+	messages, err := store.ListChatMessages(ctx, direct.ID, nil, 10, people["cr"])
 	if err != nil {
 		t.Fatalf("ListChatMessages() returned an unexpected error: %v", err)
 	}
