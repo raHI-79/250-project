@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/auth"
+	"github.com/raHI-79/250-project/backend/internal/push"
 	"github.com/raHI-79/250-project/backend/internal/store"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -66,14 +68,27 @@ type Store interface {
 	CreateBroadcastNotification(ctx context.Context, role, batch, section, kind, title, body string, link store.NotificationLink) error
 	ListNotifications(ctx context.Context, userID int64, limit int) ([]store.Notification, error)
 	CountNotificationsSince(ctx context.Context, userID int64, since time.Time) (int, error)
+	ListNotificationRecipients(ctx context.Context, role, batch, section string) ([]int64, error)
+}
+
+type Pusher interface {
+	Queue(userIDs []int64, payload push.Payload)
 }
 
 type Service struct {
 	notifications Store
+	pushes        Pusher
+	origin        string
 }
 
 func New(notifications Store) *Service {
 	return &Service{notifications: notifications}
+}
+
+func (s *Service) WithPush(pushes Pusher, origin string) *Service {
+	s.pushes = pushes
+	s.origin = origin
+	return s
 }
 
 func Page(kind string) store.NotificationLink {
@@ -123,7 +138,11 @@ func (s *Service) NotifyUser(ctx context.Context, userID int64, kind, title, bod
 	if !KnownLink(link.Kind) {
 		return ErrInvalidLink
 	}
-	return s.notifications.CreateDirectNotification(ctx, userID, kind, title, body, link)
+	if err := s.notifications.CreateDirectNotification(ctx, userID, kind, title, body, link); err != nil {
+		return err
+	}
+	s.queue(ctx, []int64{userID}, kind, title, body, link)
+	return nil
 }
 
 func (s *Service) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
@@ -147,7 +166,33 @@ func (s *Service) NotifyBroadcast(ctx context.Context, role, batch, section, kin
 	if !KnownLink(link.Kind) {
 		return ErrInvalidLink
 	}
-	return s.notifications.CreateBroadcastNotification(ctx, role, batch, section, kind, title, body, link)
+	err = s.notifications.CreateBroadcastNotification(ctx, role, batch, section, kind, title, body, link)
+	if err != nil {
+		return err
+	}
+	recipients, err := s.notifications.ListNotificationRecipients(ctx, role, batch, section)
+	if err != nil {
+		log.Printf("notify: could not list the push recipients: %v", err)
+		return nil
+	}
+	s.queue(ctx, recipients, kind, title, body, link)
+	return nil
+}
+
+func (s *Service) queue(ctx context.Context, userIDs []int64, kind, title, body string,
+	link store.NotificationLink) {
+	if s.pushes == nil || len(userIDs) == 0 {
+		return
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	s.pushes.Queue(userIDs, push.Payload{
+		Title: title,
+		Body:  body,
+		URL:   PageURL(s.origin, link),
+		Tag:   kind,
+	})
 }
 
 func (s *Service) Recent(ctx context.Context, userID int64, limit int) ([]store.Notification, error) {

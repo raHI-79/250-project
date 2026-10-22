@@ -29,6 +29,7 @@ type Dependencies struct {
 	Users     middleware.UserStore
 	Auth      handler.AuthStore
 	Numbers   handler.PublicStore
+	Devices   handler.PushStore
 	People    handler.AdminStore
 	Catalog   handler.CatalogStore
 	Lookups   handler.LookupStore
@@ -109,6 +110,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
+	registerPushRoutes(mux, deps, handler.NewPush(deps.Config, deps.Devices))
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Alarms))
 	authenticated.Handle("PATCH /api/schedule/items/{id}/link",
 		handler.NewSchedule(deps.Config, deps.Items, deps.Alarms).Link())
@@ -313,6 +315,13 @@ func registerLookupRoutes(group RouteGroup, lookups *handler.Lookups) {
 	group.Handle("GET /api/lookups/sections", lookups.Sections())
 	group.Handle("GET /api/lookups/courses", lookups.Courses())
 	group.Handle("GET /api/lookups/teachers", lookups.Teachers())
+}
+
+func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.Push) {
+	mux.HandleFunc("GET /api/push/public-key", pushes.PublicKey())
+	group := NotificationGroup(mux, deps)
+	group.Handle("POST /api/push/subscribe", pushes.Subscribe())
+	group.Handle("DELETE /api/push/subscribe", pushes.Unsubscribe())
 }
 
 func registerNotificationRoutes(group RouteGroup, notifications *handler.Notifications) {

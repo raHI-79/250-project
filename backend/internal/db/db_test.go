@@ -29,6 +29,7 @@ var expectedTables = []string{
 	"poll_options",
 	"poll_votes",
 	"polls",
+	"push_subscriptions",
 	"publications",
 	"published_items",
 	"schedule_items",

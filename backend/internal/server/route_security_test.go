@@ -11,6 +11,17 @@ import (
 	"time"
 )
 
+type emptyPushStore struct{}
+
+func (emptyPushStore) SavePushSubscription(ctx context.Context,
+	subscription store.PushSubscription) (int64, error) {
+	return 0, store.ErrNotFound
+}
+
+func (emptyPushStore) DeletePushSubscription(ctx context.Context, userID int64, endpoint string) error {
+	return nil
+}
+
 type emptyChatStore struct{}
 
 func (emptyChatStore) GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error) {
@@ -244,6 +255,8 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodPost, path: "/api/messages/conversations/1/members/2/admin", allowed: everyRole()},
 		{method: http.MethodDelete, path: "/api/messages/conversations/1/members/2/admin", allowed: everyRole()},
 		{method: http.MethodPost, path: "/api/messages/conversations/1/leave", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/push/subscribe", allowed: panelRoles()},
+		{method: http.MethodDelete, path: "/api/push/subscribe", allowed: panelRoles()},
 		{method: http.MethodPost, path: "/api/teacher/notices", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/students/today", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/upcoming-routine", allowed: studentRoles()},
