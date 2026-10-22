@@ -9,7 +9,8 @@ administration manages users, courses and the fixed weekly routine from a
 hidden admin panel. Built as a course project for **CSE 250**.
 
 The full requirements live in [docs/SPEC.md](docs/SPEC.md). The build order is
-tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+tracked in [docs/ROADMAP.md](docs/ROADMAP.md). To put the portal online for
+free, follow [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Team
 
@@ -58,10 +59,13 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 │       ├── context/          the signed-in session
 │       ├── lib/              paths, API client, navigation, helpers
 │       └── pages/            one file per screen
+├── Dockerfile                one image: the built pages and the Go server
+├── render.yaml               the Render blueprint for the free web service
 ├── docs/
+│   ├── DEPLOY.md             putting the portal online for free
 │   ├── SPEC.md               the final specification of the product
 │   └── ROADMAP.md            the development steps and their status
-├── .github/workflows/ci.yml  the backend and frontend checks
+├── .github/workflows/        the checks on every push and the nightly backup
 ├── .gitignore
 └── README.md
 ```
@@ -235,6 +239,12 @@ go run ./cmd/server
 | `VAPID_PRIVATE_KEY` | none — optional | Private push key; keep it out of git and out of logs |
 | `VAPID_SUBJECT` | none — optional | A `mailto:` address the push services can reach you at |
 | `DEMO_PASSWORD` | none — optional | Password every account the demo seeder creates shares |
+| `FILE_STORAGE` | `disk` | `disk` keeps uploads under `UPLOAD_DIR`, `database` keeps them in Postgres |
+| `STATIC_DIR` | none — optional | When set, the server also serves the built frontend from this folder |
+| `DB_MAX_CONNS` | `10` | Largest connection pool; use `5` on a free Neon database |
+| `MAIL_PROVIDER` | `smtp` | `smtp` or `brevo`, which sends over HTTPS where SMTP ports are blocked |
+| `BREVO_API_KEY` | none — optional | The Brevo API key, needed when `MAIL_PROVIDER=brevo` |
+| `MAIL_FROM_NAME` | `SUST CSE Portal` | The name beside the sender address |
 
 Never commit real values. `backend/.env` is gitignored; only
 `backend/.env.example` is tracked.

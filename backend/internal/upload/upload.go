@@ -1,17 +1,15 @@
 package upload
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -27,6 +25,7 @@ const (
 	parseMemory   = 1 << 20
 	directoryMode = 0o755
 	fileMode      = 0o644
+	defaultDir    = "uploads"
 )
 
 var (
@@ -39,17 +38,26 @@ var (
 
 type Saver struct {
 	dir      string
+	files    Store
 	maxBytes int64
 }
 
 func NewSaver(dir string, maxMB int) *Saver {
 	if dir == "" {
-		dir = "uploads"
+		dir = defaultDir
 	}
+	return NewSaverIn(NewDisk(dir), maxMB)
+}
+
+func NewSaverIn(files Store, maxMB int) *Saver {
 	if maxMB <= 0 {
 		maxMB = 1
 	}
-	return &Saver{dir: dir, maxBytes: int64(maxMB) << 20}
+	saver := &Saver{files: files, maxBytes: int64(maxMB) << 20}
+	if disk, ok := files.(*Disk); ok {
+		saver.dir = disk.Dir(KindFile)
+	}
+	return saver
 }
 
 func (s *Saver) Dir() string {
@@ -96,33 +104,23 @@ func (s *Saver) Save(r *http.Request) (string, error) {
 	if err := checkSignature(file); err != nil {
 		return "", err
 	}
-	return s.store(file)
+	return s.store(r.Context(), file)
 }
 
-func (s *Saver) store(file multipart.File) (string, error) {
-	if err := os.MkdirAll(s.dir, directoryMode); err != nil {
-		return "", fmt.Errorf("upload: could not create the upload folder: %w", err)
+func (s *Saver) store(ctx context.Context, file multipart.File) (string, error) {
+	data, tooLarge, err := readLimited(file, s.maxBytes)
+	if err != nil {
+		return "", fmt.Errorf("upload: could not read the file: %w", err)
+	}
+	if tooLarge {
+		return "", ErrTooLarge
 	}
 	name, err := randomName()
 	if err != nil {
 		return "", err
 	}
-	target := filepath.Join(s.dir, name)
-	destination, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
-	if err != nil {
-		return "", fmt.Errorf("upload: could not create the file: %w", err)
-	}
-	written, err := io.Copy(destination, io.LimitReader(file, s.maxBytes+1))
-	if closeErr := destination.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		_ = os.Remove(target)
-		return "", fmt.Errorf("upload: could not write the file: %w", err)
-	}
-	if written > s.maxBytes {
-		_ = os.Remove(target)
-		return "", ErrTooLarge
+	if err := s.files.Put(ctx, KindFile, name, ContentType, data); err != nil {
+		return "", err
 	}
 	return URLPrefix + name, nil
 }
@@ -132,10 +130,7 @@ func (s *Saver) Delete(filePath string) error {
 	if !namePattern.MatchString(name) {
 		return nil
 	}
-	if err := os.Remove(filepath.Join(s.dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("upload: could not delete the file %s: %w", name, err)
-	}
-	return nil
+	return s.files.Delete(context.Background(), KindFile, name)
 }
 
 func checkSignature(file multipart.File) error {

@@ -6,6 +6,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/db"
+	"github.com/raHI-79/250-project/backend/internal/filestore"
 	"github.com/raHI-79/250-project/backend/internal/jobs"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/notify"
@@ -44,7 +45,7 @@ func run() error {
 	defer stop()
 	startupContext, cancelStartup := context.WithTimeout(notifyContext, startupTimeout)
 	defer cancelStartup()
-	pool, err := db.Open(startupContext, cfg.DatabaseURL)
+	pool, err := db.Connect(startupContext, cfg.DatabaseURL, cfg.DBMaxConns, db.ConnectWindow)
 	if err != nil {
 		return err
 	}
@@ -62,6 +63,11 @@ func run() error {
 		return err
 	}
 	userStore := store.New(pool)
+	fileStore := upload.Store(upload.NewDisk(cfg.UploadDir))
+	if cfg.FilesInDatabase() {
+		fileStore = filestore.New(pool)
+		log.Println("upload: files are kept in the database")
+	}
 	alerts := notify.New(userStore)
 	var pushWorker *push.Worker
 	if cfg.PushEnabled() {
@@ -85,7 +91,7 @@ func run() error {
 			Database: pool,
 			Tokens:   tokens,
 			Proofs:   proofs,
-			Photos:   upload.NewPhotos(cfg.UploadDir),
+			Photos:   upload.NewPhotosIn(fileStore),
 			Accounts: userStore,
 			Users:    userStore,
 			Auth:     userStore,
@@ -106,15 +112,17 @@ func run() error {
 			Drives:   userStore,
 			Contacts: userStore,
 			Chats:    userStore,
-			Shared:   upload.NewAttachments(cfg.UploadDir, cfg.MaxUploadMB),
+			Shared:   upload.NewAttachmentsIn(fileStore, cfg.MaxUploadMB),
 			Votes:    userStore,
-			Files:    upload.NewSaver(cfg.UploadDir, cfg.MaxUploadMB),
-			Mailer: mailer.NewSMTP(mailer.Options{
+			Files:    upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
+			Mailer: mailer.New(cfg.MailProvider, mailer.Options{
 				Host:     cfg.SMTPHost,
 				Port:     cfg.SMTPPort,
 				Username: cfg.SMTPUsername,
 				Password: cfg.SMTPPassword,
 				From:     cfg.MailFrom,
+				FromName: cfg.MailFromName,
+				APIKey:   cfg.BrevoAPIKey,
 			}),
 		}),
 		ReadTimeout:  readTimeout,

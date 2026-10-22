@@ -1,6 +1,8 @@
 package upload
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	_ "golang.org/x/image/webp"
@@ -8,12 +10,9 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"io/fs"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -43,14 +42,20 @@ var (
 )
 
 type Photos struct {
-	dir string
+	dir   string
+	files Store
 }
 
 func NewPhotos(uploadDir string) *Photos {
-	if uploadDir == "" {
-		uploadDir = "uploads"
+	return NewPhotosIn(NewDisk(uploadDir))
+}
+
+func NewPhotosIn(files Store) *Photos {
+	photos := &Photos{files: files}
+	if disk, ok := files.(*Disk); ok {
+		photos.dir = disk.Dir(KindPhoto)
 	}
-	return &Photos{dir: filepath.Join(uploadDir, PhotoDirName)}
+	return photos
 }
 
 func (p *Photos) Dir() string {
@@ -94,33 +99,23 @@ func (p *Photos) Save(r *http.Request) (string, error) {
 	if err := checkPhotoSize(file); err != nil {
 		return "", err
 	}
-	return p.store(file, extension)
+	return p.store(r.Context(), file, extension)
 }
 
-func (p *Photos) store(file multipart.File, extension string) (string, error) {
-	if err := os.MkdirAll(p.dir, directoryMode); err != nil {
-		return "", fmt.Errorf("upload: could not create the photo folder: %w", err)
+func (p *Photos) store(ctx context.Context, file multipart.File, extension string) (string, error) {
+	data, tooLarge, err := readLimited(file, MaxPhotoBytes)
+	if err != nil {
+		return "", fmt.Errorf("upload: could not read the photo: %w", err)
+	}
+	if tooLarge {
+		return "", ErrPhotoTooLarge
 	}
 	name, err := randomPhotoName(extension)
 	if err != nil {
 		return "", err
 	}
-	target := filepath.Join(p.dir, name)
-	destination, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
-	if err != nil {
-		return "", fmt.Errorf("upload: could not create the photo: %w", err)
-	}
-	written, err := io.Copy(destination, io.LimitReader(file, MaxPhotoBytes+1))
-	if closeErr := destination.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		_ = os.Remove(target)
-		return "", fmt.Errorf("upload: could not write the photo: %w", err)
-	}
-	if written > MaxPhotoBytes {
-		_ = os.Remove(target)
-		return "", ErrPhotoTooLarge
+	if err := p.files.Put(ctx, KindPhoto, name, photoContentType(name), data); err != nil {
+		return "", err
 	}
 	return PhotoURLPrefix + name, nil
 }
@@ -130,10 +125,7 @@ func (p *Photos) Delete(photoPath string) error {
 	if !photoNamePattern.MatchString(name) {
 		return nil
 	}
-	if err := os.Remove(filepath.Join(p.dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("upload: could not delete the photo %s: %w", name, err)
-	}
-	return nil
+	return p.files.Delete(context.Background(), KindPhoto, name)
 }
 
 func (p *Photos) Serve() http.HandlerFunc {
@@ -143,21 +135,15 @@ func (p *Photos) Serve() http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		file, err := os.Open(filepath.Join(p.dir, name))
+		blob, err := p.files.Get(r.Context(), KindPhoto, name)
 		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer func() { _ = file.Close() }()
-		info, err := file.Stat()
-		if err != nil || info.IsDir() {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", photoContentType(name))
 		w.Header().Set("Content-Disposition", dispositionValue)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		http.ServeContent(w, r, name, info.ModTime(), file)
+		http.ServeContent(w, r, name, blob.ModTime, bytes.NewReader(blob.Data))
 	}
 }
 
