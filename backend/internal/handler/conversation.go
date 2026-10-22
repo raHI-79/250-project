@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
@@ -20,16 +19,15 @@ import (
 
 const (
 	MessageConversationMissing = "No conversation found with this ID."
-	MessageCannotPost          = "Only the person who created this group can post in it."
+	MessageCannotPost          = "Only members of this group can post in it."
 	MessageNeedsContent        = "Write something, add a link or attach a file."
 	MessageUnknownContact      = "No active account found with this ID."
 	MessageSelfConversation    = "You cannot start a conversation with yourself."
-	MessageGroupNotAllowed     = "Your role cannot start this kind of group."
+	MessageGroupNotAllowed     = "Only teachers and class representatives can start a group."
 	MessageSent                = "Message sent."
 	MessageFileNotAllowed      = "This file type is not allowed."
 	fieldBody                  = "body"
 	fieldLink                  = "link"
-	fieldScope                 = "scope"
 	fieldSection               = "section"
 )
 
@@ -37,14 +35,22 @@ type ConversationStore interface {
 	GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error)
 	SearchContacts(ctx context.Context, viewerID int64, search, role string) ([]store.ContactRow, error)
 	GetOrCreateDirect(ctx context.Context, viewerID, otherID int64) (store.Conversation, error)
-	GetOrCreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error)
+	CreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error)
 	ListConversations(ctx context.Context, viewer store.MessageViewer, limit int) ([]store.ConversationRow, error)
 	FindConversationAccess(ctx context.Context, conversationID int64, viewer store.MessageViewer) (store.ConversationAccess, error)
 	ListChatMessages(ctx context.Context, conversationID int64, before *time.Time, limit int) ([]store.ChatMessageRow, error)
 	CreateChatMessage(ctx context.Context, message store.NewChatMessage) (store.ChatMessageRow, error)
 	MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error
 	CountUnreadMessages(ctx context.Context, viewer store.MessageViewer) (int, error)
-	DirectRecipient(ctx context.Context, conversationID, senderID int64) (int64, error)
+	ConversationRecipients(ctx context.Context, conversationID, senderID int64) ([]int64, error)
+	ListConversationMembers(ctx context.Context, conversationID int64) ([]store.MemberRow, error)
+	AddConversationMembers(ctx context.Context, conversationID, actorID int64, userIDs []int64) (int, error)
+	RemoveConversationMember(ctx context.Context, conversationID, userID int64) error
+	SetConversationMemberAdmin(ctx context.Context, conversationID, userID int64, admin bool) error
+	LeaveConversation(ctx context.Context, conversationID, userID int64) error
+	RenameConversation(ctx context.Context, conversationID int64, title string) error
+	ActiveUserIDs(ctx context.Context, userIDs []int64) ([]int64, error)
+	BatchMembers(ctx context.Context, batch, section string) ([]int64, error)
 }
 
 type AttachmentStore interface {
@@ -82,13 +88,12 @@ type conversationItem struct {
 	ID            int64  `json:"id"`
 	Kind          string `json:"kind"`
 	Title         string `json:"title"`
-	Scope         string `json:"scope,omitempty"`
-	Batch         string `json:"batch,omitempty"`
-	Section       string `json:"section,omitempty"`
 	OtherUserID   int64  `json:"other_user_id,omitempty"`
 	AvatarURL     string `json:"photo_url"`
 	CreatedBy     int64  `json:"created_by"`
 	CanPost       bool   `json:"can_post"`
+	MemberRole    string `json:"member_role,omitempty"`
+	MemberCount   int    `json:"member_count,omitempty"`
 	Preview       string `json:"preview"`
 	LastMessageAt string `json:"last_message_at,omitempty"`
 	UnreadCount   int    `json:"unread_count"`
@@ -99,13 +104,13 @@ type conversationsResponse struct {
 }
 
 type conversationResponse struct {
-	ID      int64  `json:"id"`
-	Kind    string `json:"kind"`
-	Title   string `json:"title"`
-	Scope   string `json:"scope,omitempty"`
-	Batch   string `json:"batch,omitempty"`
-	Section string `json:"section,omitempty"`
-	CanPost bool   `json:"can_post"`
+	ID          int64  `json:"id"`
+	Kind        string `json:"kind"`
+	Title       string `json:"title"`
+	CanPost     bool   `json:"can_post"`
+	MemberRole  string `json:"member_role,omitempty"`
+	MemberCount int    `json:"member_count,omitempty"`
+	Message     string `json:"message,omitempty"`
 }
 
 type chatMessageItem struct {
@@ -133,12 +138,6 @@ type unreadResponse struct {
 
 type directRequest struct {
 	UserID int64 `json:"user_id"`
-}
-
-type groupRequest struct {
-	Scope   string `json:"scope"`
-	Batch   string `json:"batch"`
-	Section string `json:"section"`
 }
 
 func (c *Conversations) viewer(w http.ResponseWriter, r *http.Request) (store.MessageViewer, bool) {
@@ -220,13 +219,14 @@ func (c *Conversations) List() http.HandlerFunc {
 				ID:          row.ID,
 				Kind:        row.Kind,
 				Title:       conversationTitle(row),
-				Scope:       row.Scope,
-				Batch:       row.Batch,
-				Section:     row.Section,
 				CreatedBy:   row.CreatedBy,
-				CanPost:     row.Kind == store.ConversationDirect || row.CreatedBy == viewer.UserID,
+				CanPost:     true,
 				Preview:     preview(row),
 				UnreadCount: row.UnreadCount,
+			}
+			if row.Kind == store.ConversationGroup {
+				item.MemberRole = row.MemberRole
+				item.MemberCount = row.MemberCount
 			}
 			if row.Kind == store.ConversationDirect {
 				item.OtherUserID = row.OtherUserID
@@ -271,44 +271,6 @@ func (c *Conversations) StartDirect() http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, conversationResponse{
 			ID:      conversation.ID,
 			Kind:    conversation.Kind,
-			Title:   "",
-			CanPost: true,
-		})
-	}
-}
-
-func (c *Conversations) StartGroup() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		viewer, ok := c.viewer(w, r)
-		if !ok {
-			return
-		}
-		var request groupRequest
-		if !httpx.DecodeJSON(w, r, &request) {
-			return
-		}
-		group, err := groupFor(viewer, request)
-		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if !canStartGroup(viewer.Role, group.Scope) {
-			httpx.WriteError(w, http.StatusForbidden, MessageGroupNotAllowed)
-			return
-		}
-		conversation, err := c.chats.GetOrCreateGroup(r.Context(), group)
-		if err != nil {
-			log.Printf("handler: could not open a group conversation: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
-		}
-		httpx.WriteJSON(w, http.StatusOK, conversationResponse{
-			ID:      conversation.ID,
-			Kind:    conversation.Kind,
-			Title:   groupTitle(conversation.Scope, conversation.Batch, conversation.Section),
-			Scope:   conversation.Scope,
-			Batch:   conversation.Batch,
-			Section: conversation.Section,
 			CanPost: true,
 		})
 	}
@@ -386,10 +348,6 @@ func (c *Conversations) Send() http.HandlerFunc {
 		}
 		access, ok := c.access(w, r, viewer)
 		if !ok {
-			return
-		}
-		if !access.CanPost {
-			httpx.WriteError(w, http.StatusForbidden, MessageCannotPost)
 			return
 		}
 		link, err := validate.OptionalLink("Link", r.FormValue(fieldLink))
@@ -477,25 +435,30 @@ func (c *Conversations) access(w http.ResponseWriter, r *http.Request, viewer st
 	return access, true
 }
 
-func (c *Conversations) announce(ctx context.Context, access store.ConversationAccess, viewer store.MessageViewer, message store.ChatMessageRow) {
+func (c *Conversations) announce(ctx context.Context, access store.ConversationAccess,
+	viewer store.MessageViewer, message store.ChatMessageRow) {
 	title := "New message from " + viewer.Name
-	body := summary(message)
-	if access.Kind == store.ConversationDirect {
-		recipient, err := c.chats.DirectRecipient(ctx, access.ID, viewer.UserID)
-		if err != nil {
-			log.Printf("handler: could not find the message recipient: %v", err)
-			return
-		}
-		link := notify.Ref(notify.LinkMessage, access.ID)
-		if err := c.alerts.NotifyUser(ctx, recipient, notify.TypeMessage, title, body, link); err != nil {
-			log.Printf("handler: could not notify a message recipient: %v", err)
-		}
+	if access.Kind == store.ConversationGroup {
+		title = viewer.Name + " in " + access.Title
+	}
+	recipients, err := c.chats.ConversationRecipients(ctx, access.ID, viewer.UserID)
+	if err != nil {
+		log.Printf("handler: could not find the message recipients: %v", err)
 		return
 	}
-	role, batch, section := groupAudience(access.Scope, access.Batch, access.Section)
-	link := notify.Ref(notify.LinkMessage, access.ID)
-	if err := c.alerts.NotifyBroadcast(ctx, role, batch, section, notify.TypeMessage, title, body, link); err != nil {
-		log.Printf("handler: could not notify a message group: %v", err)
+	c.notifyMembers(ctx, recipients, viewer, title, summary(message), access.ID)
+}
+
+func (c *Conversations) notifyMembers(ctx context.Context, recipients []int64,
+	viewer store.MessageViewer, title, body string, conversationID int64) {
+	link := notify.Ref(notify.LinkMessage, conversationID)
+	for _, recipient := range recipients {
+		if recipient == viewer.UserID {
+			continue
+		}
+		if err := c.alerts.NotifyUser(ctx, recipient, notify.TypeMessage, title, body, link); err != nil {
+			log.Printf("handler: could not notify a conversation member: %v", err)
+		}
 	}
 }
 
@@ -508,88 +471,11 @@ func (c *Conversations) removeAttachment(storedPath string) {
 	}
 }
 
-func groupFor(viewer store.MessageViewer, request groupRequest) (store.NewGroup, error) {
-	scope, err := validate.ConversationScope(fieldScope, request.Scope)
-	if err != nil {
-		return store.NewGroup{}, err
-	}
-	group := store.NewGroup{Scope: scope, CreatedBy: viewer.UserID}
-	switch scope {
-	case store.ScopeBatch, store.ScopeSection:
-		batch := strings.TrimSpace(request.Batch)
-		if batch == "" && viewer.Batch != "" {
-			batch = viewer.Batch
-		}
-		checked, err := validate.Batch("batch", batch)
-		if err != nil {
-			return store.NewGroup{}, err
-		}
-		group.Batch = checked
-		if scope == store.ScopeSection {
-			section := strings.TrimSpace(request.Section)
-			if section == "" && viewer.Section != "" {
-				section = viewer.Section
-			}
-			checkedSection, err := validate.Section("section", section)
-			if err != nil {
-				return store.NewGroup{}, err
-			}
-			group.Section = checkedSection
-		}
-	}
-	return group, nil
-}
-
-func canStartGroup(role, scope string) bool {
-	switch role {
-	case auth.RoleTeacher:
-		return scope == store.ScopeBatch || scope == store.ScopeSection
-	case auth.RoleCR:
-		return scope == store.ScopeBatch || scope == store.ScopeSection
-	case auth.RoleAdmin:
-		return true
-	case auth.RoleStudent:
-		return scope == store.ScopeBatch
-	default:
-		return false
-	}
-}
-
-func groupAudience(scope, batch, section string) (string, string, string) {
-	switch scope {
-	case store.ScopeBatch:
-		return auth.RoleStudent, batch, ""
-	case store.ScopeSection:
-		return auth.RoleStudent, batch, section
-	case store.ScopeAllStudents:
-		return auth.RoleStudent, "", ""
-	case store.ScopeAllTeachers:
-		return auth.RoleTeacher, "", ""
-	default:
-		return "", batch, section
-	}
-}
-
 func conversationTitle(row store.ConversationRow) string {
 	if row.Kind == store.ConversationDirect {
 		return row.OtherName
 	}
-	return groupTitle(row.Scope, row.Batch, row.Section)
-}
-
-func groupTitle(scope, batch, section string) string {
-	switch scope {
-	case store.ScopeBatch:
-		return batch
-	case store.ScopeSection:
-		return batch + " · Section " + section
-	case store.ScopeAllStudents:
-		return "All students"
-	case store.ScopeAllTeachers:
-		return "All teachers"
-	default:
-		return batch
-	}
+	return row.Title
 }
 
 func preview(row store.ConversationRow) string {

@@ -277,6 +277,13 @@ func registerMessageRoutes(mux *http.ServeMux, deps Dependencies, messages *hand
 	group.Handle("GET /api/messages/conversations/{id}/messages", messages.Messages())
 	group.Handle("POST /api/messages/conversations/{id}/messages", messages.Send())
 	group.Handle("GET /api/messages/unread-count", messages.UnreadCount())
+	group.Handle("PATCH /api/messages/conversations/{id}", messages.Rename())
+	group.Handle("GET /api/messages/conversations/{id}/members", messages.Members())
+	group.Handle("POST /api/messages/conversations/{id}/members", messages.AddMembers())
+	group.Handle("DELETE /api/messages/conversations/{id}/members/{user_id}", messages.RemoveMember())
+	group.Handle("POST /api/messages/conversations/{id}/members/{user_id}/admin", messages.SetMemberAdmin(true))
+	group.Handle("DELETE /api/messages/conversations/{id}/members/{user_id}/admin", messages.SetMemberAdmin(false))
+	group.Handle("POST /api/messages/conversations/{id}/leave", messages.Leave())
 }
 
 func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Poll) {
