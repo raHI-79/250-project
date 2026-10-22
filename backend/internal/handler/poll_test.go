@@ -68,8 +68,9 @@ func (f *fakePollStore) ListStudentPolls(ctx context.Context, viewerUserID int64
 	return f.polls, f.err
 }
 
-func (f *fakePollStore) VoteInPoll(ctx context.Context, pollID, optionID, userID int64, batch, section string) error {
-	f.voted = append(f.voted, optionID)
+func (f *fakePollStore) VoteInPoll(ctx context.Context, pollID int64, optionIDs []int64, userID int64,
+	batch, section string) error {
+	f.voted = append(f.voted, optionIDs...)
 	f.askedBatch, f.askedSection, f.askedViewer = batch, section, userID
 	return f.voteErr
 }
@@ -252,8 +253,9 @@ func TestPollCRClose(t *testing.T) {
 func TestPollLists(t *testing.T) {
 	rows := []store.PollRow{
 		{ID: 3, Question: "Which day?", Batch: noticeBatch, Section: "ALL", Status: store.PollOpen,
-			CreatedByName: "Board CR", CreatedAt: time.Now(), TotalVotes: 1, MyOptionID: 2,
-			Options: []store.PollOptionRow{{ID: 1, Text: "Sunday"}, {ID: 2, Text: "Monday", Votes: 1}}},
+			CreatedByName: "Board CR", CreatedAt: time.Now(), MaxChoices: 1, TotalVoters: 1,
+			MyOptionIDs: []int64{2},
+			Options:     []store.PollOptionRow{{ID: 1, Text: "Sunday"}, {ID: 2, Text: "Monday", Votes: 1}}},
 		{ID: 2, Question: "Lab slot?", Batch: noticeBatch, Section: "A", Status: store.PollClosed,
 			CreatedByName: "Board CR", CreatedAt: time.Now(),
 			Options: []store.PollOptionRow{{ID: 3, Text: "Morning"}, {ID: 4, Text: "Evening"}}},
@@ -303,10 +305,13 @@ func TestPollLists(t *testing.T) {
 			if len(items) != 2 {
 				t.Fatalf("got %d items, want 2", len(items))
 			}
-			if items[0]["is_closed"] != false || items[0]["my_option_id"] != float64(2) || items[0]["total_votes"] != float64(1) {
+			mine, _ := items[0]["my_option_ids"].([]any)
+			if items[0]["is_closed"] != false || len(mine) != 1 || mine[0] != float64(2) ||
+				items[0]["total_voters"] != float64(1) {
 				t.Errorf("first item = %v, want an open poll the viewer answered", items[0])
 			}
-			if items[1]["is_closed"] != true || items[1]["my_option_id"] != nil {
+			second, _ := items[1]["my_option_ids"].([]any)
+			if items[1]["is_closed"] != true || len(second) != 0 {
 				t.Errorf("second item = %v, want a closed poll without a vote", items[1])
 			}
 			options, ok := items[0]["options"].([]any)
@@ -329,40 +334,47 @@ func TestPollStudentVote(t *testing.T) {
 		wantStatus int
 		wantError  string
 	}{
-		{name: "a first vote", body: `{"option_id":2}`, wantStatus: http.StatusCreated},
+		{name: "a first vote", body: `{"option_ids":[2]}`, wantStatus: http.StatusCreated},
 		{
 			name:       "a second vote",
-			body:       `{"option_id":2}`,
+			body:       `{"option_ids":[2]}`,
 			voteErr:    store.ErrAlreadyVoted,
 			wantStatus: http.StatusConflict,
 			wantError:  MessageAlreadyVoted,
 		},
 		{
 			name:       "a closed poll",
-			body:       `{"option_id":2}`,
+			body:       `{"option_ids":[2]}`,
 			voteErr:    store.ErrPollClosed,
 			wantStatus: http.StatusConflict,
 			wantError:  MessagePollClosed,
 		},
 		{
 			name:       "an option of another poll",
-			body:       `{"option_id":99}`,
+			body:       `{"option_ids":[99]}`,
 			voteErr:    store.ErrOptionNotInPoll,
 			wantStatus: http.StatusBadRequest,
 			wantError:  MessageOptionUnknown,
 		},
 		{
 			name:       "a poll the student may not see",
-			body:       `{"option_id":2}`,
+			body:       `{"option_ids":[2]}`,
 			voteErr:    store.ErrNotFound,
 			wantStatus: http.StatusNotFound,
 			wantError:  MessagePollUnknown,
 		},
 		{
 			name:       "without an option",
-			body:       `{"option_id":0}`,
+			body:       `{"option_ids":[]}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  MessageOptionUnknown,
+			wantError:  MessagePickAnOption,
+		},
+		{
+			name:       "more options than the poll allows",
+			body:       `{"option_ids":[2,3]}`,
+			voteErr:    store.ErrTooManyChoices,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageTooManyChoices,
 		},
 		{name: "with a broken body", body: `{`, wantStatus: http.StatusBadRequest},
 	}
@@ -389,6 +401,60 @@ func TestPollStudentVote(t *testing.T) {
 			}
 			if polls.askedBatch != noticeBatch || polls.askedSection != "A" {
 				t.Errorf("voted as %q/%q, want %q/A", polls.askedBatch, polls.askedSection, noticeBatch)
+			}
+		})
+	}
+}
+
+func TestPollResponsesHideWhoVoted(t *testing.T) {
+	allowed := map[string]bool{
+		"id": true, "question": true, "batch": true, "section": true, "is_closed": true,
+		"max_choices": true, "created_by_name": true, "created_at": true, "options": true,
+		"total_voters": true, "my_option_ids": true,
+	}
+	rows := []store.PollRow{{
+		ID: 3, Question: "Which day?", Batch: noticeBatch, Section: "ALL", Status: store.PollOpen,
+		MaxChoices: 2, CreatedByName: "Board CR", CreatedAt: time.Now(), TotalVoters: 4,
+		MyOptionIDs: []int64{2},
+		Options:     []store.PollOptionRow{{ID: 1, Text: "Sunday", Votes: 3}, {ID: 2, Text: "Monday", Votes: 1}},
+	}}
+	views := []struct {
+		name string
+		path string
+		role string
+		pick func(*Poll) http.HandlerFunc
+	}{
+		{name: "the creator view", path: "/api/cr/polls", role: auth.RoleCR,
+			pick: func(p *Poll) http.HandlerFunc { return p.CRList() }},
+		{name: "the student view", path: "/api/students/polls", role: auth.RoleStudent,
+			pick: func(p *Poll) http.HandlerFunc { return p.StudentList() }},
+	}
+	for _, view := range views {
+		t.Run(view.name, func(t *testing.T) {
+			polls := &fakePollStore{profile: crPollProfile(true), polls: rows}
+			req := jsonRequest(t, http.MethodGet, view.path, "", noticeCRID, view.role)
+			rec := httptest.NewRecorder()
+			view.pick(newPollHandler(t, polls, &recordingAlerts{}))(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+			}
+			items := noticeItems(t, rec)
+			if len(items) != 1 {
+				t.Fatalf("got %d items, want 1", len(items))
+			}
+			for key := range items[0] {
+				if !allowed[key] {
+					t.Errorf("the response carries %q, which could reveal who voted", key)
+				}
+			}
+			options, _ := items[0]["options"].([]any)
+			for _, raw := range options {
+				option, _ := raw.(map[string]any)
+				for key := range option {
+					if key != "id" && key != "text" && key != "votes" {
+						t.Errorf("an option carries %q, want only a count", key)
+					}
+				}
 			}
 		})
 	}

@@ -20,6 +20,7 @@ const PUBLIC_ENDPOINTS = [
   '/api/auth/verify-email',
   '/api/auth/resend-verification',
   '/api/auth/drop-course-options',
+  '/api/auth/sections',
   '/api/auth/google/verify-email',
   '/api/auth/invite',
   '/api/auth/activate',

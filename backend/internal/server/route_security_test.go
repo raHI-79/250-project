@@ -11,6 +11,17 @@ import (
 	"time"
 )
 
+type emptyPushStore struct{}
+
+func (emptyPushStore) SavePushSubscription(ctx context.Context,
+	subscription store.PushSubscription) (int64, error) {
+	return 0, store.ErrNotFound
+}
+
+func (emptyPushStore) DeletePushSubscription(ctx context.Context, userID int64, endpoint string) error {
+	return nil
+}
+
 type emptyChatStore struct{}
 
 func (emptyChatStore) GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error) {
@@ -36,8 +47,42 @@ func (emptyChatStore) GetOrCreateDirect(ctx context.Context, viewerID, otherID i
 	return store.Conversation{}, store.ErrInactiveTarget
 }
 
-func (emptyChatStore) GetOrCreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error) {
+func (emptyChatStore) CreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error) {
 	return store.Conversation{}, store.ErrNotFound
+}
+
+func (emptyChatStore) ListConversationMembers(ctx context.Context, conversationID int64) ([]store.MemberRow, error) {
+	return nil, nil
+}
+
+func (emptyChatStore) AddConversationMembers(ctx context.Context, conversationID, actorID int64,
+	userIDs []int64) (int, error) {
+	return 0, store.ErrNotFound
+}
+
+func (emptyChatStore) RemoveConversationMember(ctx context.Context, conversationID, userID int64) error {
+	return store.ErrNotAMember
+}
+
+func (emptyChatStore) SetConversationMemberAdmin(ctx context.Context, conversationID, userID int64,
+	admin bool) error {
+	return store.ErrNotAMember
+}
+
+func (emptyChatStore) LeaveConversation(ctx context.Context, conversationID, userID int64) error {
+	return store.ErrNotAMember
+}
+
+func (emptyChatStore) RenameConversation(ctx context.Context, conversationID int64, title string) error {
+	return store.ErrNotAGroup
+}
+
+func (emptyChatStore) ActiveUserIDs(ctx context.Context, userIDs []int64) ([]int64, error) {
+	return userIDs, nil
+}
+
+func (emptyChatStore) BatchMembers(ctx context.Context, batch, section string) ([]int64, error) {
+	return nil, nil
 }
 
 func (emptyChatStore) ListConversations(ctx context.Context, viewer store.MessageViewer, limit int) ([]store.ConversationRow, error) {
@@ -64,8 +109,9 @@ func (emptyChatStore) CountUnreadMessages(ctx context.Context, viewer store.Mess
 	return 0, nil
 }
 
-func (emptyChatStore) DirectRecipient(ctx context.Context, conversationID, senderID int64) (int64, error) {
-	return 0, store.ErrNoRecipient
+func (emptyChatStore) ConversationRecipients(ctx context.Context, conversationID,
+	senderID int64) ([]int64, error) {
+	return nil, nil
 }
 
 type emptyPollStore struct{}
@@ -90,7 +136,8 @@ func (emptyPollStore) ListStudentPolls(ctx context.Context, viewerUserID int64, 
 	return nil, nil
 }
 
-func (emptyPollStore) VoteInPoll(ctx context.Context, pollID, optionID, userID int64, batch, section string) error {
+func (emptyPollStore) VoteInPoll(ctx context.Context, pollID int64, optionIDs []int64, userID int64,
+	batch, section string) error {
 	return store.ErrNotFound
 }
 
@@ -201,6 +248,15 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodGet, path: "/api/messages/conversations/1/messages", allowed: everyRole()},
 		{method: http.MethodPost, path: "/api/messages/conversations/1/messages", allowed: everyRole()},
 		{method: http.MethodGet, path: "/api/messages/unread-count", allowed: everyRole()},
+		{method: http.MethodPatch, path: "/api/messages/conversations/1", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/messages/conversations/1/members", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/messages/conversations/1/members", allowed: everyRole()},
+		{method: http.MethodDelete, path: "/api/messages/conversations/1/members/2", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/messages/conversations/1/members/2/admin", allowed: everyRole()},
+		{method: http.MethodDelete, path: "/api/messages/conversations/1/members/2/admin", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/messages/conversations/1/leave", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/push/subscribe", allowed: panelRoles()},
+		{method: http.MethodDelete, path: "/api/push/subscribe", allowed: panelRoles()},
 		{method: http.MethodPost, path: "/api/teacher/notices", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/students/today", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/upcoming-routine", allowed: studentRoles()},

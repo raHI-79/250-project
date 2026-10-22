@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Reply, Users } from 'lucide-react'
+import { ArrowLeft, Info, Plus, Users } from 'lucide-react'
 import ContactSearch from '../components/messages/ContactSearch'
 import ConversationList from '../components/messages/ConversationList'
+import GroupCreateModal from '../components/messages/GroupCreateModal'
+import GroupInfoPanel from '../components/messages/GroupInfoPanel'
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
 import { Alert, Avatar, Button, EmptyState, PageHeader } from '../components/ui'
@@ -25,7 +27,8 @@ export default function MessagesPage() {
   const [threadLoading, setThreadLoading] = useState(false)
   const [roleFilter, setRoleFilter] = useState('')
   const [starting, setStarting] = useState(false)
-  const [creator, setCreator] = useState({ id: 0, name: '' })
+  const [creating, setCreating] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
   const [params, setParams] = useSearchParams()
   const loadList = useCallback(
     () =>
@@ -60,36 +63,15 @@ export default function MessagesPage() {
     Promise.resolve(loadThread()).finally(() => setThreadLoading(false))
   }, [activeId, loadThread])
   usePolling(activeId ? loadThread : null, THREAD_INTERVAL)
+  const canStartGroups = user?.role === 'teacher' || user?.role === 'cr'
   const active = useMemo(
     () => items.find((entry) => entry.id === activeId) || opened,
     [items, activeId, opened],
   )
-  const groupOwner = active && active.kind === 'group' && !active.can_post ? active.created_by : 0
-  useEffect(() => {
-    if (!groupOwner) {
-      setCreator({ id: 0, name: '' })
-      return undefined
-    }
-    if (creator.id === groupOwner) return undefined
-    const posted = messages.find((item) => item.sender_id === groupOwner)
-    if (posted) {
-      setCreator({ id: groupOwner, name: posted.sender_name })
-      return undefined
-    }
-    let live = true
-    api
-      .get(`/api/people/${groupOwner}`)
-      .then((data) => {
-        if (live) setCreator({ id: groupOwner, name: data?.full_name || data?.name || '' })
-      })
-      .catch(() => null)
-    return () => {
-      live = false
-    }
-  }, [groupOwner, messages, creator.id])
   const select = (item) => {
     setMessages([])
     setThreadError('')
+    setShowInfo(false)
     setOpened(item)
     setActiveId(item.id)
     setItems((current) =>
@@ -119,12 +101,6 @@ export default function MessagesPage() {
       { user_id: contact.user_id },
       { title: contact.name, photo_url: contact.photo_url, kind: 'direct', can_post: true },
     )
-  const pickGroup = (group) =>
-    startWith(
-      '/api/messages/groups',
-      { scope: group.scope, batch: group.batch, section: group.section },
-      { title: group.title, kind: 'group', can_post: true },
-    )
   const send = async ({ body, link, file }) => {
     const payload = new FormData()
     if (body) payload.set('body', body)
@@ -133,13 +109,6 @@ export default function MessagesPage() {
     await api.post(`/api/messages/conversations/${activeId}/messages`, payload)
     await loadThread()
     loadList()
-  }
-  const replyPrivately = async () => {
-    const data = await api.post('/api/messages/direct', { user_id: groupOwner }).catch((failure) => {
-      setThreadError(failure.message)
-      return null
-    })
-    if (data) openConversation({ ...data, title: creator.name, kind: 'direct', can_post: true })
   }
   useEffect(() => {
     const wanted = Number(params.get('c') || 0)
@@ -165,8 +134,17 @@ export default function MessagesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Department messages" title="Messages"
-        subtitle="Search for a person or a group, then write"
+        eyebrow="Department messages"
+        title="Messages"
+        subtitle="Search for a person, open a group, then write"
+        actions={
+          canStartGroups ? (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={15} />
+              New group
+            </Button>
+          ) : null
+        }
       />
       {listError && (
         <Alert tone="error" className="mb-5">
@@ -185,20 +163,29 @@ export default function MessagesPage() {
               <ContactSearch
                 search={search}
                 onSearchChange={setSearch}
-                role={user?.role}
                 roleFilter={roleFilter}
                 onRoleFilterChange={setRoleFilter}
-                batch={user?.batch}
-                section={user?.section}
                 onPickPerson={pickPerson}
-                onPickGroup={pickGroup}
                 busy={starting}
               />
             }
           />
         </div>
         <div className={cx('min-w-0 flex-1', !activeId && 'hidden md:block')}>
-          {active ? (
+          {active && showInfo && active.kind === 'group' ? (
+            <GroupInfoPanel
+              conversation={active}
+              meId={user?.id}
+              role={user?.role}
+              batch={user?.batch}
+              onChanged={loadList}
+              onLeft={() => {
+                setShowInfo(false)
+                close()
+                loadList()
+              }}
+            />
+          ) : active ? (
             <div className="flex h-full min-h-0 flex-col border border-line bg-page">
               <div className="flex items-center gap-3 border-b border-line bg-surface px-3 py-3">
                 <Button
@@ -217,10 +204,21 @@ export default function MessagesPage() {
                 ) : (
                   <Avatar src={active.photo_url} name={active.title} />
                 )}
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{active.title}</p>
                   <p className="text-xs text-muted">{conversationDetail(active)}</p>
                 </div>
+                {active.kind === 'group' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowInfo((current) => !current)}
+                    aria-pressed={showInfo}
+                  >
+                    <Info size={15} />
+                    {showInfo ? 'Hide members' : 'Members'}
+                  </Button>
+                )}
               </div>
               {threadError && (
                 <Alert tone="error" className="m-3">
@@ -230,19 +228,7 @@ export default function MessagesPage() {
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <MessageThread items={messages} meId={user?.id} loading={threadLoading} />
               </div>
-              {active.can_post ? (
-                <MessageComposer onSend={send} />
-              ) : (
-                <div className="flex flex-wrap items-center gap-3 border-t border-line bg-surface p-3">
-                  <p className="text-sm text-brand-600">
-                    Only the person who started this group can post here.
-                  </p>
-                  <Button variant="secondary" onClick={replyPrivately} className="ml-auto">
-                    <Reply size={15} />
-                    Reply privately{creator.name ? ` to ${creator.name}` : ''}
-                  </Button>
-                </div>
-              )}
+              <MessageComposer onSend={send} />
             </div>
           ) : (
             <EmptyState
@@ -254,6 +240,16 @@ export default function MessagesPage() {
           )}
         </div>
       </div>
+      <GroupCreateModal
+        open={creating}
+        onClose={() => setCreating(false)}
+        role={user?.role}
+        batch={user?.batch}
+        onCreated={(created) => {
+          setCreating(false)
+          openConversation({ ...created, kind: 'group', can_post: true })
+        }}
+      />
     </>
   )
 }

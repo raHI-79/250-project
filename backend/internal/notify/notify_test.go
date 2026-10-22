@@ -35,6 +35,15 @@ type fakeStore struct {
 	askedLimit int
 	askedUser  int64
 	askedSince time.Time
+	recipients []int64
+}
+
+func (f *fakeStore) ListNotificationRecipients(ctx context.Context, role, batch,
+	section string) ([]int64, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.recipients, nil
 }
 
 func (f *fakeStore) CreateDirectNotification(ctx context.Context, userID int64, kind, title, body string,

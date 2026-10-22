@@ -48,16 +48,19 @@ func flowConfig(t *testing.T) *config.Config {
 		t.Fatalf("could not load timezone: %v", err)
 	}
 	return &config.Config{
-		AppEnv:         "test",
-		Timezone:       "Asia/Dhaka",
-		Location:       loc,
-		FrontendOrigin: testFrontend,
-		StudentDomain:  "student.sust.edu",
-		DecisionStart:  "00:00",
-		DecisionEnd:    "23:59",
-		DecisionFrom:   0,
-		DecisionTo:     24 * 60,
-		DaysAhead:      7,
+		AppEnv:          "test",
+		Timezone:        "Asia/Dhaka",
+		Location:        loc,
+		FrontendOrigin:  testFrontend,
+		StudentDomain:   "student.sust.edu",
+		DecisionStart:   "00:00",
+		DecisionEnd:     "23:59",
+		DecisionFrom:    0,
+		DecisionTo:      24 * 60,
+		DaysAhead:       7,
+		VAPIDPublicKey:  "test-public-key",
+		VAPIDPrivateKey: "test-private-key",
+		VAPIDSubject:    "mailto:cse@sust.edu",
 	}
 }
 
@@ -91,6 +94,7 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 		Users:     userStore,
 		Auth:      userStore,
 		Numbers:   userStore,
+		Devices:   userStore,
 		People:    userStore,
 		Catalog:   userStore,
 		Lookups:   userStore,

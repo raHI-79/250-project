@@ -196,6 +196,7 @@ func newAccessRouter(t *testing.T) (Dependencies, http.Handler) {
 	deps.Accounts = emptyAccountStore{}
 	deps.Chats = emptyChatStore{}
 	deps.Votes = emptyPollStore{}
+	deps.Devices = emptyPushStore{}
 	return deps, NewRouter(deps)
 }
 

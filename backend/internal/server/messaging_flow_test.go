@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/upload"
 )
 
@@ -144,40 +143,87 @@ func TestMessagingAndNoticeFlow(t *testing.T) {
 	}
 
 	group := call(t, router, http.MethodPost, "/api/messages/groups",
-		`{"scope":"section","batch":"CSE-23","section":"A"}`, teacherToken)
-	if group.Code != http.StatusOK {
-		t.Fatalf("open group status = %d, want 200 (body = %q)", group.Code, group.Body.String())
+		`{"title":"CSE-23 section A","batches":[{"batch":"CSE-23","section":"A"}]}`, teacherToken)
+	if group.Code != http.StatusCreated {
+		t.Fatalf("new group status = %d, want 201 (body = %q)", group.Code, group.Body.String())
 	}
 	groupID := int64(number(t, group, "id"))
-	if got := field(t, group, "title"); got != "CSE-23 · Section A" {
-		t.Errorf("group title = %q, want the section label", got)
+	if got := field(t, group, "title"); got != "CSE-23 section A" {
+		t.Errorf("group title = %q, want the name the teacher chose", got)
+	}
+	studentGroup := call(t, router, http.MethodPost, "/api/messages/groups",
+		`{"title":"Study circle","user_ids":[1]}`, studentToken)
+	if studentGroup.Code != http.StatusForbidden {
+		t.Errorf("a student starting a group status = %d, want 403", studentGroup.Code)
 	}
 	posted := sendMessage(t, router, groupID, teacherToken,
 		map[string]string{"body": "Extra class tomorrow at 10:30."}, "", nil)
 	if posted.Code != http.StatusCreated {
 		t.Fatalf("group post status = %d, want 201 (body = %q)", posted.Code, posted.Body.String())
 	}
-	refused := sendMessage(t, router, groupID, studentToken, map[string]string{"body": "me too"}, "", nil)
-	if refused.Code != http.StatusForbidden {
-		t.Fatalf("a student posting in the group status = %d, want 403", refused.Code)
+	fromMember := sendMessage(t, router, groupID, studentToken, map[string]string{"body": "me too"}, "", nil)
+	if fromMember.Code != http.StatusCreated {
+		t.Fatalf("a member posting status = %d, want 201 (body = %q)", fromMember.Code, fromMember.Body.String())
 	}
-	if got := field(t, refused, "error"); got != handler.MessageCannotPost {
-		t.Errorf("error = %q, want %q", got, handler.MessageCannotPost)
+	outsiderPost := sendMessage(t, router, groupID, outsiderToken, map[string]string{"body": "hello"}, "", nil)
+	if outsiderPost.Code != http.StatusNotFound {
+		t.Errorf("an outsider posting status = %d, want 404", outsiderPost.Code)
 	}
-	studentChats := listItems(t, call(t, router, http.MethodGet, "/api/messages/conversations", "", studentToken))
-	if len(studentChats) != 2 {
-		t.Fatalf("the student sees %d conversations, want the direct chat and the group", len(studentChats))
+	members := listItems(t, call(t, router, http.MethodGet,
+		"/api/messages/conversations/"+strconv.FormatInt(groupID, 10)+"/members", "", teacherToken))
+	if len(members) < 2 {
+		t.Fatalf("the group holds %v, want the teacher and the batch", members)
 	}
-	outsiderChats := listItems(t, call(t, router, http.MethodGet, "/api/messages/conversations", "", outsiderToken))
-	if len(outsiderChats) != 0 {
-		t.Errorf("another batch sees %d conversations, want none", len(outsiderChats))
+	admins := 0
+	var memberID int64
+	for _, member := range members {
+		if member["role"] == "admin" {
+			admins++
+		} else {
+			memberID = int64(member["user_id"].(float64))
+		}
 	}
-	crChats := listItems(t, call(t, router, http.MethodGet, "/api/messages/conversations", "", crToken))
-	if len(crChats) != 1 || crChats[0]["kind"] != "group" {
-		t.Fatalf("the class representative sees %v, want only the section group", crChats)
+	if admins != 1 {
+		t.Errorf("the group has %d admins, want 1", admins)
 	}
-	if crChats[0]["can_post"] != false {
-		t.Error("the class representative should not be able to post in the teacher's group")
+	notAdmin := call(t, router, http.MethodPatch,
+		"/api/messages/conversations/"+strconv.FormatInt(groupID, 10), `{"title":"Renamed by a member"}`,
+		studentToken)
+	if notAdmin.Code != http.StatusForbidden {
+		t.Errorf("a member renaming the group status = %d, want 403", notAdmin.Code)
+	}
+	renamed := call(t, router, http.MethodPatch,
+		"/api/messages/conversations/"+strconv.FormatInt(groupID, 10), `{"title":"CSE-23 lab group"}`,
+		teacherToken)
+	if renamed.Code != http.StatusOK {
+		t.Fatalf("rename status = %d, want 200 (body = %q)", renamed.Code, renamed.Body.String())
+	}
+	promoted := call(t, router, http.MethodPost,
+		"/api/messages/conversations/"+strconv.FormatInt(groupID, 10)+"/members/"+
+			strconv.FormatInt(memberID, 10)+"/admin", "", teacherToken)
+	if promoted.Code != http.StatusOK {
+		t.Fatalf("promote status = %d, want 200 (body = %q)", promoted.Code, promoted.Body.String())
+	}
+	left := call(t, router, http.MethodPost,
+		"/api/messages/conversations/"+strconv.FormatInt(groupID, 10)+"/leave", "", teacherToken)
+	if left.Code != http.StatusOK {
+		t.Fatalf("leave status = %d, want 200 (body = %q)", left.Code, left.Body.String())
+	}
+	gone := call(t, router, http.MethodGet,
+		"/api/messages/conversations/"+strconv.FormatInt(groupID, 10)+"/members", "", teacherToken)
+	if gone.Code != http.StatusNotFound {
+		t.Errorf("the teacher still sees the group, status = %d, want 404", gone.Code)
+	}
+	crGroup := call(t, router, http.MethodPost, "/api/messages/groups",
+		`{"title":"Other batch","batches":[{"batch":"CSE-22"}]}`, crToken)
+	if crGroup.Code != http.StatusForbidden {
+		t.Errorf("a class representative adding another batch status = %d, want 403", crGroup.Code)
+	}
+	ownBatch := call(t, router, http.MethodPost, "/api/messages/groups",
+		`{"title":"CSE-23 reps","batches":[{"batch":"CSE-23"}]}`, crToken)
+	if ownBatch.Code != http.StatusCreated {
+		t.Fatalf("a class representative group status = %d, want 201 (body = %q)",
+			ownBatch.Code, ownBatch.Body.String())
 	}
 
 	noticeFields := map[string]string{

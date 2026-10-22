@@ -30,6 +30,7 @@ export default function CRPollsPage() {
   const [question, setQuestion] = useState('')
   const [options, setOptions] = useState(['', ''])
   const [scope, setScope] = useState('section')
+  const [maxChoices, setMaxChoices] = useState(1)
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [closing, setClosing] = useState(0)
@@ -65,10 +66,16 @@ export default function CRPollsPage() {
     }
     setSending(true)
     try {
-      await api.post('/api/cr/polls', { question: question.trim(), options: cleaned, scope })
+      await api.post('/api/cr/polls', {
+        question: question.trim(),
+        options: cleaned,
+        scope,
+        max_choices: Math.min(maxChoices, cleaned.length),
+      })
       toast.success('Poll created')
       setQuestion('')
       setOptions(['', ''])
+      setMaxChoices(1)
       polls.reload()
     } catch (failure) {
       setError(failure.message)
@@ -95,6 +102,10 @@ export default function CRPollsPage() {
     }
   }
   const items = polls.data?.items || []
+  const filledOptions = Math.max(
+    MIN_OPTIONS,
+    options.map((entry) => entry.trim()).filter(Boolean).length,
+  )
   return (
     <>
       <PageHeader eyebrow="Ask your batch" title="Polls" subtitle="Ask your section or your whole batch a question" />
@@ -139,10 +150,24 @@ export default function CRPollsPage() {
               </Button>
             </div>
           </Field>
-          <Select label="Who votes" value={scope} onChange={(event) => setScope(event.target.value)}>
-            <option value="section">My section</option>
-            <option value="batch">Whole batch</option>
-          </Select>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Select label="Who votes" value={scope} onChange={(event) => setScope(event.target.value)}>
+              <option value="section">My section</option>
+              <option value="batch">Whole batch</option>
+            </Select>
+            <Select
+              label="Each student may choose up to"
+              value={String(Math.min(maxChoices, filledOptions))}
+              onChange={(event) => setMaxChoices(Number(event.target.value))}
+              hint="One vote per student, counted per option"
+            >
+              {Array.from({ length: filledOptions }, (_, index) => index + 1).map((count) => (
+                <option key={count} value={count}>
+                  {count === 1 ? '1 option' : `${count} options`}
+                </option>
+              ))}
+            </Select>
+          </div>
           <Button type="submit" loading={sending} className="w-full sm:w-auto sm:self-end">
             Create the poll
           </Button>
@@ -177,10 +202,18 @@ export default function CRPollsPage() {
               </div>
               <p className="mt-1 text-xs text-muted">
                 {poll.section === 'ALL' ? `${poll.batch} · whole batch` : `${poll.batch} · section ${poll.section}`}{' '}
-                · {formatDateTime(poll.created_at)} · {poll.total_votes} vote
-                {poll.total_votes === 1 ? '' : 's'}
+                · {formatDateTime(poll.created_at)} · {poll.total_voters} voter
+                {poll.total_voters === 1 ? '' : 's'} ·{' '}
+                {poll.max_choices > 1 ? `up to ${poll.max_choices} choices` : 'one choice'}
               </p>
-              <PollResults options={poll.options} total={poll.total_votes} />
+              <PollResults
+                options={poll.options}
+                total={poll.total_voters}
+                myOptionIds={poll.my_option_ids || []}
+              />
+              <p className="mt-3 text-xs text-muted">
+                Votes are secret: you see the counts, never who picked what.
+              </p>
               {!poll.is_closed && (
                 <div className="mt-4 flex justify-end">
                   <Button

@@ -53,3 +53,13 @@ func PollOptions(label string, values []string) ([]string, error) {
 	}
 	return options, nil
 }
+
+func PollChoices(label string, value, options int) (int, error) {
+	if value == 0 {
+		return 1, nil
+	}
+	if value < 1 || value > options {
+		return 0, fmt.Errorf("%s must be a number between 1 and %d.", label, options)
+	}
+	return value, nil
+}

@@ -41,8 +41,18 @@ type fakeChatStore struct {
 	rows         []store.ConversationRow
 	messages     []store.ChatMessageRow
 	unread       int
-	recipient    int64
+	recipients   []int64
 	groups       []store.NewGroup
+	members      []store.MemberRow
+	addedMembers []int64
+	removed      []int64
+	roleChanges  map[int64]bool
+	left         []int64
+	renamed      []string
+	activeIDs    []int64
+	batchAsked   []string
+	batchMembers []int64
+	memberErr    error
 	directWith   []int64
 	sent         []sentChatMessage
 	reads        []int64
@@ -67,7 +77,8 @@ func newChatStore() *fakeChatStore {
 			chatTeacherID: {UserID: chatTeacherID, Name: "Active Teacher", Role: auth.RoleTeacher},
 			chatAdminID:   {UserID: chatAdminID, Name: "admin", Role: auth.RoleAdmin},
 		},
-		recipient: chatTeacherID,
+		recipients:  []int64{chatStudentID},
+		roleChanges: make(map[int64]bool),
 	}
 }
 
@@ -92,15 +103,78 @@ func (f *fakeChatStore) GetOrCreateDirect(ctx context.Context, viewerID, otherID
 	return store.Conversation{ID: 7, Kind: store.ConversationDirect, CreatedBy: viewerID}, nil
 }
 
-func (f *fakeChatStore) GetOrCreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error) {
+func (f *fakeChatStore) CreateGroup(ctx context.Context, group store.NewGroup) (store.Conversation, error) {
 	if f.err != nil {
 		return store.Conversation{}, f.err
 	}
 	f.groups = append(f.groups, group)
 	return store.Conversation{
-		ID: 9, Kind: store.ConversationGroup, Scope: group.Scope,
-		Batch: group.Batch, Section: group.Section, CreatedBy: group.CreatedBy,
+		ID: 9, Kind: store.ConversationGroup, Title: group.Title, CreatedBy: group.CreatedBy,
 	}, nil
+}
+
+func (f *fakeChatStore) ListConversationMembers(ctx context.Context, conversationID int64) ([]store.MemberRow, error) {
+	return f.members, f.memberErr
+}
+
+func (f *fakeChatStore) AddConversationMembers(ctx context.Context, conversationID, actorID int64,
+	userIDs []int64) (int, error) {
+	if f.memberErr != nil {
+		return 0, f.memberErr
+	}
+	f.addedMembers = append(f.addedMembers, userIDs...)
+	return len(userIDs), nil
+}
+
+func (f *fakeChatStore) RemoveConversationMember(ctx context.Context, conversationID, userID int64) error {
+	if f.memberErr != nil {
+		return f.memberErr
+	}
+	f.removed = append(f.removed, userID)
+	return nil
+}
+
+func (f *fakeChatStore) SetConversationMemberAdmin(ctx context.Context, conversationID, userID int64,
+	admin bool) error {
+	if f.memberErr != nil {
+		return f.memberErr
+	}
+	f.roleChanges[userID] = admin
+	return nil
+}
+
+func (f *fakeChatStore) LeaveConversation(ctx context.Context, conversationID, userID int64) error {
+	if f.memberErr != nil {
+		return f.memberErr
+	}
+	f.left = append(f.left, userID)
+	return nil
+}
+
+func (f *fakeChatStore) RenameConversation(ctx context.Context, conversationID int64, title string) error {
+	if f.memberErr != nil {
+		return f.memberErr
+	}
+	f.renamed = append(f.renamed, title)
+	return nil
+}
+
+func (f *fakeChatStore) ActiveUserIDs(ctx context.Context, userIDs []int64) ([]int64, error) {
+	if f.memberErr != nil {
+		return nil, f.memberErr
+	}
+	if f.activeIDs != nil {
+		return f.activeIDs, nil
+	}
+	return userIDs, nil
+}
+
+func (f *fakeChatStore) BatchMembers(ctx context.Context, batch, section string) ([]int64, error) {
+	if f.memberErr != nil {
+		return nil, f.memberErr
+	}
+	f.batchAsked = append(f.batchAsked, batch+"/"+section)
+	return f.batchMembers, nil
 }
 
 func (f *fakeChatStore) ListConversations(ctx context.Context, viewer store.MessageViewer, limit int) ([]store.ConversationRow, error) {
@@ -146,11 +220,9 @@ func (f *fakeChatStore) CountUnreadMessages(ctx context.Context, viewer store.Me
 	return f.unread, f.err
 }
 
-func (f *fakeChatStore) DirectRecipient(ctx context.Context, conversationID, senderID int64) (int64, error) {
-	if f.recipient == 0 {
-		return 0, store.ErrNoRecipient
-	}
-	return f.recipient, nil
+func (f *fakeChatStore) ConversationRecipients(ctx context.Context, conversationID,
+	senderID int64) ([]int64, error) {
+	return f.recipients, nil
 }
 
 func newChatHandler(t *testing.T, chats ConversationStore, files AttachmentStore, alerts BroadcastNotifier) *Conversations {
@@ -351,163 +423,6 @@ func TestConversationStartDirect(t *testing.T) {
 	}
 }
 
-func TestConversationGroupPermissions(t *testing.T) {
-	silenceLog(t)
-	tests := []struct {
-		name        string
-		role        string
-		userID      int64
-		body        string
-		wantStatus  int
-		wantScope   string
-		wantBatch   string
-		wantSection string
-		wantError   string
-	}{
-		{
-			name:       "a teacher opens a batch group",
-			role:       auth.RoleTeacher,
-			userID:     chatTeacherID,
-			body:       `{"scope":"batch","batch":"CSE-23"}`,
-			wantStatus: http.StatusOK,
-			wantScope:  store.ScopeBatch,
-			wantBatch:  chatBatch,
-		},
-		{
-			name:        "a teacher opens a section group",
-			role:        auth.RoleTeacher,
-			userID:      chatTeacherID,
-			body:        `{"scope":"section","batch":"CSE-23","section":"A"}`,
-			wantStatus:  http.StatusOK,
-			wantScope:   store.ScopeSection,
-			wantBatch:   chatBatch,
-			wantSection: "A",
-		},
-		{
-			name:       "a teacher cannot reach every student",
-			role:       auth.RoleTeacher,
-			userID:     chatTeacherID,
-			body:       `{"scope":"all_students"}`,
-			wantStatus: http.StatusForbidden,
-			wantError:  MessageGroupNotAllowed,
-		},
-		{
-			name:       "a class representative opens another batch",
-			role:       auth.RoleCR,
-			userID:     chatCRID,
-			body:       `{"scope":"batch","batch":"CSE-22"}`,
-			wantStatus: http.StatusOK,
-			wantScope:  store.ScopeBatch,
-			wantBatch:  "CSE-22",
-		},
-		{
-			name:        "a class representative opens a section",
-			role:        auth.RoleCR,
-			userID:      chatCRID,
-			body:        `{"scope":"section","batch":"CSE-23","section":"B"}`,
-			wantStatus:  http.StatusOK,
-			wantScope:   store.ScopeSection,
-			wantBatch:   chatBatch,
-			wantSection: "B",
-		},
-		{
-			name:       "a class representative cannot reach every teacher",
-			role:       auth.RoleCR,
-			userID:     chatCRID,
-			body:       `{"scope":"all_teachers"}`,
-			wantStatus: http.StatusForbidden,
-			wantError:  MessageGroupNotAllowed,
-		},
-		{
-			name:       "an admin reaches every student",
-			role:       auth.RoleAdmin,
-			userID:     chatAdminID,
-			body:       `{"scope":"all_students"}`,
-			wantStatus: http.StatusOK,
-			wantScope:  store.ScopeAllStudents,
-		},
-		{
-			name:       "an admin reaches every teacher",
-			role:       auth.RoleAdmin,
-			userID:     chatAdminID,
-			body:       `{"scope":"all_teachers"}`,
-			wantStatus: http.StatusOK,
-			wantScope:  store.ScopeAllTeachers,
-		},
-		{
-			name:       "a student reaches their own batch",
-			role:       auth.RoleStudent,
-			userID:     chatStudentID,
-			body:       `{"scope":"batch"}`,
-			wantStatus: http.StatusOK,
-			wantScope:  store.ScopeBatch,
-			wantBatch:  chatBatch,
-		},
-		{
-			name:       "a student cannot open a section group",
-			role:       auth.RoleStudent,
-			userID:     chatStudentID,
-			body:       `{"scope":"section","batch":"CSE-23","section":"A"}`,
-			wantStatus: http.StatusForbidden,
-			wantError:  MessageGroupNotAllowed,
-		},
-		{
-			name:       "a student cannot reach every student",
-			role:       auth.RoleStudent,
-			userID:     chatStudentID,
-			body:       `{"scope":"all_students"}`,
-			wantStatus: http.StatusForbidden,
-			wantError:  MessageGroupNotAllowed,
-		},
-		{
-			name:       "a broken scope",
-			role:       auth.RoleAdmin,
-			userID:     chatAdminID,
-			body:       `{"scope":"everyone"}`,
-			wantStatus: http.StatusBadRequest,
-			wantError:  "scope must be one of batch, section, all_students, all_teachers.",
-		},
-		{
-			name:       "a broken batch",
-			role:       auth.RoleTeacher,
-			userID:     chatTeacherID,
-			body:       `{"scope":"batch","batch":"CSE23"}`,
-			wantStatus: http.StatusBadRequest,
-			wantError:  "batch must look like CSE-23.",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			chats := newChatStore()
-			handler := newChatHandler(t, chats, &fakeFileStore{}, &recordingAlerts{})
-			request := chatRequest(t, http.MethodPost, "/api/messages/groups", tc.body, tc.userID, tc.role)
-			rec := serve(handler.StartGroup(), request)
-			if rec.Code != tc.wantStatus {
-				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, tc.wantStatus, rec.Body.String())
-			}
-			if tc.wantStatus != http.StatusOK {
-				if got := errorMessage(t, rec); got != tc.wantError {
-					t.Errorf("error = %q, want %q", got, tc.wantError)
-				}
-				if len(chats.groups) != 0 {
-					t.Error("the store opened a group although the request was refused")
-				}
-				return
-			}
-			if len(chats.groups) != 1 {
-				t.Fatalf("the store opened %d groups, want 1", len(chats.groups))
-			}
-			group := chats.groups[0]
-			if group.Scope != tc.wantScope || group.Batch != tc.wantBatch || group.Section != tc.wantSection {
-				t.Errorf("group = %+v, want %q/%q/%q", group, tc.wantScope, tc.wantBatch, tc.wantSection)
-			}
-			if group.CreatedBy != tc.userID {
-				t.Errorf("created_by = %d, want %d", group.CreatedBy, tc.userID)
-			}
-		})
-	}
-}
-
 func TestConversationSendRules(t *testing.T) {
 	silenceLog(t)
 	tests := []struct {
@@ -525,7 +440,7 @@ func TestConversationSendRules(t *testing.T) {
 			name: "a direct message with a body",
 			access: store.ConversationAccess{
 				Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-				CanPost:      true,
+				MemberRole:   store.MemberRegular,
 			},
 			fields:     map[string]string{"body": "Good morning"},
 			wantStatus: http.StatusCreated,
@@ -536,7 +451,7 @@ func TestConversationSendRules(t *testing.T) {
 			name: "a direct message with only a file",
 			access: store.ConversationAccess{
 				Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-				CanPost:      true,
+				MemberRole:   store.MemberRegular,
 			},
 			fields:     map[string]string{},
 			filename:   "notice.pdf",
@@ -548,7 +463,7 @@ func TestConversationSendRules(t *testing.T) {
 			name: "a direct message with only a link",
 			access: store.ConversationAccess{
 				Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-				CanPost:      true,
+				MemberRole:   store.MemberRegular,
 			},
 			fields:     map[string]string{"link": "https://drive.google.com/file/x"},
 			wantStatus: http.StatusCreated,
@@ -558,7 +473,7 @@ func TestConversationSendRules(t *testing.T) {
 			name: "an empty message",
 			access: store.ConversationAccess{
 				Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-				CanPost:      true,
+				MemberRole:   store.MemberRegular,
 			},
 			fields:     map[string]string{"body": "   "},
 			wantStatus: http.StatusBadRequest,
@@ -568,52 +483,41 @@ func TestConversationSendRules(t *testing.T) {
 			name: "a broken link",
 			access: store.ConversationAccess{
 				Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-				CanPost:      true,
+				MemberRole:   store.MemberRegular,
 			},
 			fields:     map[string]string{"body": "see this", "link": "drive.google.com"},
 			wantStatus: http.StatusBadRequest,
 			wantError:  "Link must be a full link that starts with http:// or https://.",
 		},
 		{
-			name: "the group creator posts",
+			name: "the group admin posts",
 			access: store.ConversationAccess{
 				Conversation: store.Conversation{
-					ID: 5, Kind: store.ConversationGroup, Scope: store.ScopeSection,
-					Batch: chatBatch, Section: "A", CreatedBy: chatTeacherID,
+					ID: 5, Kind: store.ConversationGroup, Title: "CSE-23 section A",
+					CreatedBy: chatTeacherID,
 				},
-				CanPost: true,
+				MemberRole:  store.MemberAdmin,
+				MemberCount: 3,
 			},
 			fields:     map[string]string{"body": "Extra class tomorrow"},
 			wantStatus: http.StatusCreated,
 			wantBody:   "Extra class tomorrow",
-			wantNotify: "section",
+			wantNotify: "members",
 		},
 		{
-			name: "somebody else cannot post in a group",
+			name: "a plain member posts too",
 			access: store.ConversationAccess{
 				Conversation: store.Conversation{
-					ID: 5, Kind: store.ConversationGroup, Scope: store.ScopeSection,
-					Batch: chatBatch, Section: "A", CreatedBy: chatTeacherID,
+					ID: 5, Kind: store.ConversationGroup, Title: "CSE-23 section A",
+					CreatedBy: chatTeacherID,
 				},
-				CanPost: false,
+				MemberRole:  store.MemberRegular,
+				MemberCount: 3,
 			},
 			fields:     map[string]string{"body": "me too"},
-			wantStatus: http.StatusForbidden,
-			wantError:  MessageCannotPost,
-		},
-		{
-			name: "a group for every student notifies every student",
-			access: store.ConversationAccess{
-				Conversation: store.Conversation{
-					ID: 5, Kind: store.ConversationGroup, Scope: store.ScopeAllStudents,
-					CreatedBy: chatAdminID,
-				},
-				CanPost: true,
-			},
-			fields:     map[string]string{"body": "Holiday notice"},
 			wantStatus: http.StatusCreated,
-			wantBody:   "Holiday notice",
-			wantNotify: "all_students",
+			wantBody:   "me too",
+			wantNotify: "members",
 		},
 	}
 	for _, tc := range tests {
@@ -657,22 +561,19 @@ func TestConversationSendRules(t *testing.T) {
 				if alerts.users != 1 {
 					t.Errorf("direct notifications = %d, want 1", alerts.users)
 				}
-			case "section":
-				if alerts.calls != 1 || alerts.batch != chatBatch || alerts.section != "A" {
-					t.Errorf("broadcast = %d to %q/%q, want one to %q/A",
-						alerts.calls, alerts.batch, alerts.section, chatBatch)
+				if alerts.title != "New message from Active Teacher" {
+					t.Errorf("notification title = %q, want the sender name", alerts.title)
 				}
-				if alerts.role != auth.RoleStudent {
-					t.Errorf("broadcast role = %q, want %q", alerts.role, auth.RoleStudent)
+			case "members":
+				if alerts.users != len(chats.recipients) {
+					t.Errorf("member notifications = %d, want %d", alerts.users, len(chats.recipients))
 				}
-			case "all_students":
-				if alerts.calls != 1 || alerts.batch != "" || alerts.role != auth.RoleStudent {
-					t.Errorf("broadcast = %d to %q as %q, want one to every student",
-						alerts.calls, alerts.batch, alerts.role)
+				if alerts.calls != 0 {
+					t.Errorf("broadcasts = %d, want none for a member group", alerts.calls)
 				}
-			}
-			if alerts.title != "New message from Active Teacher" {
-				t.Errorf("notification title = %q, want the sender name", alerts.title)
+				if alerts.title != "Active Teacher in CSE-23 section A" {
+					t.Errorf("notification title = %q, want the sender and the group", alerts.title)
+				}
 			}
 		})
 	}
@@ -683,7 +584,7 @@ func TestConversationSendRejectsABadAttachment(t *testing.T) {
 	chats := newChatStore()
 	chats.access = store.ConversationAccess{
 		Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-		CanPost:      true,
+		MemberRole:   store.MemberRegular,
 	}
 	files := upload.NewAttachments(t.TempDir(), upload.DefaultAttachmentMB)
 	handler := newChatHandler(t, chats, files, &recordingAlerts{})
@@ -707,7 +608,7 @@ func TestConversationSendRemovesTheFileWhenTheStoreFails(t *testing.T) {
 	chats := newChatStore()
 	chats.access = store.ConversationAccess{
 		Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-		CanPost:      true,
+		MemberRole:   store.MemberRegular,
 	}
 	chats.createErr = errors.New("database is down")
 	files := upload.NewAttachments(t.TempDir(), upload.DefaultAttachmentMB)
@@ -743,17 +644,21 @@ func TestConversationListAndUnread(t *testing.T) {
 		},
 		{
 			Conversation: store.Conversation{
-				ID: 9, Kind: store.ConversationGroup, Scope: store.ScopeSection,
-				Batch: chatBatch, Section: "A", CreatedBy: chatTeacherID, LastMessageAt: &last,
+				ID: 9, Kind: store.ConversationGroup, Title: "CSE-23 section A",
+				CreatedBy: chatTeacherID, LastMessageAt: &last,
 			},
 			LastFileName: "slides.pptx",
 			UnreadCount:  2,
+			MemberRole:   store.MemberRegular,
+			MemberCount:  12,
 		},
 		{
 			Conversation: store.Conversation{
-				ID: 10, Kind: store.ConversationGroup, Scope: store.ScopeAllStudents,
-				CreatedBy: chatAdminID,
+				ID: 10, Kind: store.ConversationGroup, Title: "Lab helpers",
+				CreatedBy: chatTeacherID,
 			},
+			MemberRole:  store.MemberAdmin,
+			MemberCount: 4,
 		},
 	}
 	handler := newChatHandler(t, chats, &fakeFileStore{}, &recordingAlerts{})
@@ -772,17 +677,20 @@ func TestConversationListAndUnread(t *testing.T) {
 	if list[0]["can_post"] != true || list[0]["preview"] != "See you tomorrow" {
 		t.Errorf("direct conversation = %v, want it postable with a preview", list[0])
 	}
-	if list[1]["title"] != "CSE-23 · Section A" {
-		t.Errorf("group title = %v, want the section label", list[1]["title"])
+	if list[1]["title"] != "CSE-23 section A" {
+		t.Errorf("group title = %v, want the stored title", list[1]["title"])
 	}
-	if list[1]["can_post"] != false {
-		t.Error("a group created by somebody else should not be postable")
+	if list[1]["can_post"] != true || list[1]["member_role"] != store.MemberRegular {
+		t.Errorf("group = %v, want a member who can post", list[1])
+	}
+	if list[1]["member_count"] != float64(12) {
+		t.Errorf("member count = %v, want 12", list[1]["member_count"])
 	}
 	if list[1]["preview"] != "slides.pptx" {
 		t.Errorf("group preview = %v, want the file name", list[1]["preview"])
 	}
-	if list[2]["title"] != "All students" {
-		t.Errorf("group title = %v, want All students", list[2]["title"])
+	if list[2]["title"] != "Lab helpers" || list[2]["member_role"] != store.MemberAdmin {
+		t.Errorf("group = %v, want the admin's group", list[2])
 	}
 	if list[0]["unread_count"] != float64(2) {
 		t.Errorf("unread_count = %v, want 2", list[0]["unread_count"])
@@ -802,7 +710,7 @@ func TestConversationMessagesMarkTheConversationRead(t *testing.T) {
 	chats := newChatStore()
 	chats.access = store.ConversationAccess{
 		Conversation: store.Conversation{ID: 5, Kind: store.ConversationDirect},
-		CanPost:      true,
+		MemberRole:   store.MemberRegular,
 	}
 	chats.messages = []store.ChatMessageRow{
 		{

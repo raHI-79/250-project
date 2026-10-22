@@ -21,6 +21,9 @@ type fakeCatalogStore struct {
 	deleted       []int64
 	batchFilter   string
 	sectionFilter string
+	usage         store.CourseUsage
+	usageErr      error
+	deletedCourse []int64
 }
 
 func (f *fakeCatalogStore) CreateCourse(ctx context.Context, code, title string) (store.Course, error) {
@@ -69,6 +72,14 @@ func (f *fakeCatalogStore) ListRoutines(ctx context.Context, batch, section stri
 		return nil, f.err
 	}
 	return f.entries, nil
+}
+
+func (f *fakeCatalogStore) DeleteCourse(ctx context.Context, courseID int64) (store.CourseUsage, error) {
+	if f.usageErr != nil {
+		return f.usage, f.usageErr
+	}
+	f.deletedCourse = append(f.deletedCourse, courseID)
+	return store.CourseUsage{}, nil
 }
 
 func (f *fakeCatalogStore) DeleteRoutine(ctx context.Context, routineID int64) error {
@@ -422,6 +433,71 @@ func TestDeleteRoutine(t *testing.T) {
 			}
 			if len(catalog.deleted) != 1 || catalog.deleted[0] != 9 {
 				t.Errorf("deleted = %v, want [9]", catalog.deleted)
+			}
+		})
+	}
+}
+
+func TestDeleteCourseRules(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name       string
+		id         string
+		usage      store.CourseUsage
+		storeErr   error
+		wantStatus int
+		wantError  string
+	}{
+		{name: "deletes an unused course", id: "7", wantStatus: http.StatusOK},
+		{
+			name:       "an unknown course",
+			id:         "9",
+			storeErr:   store.ErrNotFound,
+			wantStatus: http.StatusNotFound,
+			wantError:  MessageCourseUnknown,
+		},
+		{
+			name:       "one routine entry",
+			id:         "4",
+			usage:      store.CourseUsage{Routines: 1},
+			storeErr:   store.ErrCourseInUse,
+			wantStatus: http.StatusConflict,
+			wantError:  "This course is still in use by 1 routine entry. Remove those first.",
+		},
+		{
+			name:       "routines, classes and drop courses",
+			id:         "4",
+			usage:      store.CourseUsage{Routines: 3, Items: 2, DropCourses: 1},
+			storeErr:   store.ErrCourseInUse,
+			wantStatus: http.StatusConflict,
+			wantError: "This course is still in use by 3 routine entries, 2 classes and exams and " +
+				"1 student with it as a drop course. Remove those first.",
+		},
+		{
+			name:       "a broken store",
+			id:         "4",
+			storeErr:   errors.New("database is down"),
+			wantStatus: http.StatusInternalServerError,
+			wantError:  "Internal server error",
+		},
+		{name: "an invalid id", id: "abc", wantStatus: http.StatusBadRequest, wantError: MessageInvalidID},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			catalog := &fakeCatalogStore{usage: test.usage, usageErr: test.storeErr}
+			rec := adminCall(t, NewCatalog(catalog).DeleteCourse(), http.MethodDelete,
+				"/api/admin/courses/"+test.id, test.id, "")
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantError != "" {
+				if got := errorMessage(t, rec); got != test.wantError {
+					t.Errorf("error = %q, want %q", got, test.wantError)
+				}
+				return
+			}
+			if len(catalog.deletedCourse) != 1 {
+				t.Errorf("deleted courses = %v, want one id", catalog.deletedCourse)
 			}
 		})
 	}

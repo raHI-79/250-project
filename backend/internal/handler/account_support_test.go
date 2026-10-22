@@ -181,6 +181,8 @@ type accountStore struct {
 	inviteTries   int
 	activateErr   error
 	searchErr     error
+	sections      map[string][]string
+	sectionsErr   error
 }
 
 func newAccountStore() *accountStore {
@@ -189,6 +191,7 @@ func newAccountStore() *accountStore {
 		invites:    make(map[string]store.TeacherInvite),
 		allowedIDs: make(map[int64]bool),
 		takenIDs:   make(map[string]bool),
+		sections:   make(map[string][]string),
 	}
 }
 
@@ -327,6 +330,13 @@ func (f *accountStore) IdentifierTaken(ctx context.Context, chosenID string) (bo
 		return false, f.takenErr
 	}
 	return f.takenIDs[strings.ToLower(chosenID)], nil
+}
+
+func (f *accountStore) ListSections(ctx context.Context, batch string) ([]string, error) {
+	if f.sectionsErr != nil {
+		return nil, f.sectionsErr
+	}
+	return f.sections[batch], nil
 }
 
 func newAccountAuth(t *testing.T, users AuthStore, photos PhotoStore, google googleauth.Validator, mail *fakeMailer) *Auth {

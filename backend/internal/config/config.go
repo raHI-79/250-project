@@ -61,6 +61,13 @@ type Config struct {
 	MailFrom        string
 	StudentDomain   string
 	GoogleClientID  string
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	VAPIDSubject    string
+}
+
+func (c *Config) PushEnabled() bool {
+	return c.VAPIDPublicKey != "" && c.VAPIDPrivateKey != "" && c.VAPIDSubject != ""
 }
 
 func Load() (*Config, error) {
@@ -86,6 +93,9 @@ func Load() (*Config, error) {
 		MailFrom:        os.Getenv("MAIL_FROM"),
 		StudentDomain:   strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
 		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
+		VAPIDPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
+		VAPIDPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
+		VAPIDSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL

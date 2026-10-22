@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import PhotoReminder from './PhotoReminder'
+import PushBanner from './PushBanner'
 import { useUnreadMessages } from '../../lib/hooks'
 import { MESSAGES_BADGE } from '../../lib/nav'
 
@@ -28,6 +29,7 @@ export default function AppShell({ groups, tone = 'brand', showBell = true }) {
         <Header onOpenMenu={() => setMenuOpen(true)} showBell={showBell} />
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div key={location.pathname} className="animate-fade-in-up mx-auto max-w-6xl">
+            <PushBanner />
             <PhotoReminder />
             <Outlet />
           </div>

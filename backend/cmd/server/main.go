@@ -9,6 +9,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/jobs"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/notify"
+	"github.com/raHI-79/250-project/backend/internal/push"
 	"github.com/raHI-79/250-project/backend/internal/server"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/upload"
@@ -62,6 +63,15 @@ func run() error {
 	}
 	userStore := store.New(pool)
 	alerts := notify.New(userStore)
+	var pushWorker *push.Worker
+	if cfg.PushEnabled() {
+		sender := push.NewSender(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
+		pushWorker = push.NewWorker(userStore, sender, push.QueueSize)
+		alerts = alerts.WithPush(pushWorker, cfg.FrontendOrigin)
+		log.Println("push: web push notifications are on")
+	} else {
+		log.Println("push: VAPID keys are missing, web push notifications stay off")
+	}
 	if cfg.HasAdminSeed() {
 		if err := seedAdmin(startupContext, userStore, cfg); err != nil {
 			return err
@@ -80,6 +90,7 @@ func run() error {
 			Users:    userStore,
 			Auth:     userStore,
 			Numbers:  userStore,
+			Devices:  userStore,
 			People:   userStore,
 			Catalog:  userStore,
 			Lookups:  userStore,
@@ -112,6 +123,9 @@ func run() error {
 	jobContext, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
 	go jobs.NewScheduler(cfg, userStore, alerts).Run(jobContext, jobs.Interval)
+	if pushWorker != nil {
+		pushWorker.Run(jobContext, push.Workers)
+	}
 	serverErrors := make(chan error, 1)
 	go func() {
 		log.Printf("server: listening on http://localhost:%s (env=%s, timezone=%s)", cfg.Port, cfg.AppEnv, cfg.Timezone)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, Plus } from 'lucide-react'
+import { BookOpen, Plus, Trash2 } from 'lucide-react'
 import {
   Alert,
   Button,
@@ -9,6 +9,7 @@ import {
   Input,
   PageHeader,
   SkeletonTable,
+  useConfirm,
   useToast,
 } from '../../components/ui'
 import api from '../../lib/api'
@@ -16,6 +17,8 @@ import { useResource } from '../../lib/hooks'
 
 export default function CoursesPage() {
   const toast = useToast()
+  const confirm = useConfirm()
+  const [removing, setRemoving] = useState(0)
   const [code, setCode] = useState('')
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
@@ -36,6 +39,34 @@ export default function CoursesPage() {
       setError(failure.message)
     } finally {
       setSaving(false)
+    }
+  }
+  const remove = async (course) => {
+    const ok = await confirm({
+      title: 'Delete this course?',
+      message: `${course.code} ${course.title} is removed from the catalogue. A course can only go when no routine entry, class, exam or drop course uses it.`,
+      confirmLabel: 'Delete the course',
+    })
+    if (!ok) return
+    setRemoving(course.id)
+    try {
+      await api.delete(`/api/admin/courses/${course.id}`)
+      toast.success('Course deleted')
+      reload()
+    } catch (failure) {
+      if (failure.status === 409) {
+        await confirm({
+          title: 'This course is still in use',
+          message: failure.message,
+          confirmLabel: 'Close',
+          cancelLabel: null,
+          tone: 'primary',
+        })
+        return
+      }
+      toast.error(failure.message)
+    } finally {
+      setRemoving(0)
     }
   }
   return (
@@ -68,7 +99,7 @@ export default function CoursesPage() {
       </Card>
       {listError && <Alert tone="error" className="mb-5">{listError}</Alert>}
       {loading ? (
-        <SkeletonTable columns={2} />
+        <SkeletonTable columns={3} />
       ) : items.length === 0 ? (
         <EmptyState icon={BookOpen} title="No courses" text="Add the first course above." />
       ) : (
@@ -77,6 +108,7 @@ export default function CoursesPage() {
             <tr className="border-b border-line bg-wash">
               <th className="px-4 py-3 font-semibold text-ink-soft">Code</th>
               <th className="px-4 py-3 font-semibold text-ink-soft">Title</th>
+              <th className="px-4 py-3 text-right font-semibold text-ink-soft">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -84,6 +116,19 @@ export default function CoursesPage() {
               <tr key={item.id} className="border-b border-line last:border-b-0">
                 <td className="px-4 py-3 font-medium text-ink">{item.code}</td>
                 <td className="px-4 py-3 text-ink-soft">{item.title}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={removing === item.id}
+                      onClick={() => remove(item)}
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </Button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

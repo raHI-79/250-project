@@ -168,7 +168,7 @@ func TestDeleteAccountKeepsTheContentOthersRelyOn(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateChatMessage() returned an unexpected error: %v", err)
 	}
-	if err := store.VoteInPoll(ctx, poll.ID, poll.Options[0].ID, crID, "CSE-23", "A"); err != nil {
+	if err := store.VoteInPoll(ctx, poll.ID, []int64{poll.Options[0].ID}, crID, "CSE-23", "A"); err != nil {
 		t.Fatalf("VoteInPoll() returned an unexpected error: %v", err)
 	}
 	removeAccount(t, ctx, pool, crID, StatusRemoved)
@@ -200,8 +200,8 @@ func TestDeleteAccountKeepsTheContentOthersRelyOn(t *testing.T) {
 	if len(polls) != 1 || polls[0].CreatedByName != "Deleted user" {
 		t.Fatalf("polls = %+v, want one poll by a deleted user", polls)
 	}
-	if polls[0].TotalVotes != 0 {
-		t.Errorf("total votes = %d, want 0 once the voter is deleted", polls[0].TotalVotes)
+	if polls[0].TotalVoters != 0 {
+		t.Errorf("total voters = %d, want 0 once the voter is deleted", polls[0].TotalVoters)
 	}
 	messages, err := store.ListChatMessages(ctx, conversation.ID, nil, 20)
 	if err != nil {

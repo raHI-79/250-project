@@ -38,4 +38,5 @@ Full requirements: [SPEC.md](SPEC.md)
 | 21 | A | Scheduling engine, notification links, course codes and verification paths | done |
 | 22 | B | Scheduling pages, messaging search and clickable notifications | done |
 | 23 | A | Interface redesign: design system, public home, sign-in and dashboard pages | done |
-| 24 | A+B | Push notifications, requirement updates, demo data, docs and CI | todo |
+| 24 | B | Course delete, section hints, multi-choice secret polls, group chats and push notifications | done |
+| 25 | A | Requirement updates, demo data, docs and CI | todo |

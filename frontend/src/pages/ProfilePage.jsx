@@ -19,6 +19,7 @@ import PhotoPicker from '../components/forms/PhotoPicker'
 import { useAuth } from '../context/auth'
 import api from '../lib/api'
 import { useResource } from '../lib/hooks'
+import { usePush } from '../lib/push'
 import { loginFor } from '../lib/paths'
 import { MAX_BIO, PHONE_MESSAGE, accountRoleLabel, isPhone, passwordError } from '../lib/account'
 import { formatDate } from '../lib/time'
@@ -51,6 +52,7 @@ function Section({ title, icon: Icon, actions, children }) {
 
 export default function ProfilePage() {
   const { role, updateUser, logout } = useAuth()
+  const push = usePush(role)
   const navigate = useNavigate()
   const toast = useToast()
   const { data, loading, error, reload } = useResource('/api/profile')
@@ -425,6 +427,28 @@ export default function ProfilePage() {
             )}
           </Section>
           <Section title="Security" icon={ShieldCheck}>
+            {push.allowed && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border border-line bg-wash px-3 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink">Notifications on this device</p>
+                  <p className="text-sm text-muted">
+                    {push.enabled
+                      ? 'This browser receives class, exam, notice and message alerts.'
+                      : 'Turn this on to get alerts while the site is closed.'}
+                    {push.error ? ` ${push.error}` : ''}
+                  </p>
+                </div>
+                <Button
+                  variant={push.enabled ? 'secondary' : 'primary'}
+                  size="sm"
+                  loading={push.busy}
+                  onClick={push.enabled ? push.unsubscribe : push.subscribe}
+                  aria-pressed={push.enabled}
+                >
+                  {push.enabled ? 'Turn off' : 'Turn on'}
+                </Button>
+              </div>
+            )}
             <form onSubmit={changePassword} className="flex flex-col gap-3 pt-1">
               {passwordProblem && <Alert tone="error">{passwordProblem}</Alert>}
               <Input

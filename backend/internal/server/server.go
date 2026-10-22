@@ -29,6 +29,7 @@ type Dependencies struct {
 	Users     middleware.UserStore
 	Auth      handler.AuthStore
 	Numbers   handler.PublicStore
+	Devices   handler.PushStore
 	People    handler.AdminStore
 	Catalog   handler.CatalogStore
 	Lookups   handler.LookupStore
@@ -90,6 +91,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
 	mux.HandleFunc("POST /api/auth/register", authHandler.Register())
 	throttled.Handle("GET /api/auth/drop-course-options", authHandler.DropCourseOptions())
+	throttled.Handle("GET /api/auth/sections", authHandler.Sections())
 	throttled.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())
 	throttled.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
 	throttled.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())
@@ -108,6 +110,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
+	registerPushRoutes(mux, deps, handler.NewPush(deps.Config, deps.Devices))
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Alarms))
 	authenticated.Handle("PATCH /api/schedule/items/{id}/link",
 		handler.NewSchedule(deps.Config, deps.Items, deps.Alarms).Link())
@@ -276,6 +279,13 @@ func registerMessageRoutes(mux *http.ServeMux, deps Dependencies, messages *hand
 	group.Handle("GET /api/messages/conversations/{id}/messages", messages.Messages())
 	group.Handle("POST /api/messages/conversations/{id}/messages", messages.Send())
 	group.Handle("GET /api/messages/unread-count", messages.UnreadCount())
+	group.Handle("PATCH /api/messages/conversations/{id}", messages.Rename())
+	group.Handle("GET /api/messages/conversations/{id}/members", messages.Members())
+	group.Handle("POST /api/messages/conversations/{id}/members", messages.AddMembers())
+	group.Handle("DELETE /api/messages/conversations/{id}/members/{user_id}", messages.RemoveMember())
+	group.Handle("POST /api/messages/conversations/{id}/members/{user_id}/admin", messages.SetMemberAdmin(true))
+	group.Handle("DELETE /api/messages/conversations/{id}/members/{user_id}/admin", messages.SetMemberAdmin(false))
+	group.Handle("POST /api/messages/conversations/{id}/leave", messages.Leave())
 }
 
 func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Poll) {
@@ -307,6 +317,13 @@ func registerLookupRoutes(group RouteGroup, lookups *handler.Lookups) {
 	group.Handle("GET /api/lookups/teachers", lookups.Teachers())
 }
 
+func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.Push) {
+	mux.HandleFunc("GET /api/push/public-key", pushes.PublicKey())
+	group := NotificationGroup(mux, deps)
+	group.Handle("POST /api/push/subscribe", pushes.Subscribe())
+	group.Handle("DELETE /api/push/subscribe", pushes.Unsubscribe())
+}
+
 func registerNotificationRoutes(group RouteGroup, notifications *handler.Notifications) {
 	group.Handle("GET /api/notifications", notifications.List())
 	group.Handle("GET /api/notifications/unread-count", notifications.UnreadCount())
@@ -333,6 +350,7 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("GET /api/admin/stats", admin.Stats())
 	group.Handle("POST /api/admin/courses", catalog.CreateCourse())
 	group.Handle("GET /api/admin/courses", catalog.Courses())
+	group.Handle("DELETE /api/admin/courses/{id}", catalog.DeleteCourse())
 	group.Handle("POST /api/admin/routines", catalog.CreateRoutine())
 	group.Handle("GET /api/admin/routines", catalog.Routines())
 	group.Handle("DELETE /api/admin/routines/{id}", catalog.DeleteRoutine())

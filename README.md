@@ -306,13 +306,35 @@ cancelled classes struck through, and the notes. `Exams` lists every exam with
 its syllabus and instructions, and either the time and the place or
 `Time to be announced`. A class representative sees exactly the same pages.
 
-### Messaging and notifications
+### Messaging and group chats
 
 The conversation list carries a WhatsApp-like search bar with the filter chips
 `All · Teachers · CRs · Students · Office`. Typing shows the people who match
-with their role and batch or designation, plus the groups the caller is allowed
-to start; clicking one opens or reuses that conversation. `?c=` opens a
-conversation straight from a link, which is how a message notification lands.
+with their role and batch or designation; clicking one opens or reuses that
+direct conversation. `?c=` opens a conversation straight from a link, which is
+how a message notification lands.
+
+Group chats have real members. Only a teacher or a class representative starts
+one, with a name, a people picker and an `Add whole batch` picker; a CR may add
+whole batches only for their own batch, a teacher any batch. The creator becomes
+the first group admin. Every member posts, sees the member list and can leave.
+Group admins add and remove members, hand the admin role out or take it back and
+rename the group; a group always keeps at least one admin, and when the last one
+leaves, the earliest member takes over. Nobody outside the member list can read
+or post, and each message notifies every member except its sender.
+
+### Polls
+
+A class representative sets how many options each student may pick
+(`Each student may choose up to N options`, 1 to the number of options). A vote
+carries 1 to `max_choices` distinct options of that poll and is accepted once
+per student; a second attempt answers `409`.
+
+Votes are secret. Every response, for the student, the CR, the teacher and the
+office alike, carries only the count per option, the number of voters and
+`my_option_ids` for the caller. No endpoint and no store method returns who
+voted for what, and tests cover both the shape of the responses and the store
+rows.
 
 Every notification is a button. `notificationTarget(link, role)` turns the
 `link` the API sends into the right page for the reader, so a teacher and a
@@ -361,6 +383,38 @@ line and the greeting on each dashboard home), `PageHeader` (an eyebrow over a
 serif title), `DateBlock` (the calendar block on notices and exams),
 `TimelineItem` (the time rail on every routine) and `IdentityCard` (the ID card
 on a profile).
+
+### Browser push notifications
+
+Students, CRs and teachers can receive notifications on a device even while the
+site is closed; the office never does. Every stored notification queues a push
+on a small background worker with a 24 hour TTL, and a subscription that answers
+`404` or `410` is deleted.
+
+Set three values in `backend/.env` to switch it on:
+
+| Variable | What it holds |
+|---|---|
+| `VAPID_PUBLIC_KEY` | The public VAPID key the browser subscribes with |
+| `VAPID_PRIVATE_KEY` | The private VAPID key; keep it out of git and out of logs |
+| `VAPID_SUBJECT` | A `mailto:` address the push services can reach you at |
+
+With any of them missing the feature stays off: `GET /api/push/public-key`
+answers `enabled: false`, the frontend never asks for permission and nothing is
+queued.
+
+In the browser, `public/sw.js` shows the notification and, on click, focuses an
+open tab and navigates it to the page the notification points at, or opens a new
+window. After signing in, students, CRs and teachers see one dismissible
+`Get notifications on this device` banner, and `My profile → Security` has the
+switch for this device. Signing out removes that device's subscription.
+
+Browsers only allow push on `https://`, with `http://localhost` as the single
+exception, so test on a phone through a tunnel or a real certificate, not
+through `http://192.168.x.x`. On an iPhone, Safari only delivers push after the
+site is installed: open it in Safari, use `Share → Add to Home Screen`, open it
+from that icon and turn the switch on there. `public/manifest.webmanifest` gives
+the installed app its name (`SUST CSE Portal`), its maroon theme and its icons.
 
 ### Campus photos
 
@@ -412,6 +466,8 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/health` | public | `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
 | `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
 | `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
+| `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students |
+| `GET` | `/api/push/public-key` | public | `enabled` and the VAPID `public_key` when web push is set up |
 | `POST` | `/api/auth/register` | public | `multipart/form-data` student registration with a required photo; `201` on success |
 | `POST` | `/api/auth/verify-email` | public, rate limited | `{reg_no, code}` turns an `unverified` account into `pending` |
 | `POST` | `/api/auth/resend-verification` | public, rate limited | `{reg_no}` sends a new 6-digit code; `429` inside the 60 second cooldown |
@@ -451,6 +507,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
 | `POST` | `/api/admin/courses` | admin | Adds a course; the code is stored in upper case, `409` on a duplicate |
 | `GET` | `/api/admin/courses` | admin | Every course, sorted by code |
+| `DELETE` | `/api/admin/courses/{id}` | admin | Deletes a course nothing uses; `409` naming the routine entries, classes, exams and drop course students that still hold it |
 | `POST` | `/api/admin/routines` | admin | Adds a fixed routine entry; `400` on a broken rule, `409` on a room clash |
 | `GET` | `/api/admin/routines` | admin | Routine entries with the `batch` and `section` filters |
 | `DELETE` | `/api/admin/routines/{id}` | admin | Deletes one entry; `204` on success, `404` if it does not exist |
@@ -510,15 +567,24 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/messages/contacts` | any signed-in role | Up to 20 active people matched by `search`, narrowed with `role`; carries `photo_url` |
 | `GET` | `/api/messages/conversations` | any signed-in role | Everything visible to the caller, newest activity first, with `title`, `can_post`, a preview and `unread_count` |
 | `POST` | `/api/messages/direct` | any signed-in role | `{user_id}` opens or reuses the one-to-one conversation with that person |
-| `POST` | `/api/messages/groups` | any signed-in role | `{scope, batch?, section?}` opens or reuses a group the caller's role may start |
+| `POST` | `/api/messages/groups` | teacher, CR | `{title, user_ids[], batches[{batch, section?}]}` makes a group; the caller becomes its group admin, `403` for students and the office |
+| `GET` | `/api/messages/conversations/{id}/members` | members | The member list with each one's group role and the time they joined |
+| `POST` | `/api/messages/conversations/{id}/members` | group admins | `{user_ids, batches}` adds people; a CR may only add their own batch |
+| `DELETE` | `/api/messages/conversations/{id}/members/{user_id}` | group admins | Removes a member; `409` on the last group admin |
+| `POST` | `/api/messages/conversations/{id}/members/{user_id}/admin` | group admins | Makes that member a group admin |
+| `DELETE` | `/api/messages/conversations/{id}/members/{user_id}/admin` | group admins | Takes the group admin role back; `409` on the last one |
+| `PATCH` | `/api/messages/conversations/{id}` | group admins | `{title}` renames the group |
+| `POST` | `/api/messages/conversations/{id}/leave` | members | Leaves the group; the earliest member becomes admin if the last admin leaves |
 | `GET` | `/api/messages/conversations/{id}/messages` | any signed-in role | Newest first with `before` and `limit`; marks the conversation read |
 | `POST` | `/api/messages/conversations/{id}/messages` | any signed-in role | `multipart/form-data` with `body`, `link` and `file`; at least one is required |
 | `GET` | `/api/messages/unread-count` | any signed-in role | How many unread messages the caller has across every conversation |
-| `POST` | `/api/cr/polls` | CR | `{question, options, scope}`; 2 to 10 unique options, `scope` is `section` or `batch` |
+| `POST` | `/api/cr/polls` | CR | `{question, options, scope, max_choices}`; 2 to 10 unique options, `scope` is `section` or `batch`, `max_choices` is 1 to the number of options |
 | `POST` | `/api/cr/polls/{id}/close` | CR | Closes one of this CR's own polls; `404` otherwise, `409` if it is already closed |
 | `GET` | `/api/cr/polls` | CR | The polls this CR made, with the counted results |
-| `GET` | `/api/students/polls` | student, CR | Polls for the own batch and section with `options`, `total_votes` and `my_option_id` |
-| `POST` | `/api/students/polls/{id}/vote` | student, CR | `{option_id}`; `409` when the poll is closed or the student already voted |
+| `GET` | `/api/students/polls` | student, CR | Polls for the own batch and section with `options`, `max_choices`, `total_voters` and `my_option_ids` |
+| `POST` | `/api/students/polls/{id}/vote` | student, CR | `{option_ids}`; 1 to `max_choices` distinct options, `409` when the poll is closed or the student already voted |
+| `POST` | `/api/push/subscribe` | student, CR, teacher | `{endpoint, keys:{p256dh, auth}, user_agent?}` stores this browser; `503` when the server has no VAPID keys |
+| `DELETE` | `/api/push/subscribe` | student, CR, teacher | `{endpoint}` forgets this browser |
 | `GET` | `/uploads/{name}` | public | Serves one older uploaded PDF inline; only the generated file names resolve, anything else is `404` |
 | `GET` | `/uploads/files/{name}` | public | Serves one attachment with its real type and `nosniff`; images and PDFs inline, everything else as a download |
 | `GET` | `/uploads/photos/{name}` | public | Serves one profile photo inline with `nosniff`; only the generated names resolve |

@@ -178,90 +178,115 @@ func TestGetOrCreateDirect(t *testing.T) {
 	if _, err := store.GetOrCreateDirect(ctx, people["student"], 999999); !errors.Is(err, ErrInactiveTarget) {
 		t.Errorf("an unknown target error = %v, want ErrInactiveTarget", err)
 	}
-	recipient, err := store.DirectRecipient(ctx, first.ID, people["student"])
+	recipients, err := store.ConversationRecipients(ctx, first.ID, people["student"])
 	if err != nil {
-		t.Fatalf("DirectRecipient() returned an unexpected error: %v", err)
+		t.Fatalf("ConversationRecipients() returned an unexpected error: %v", err)
 	}
-	if recipient != people["teacher"] {
-		t.Errorf("recipient = %d, want %d", recipient, people["teacher"])
+	if len(recipients) != 1 || recipients[0] != people["teacher"] {
+		t.Errorf("recipients = %v, want only the teacher", recipients)
 	}
 }
 
-func TestGroupVisibilityAndPosting(t *testing.T) {
+func TestGroupMembershipRules(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	people := seedChatPeople(t, ctx, pool)
-	batchGroup, err := store.GetOrCreateGroup(ctx, NewGroup{
-		Scope: ScopeBatch, Batch: "CSE-23", CreatedBy: people["teacher"],
+	group, err := store.CreateGroup(ctx, NewGroup{
+		Title:     "CSE-23 section A",
+		CreatedBy: people["teacher"],
+		Members:   []int64{people["student"], people["cr"]},
 	})
 	if err != nil {
-		t.Fatalf("GetOrCreateGroup() returned an unexpected error: %v", err)
+		t.Fatalf("CreateGroup() returned an unexpected error: %v", err)
 	}
-	same, err := store.GetOrCreateGroup(ctx, NewGroup{
-		Scope: ScopeBatch, Batch: "CSE-23", CreatedBy: people["teacher"],
-	})
+	if group.Title != "CSE-23 section A" || group.Kind != ConversationGroup {
+		t.Fatalf("group = %+v, want a titled group", group)
+	}
+	members, err := store.ListConversationMembers(ctx, group.ID)
 	if err != nil {
-		t.Fatalf("GetOrCreateGroup() returned an unexpected error: %v", err)
+		t.Fatalf("ListConversationMembers() returned an unexpected error: %v", err)
 	}
-	if same.ID != batchGroup.ID {
-		t.Errorf("the second call made group %d, want %d", same.ID, batchGroup.ID)
+	if len(members) != 3 {
+		t.Fatalf("the group holds %d members, want 3", len(members))
 	}
-	sectionGroup, err := store.GetOrCreateGroup(ctx, NewGroup{
-		Scope: ScopeSection, Batch: "CSE-23", Section: "A", CreatedBy: people["teacher"],
-	})
+	roles := make(map[int64]string)
+	for _, member := range members {
+		roles[member.UserID] = member.Role
+	}
+	if roles[people["teacher"]] != MemberAdmin {
+		t.Errorf("the creator is %q, want the group admin", roles[people["teacher"]])
+	}
+	if roles[people["student"]] != MemberRegular {
+		t.Errorf("an added student is %q, want a member", roles[people["student"]])
+	}
+	for _, viewerName := range []string{"teacher", "student", "cr"} {
+		viewer := viewerOf(t, ctx, store, people[viewerName])
+		access, err := store.FindConversationAccess(ctx, group.ID, viewer)
+		if err != nil {
+			t.Fatalf("FindConversationAccess() for %s returned an unexpected error: %v", viewerName, err)
+		}
+		if access.MemberCount != 3 {
+			t.Errorf("%s sees %d members, want 3", viewerName, access.MemberCount)
+		}
+	}
+	outsider := viewerOf(t, ctx, store, people["other"])
+	if _, err := store.FindConversationAccess(ctx, group.ID, outsider); !errors.Is(err, ErrNotFound) {
+		t.Errorf("an outsider access error = %v, want ErrNotFound", err)
+	}
+	added, err := store.AddConversationMembers(ctx, group.ID, people["teacher"],
+		[]int64{people["other"], people["student"]})
 	if err != nil {
-		t.Fatalf("GetOrCreateGroup() returned an unexpected error: %v", err)
+		t.Fatalf("AddConversationMembers() returned an unexpected error: %v", err)
 	}
-	allStudents, err := store.GetOrCreateGroup(ctx, NewGroup{
-		Scope: ScopeAllStudents, CreatedBy: people["admin"],
-	})
+	if added != 1 {
+		t.Errorf("added %d members, want only the new one", added)
+	}
+	if err := store.RemoveConversationMember(ctx, group.ID, people["other"]); err != nil {
+		t.Fatalf("RemoveConversationMember() returned an unexpected error: %v", err)
+	}
+	if err := store.RemoveConversationMember(ctx, group.ID, people["other"]); !errors.Is(err, ErrNotAMember) {
+		t.Errorf("removing a stranger error = %v, want ErrNotAMember", err)
+	}
+	if err := store.RemoveConversationMember(ctx, group.ID, people["teacher"]); !errors.Is(err, ErrLastAdmin) {
+		t.Errorf("removing the last admin error = %v, want ErrLastAdmin", err)
+	}
+	if err := store.SetConversationMemberAdmin(ctx, group.ID, people["teacher"], false); !errors.Is(err, ErrLastAdmin) {
+		t.Errorf("demoting the last admin error = %v, want ErrLastAdmin", err)
+	}
+	if err := store.SetConversationMemberAdmin(ctx, group.ID, people["cr"], true); err != nil {
+		t.Fatalf("SetConversationMemberAdmin() returned an unexpected error: %v", err)
+	}
+	if err := store.SetConversationMemberAdmin(ctx, group.ID, people["teacher"], false); err != nil {
+		t.Fatalf("demoting the second admin returned an unexpected error: %v", err)
+	}
+	if err := store.RenameConversation(ctx, group.ID, "CSE-23 lab group"); err != nil {
+		t.Fatalf("RenameConversation() returned an unexpected error: %v", err)
+	}
+	viewer := viewerOf(t, ctx, store, people["cr"])
+	access, err := store.FindConversationAccess(ctx, group.ID, viewer)
 	if err != nil {
-		t.Fatalf("GetOrCreateGroup() returned an unexpected error: %v", err)
+		t.Fatalf("FindConversationAccess() returned an unexpected error: %v", err)
 	}
-	allTeachers, err := store.GetOrCreateGroup(ctx, NewGroup{
-		Scope: ScopeAllTeachers, CreatedBy: people["admin"],
-	})
+	if access.Title != "CSE-23 lab group" || !access.IsAdmin() {
+		t.Errorf("access = %+v, want the new title and the promoted admin", access)
+	}
+	if err := store.LeaveConversation(ctx, group.ID, people["cr"]); err != nil {
+		t.Fatalf("LeaveConversation() returned an unexpected error: %v", err)
+	}
+	after, err := store.ListConversationMembers(ctx, group.ID)
 	if err != nil {
-		t.Fatalf("GetOrCreateGroup() returned an unexpected error: %v", err)
+		t.Fatalf("ListConversationMembers() returned an unexpected error: %v", err)
 	}
-	tests := []struct {
-		name        string
-		viewer      string
-		group       int64
-		wantVisible bool
-		wantPost    bool
-	}{
-		{name: "the creator sees the batch group", viewer: "teacher", group: batchGroup.ID, wantVisible: true, wantPost: true},
-		{name: "a student of the batch sees it", viewer: "student", group: batchGroup.ID, wantVisible: true},
-		{name: "the batch class representative sees it", viewer: "cr", group: batchGroup.ID, wantVisible: true},
-		{name: "another batch does not see it", viewer: "other", group: batchGroup.ID},
-		{name: "another teacher does not see it", viewer: "teacher2", group: batchGroup.ID},
-		{name: "the admin does not see somebody else's group", viewer: "admin", group: batchGroup.ID},
-		{name: "section A sees the section group", viewer: "student", group: sectionGroup.ID, wantVisible: true},
-		{name: "section B does not see it", viewer: "sectionB", group: sectionGroup.ID},
-		{name: "every student sees the all students group", viewer: "student", group: allStudents.ID, wantVisible: true},
-		{name: "another batch sees the all students group", viewer: "other", group: allStudents.ID, wantVisible: true},
-		{name: "a teacher does not see the all students group", viewer: "teacher", group: allStudents.ID},
-		{name: "a teacher sees the all teachers group", viewer: "teacher", group: allTeachers.ID, wantVisible: true},
-		{name: "a student does not see the all teachers group", viewer: "student", group: allTeachers.ID},
-		{name: "the admin posts in its own group", viewer: "admin", group: allStudents.ID, wantVisible: true, wantPost: true},
+	admins := 0
+	for _, member := range after {
+		if member.Role == MemberAdmin {
+			admins++
+		}
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			viewer := viewerOf(t, ctx, store, people[tc.viewer])
-			access, err := store.FindConversationAccess(ctx, tc.group, viewer)
-			if !tc.wantVisible {
-				if !errors.Is(err, ErrNotFound) {
-					t.Fatalf("FindConversationAccess() error = %v, want ErrNotFound", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("FindConversationAccess() returned an unexpected error: %v", err)
-			}
-			if access.CanPost != tc.wantPost {
-				t.Errorf("can post = %t, want %t", access.CanPost, tc.wantPost)
-			}
-		})
+	if len(after) != 2 || admins != 1 {
+		t.Errorf("after the last admin left: %d members with %d admins, want 2 and 1", len(after), admins)
+	}
+	if err := store.LeaveConversation(ctx, group.ID, people["other"]); !errors.Is(err, ErrNotAMember) {
+		t.Errorf("leaving a group you are not in error = %v, want ErrNotAMember", err)
 	}
 }
 
@@ -272,11 +297,13 @@ func TestConversationListAndUnreadCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() returned an unexpected error: %v", err)
 	}
-	group, err := store.GetOrCreateGroup(ctx, NewGroup{
-		Scope: ScopeSection, Batch: "CSE-23", Section: "A", CreatedBy: people["teacher"],
+	group, err := store.CreateGroup(ctx, NewGroup{
+		Title:     "CSE-23 section A",
+		CreatedBy: people["teacher"],
+		Members:   []int64{people["student"]},
 	})
 	if err != nil {
-		t.Fatalf("GetOrCreateGroup() returned an unexpected error: %v", err)
+		t.Fatalf("CreateGroup() returned an unexpected error: %v", err)
 	}
 	for _, message := range []NewChatMessage{
 		{ConversationID: direct.ID, SenderID: people["teacher"], Body: "Are you coming?"},

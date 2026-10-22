@@ -9,10 +9,13 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 const (
 	MessageCourseCreated    = "Course added."
+	MessageCourseDeleted    = "Course deleted."
 	MessageDuplicateCourse  = "A course with this code already exists."
 	MessageCourseUnknown    = "No course found with this ID."
 	MessageTeacherNotActive = "This teacher account is not active."
@@ -25,6 +28,7 @@ type CatalogStore interface {
 	CreateRoutine(ctx context.Context, routine store.NewRoutine) (store.RoutineRow, error)
 	ListRoutines(ctx context.Context, batch, section string) ([]store.RoutineRow, error)
 	DeleteRoutine(ctx context.Context, routineID int64) error
+	DeleteCourse(ctx context.Context, courseID int64) (store.CourseUsage, error)
 }
 
 type Catalog struct {
@@ -115,4 +119,57 @@ func courseItems(courses []store.Course) []courseItem {
 		items = append(items, courseItem{ID: course.ID, Code: course.Code, Title: course.Title})
 	}
 	return items
+}
+
+func (c *Catalog) DeleteCourse() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		courseID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		usage, err := c.catalog.DeleteCourse(r.Context(), courseID)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessageCourseUnknown)
+		case errors.Is(err, store.ErrCourseInUse):
+			httpx.WriteError(w, http.StatusConflict, courseInUseMessage(usage))
+		case err != nil:
+			log.Printf("handler: could not delete a course: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageCourseDeleted})
+		}
+	}
+}
+
+func courseInUseMessage(usage store.CourseUsage) string {
+	parts := make([]string, 0, 3)
+	if usage.Routines > 0 {
+		parts = append(parts, plural(usage.Routines, "routine entry", "routine entries"))
+	}
+	if usage.Items > 0 {
+		parts = append(parts, plural(usage.Items, "class or exam", "classes and exams"))
+	}
+	if usage.DropCourses > 0 {
+		parts = append(parts, plural(usage.DropCourses, "student", "students")+" with it as a drop course")
+	}
+	return "This course is still in use by " + join(parts) + ". Remove those first."
+}
+
+func plural(count int, one, many string) string {
+	if count == 1 {
+		return strconv.Itoa(count) + " " + one
+	}
+	return strconv.Itoa(count) + " " + many
+}
+
+func join(parts []string) string {
+	switch len(parts) {
+	case 0:
+		return "the department"
+	case 1:
+		return parts[0]
+	default:
+		return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
+	}
 }
