@@ -15,19 +15,22 @@ import {
   useToast,
 } from '../../../components/ui'
 import api from '../../../lib/api'
+import { usePeriods } from '../../../lib/hooks'
 import {
   MODE_ROOM,
   ORIGIN_TEACHER_EXAM,
   courseLine,
+  periodRangeError,
   placeOf,
   sectionShort,
   slotError,
 } from '../../../lib/schedule'
-import { formatDate, formatTimeRange, timeRangeError } from '../../../lib/time'
+import { formatDate, formatTimeRange } from '../../../lib/time'
 import cx from '../../../lib/cx'
 
 export default function FinalTab({ final, highlight, onPublished }) {
   const toast = useToast()
+  const periods = usePeriods()
   const confirm = useConfirm()
   const [picked, setPicked] = useState([])
   const [editing, setEditing] = useState(null)
@@ -57,7 +60,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
     })
   }
   const saveEdit = async (item) => {
-    const timeProblem = timeRangeError(draft.start, draft.end)
+    const timeProblem = periodRangeError(periods, draft.start, draft.end)
     const found = timeProblem || slotError(draft.mode, draft.room, draft.meeting_link)
     if (found) {
       toast.error(found)
@@ -197,6 +200,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
                       {editing === item.id ? (
                         <div className="mt-3 flex flex-col gap-4 rounded-md border border-line bg-wash/40 p-3">
                           <TimeRangeFields
+                            periods={periods}
                             start={draft.start}
                             end={draft.end}
                             onStartChange={(value) =>

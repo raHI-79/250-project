@@ -1,3 +1,5 @@
+import { formatClock } from './time'
+
 export const MODE_ROOM = 'room'
 
 export const MODE_ONLINE = 'online'
@@ -86,9 +88,11 @@ export const allows = (item, action) => (item?.allowed_actions || []).includes(a
 
 export const isOnline = (item) => item?.mode === MODE_ONLINE
 
+export const needsLink = (item) => isOnline(item) && !String(item?.meeting_link || '').trim()
+
 export const placeOf = (item) => {
   if (!item) return ''
-  if (isOnline(item)) return 'Online'
+  if (isOnline(item)) return needsLink(item) ? 'Online · Link coming soon' : 'Online'
   return item.room || ''
 }
 
@@ -105,9 +109,9 @@ export const courseLine = (item) => {
 }
 
 export const slotError = (mode, room, link) => {
+  const address = String(link || '').trim()
   if (mode === MODE_ONLINE) {
-    if (!String(link || '').trim()) return 'A meeting link is required for an online class.'
-    if (!/^https?:\/\/\S+$/i.test(String(link).trim()))
+    if (address && !/^https?:\/\/\S+$/i.test(address))
       return 'The meeting link must start with http:// or https://.'
     return ''
   }
@@ -134,4 +138,39 @@ export const secondsUntilClock = (clock) => {
   const target = new Date(now)
   target.setHours(hour, minute, 0, 0)
   return Math.max(0, Math.round((target.getTime() - now.getTime()) / 1000))
+}
+
+export const teachingPeriods = (periods) => (periods || []).filter((period) => !period.is_break)
+
+export const periodEndOptions = (periods, start) => {
+  const ordered = [...(periods || [])].sort((left, right) =>
+    left.start_time.localeCompare(right.start_time),
+  )
+  const first = ordered.findIndex((period) => period.start_time === start)
+  if (first < 0) return []
+  const options = []
+  for (let index = first; index < ordered.length; index += 1) {
+    if (ordered[index].is_break) break
+    options.push(ordered[index])
+  }
+  return options
+}
+
+export const periodRangeError = (periods, start, end) => {
+  if (!start || !end) return ''
+  if (start >= end) return 'The start time must be before the end time.'
+  const teaching = teachingPeriods(periods)
+  if (teaching.length === 0) return ''
+  const opening = teaching.reduce((lowest, period) =>
+    period.start_time < lowest ? period.start_time : lowest, teaching[0].start_time)
+  const closing = teaching.reduce((highest, period) =>
+    period.end_time > highest ? period.end_time : highest, teaching[0].end_time)
+  if (start < opening || end > closing) {
+    return `Classes run from ${formatClock(opening)} to ${formatClock(closing)}.`
+  }
+  const broken = (periods || []).find(
+    (period) => period.is_break && start < period.end_time && period.start_time < end,
+  )
+  if (broken) return `Classes cannot run during ${broken.label}.`
+  return ''
 }

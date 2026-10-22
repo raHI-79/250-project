@@ -4,6 +4,11 @@ import api from './api'
 
 const NO_QUERY = {}
 
+export const usePeriods = () => {
+  const { data } = useResource('/api/lookups/periods')
+  return data?.items || []
+}
+
 export const useResource = (path, query) => {
   const key = JSON.stringify(query || NO_QUERY)
   const [data, setData] = useState(null)

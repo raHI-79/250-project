@@ -4,9 +4,11 @@ import {
   CalendarDays,
   CalendarPlus,
   ClipboardList,
+  Clock,
   FolderOpen,
   GaugeCircle,
   GraduationCap,
+  Library,
   Link2,
   Mail,
   Megaphone,
@@ -28,6 +30,7 @@ const overview = [
   { label: 'Upcoming routine', to: paths.student.upcomingRoutine, icon: CalendarClock },
   { label: 'Exams', to: paths.student.exams, icon: ClipboardList },
   { label: 'Weekly routine', to: paths.student.fixedRoutine, icon: BookOpen },
+  { label: 'Courses', to: paths.student.courses, icon: Library },
 ]
 
 const communication = [
@@ -86,6 +89,7 @@ export const adminNav = [
       { label: 'CRs', to: paths.admin.crs, icon: UserCog },
       { label: 'Teachers', to: paths.admin.teachers, icon: GraduationCap },
       { label: 'Courses', to: paths.admin.courses, icon: BookOpen },
+      { label: 'Class periods', to: paths.admin.periods, icon: Clock },
       { label: 'Routines', to: paths.admin.routines, icon: CalendarDays },
       { label: 'Notices', to: paths.admin.notices, icon: Megaphone },
       { label: 'Messages', to: paths.admin.messages, icon: Mail, badge: MESSAGES_BADGE },

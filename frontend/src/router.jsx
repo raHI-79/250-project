@@ -13,6 +13,7 @@ import PersonPage from './pages/PersonPage'
 import TodayPage from './pages/student/TodayPage'
 import UpcomingRoutinePage from './pages/student/UpcomingRoutinePage'
 import ExamsPage from './pages/student/ExamsPage'
+import CoursesStudentPage from './pages/student/CoursesPage'
 import FixedRoutinePage from './pages/student/FixedRoutinePage'
 import NoticesPage from './pages/NoticesPage'
 import MaterialsPage from './pages/student/MaterialsPage'
@@ -34,6 +35,7 @@ import AdminStudentsPage from './pages/admin/AdminStudentsPage'
 import CRsPage from './pages/admin/CRsPage'
 import AdminTeachersPage from './pages/admin/AdminTeachersPage'
 import CoursesPage from './pages/admin/CoursesPage'
+import ClassPeriodsPage from './pages/admin/ClassPeriodsPage'
 import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
 import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
 import ActivityLogPage from './pages/admin/ActivityLogPage'
@@ -86,6 +88,7 @@ export default function Router() {
           <Route path={paths.student.upcomingRoutine()} element={<UpcomingRoutinePage />} />
           <Route path={paths.student.exams()} element={<ExamsPage />} />
           <Route path={paths.student.fixedRoutine()} element={<FixedRoutinePage />} />
+          <Route path={paths.student.courses()} element={<CoursesStudentPage />} />
           <Route path={paths.student.notices()} element={<NoticesPage />} />
           <Route path={paths.student.materials()} element={<MaterialsPage />} />
           <Route path={paths.student.students()} element={<StudentsDirectoryPage />} />
@@ -127,6 +130,7 @@ export default function Router() {
           <Route path={paths.admin.crs()} element={<CRsPage />} />
           <Route path={paths.admin.teachers()} element={<AdminTeachersPage />} />
           <Route path={paths.admin.courses()} element={<CoursesPage />} />
+          <Route path={paths.admin.periods()} element={<ClassPeriodsPage />} />
           <Route path={paths.admin.routines()} element={<AdminRoutinesPage />} />
           <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />
           <Route path={paths.admin.messages()} element={<MessagesPage />} />

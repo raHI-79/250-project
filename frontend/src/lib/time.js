@@ -67,17 +67,6 @@ export const formatDateTime = (value) => {
   })
 }
 
-export const CLASS_START = '08:00'
-
-export const CLASS_END = '17:00'
-
-export const timeRangeError = (start, end) => {
-  if (!start || !end) return ''
-  if (start < CLASS_START || end > CLASS_END) return 'Class hours run from 8:00 AM to 5:00 PM.'
-  if (start >= end) return 'The start time must be before the end time.'
-  return ''
-}
-
 export const overlaps = (startA, endA, startB, endB) => startA < endB && startB < endA
 
 export const isoDate = (value) => {

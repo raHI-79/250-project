@@ -4,8 +4,9 @@ import SlotFields from '../../../components/schedule/SlotFields'
 import TimeRangeFields from '../../../components/forms/TimeRangeFields'
 import { Alert, Button, Card, Input, Select, SkeletonLines, Textarea, useToast } from '../../../components/ui'
 import api from '../../../lib/api'
-import { MODE_ROOM, SECTION_ALL, sectionLabel, slotError } from '../../../lib/schedule'
-import { timeRangeError, today } from '../../../lib/time'
+import { usePeriods } from '../../../lib/hooks'
+import { MODE_ROOM, SECTION_ALL, periodRangeError, sectionLabel, slotError } from '../../../lib/schedule'
+import { today } from '../../../lib/time'
 
 const EMPTY = {
   kind: 'class',
@@ -29,6 +30,7 @@ const slotFor = (course, date) => {
 
 export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
   const toast = useToast()
+  const periods = usePeriods()
   const [form, setForm] = useState({ ...EMPTY, section: ownSection || '' })
   const [slot, setSlot] = useState({ mode: MODE_ROOM, room: '', meeting_link: '' })
   const [error, setError] = useState('')
@@ -47,7 +49,7 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
   const course = items.find((entry) => String(entry.id) === form.course_id) || null
   const routineSlot = slotFor(course, form.item_date)
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
-  const timeProblem = timeRangeError(form.start, form.end)
+  const timeProblem = periodRangeError(periods, form.start, form.end)
   const useRoutineSlot = () => {
     if (!routineSlot) return
     setForm((current) => ({
@@ -141,6 +143,7 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
           </p>
         )}
         <TimeRangeFields
+          periods={periods}
           start={form.start}
           end={form.end}
           onStartChange={(value) => setForm((current) => ({ ...current, start: value }))}
