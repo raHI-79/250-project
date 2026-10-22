@@ -47,7 +47,7 @@ Help the SUST CSE department coordinate classes, exams, notices, materials and c
   1. **Shared part** for Student, CR and Teacher.
   2. **Hidden admin part.**
 - Normal users must **never** see any admin link, menu, button or page.
-- Admin logs in at a separate, **unlinked** route: `/portal-admin` (not linked anywhere in the normal UI).
+- Admin logs in at a separate, **unlinked** route: `/office-portal` (not linked anywhere in the normal UI).
 
 ### 2.2 Backend enforcement
 - The backend must verify the role on **every** protected route using middleware (`verifyToken` + `requireRole`).

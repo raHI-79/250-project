@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, ShieldCheck } from 'lucide-react'
+import IdentityCard from '../components/IdentityCard'
 import {
   Alert,
-  Avatar,
   Button,
   Card,
   Input,
@@ -23,13 +23,13 @@ import { loginFor } from '../lib/paths'
 import { MAX_BIO, PHONE_MESSAGE, accountRoleLabel, isPhone, passwordError } from '../lib/account'
 import { formatDate } from '../lib/time'
 
-const ROW_LABEL = 'text-xs font-medium tracking-wide text-brand-400 uppercase'
+const ROW_LABEL = 'text-xs font-medium tracking-wide text-faint uppercase'
 
 function Row({ label, children }) {
   return (
     <div className="flex flex-col gap-0.5 py-2">
       <span className={ROW_LABEL}>{label}</span>
-      <span className="text-sm text-brand-900">{children || '—'}</span>
+      <span className="text-sm text-ink">{children || '—'}</span>
     </div>
   )
 }
@@ -37,9 +37,9 @@ function Row({ label, children }) {
 function Section({ title, icon: Icon, actions, children }) {
   return (
     <Card hover={false}>
-      <div className="flex items-center justify-between gap-3 border-b border-brand-100 pb-3">
-        <h2 className="font-display inline-flex items-center gap-2 text-base font-semibold text-brand-900">
-          {Icon && <Icon size={16} className="text-brand-500" />}
+      <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
+        <h2 className="font-display inline-flex items-center gap-2 text-base font-semibold text-ink">
+          {Icon && <Icon size={16} className="text-muted" />}
           {title}
         </h2>
         {actions}
@@ -156,7 +156,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <>
-        <PageHeader title="My Profile" subtitle="Your account details" />
+        <PageHeader eyebrow="Your account" title="My Profile" subtitle="Your account details" />
         <div className="grid gap-5 lg:grid-cols-[20rem_1fr]">
           <SkeletonCard />
           <div className="flex flex-col gap-5">
@@ -170,67 +170,58 @@ export default function ProfilePage() {
   if (error) {
     return (
       <>
-        <PageHeader title="My Profile" subtitle="Your account details" />
+        <PageHeader eyebrow="Your account" title="My Profile" subtitle="Your account details" />
         <Alert tone="error">{error}</Alert>
       </>
     )
   }
   return (
     <>
-      <PageHeader title="My Profile" subtitle="Your account details and sign-in settings" />
+      <PageHeader eyebrow="Your account" title="My Profile" subtitle="Your account details and sign-in settings" />
       {saveError && (
         <Alert tone="error" className="mb-5">
           {saveError}
         </Alert>
       )}
       <div className="grid gap-5 lg:grid-cols-[20rem_1fr] lg:items-start">
-        <Card hover={false} className="text-center">
-          <Avatar src={data?.photo_url} name={displayName} size="xl" className="mx-auto" />
-          <p className="font-display mt-3 text-lg font-semibold text-brand-900">{displayName}</p>
-          <p className="text-sm tabular-nums text-brand-500">
-            {data?.reg_no || data?.teacher_id || data?.identifier}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            {role === 'cr' ? (
-              <StatusBadge status="approved" label="Class Representative" />
-            ) : (
-              <span className="text-xs font-medium tracking-wide text-brand-500 uppercase">
-                {accountRoleLabel(role)}
-              </span>
-            )}
-            {data?.status && <StatusBadge status={data.status} />}
-          </div>
-          <div className="mt-4 border-t border-brand-100 pt-3 text-left">
-            {isStudent && (
-              <>
-                <Row label="Batch">{data?.batch}</Row>
-                <Row label="Section">{data?.section}</Row>
-              </>
-            )}
-            {isTeacher && (
-              <>
-                <Row label="Designation">{data?.designation}</Row>
-                <Row label="Office room">{data?.office_room}</Row>
-              </>
-            )}
-            {isAdmin && <Row label="Role">{accountRoleLabel(role)}</Row>}
-            {data?.created_at && <Row label="Member since">{formatDate(data.created_at)}</Row>}
-          </div>
-          <div className="mt-4 border-t border-brand-100 pt-4 text-left">
-            <PhotoPicker
-              file={photo}
-              onChange={setPhoto}
-              currentUrl={data?.photo_url || ''}
-              label="Change photo"
-              hint="JPG, PNG or WEBP, at most 2 MB, at least 200 by 200 pixels"
-            />
-            {photo && (
-              <Button loading={saving} onClick={savePhoto} className="mt-3 w-full">
-                Save the new photo
-              </Button>
-            )}
-          </div>
-        </Card>
+        <IdentityCard
+          name={displayName}
+          photoUrl={data?.photo_url}
+          role={accountRoleLabel(role)}
+          chips={[
+            role === 'cr' ? (
+              <StatusBadge key="cr" status="approved" label="Class Representative" />
+            ) : null,
+            data?.status ? <StatusBadge key="status" status={data.status} /> : null,
+          ].filter(Boolean)}
+          rows={[
+            isStudent ? { label: 'Batch', value: data?.batch } : null,
+            isStudent ? { label: 'Section', value: data?.section } : null,
+            isTeacher ? { label: 'Designation', value: data?.designation } : null,
+            isTeacher ? { label: 'Office room', value: data?.office_room } : null,
+            isAdmin ? { label: 'Role', value: accountRoleLabel(role) } : null,
+            data?.created_at
+              ? { label: 'Member since', value: formatDate(data.created_at) }
+              : null,
+          ].filter(Boolean)}
+          code={data?.reg_no || data?.teacher_id || data?.identifier}
+          footer={
+            <div className="border-t border-line p-5">
+              <PhotoPicker
+                file={photo}
+                onChange={setPhoto}
+                currentUrl={data?.photo_url || ''}
+                label="Change photo"
+                hint="JPG, PNG or WEBP, at most 2 MB, at least 200 by 200 pixels"
+              />
+              {photo && (
+                <Button loading={saving} onClick={savePhoto} className="mt-3 w-full">
+                  Save the new photo
+                </Button>
+              )}
+            </div>
+          }
+        />
         <div className="flex flex-col gap-5">
           {isStudent && (
             <Section
@@ -276,7 +267,7 @@ export default function ProfilePage() {
                 <div className="py-2">
                   <span className={ROW_LABEL}>Drop courses</span>
                   {(data?.drop_courses || []).length === 0 ? (
-                    <p className="text-sm text-brand-500">No drop course</p>
+                    <p className="text-sm text-muted">No drop course</p>
                   ) : (
                     <div className="mt-1 flex flex-wrap gap-2">
                       {data.drop_courses.map((course) => (
@@ -428,7 +419,7 @@ export default function ProfilePage() {
               </>
             )}
             {!isAdmin && (
-              <p className="pt-1 text-xs text-brand-400">
+              <p className="pt-1 text-xs text-faint">
                 The administration keeps your name, ID and email address up to date.
               </p>
             )}
@@ -463,7 +454,7 @@ export default function ProfilePage() {
                   required
                 />
               </div>
-              <p className="text-xs text-brand-400">
+              <p className="text-xs text-faint">
                 Changing your password signs you out everywhere, so you log in again afterwards.
               </p>
               <div className="flex gap-2">

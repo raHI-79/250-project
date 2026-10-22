@@ -61,7 +61,7 @@ export default function RegistrationsPage() {
   return (
     <>
       <PageHeader
-        title="Registrations"
+        eyebrow="Student records" title="Registrations"
         subtitle="Student accounts waiting for your approval, oldest first"
       />
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
@@ -76,9 +76,9 @@ export default function RegistrationsPage() {
       ) : (
         <DataTable className="animate-fade-in">
           <thead>
-            <tr className="border-b border-brand-100 bg-brand-50/60">
+            <tr className="border-b border-line bg-wash">
               {HEADINGS.map((heading, index) => (
-                <th key={heading || index} className="px-4 py-3 font-semibold text-brand-700">
+                <th key={heading || index} className="px-4 py-3 font-semibold text-ink-soft">
                   {heading}
                 </th>
               ))}
@@ -86,25 +86,25 @@ export default function RegistrationsPage() {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
+              <tr key={item.id} className="border-b border-line last:border-b-0">
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-2.5">
                     <Avatar src={item.photo_url} name={item.full_name} size="sm" />
-                    <span className="font-medium text-brand-900">{item.full_name}</span>
+                    <span className="font-medium text-ink">{item.full_name}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 tabular-nums text-brand-700">{item.reg_no}</td>
-                <td className="px-4 py-3 text-brand-700">{item.batch}</td>
-                <td className="px-4 py-3 text-brand-700">{item.section}</td>
-                <td className="px-4 py-3 text-brand-700">{item.email}</td>
-                <td className="px-4 py-3 text-brand-700">{item.phone}</td>
-                <td className="px-4 py-3 text-brand-700">{item.blood_group}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-brand-700">
+                <td className="px-4 py-3 tabular-nums text-ink-soft">{item.reg_no}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.batch}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.section}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.email}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.phone}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.blood_group}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
                   {item.date_of_birth ? formatDate(item.date_of_birth) : '—'}
                 </td>
                 <td className="px-4 py-3">
                   {(item.drop_courses || []).length === 0 ? (
-                    <span className="text-brand-500">No</span>
+                    <span className="text-muted">No</span>
                   ) : (
                     <span className="flex flex-wrap gap-1">
                       {item.drop_courses.map((course) => (
@@ -113,11 +113,11 @@ export default function RegistrationsPage() {
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-brand-700">
+                <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
                   {formatDate(item.created_at)}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <Button
                       size="sm"
                       loading={busy === item.id}

@@ -85,7 +85,7 @@ export default function AdminStudentsPage() {
   return (
     <>
       <PageHeader
-        title="Students"
+        eyebrow="Student records" title="Students"
         subtitle={total > 0 ? `${total} student${total === 1 ? '' : 's'} match` : 'Every student account'}
       />
       <Card hover={false} className="mb-5">
@@ -139,9 +139,9 @@ export default function AdminStudentsPage() {
         <>
           <DataTable className="animate-fade-in">
             <thead>
-              <tr className="border-b border-brand-100 bg-brand-50/60">
+              <tr className="border-b border-line bg-wash">
                 {HEADINGS.map((heading, index) => (
-                  <th key={heading || index} className="px-4 py-3 font-semibold text-brand-700">
+                  <th key={heading || index} className="px-4 py-3 font-semibold text-ink-soft">
                     {heading}
                   </th>
                 ))}
@@ -149,24 +149,24 @@ export default function AdminStudentsPage() {
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
-                  <td className="px-4 py-3 text-brand-900">
+                <tr key={item.id} className="border-b border-line last:border-b-0">
+                  <td className="px-4 py-3 text-ink">
                     <span className="flex items-center gap-2.5">
                       <Avatar src={item.photo_url} name={item.full_name} size="sm" />
                       <Link
                         to={paths.person(item.user_id || item.id)}
-                        className="font-medium text-brand-900 hover:text-brand-600 hover:underline"
+                        className="font-medium text-ink hover:text-brand-600 hover:underline"
                       >
                         {item.full_name}
                       </Link>
                       {item.is_cr && <StatusBadge status="approved" label="CR" />}
                     </span>
                   </td>
-                  <td className="px-4 py-3 tabular-nums text-brand-700">{item.reg_no}</td>
-                  <td className="px-4 py-3 text-brand-700">{item.batch}</td>
-                  <td className="px-4 py-3 text-brand-700">{item.section}</td>
-                  <td className="px-4 py-3 text-brand-700">{item.email}</td>
-                  <td className="px-4 py-3 text-brand-700">{item.phone}</td>
+                  <td className="px-4 py-3 tabular-nums text-ink-soft">{item.reg_no}</td>
+                  <td className="px-4 py-3 text-ink-soft">{item.batch}</td>
+                  <td className="px-4 py-3 text-ink-soft">{item.section}</td>
+                  <td className="px-4 py-3 text-ink-soft">{item.email}</td>
+                  <td className="px-4 py-3 text-ink-soft">{item.phone}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={item.status} />
                   </td>
@@ -207,10 +207,10 @@ export default function AdminStudentsPage() {
             </tbody>
           </DataTable>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-brand-500">
+            <p className="text-sm text-muted">
               Showing {firstShown}–{lastShown} of {total}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="secondary"
                 size="sm"

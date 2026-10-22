@@ -269,8 +269,13 @@ code.
 | `npm run build` | Production bundle in `frontend/dist/` |
 | `npm run preview` | Serves the built bundle |
 
-Students, CRs and teachers log in at `/login`. The administration logs in at
-`/portal-admin`, which is never linked from any normal page.
+Everyone starts on the public home page at `/`, which carries the campus hero,
+the department numbers and a card for the student and the teacher portal.
+Students and CRs sign in at `/student/login`, teachers at `/teacher/login`. The
+department office signs in at `/office-portal`, a route that is never linked,
+labelled or hinted at on any other page; the page also sets a
+`noindex,nofollow` robots meta tag while it is open, and the route is kept out
+of `robots.txt` on purpose so the file does not advertise it.
 
 ### The pages of the scheduling engine
 
@@ -316,18 +321,58 @@ Opening one marks it read, closes the panel and navigates; `Mark all as read`
 clears the dot. The target pages honour `?date`, `?item`, `?tab` and
 `?highlight`, scrolling the row into view and flashing it for a moment.
 
+### Interface design
+
+The interface follows one look, an academic ledger: a printed department record
+rather than a colourful dashboard. Panels are white with a one-pixel rule and no
+shadow, headings are set in a serif, numbers are serif and tabular, and status
+tags are small flat uppercase labels.
+
+The tokens live in `frontend/src/index.css` under `@theme`, so a page never
+writes a raw colour:
+
+| Token group | Values | Used for |
+|---|---|---|
+| `brand-50` … `brand-950` | maroon, `brand-600` is `#7A1F2B` | the department colour: links, primary buttons, rails, the sidebar |
+| `gold-50` … `gold-900` | `gold-500` is `#B8860B` | notes, the syllabus block, the active sidebar marker |
+| `ink`, `ink-soft`, `muted`, `faint` | near-black to grey | text, in that order of weight |
+| `paper`, `surface`, `wash` | `#FAF9F6`, white, `#F7F6F3` | the page, panels and table stripes |
+| `line`, `line-strong` | `#E7E5E4`, `#D6D3D1` | rules and borders |
+| `accent-*` | red | errors and destructive buttons |
+
+Two fonts are loaded in `frontend/index.html`: Source Serif 4 at weight 700 for
+headings, numbers and the crest (the `font-display` and `font-numeral`
+utilities), and Inter for everything else.
+
+Body text is 16 px with a 1.6 line height, secondary text is 14 px (`text-sm`)
+and the smallest label is 13 px (`text-xs`, `eyebrow`, `label-caps`). Page
+titles are 30-32 px, section titles 22-24 px, card titles 18 px and stat numbers
+34-38 px. Buttons, inputs, tabs and icon buttons are at least 44 px tall, which
+is what the `tap-target` utility sets.
+
+Every page is built for 360 px upward: the sidebar turns into a drawer below
+1024 px, tables scroll inside their panel with the first column pinned, filter
+bars, tabs and action rows wrap, forms fall to one column, modals cap at
+`92dvh` with a scrolling body and a sticky footer, and long names, emails and
+links wrap through the `wrap-long` utility instead of overflowing.
+
+The shared pieces of the look are `Crest`, `IdentityBar`, `Masthead` (the date
+line and the greeting on each dashboard home), `PageHeader` (an eyebrow over a
+serif title), `DateBlock` (the calendar block on notices and exams),
+`TimelineItem` (the time rail on every routine) and `IdentityCard` (the ID card
+on a profile).
+
 ### Campus photos
 
-The login heroes and the dashboard banner read their images from
+The public hero and the sign-in pages read their images from
 `frontend/public/campus/`. The folder is empty on purpose — drop the real
 photos in with exactly these names and nothing else has to change:
 
 | File | Size | Used by |
 |---|---|---|
-| `hero-monument.jpg`, `hero-building.jpg`, `hero-entrance.jpg` | 1920 × 1080 | the login backgrounds |
-| `banner-monument.jpg`, `banner-building.jpg`, `banner-entrance.jpg` | 1600 × 260 | the dashboard banner |
+| `hero-monument.jpg`, `hero-building.jpg`, `hero-entrance.jpg` | 1920 × 1080 | the home hero slideshow and the sign-in pages |
 
-When a photo is missing the banner falls back to its green gradient, so the app
+When a photo is missing the hero falls back to its maroon gradient, so the app
 still looks finished without them.
 
 ## How to run tests
@@ -365,6 +410,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/health` | public | `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
+| `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
 | `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
 | `POST` | `/api/auth/register` | public | `multipart/form-data` student registration with a required photo; `201` on success |
 | `POST` | `/api/auth/verify-email` | public, rate limited | `{reg_no, code}` turns an `unverified` account into `pending` |

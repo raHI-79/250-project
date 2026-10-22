@@ -25,7 +25,7 @@ export default function ActivityLogPage() {
   return (
     <>
       <PageHeader
-        title="Activity log"
+        eyebrow="Department office" title="Activity log"
         subtitle="The last 100 removals, restores and permanent deletions"
       />
       {error && (
@@ -44,9 +44,9 @@ export default function ActivityLogPage() {
       ) : (
         <DataTable className="animate-fade-in">
           <thead>
-            <tr className="border-b border-brand-100 bg-brand-50/60">
+            <tr className="border-b border-line bg-wash">
               {HEADINGS.map((heading) => (
-                <th key={heading} className="px-4 py-3 font-semibold text-brand-700">
+                <th key={heading} className="px-4 py-3 font-semibold text-ink-soft">
                   {heading}
                 </th>
               ))}
@@ -54,8 +54,8 @@ export default function ActivityLogPage() {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b border-brand-50 last:border-b-0">
-                <td className="px-4 py-3 whitespace-nowrap text-brand-700">
+              <tr key={item.id} className="border-b border-line last:border-b-0">
+                <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
                   {formatDateTime(item.created_at)}
                 </td>
                 <td className="px-4 py-3">
@@ -64,8 +64,8 @@ export default function ActivityLogPage() {
                     label={AUDIT_ACTION_LABELS[item.action] || item.action}
                   />
                 </td>
-                <td className="px-4 py-3 text-brand-900">{item.target_summary}</td>
-                <td className="px-4 py-3 text-brand-700">{item.admin_name}</td>
+                <td className="px-4 py-3 text-ink">{item.target_summary}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.admin_name}</td>
               </tr>
             ))}
           </tbody>

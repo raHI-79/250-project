@@ -88,7 +88,7 @@ export default function AdminPostNoticesPage() {
   const items = notices.data?.items || []
   return (
     <>
-      <PageHeader title="Notices" subtitle="Publish a notice for one batch or for everyone" />
+      <PageHeader eyebrow="Notice board" title="Notices" subtitle="Publish a notice for one batch or for everyone" />
       <Card hover={false} className="mb-6">
         <form onSubmit={publish} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}
@@ -119,7 +119,7 @@ export default function AdminPostNoticesPage() {
           </Button>
         </form>
       </Card>
-      <p className="font-display mb-3 text-lg font-semibold text-brand-800">Published notices</p>
+      <p className="font-display mb-3 text-lg font-semibold text-ink">Published notices</p>
       {notices.error && <Alert tone="error" className="mb-5">{notices.error}</Alert>}
       {notices.loading ? (
         <SkeletonCard />
@@ -142,17 +142,17 @@ export default function AdminPostNoticesPage() {
               )}
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-display text-base font-semibold text-brand-900">{item.title}</p>
+                <p className="font-display text-lg font-bold text-ink">{item.title}</p>
                 <StatusBadge
                   status={item.batch === 'ALL' ? 'approved' : 'unavailable'}
                   label={item.batch === 'ALL' ? 'All batches' : item.batch}
                 />
-                <span className="ml-auto text-xs text-brand-500">
+                <span className="ml-auto text-xs text-muted">
                   {formatDateTime(item.created_at)}
                 </span>
               </div>
               {item.description && (
-                <p className="mt-2 text-sm whitespace-pre-line text-brand-700">
+                <p className="mt-2 text-sm whitespace-pre-line text-ink-soft">
                   {item.description}
                 </p>
               )}
