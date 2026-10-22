@@ -1,0 +1,11 @@
+.git
+.github
+docs
+**/node_modules
+frontend/dist
+backend/uploads
+backend/.env
+frontend/.env
+**/*.test
+**/*_test.go
+*.md

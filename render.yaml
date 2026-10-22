@@ -1,0 +1,63 @@
+services:
+  - type: web
+    name: sust-cse-portal
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_TIMEZONE
+        value: Asia/Dhaka
+      - key: FILE_STORAGE
+        value: database
+      - key: MAIL_PROVIDER
+        value: brevo
+      - key: DB_MAX_CONNS
+        value: "5"
+      - key: STUDENT_EMAIL_DOMAIN
+        value: student.sust.edu
+      - key: MAIL_FROM_NAME
+        value: SUST CSE Portal
+      - key: DECISION_WINDOW_START
+        value: "16:00"
+      - key: DECISION_WINDOW_END
+        value: "23:00"
+      - key: SCHEDULE_DAYS_AHEAD
+        value: "7"
+      - key: MAX_UPLOAD_MB
+        value: "10"
+      - key: JWT_TTL
+        value: 24h
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_IDENTIFIER
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PHONE
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false

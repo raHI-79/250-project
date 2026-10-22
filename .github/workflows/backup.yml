@@ -1,0 +1,39 @@
+name: Database backup
+
+on:
+  schedule:
+    - cron: "30 21 * * *"
+  workflow_dispatch:
+
+jobs:
+  dump:
+    name: Nightly dump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install the PostgreSQL 17 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+      - name: Name the dump
+        id: name
+        run: echo "file=sust-cse-$(date -u +%Y-%m-%d).sql.gz" >> "$GITHUB_OUTPUT"
+      - name: Dump the database
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ]; then
+            echo "BACKUP_DATABASE_URL is not set in the repository secrets"
+            exit 1
+          fi
+          pg_dump --no-owner --no-privileges "$BACKUP_DATABASE_URL" | gzip -9 > "${{ steps.name.outputs.file }}"
+          ls -lh "${{ steps.name.outputs.file }}"
+      - name: Upload the dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.file }}
+          path: ${{ steps.name.outputs.file }}
+          retention-days: 30
+          if-no-files-found: error
