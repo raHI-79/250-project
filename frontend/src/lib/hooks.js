@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from './api'
 
 const NO_QUERY = {}
@@ -37,6 +38,54 @@ export const useResource = (path, query) => {
     }
   }, [path, key, attempt])
   return { data, loading, error, reload }
+}
+
+export const useHighlight = (ready, key = 'highlight') => {
+  const [params] = useSearchParams()
+  const target = params.get(key) || ''
+  const [active, setActive] = useState('')
+  const nodes = useRef(new Map())
+  const register = useCallback(
+    (id) => (node) => {
+      const name = String(id)
+      if (node) nodes.current.set(name, node)
+      else nodes.current.delete(name)
+    },
+    [],
+  )
+  useEffect(() => {
+    if (!target || !ready) return undefined
+    const node = nodes.current.get(target)
+    if (!node) return undefined
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setActive(target)
+    const timer = window.setTimeout(() => setActive(''), 2500)
+    return () => window.clearTimeout(timer)
+  }, [target, ready])
+  const highlighted = useCallback((id) => String(id) === active, [active])
+  return { register, highlighted, target }
+}
+
+export const useQueryTab = (tabs, fallback, key = 'tab') => {
+  const [params, setParams] = useSearchParams()
+  const raw = params.get(key) || ''
+  const value = tabs.includes(raw) ? raw : fallback
+  const setValue = useCallback(
+    (next) => {
+      setParams(
+        (current) => {
+          const copy = new URLSearchParams(current)
+          copy.set(key, next)
+          copy.delete('item')
+          copy.delete('highlight')
+          return copy
+        },
+        { replace: true },
+      )
+    },
+    [key, setParams],
+  )
+  return [value, setValue]
 }
 
 export const useDebounced = (value, delay = 300) => {
