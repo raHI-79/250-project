@@ -129,6 +129,15 @@ export const countdownText = (seconds) => {
   return `${rest}s left`
 }
 
+export const startsInText = (seconds) => {
+  if (seconds <= 0) return 'Now'
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (hours > 0) return `in ${hours}h ${String(minutes).padStart(2, '0')}m`
+  if (minutes > 0) return `in ${minutes} min`
+  return 'in under a minute'
+}
+
 export const secondsUntilClock = (clock) => {
   const [hour, minute] = String(clock || '')
     .split(':')
