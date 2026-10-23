@@ -14,7 +14,7 @@ export default function SlotFields({ value, onChange, error, className }) {
   return (
     <div className={cx('flex flex-col gap-4', className)}>
       <Field label="Where">
-        <div className="inline-flex flex-wrap rounded-md border border-line-strong bg-surface p-1">
+        <div className="inline-flex flex-wrap rounded-xl border border-line-strong bg-surface p-1">
           {MODES.map((entry) => {
             const Icon = entry.icon
             const active = mode === entry.value
@@ -24,8 +24,8 @@ export default function SlotFields({ value, onChange, error, className }) {
                 type="button"
                 onClick={() => set({ mode: entry.value })}
                 className={cx(
-                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                  active ? 'bg-brand-600 text-white' : 'text-brand-600 hover:bg-wash',
+                  'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors',
+                  active ? 'bg-brand-600 text-page' : 'text-brand-600 hover:bg-wash',
                 )}
               >
                 <Icon size={14} />

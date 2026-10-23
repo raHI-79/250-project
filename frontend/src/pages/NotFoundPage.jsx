@@ -8,7 +8,7 @@ import { homeFor } from '../lib/paths'
 export default function NotFoundPage() {
   const { role } = useAuth()
   return (
-    <div className="flex min-h-screen items-center justify-center bg-page px-4 py-10">
+    <div className="flex min-h-dvh items-center justify-center bg-page px-4 py-10">
       <Card hover={false} className="w-full max-w-md">
         <EmptyState
           icon={Compass}

@@ -21,7 +21,7 @@ export default function CampusBackdrop({
     <div
       aria-hidden="true"
       className={cx(
-        'absolute inset-0 overflow-hidden bg-linear-to-br from-brand-900 via-brand-600 to-brand-400',
+        'absolute inset-0 overflow-hidden bg-linear-to-br from-maroon-900 via-maroon-700 to-maroon-600',
         className,
       )}
     >

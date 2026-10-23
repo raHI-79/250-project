@@ -94,7 +94,7 @@ export default function CourseMultiSelect({
           {loading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
         </span>
         {available.length > 0 && (
-          <ul className="animate-fade-in absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto border border-line-strong bg-surface py-1 shadow-lg">
+          <ul className="animate-fade-in absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-line-strong bg-surface py-1 shadow-lg">
             {available.map((course) => (
               <li key={course.id}>
                 <button

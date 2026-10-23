@@ -132,7 +132,7 @@ export default function CRPollsPage() {
                     value={entry}
                     onChange={setOption(index)}
                     placeholder={`Option ${index + 1}`}
-                    className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink transition-colors placeholder:text-faint focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none"
+                    className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink transition-colors placeholder:text-faint focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none"
                   />
                   <Button
                     variant="ghost"

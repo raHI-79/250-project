@@ -3,13 +3,14 @@ import { CheckCircle2, Info, X, XCircle } from 'lucide-react'
 import cx from '../../lib/cx'
 import { ToastContext } from './toast'
 
-const MAX_TOASTS = 4
+const MAX_TOASTS = 3
+
 const DISMISS_AFTER = 4000
 
 const tones = {
-  success: { icon: CheckCircle2, className: 'border-l-emerald-600 text-ink' },
-  error: { icon: XCircle, className: 'border-l-accent-600 text-accent-700' },
-  info: { icon: Info, className: 'border-l-brand-600 text-ink' },
+  success: { icon: CheckCircle2, className: 'text-success-700' },
+  error: { icon: XCircle, className: 'text-danger-700' },
+  info: { icon: Info, className: 'text-brand-700' },
 }
 
 export default function ToastProvider({ children }) {
@@ -48,7 +49,7 @@ export default function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed top-4 right-4 z-[70] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-90 mx-auto flex w-[min(26rem,calc(100vw-2rem))] flex-col gap-2 lg:bottom-auto lg:top-4 lg:right-4 lg:mx-0 lg:ml-auto">
         {toasts.map((toast) => {
           const config = tones[toast.tone] || tones.info
           const Icon = config.icon
@@ -57,12 +58,12 @@ export default function ToastProvider({ children }) {
               key={toast.id}
               role="status"
               className={cx(
-                'animate-slide-in-right pointer-events-auto flex items-start gap-3 border-l-[3px] border border-line bg-surface px-4 py-3 text-sm shadow-lg',
+                'animate-fade-in-up pointer-events-auto flex items-start gap-3 rounded-card border border-line bg-raised px-4 py-3 text-sm shadow-lg',
                 config.className,
               )}
             >
               <Icon size={18} className="mt-0.5 shrink-0" />
-              <p className="min-w-0 flex-1 break-words">{toast.message}</p>
+              <p className="min-w-0 flex-1 wrap-long text-ink">{toast.message}</p>
               <button
                 type="button"
                 onClick={() => dismiss(toast.id)}

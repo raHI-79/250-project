@@ -143,7 +143,7 @@ export default function ForgotPasswordPage({ portal }) {
     >
       <div>
         <p className="eyebrow">Password reset</p>
-        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[26px] font-bold text-ink">
+        <h1 className="font-display mt-2 text-title font-bold text-ink">
           {page.heading}
         </h1>
         <p className="mt-3 text-sm text-muted">{page.subtitle}</p>

@@ -5,7 +5,10 @@ export default function StatusTabs({ tabs, value, onChange, className }) {
     <div
       role="tablist"
       aria-label="Tabs"
-      className={cx('flex flex-wrap border-b border-line bg-surface', className)}
+      className={cx(
+        'no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0',
+        className,
+      )}
     >
       {tabs.map((tab) => {
         const active = tab.value === value
@@ -17,10 +20,10 @@ export default function StatusTabs({ tabs, value, onChange, className }) {
             aria-selected={active}
             onClick={() => onChange(tab.value)}
             className={cx(
-              'tap-target border-b-2 px-4 py-3 text-sm whitespace-nowrap transition-colors',
+              'min-h-10 shrink-0 rounded-full border px-4 text-sm whitespace-nowrap transition-colors',
               active
-                ? 'border-brand-600 bg-brand-50 font-semibold text-brand-600'
-                : 'border-transparent font-medium text-muted hover:bg-wash hover:text-ink-soft',
+                ? 'border-brand-600 bg-brand-600 font-semibold text-page'
+                : 'border-line bg-surface font-medium text-muted hover:border-brand-300 hover:text-ink',
             )}
           >
             {tab.label}

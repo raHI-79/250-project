@@ -89,7 +89,7 @@ export default function AvailabilityGrid({ rooms, periods, onPick }) {
                               ? 'cursor-not-allowed border-line bg-wash bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(0,0,0,0.06)_4px,rgba(0,0,0,0.06)_8px)]'
                               : booking
                                 ? 'cursor-not-allowed border-accent-300 bg-accent-100'
-                                : 'border-emerald-300 bg-emerald-50 hover:border-brand-500 hover:bg-brand-100',
+                                : 'border-success-100 bg-success-50 hover:border-brand-500 hover:bg-brand-100',
                           )}
                         />
                       </td>
@@ -101,7 +101,7 @@ export default function AvailabilityGrid({ rooms, periods, onPick }) {
           </table>
           <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-3 rounded border border-emerald-300 bg-emerald-50" />
+              <span className="size-3 rounded border border-success-100 bg-success-50" />
               Free, click to fill the form
             </span>
             <span className="inline-flex items-center gap-1.5">

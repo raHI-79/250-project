@@ -112,7 +112,7 @@ function PromoteModal({ open, onClose, batches, onPromoted }) {
             {candidates.map((item) => (
               <li
                 key={item.user_id || item.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-xl border border-line px-3 py-2"
               >
                 <span className="flex min-w-0 items-center gap-2.5">
                   <Avatar src={item.photo_url} name={item.full_name} size="sm" />

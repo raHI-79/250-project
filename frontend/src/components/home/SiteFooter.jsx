@@ -5,7 +5,7 @@ import { DEPARTMENT, UNIVERSITY } from '../ui/IdentityBar'
 
 export default function SiteFooter() {
   return (
-    <footer className="bg-ink px-4 py-10 text-white/70 sm:px-6">
+    <footer className="bg-night px-4 py-10 text-white/70 sm:px-6">
       <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <div className="flex items-center gap-3">

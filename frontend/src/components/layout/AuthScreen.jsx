@@ -8,17 +8,17 @@ import CampusBackdrop from './CampusBackdrop'
 const TONES = {
   brand: {
     page: 'bg-paper',
-    bar: 'bg-ink text-white/75',
+    bar: 'bg-night text-white/75',
     barName: 'text-white',
     panel: 'bg-surface',
-    overlay: 'bg-linear-to-br from-brand-950/90 via-brand-900/70 to-brand-700/35',
+    overlay: 'bg-linear-to-br from-maroon-950/90 via-maroon-900/70 to-maroon-700/35',
   },
   dark: {
-    page: 'bg-ink',
+    page: 'bg-night',
     bar: 'bg-black/70 text-white/60',
     barName: 'text-white/90',
-    panel: 'bg-ink',
-    overlay: 'bg-linear-to-br from-black/92 via-brand-950/88 to-brand-900/70',
+    panel: 'bg-night',
+    overlay: 'bg-linear-to-br from-black/92 via-maroon-950/88 to-maroon-900/70',
   },
 }
 
@@ -34,7 +34,7 @@ export default function AuthScreen({
 }) {
   const skin = TONES[tone] || TONES.brand
   return (
-    <div className={cx('grid min-h-screen lg:grid-cols-[1.1fr_1fr]', skin.page)}>
+    <div className={cx('grid min-h-dvh lg:grid-cols-[1.1fr_1fr]', skin.page)}>
       <aside className="relative hidden overflow-hidden lg:block">
         <CampusBackdrop
           images={images}
@@ -52,7 +52,7 @@ export default function AuthScreen({
             </span>
           </Link>
           <div>
-            <p className="text-xs font-semibold tracking-[0.14em] text-gold-200 uppercase">
+            <p className="text-xs font-semibold tracking-[0.14em] text-sand uppercase">
               Class and exam coordination
             </p>
             <p className="font-display mt-3 max-w-md text-2xl leading-snug font-semibold text-white xl:text-3xl">
@@ -62,10 +62,10 @@ export default function AuthScreen({
           <p className="text-xs text-white/55">Kumargaon, Sylhet 3114, Bangladesh</p>
         </div>
       </aside>
-      <main className={cx('flex min-h-screen flex-col', skin.panel)}>
+      <main className={cx('flex min-h-dvh flex-col', skin.panel)}>
         <div
           className={cx(
-            'flex items-center gap-3 px-4 py-2.5 text-xs sm:px-6 lg:hidden',
+            'flex items-center gap-3 px-4 pt-[max(0.625rem,env(safe-area-inset-top,0px))] pb-2.5 text-xs sm:px-6 lg:hidden',
             skin.bar,
           )}
         >
