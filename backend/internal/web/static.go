@@ -13,6 +13,11 @@ const (
 	AssetsPrefix  = "/assets/"
 	APIPrefix     = "/api/"
 	UploadsPrefix = "/uploads/"
+	WorkerPath    = "/sw.js"
+	ManifestPath  = "/manifest.webmanifest"
+	WorkerType    = "application/javascript; charset=utf-8"
+	ManifestType  = "application/manifest+json; charset=utf-8"
+	WorkerScope   = "/"
 	assetCache    = "public, max-age=31536000, immutable"
 	pageCache     = "no-cache"
 )
@@ -33,9 +38,17 @@ func Static(dir string, fallback http.Handler) http.Handler {
 		name := path.Clean("/" + r.URL.Path)
 		if file, info, ok := openFile(root, name); ok {
 			defer func() { _ = file.Close() }()
-			if strings.HasPrefix(name, AssetsPrefix) {
+			switch {
+			case name == WorkerPath:
+				w.Header().Set("Content-Type", WorkerType)
+				w.Header().Set("Service-Worker-Allowed", WorkerScope)
+				w.Header().Set("Cache-Control", pageCache)
+			case name == ManifestPath:
+				w.Header().Set("Content-Type", ManifestType)
+				w.Header().Set("Cache-Control", pageCache)
+			case strings.HasPrefix(name, AssetsPrefix):
 				w.Header().Set("Cache-Control", assetCache)
-			} else {
+			default:
 				w.Header().Set("Cache-Control", pageCache)
 			}
 			http.ServeContent(w, r, info.Name(), info.ModTime(), file)

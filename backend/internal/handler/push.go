@@ -16,6 +16,10 @@ const (
 	MessagePushRemoved    = "This device will not receive notifications."
 	MessagePushOff        = "Push notifications are not set up on this server."
 	MessagePushIncomplete = "The browser did not send a complete subscription."
+	MessagePushNoDevice   = "No device on this account is set up for notifications."
+	MessagePushTestSent   = "Test notification sent."
+	TestPushTitle         = "SUST CSE"
+	TestPushBody          = "Notifications are working on this device."
 	MaxEndpointLength     = 1000
 	MaxKeyLength          = 400
 	MaxAgentLength        = 300
@@ -26,13 +30,18 @@ type PushStore interface {
 	DeletePushSubscription(ctx context.Context, userID int64, endpoint string) error
 }
 
+type PushTester interface {
+	SendTest(ctx context.Context, userID int64, title, body, target string) (int, error)
+}
+
 type Push struct {
 	cfg           *config.Config
 	subscriptions PushStore
+	tester        PushTester
 }
 
-func NewPush(cfg *config.Config, subscriptions PushStore) *Push {
-	return &Push{cfg: cfg, subscriptions: subscriptions}
+func NewPush(cfg *config.Config, subscriptions PushStore, tester PushTester) *Push {
+	return &Push{cfg: cfg, subscriptions: subscriptions, tester: tester}
 }
 
 type pushKeys struct {
@@ -49,6 +58,11 @@ type pushSubscriptionRequest struct {
 type publicKeyResponse struct {
 	Enabled   bool   `json:"enabled"`
 	PublicKey string `json:"public_key,omitempty"`
+}
+
+type testPushResponse struct {
+	Sent    int    `json:"sent"`
+	Message string `json:"message"`
 }
 
 func (p *Push) PublicKey() http.HandlerFunc {
@@ -131,5 +145,30 @@ func (p *Push) Unsubscribe() http.HandlerFunc {
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessagePushRemoved})
+	}
+}
+
+func (p *Push) Test() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		if !p.cfg.PushEnabled() || p.tester == nil {
+			httpx.WriteError(w, http.StatusServiceUnavailable, MessagePushOff)
+			return
+		}
+		sent, err := p.tester.SendTest(r.Context(), current.ID, TestPushTitle, TestPushBody, p.cfg.FrontendOrigin)
+		if err != nil {
+			log.Printf("handler: could not send a test notification: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		if sent == 0 {
+			httpx.WriteError(w, http.StatusNotFound, MessagePushNoDevice)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, testPushResponse{Sent: sent, Message: MessagePushTestSent})
 	}
 }

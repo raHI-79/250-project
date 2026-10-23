@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import TabBar from './TabBar'
 import TopBar from './TopBar'
 import PhotoReminder from './PhotoReminder'
+import PushGate from './PushGate'
 import SearchSheet from './SearchSheet'
 import { ChromeContext } from '../../context/chrome'
 import cx from '../../lib/cx'
@@ -43,6 +44,7 @@ export default function AppShell({ groups, tabs = [], showBell = true, showSearc
               bar.length > 0 ? 'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]' : 'pb-8',
             )}
           >
+            <PushGate />
             <div key={location.pathname} className="animate-fade-in-up mx-auto max-w-6xl">
               <PhotoReminder />
               <Outlet />

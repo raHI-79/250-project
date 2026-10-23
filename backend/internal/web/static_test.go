@@ -15,6 +15,7 @@ func staticDir(t *testing.T) string {
 		IndexFile:                       "<!doctype html><title>Portal</title>",
 		filepath.Join("assets", "a.js"): "console.log(1)",
 		"manifest.webmanifest":          "{}",
+		"sw.js":                         "self.addEventListener('push', () => {})",
 	}
 	for name, body := range files {
 		target := filepath.Join(dir, name)
@@ -109,5 +110,48 @@ func TestStaticKeepsEscapesInsideTheFolder(t *testing.T) {
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/../secret.txt", nil))
 	if rec.Body.String() == "not for the web" {
 		t.Fatal("the handler served a file from outside the static folder")
+	}
+}
+
+func TestStaticServesTheServiceWorkerAndManifestForInstalling(t *testing.T) {
+	handler := Static(staticDir(t), fallbackHandler())
+	tests := []struct {
+		name      string
+		target    string
+		wantType  string
+		wantScope string
+		wantCache string
+	}{
+		{
+			name:      "the service worker",
+			target:    WorkerPath,
+			wantType:  WorkerType,
+			wantScope: WorkerScope,
+			wantCache: pageCache,
+		},
+		{
+			name:      "the manifest",
+			target:    ManifestPath,
+			wantType:  ManifestType,
+			wantCache: pageCache,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, test.target, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			if got := rec.Header().Get("Content-Type"); got != test.wantType {
+				t.Errorf("content type = %q, want %q", got, test.wantType)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != test.wantCache {
+				t.Errorf("cache = %q, want %q", got, test.wantCache)
+			}
+			if got := rec.Header().Get("Service-Worker-Allowed"); got != test.wantScope {
+				t.Errorf("service worker scope = %q, want %q", got, test.wantScope)
+			}
+		})
 	}
 }

@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Field'
 import AuthScreen from '../../components/layout/AuthScreen'
 import { useAuth } from '../../context/auth'
 import { HERO_IMAGES } from '../../lib/campus'
+import { askPushPermission } from '../../lib/push'
 import { PORTAL_TEACHER, homeFor, paths } from '../../lib/paths'
 
 const SLIDE_AFTER = 6000
@@ -59,6 +60,7 @@ export default function LoginPage({ portal }) {
     setLoading(true)
     try {
       const user = await login(identifier.trim(), password, portal)
+      await askPushPermission(user.role).catch(() => null)
       navigate(homeFor(user.role), { replace: true })
     } catch (failure) {
       setError(failure.message)
@@ -71,7 +73,7 @@ export default function LoginPage({ portal }) {
     <AuthScreen images={HERO_IMAGES} rotateAfter={SLIDE_AFTER} note={page.note}>
       <div>
         <p className="eyebrow">{page.eyebrow}</p>
-        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[30px] font-bold text-ink">
+        <h1 className="font-display mt-2 text-title font-bold text-ink">
           {page.heading}
         </h1>
         <p className="mt-3 text-sm text-muted">{page.subtitle}</p>

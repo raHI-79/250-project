@@ -1,16 +1,36 @@
 import { useCallback, useEffect, useState } from 'react'
 import api from './api'
-import { readRaw, writeRaw } from './storage'
+import { readRaw, remove, writeRaw } from './storage'
 
-const DISMISS_KEY = 'sustcse.push.dismissed'
+const STAGE_KEY = 'sustcse.push.ask'
+
+const STAGE_SIGN_IN = 'sign-in'
+
+const STAGE_DONE = 'done'
 
 export const PUSH_ROLES = ['student', 'cr', 'teacher']
+
+export const PERMISSION_GRANTED = 'granted'
+
+export const PERMISSION_DENIED = 'denied'
+
+export const PERMISSION_DEFAULT = 'default'
+
+export const PERMISSION_LABELS = {
+  granted: 'Allowed',
+  denied: 'Blocked',
+  default: 'Not asked',
+}
 
 export const pushSupported = () =>
   typeof window !== 'undefined' &&
   'serviceWorker' in navigator &&
   'PushManager' in window &&
   'Notification' in window
+
+export const pushAllowed = (role) => PUSH_ROLES.includes(role) && pushSupported()
+
+export const permissionNow = () => (pushSupported() ? Notification.permission : PERMISSION_DENIED)
 
 const base64ToBytes = (value) => {
   const padded = value.padEnd(value.length + ((4 - (value.length % 4)) % 4), '=')
@@ -20,101 +40,162 @@ const base64ToBytes = (value) => {
   return bytes
 }
 
-const register = () => navigator.serviceWorker.register('/sw.js')
+const sameKey = (subscription, key) => {
+  const current = subscription.options?.applicationServerKey
+  if (!current) return false
+  const bytes = new Uint8Array(current)
+  if (bytes.length !== key.length) return false
+  return bytes.every((byte, index) => byte === key[index])
+}
 
-export const usePush = (role) => {
-  const allowed = PUSH_ROLES.includes(role) && pushSupported()
-  const [enabled, setEnabled] = useState(false)
-  const [ready, setReady] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [dismissed, setDismissed] = useState(() => readRaw(DISMISS_KEY) === 'yes')
+const registerWorker = () => navigator.serviceWorker.register('/sw.js', { scope: '/' })
+
+const serverKey = async () => {
+  const config = await api.get('/api/push/public-key').catch(() => null)
+  if (!config?.enabled || !config?.public_key) return null
+  return config.public_key
+}
+
+const postSubscription = (subscription) => {
+  const payload = subscription.toJSON()
+  return api.post('/api/push/subscribe', {
+    endpoint: payload.endpoint,
+    keys: { p256dh: payload.keys?.p256dh, auth: payload.keys?.auth },
+    user_agent: navigator.userAgent,
+  })
+}
+
+export const registerPushWorker = async () => {
+  if (!pushSupported()) return null
+  return registerWorker().catch(() => null)
+}
+
+export const syncPushSubscription = async () => {
+  if (!pushSupported() || Notification.permission !== PERMISSION_GRANTED) return false
+  const publicKey = await serverKey()
+  if (!publicKey) return false
+  const registration = await registerWorker()
+  const key = base64ToBytes(publicKey)
+  let subscription = await registration.pushManager.getSubscription()
+  if (subscription && !sameKey(subscription, key)) {
+    await subscription.unsubscribe().catch(() => null)
+    subscription = null
+  }
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: key,
+    })
+  }
+  await postSubscription(subscription)
+  return true
+}
+
+export const askPushPermission = async (role) => {
+  if (!pushAllowed(role)) return PERMISSION_DENIED
+  if (Notification.permission !== PERMISSION_DEFAULT) {
+    writeRaw(STAGE_KEY, STAGE_DONE)
+    await syncPushSubscription().catch(() => null)
+    return Notification.permission
+  }
+  let permission = PERMISSION_DEFAULT
+  try {
+    permission = await Notification.requestPermission()
+  } catch {
+    permission = Notification.permission
+  }
+  writeRaw(STAGE_KEY, permission === PERMISSION_DEFAULT ? STAGE_SIGN_IN : STAGE_DONE)
+  if (permission === PERMISSION_GRANTED) await syncPushSubscription().catch(() => null)
+  return permission
+}
+
+export const retryAskPending = (role) =>
+  pushAllowed(role) &&
+  Notification.permission === PERMISSION_DEFAULT &&
+  readRaw(STAGE_KEY) === STAGE_SIGN_IN
+
+export const closePushAsk = () => writeRaw(STAGE_KEY, STAGE_DONE)
+
+export const resetPushAsk = () => remove(STAGE_KEY)
+
+export const sendTestPush = () => api.post('/api/push/test')
+
+export const usePushSync = (role) => {
   useEffect(() => {
-    if (!allowed) {
-      setReady(true)
-      return undefined
-    }
+    if (!pushSupported()) return undefined
     let live = true
-    api
-      .get('/api/push/public-key')
-      .then(async (data) => {
-        if (!data?.enabled) return
-        const registration = await register()
-        const existing = await registration.pushManager.getSubscription()
-        if (live) setEnabled(Boolean(existing))
+    const sync = () => {
+      if (!live || document.visibilityState !== 'visible') return
+      registerPushWorker().then(() => {
+        if (PUSH_ROLES.includes(role)) syncPushSubscription().catch(() => null)
       })
-      .catch(() => null)
-      .finally(() => {
-        if (live) setReady(true)
-      })
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
     return () => {
       live = false
+      document.removeEventListener('visibilitychange', sync)
     }
-  }, [allowed])
-  const subscribe = useCallback(async () => {
+  }, [role])
+}
+
+export const usePushStatus = (role) => {
+  const allowed = pushAllowed(role)
+  const [permission, setPermission] = useState(() => permissionNow())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [sent, setSent] = useState(0)
+  const refresh = useCallback(() => setPermission(permissionNow()), [])
+  useEffect(() => {
+    const onVisible = () => refresh()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [refresh])
+  const test = useCallback(async () => {
     setBusy(true)
     setError('')
+    setSent(0)
     try {
-      const config = await api.get('/api/push/public-key')
-      if (!config?.enabled || !config?.public_key) {
-        throw new Error('Notifications are not set up on this server yet.')
-      }
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') {
-        throw new Error('Your browser blocked notifications for this site.')
-      }
-      const registration = await register()
-      const subscription =
-        (await registration.pushManager.getSubscription()) ||
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: base64ToBytes(config.public_key),
-        }))
-      const payload = subscription.toJSON()
-      await api.post('/api/push/subscribe', {
-        endpoint: payload.endpoint,
-        keys: { p256dh: payload.keys?.p256dh, auth: payload.keys?.auth },
-        user_agent: navigator.userAgent,
-      })
-      setEnabled(true)
+      await syncPushSubscription()
+      const result = await sendTestPush()
+      setSent(Number(result?.sent) || 0)
       return true
     } catch (failure) {
       setError(failure.message)
       return false
     } finally {
       setBusy(false)
+      refresh()
     }
-  }, [])
-  const unsubscribe = useCallback(async () => {
+  }, [refresh])
+  const ask = useCallback(async () => {
     setBusy(true)
     setError('')
     try {
-      const registration = await register()
-      const subscription = await registration.pushManager.getSubscription()
-      if (subscription) {
-        await api
-          .delete('/api/push/subscribe', { body: { endpoint: subscription.endpoint } })
-          .catch(() => null)
-        await subscription.unsubscribe()
-      }
-      setEnabled(false)
-      return true
-    } catch (failure) {
-      setError(failure.message)
-      return false
+      const next = await askPushPermission(role)
+      setPermission(next)
+      return next
     } finally {
       setBusy(false)
     }
-  }, [])
-  const dismiss = useCallback(() => {
-    writeRaw(DISMISS_KEY, 'yes')
-    setDismissed(true)
-  }, [])
-  return { allowed, enabled, ready, busy, error, dismissed, subscribe, unsubscribe, dismiss }
+  }, [role])
+  return {
+    allowed,
+    supported: pushSupported(),
+    permission,
+    label: PERMISSION_LABELS[permission] || PERMISSION_LABELS.default,
+    busy,
+    error,
+    sent,
+    ask,
+    test,
+    refresh,
+  }
 }
 
 export const dropPushOnSignOut = async () => {
   if (!pushSupported()) return
+  resetPushAsk()
   try {
     const registration = await navigator.serviceWorker.getRegistration('/sw.js')
     const subscription = await registration?.pushManager.getSubscription()

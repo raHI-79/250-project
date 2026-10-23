@@ -1,6 +1,7 @@
 package push
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -192,5 +194,86 @@ func TestWorkerIgnoresEmptyWork(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if len(sender.calls()) != 0 {
 		t.Errorf("sent %d notifications, want none", len(sender.calls()))
+	}
+}
+
+func TestWorkerSendTestCountsTheDevicesItReached(t *testing.T) {
+	silence(t)
+	subscriptions := &fakeSubscriptions{rows: []store.PushSubscription{
+		{ID: 1, UserID: 7, Endpoint: "https://push.example/live", P256dh: "p", Auth: "a"},
+		{ID: 2, UserID: 7, Endpoint: "https://push.example/gone", P256dh: "p", Auth: "a"},
+		{ID: 3, UserID: 7, Endpoint: "https://push.example/broken", P256dh: "p", Auth: "a"},
+	}}
+	sender := &fakeSender{
+		status:  map[string]int{"https://push.example/gone": http.StatusGone},
+		failing: map[string]bool{"https://push.example/broken": true},
+	}
+	worker := NewWorker(subscriptions, sender, 1)
+	sent, err := worker.SendTest(context.Background(), 7, "SUST CSE", "Working", "https://portal.example/")
+	if err != nil {
+		t.Fatalf("SendTest returned %v", err)
+	}
+	if sent != 1 {
+		t.Errorf("sent = %d, want 1", sent)
+	}
+	dropped, touched := subscriptions.state()
+	if len(dropped) != 1 || dropped[0] != "https://push.example/gone" {
+		t.Errorf("dropped = %v, want only the 410 endpoint", dropped)
+	}
+	if len(touched) != 1 || touched[0] != "https://push.example/live" {
+		t.Errorf("touched = %v, want only the living subscription", touched)
+	}
+	calls := sender.calls()
+	if len(calls) == 0 || calls[0].payload.Tag != TestTag {
+		t.Errorf("calls = %+v, want the test tag %q", calls, TestTag)
+	}
+}
+
+func TestWorkerSendTestReportsAStoreFailure(t *testing.T) {
+	silence(t)
+	subscriptions := &fakeSubscriptions{err: errors.New("database is down")}
+	worker := NewWorker(subscriptions, &fakeSender{}, 1)
+	if _, err := worker.SendTest(context.Background(), 7, "SUST CSE", "Working", ""); err == nil {
+		t.Fatal("SendTest hid the store failure")
+	}
+}
+
+func TestWorkerLogsOnlyTheHostAndStatusOfAFailure(t *testing.T) {
+	var buffer bytes.Buffer
+	log.SetOutput(&buffer)
+	log.SetFlags(0)
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetFlags(log.LstdFlags)
+	})
+	subscriptions := &fakeSubscriptions{rows: []store.PushSubscription{
+		{ID: 1, UserID: 7, Endpoint: "https://push.example/secret-token", P256dh: "public-key", Auth: "auth-secret"},
+		{ID: 2, UserID: 7, Endpoint: "https://push.example/unreachable", P256dh: "public-key", Auth: "auth-secret"},
+	}}
+	sender := &fakeSender{
+		status:  map[string]int{"https://push.example/secret-token": http.StatusBadRequest},
+		failing: map[string]bool{"https://push.example/unreachable": true},
+	}
+	worker := NewWorker(subscriptions, sender, 1)
+	if _, err := worker.SendTest(context.Background(), 7, "SUST CSE", "Working", ""); err != nil {
+		t.Fatalf("SendTest returned %v", err)
+	}
+	logged := buffer.String()
+	for _, secret := range []string{"secret-token", "unreachable", "public-key", "auth-secret"} {
+		if strings.Contains(logged, secret) {
+			t.Errorf("the log leaked %q: %s", secret, logged)
+		}
+	}
+	if !strings.Contains(logged, "push.example answered 400") {
+		t.Errorf("the log misses the host and status: %s", logged)
+	}
+	if !strings.Contains(logged, "push.example could not be reached") {
+		t.Errorf("the log misses the unreachable host: %s", logged)
+	}
+}
+
+func TestEndpointHostFallsBackWhenTheEndpointIsUnusable(t *testing.T) {
+	if got := endpointHost("not a url"); got != unknownHost {
+		t.Errorf("endpointHost = %q, want %q", got, unknownHost)
 	}
 }
