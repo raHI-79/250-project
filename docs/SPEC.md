@@ -379,28 +379,48 @@ office never does.
   every subscription of its recipients. The payload carries a title, a body, the
   URL of the page the notification points at and a tag, with a 24 hour TTL.
 - A subscription that answers `404` or `410` is deleted.
-- The site never prompts on load. After signing in, a dismissible banner offers
-  **Get notifications on this device**, with help text when the browser has
-  blocked permission, and **My profile → Security** carries the switch.
+- Permission is asked inside the sign-in click itself, so the phone shows its
+  own dialog. If it could not be shown, the app asks once more on the next tap
+  and never again after a decision.
+- **My profile → Notifications** shows only the state (Allowed, Blocked or Not
+  asked), the phone-settings steps when it is blocked, and a test button.
+- `POST /api/push/test` sends to every subscription of the caller and answers
+  how many went out. Each failure is logged with the push service host and the
+  status code, never a key and never a full endpoint. The server logs once at
+  startup whether the VAPID keys are configured.
 
 ### 11.3 Installable site
 
-A web manifest and a service worker make the site installable. The service worker
-shows the notification and, on click, focuses an open tab and navigates it to the
-target, or opens a new window.
+A web manifest and a service worker make the site installable. The app registers
+`/sw.js` at scope `/` on every start and re-syncs its subscription on start and
+on each visibility change, subscribing again whenever the server key changed.
+The service worker always shows the notification and, on click, focuses an open
+window and navigates it, or opens a new one. The server serves `/sw.js` as
+`application/javascript` with `no-cache` and `Service-Worker-Allowed: /`, and
+the manifest as `application/manifest+json` with `no-cache`.
 
 ## 12. Interface
 
-- Serif display headings, a 16px base size, and the department colours: brand
-  `#7A1F2B` on a `#FAF9F6` page.
+- A mobile app look on the department's own colours: maroon `#7A1F2B`, paper
+  `#FAF9F6` and a muted gold for highlights. Inter for interface text, Source
+  Serif 4 for large titles and the home greeting.
+- A dark theme that follows the system setting, with Light, Dark and System in
+  **My profile → Appearance**.
+- A translucent top app bar whose compact title appears as the large title
+  scrolls away, a translucent bottom tab bar with five role tabs and unread
+  badges, bottom sheets instead of modals on a phone, segmented controls, chips,
+  list rows, skeletons, empty states, toasts above the tab bar and
+  pull-to-refresh on lists.
+- From 1024px the same components sit in a sidebar layout, and the office keeps
+  its desktop layout.
 - Every route and link goes through one paths module.
-- Shared components: cards, buttons, fields, tables, badges, modals, toasts,
-  empty states and skeletons.
-- Readable at 360px wide, with touch targets of at least 44px.
+- Readable at 360px wide, touch targets of at least 48px, `env(safe-area-inset-*)`
+  respected, no horizontal scroll, AA contrast, and transitions that respect
+  `prefers-reduced-motion`.
 - No admin link or admin wording on any non-admin page.
-- The crest and the home page use `frontend/public/brand/sust-logo.png` and
-  `cse-logo.png` when those files are present and fall back to a monogram when
-  they are not; the favicon follows `cse-logo.png` the same way.
+- The only logo is `frontend/public/brand/sust-logo.png`, with a monogram
+  fallback. `npm run icons` generates the app icons, the maskable icons, the
+  monochrome badge, the apple-touch icon and the favicon from it.
 
 ## 13. Demo data
 

@@ -2,20 +2,114 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#7A1F2B" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SUST CSE · Class and Exam Coordination</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#FAF9F6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101113" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SUST CSE" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,500&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #faf9f6;
+        transition: opacity 0.25s ease;
+      }
+      #splash img {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+      }
+      #splash p {
+        margin: 0;
+        font-family: "Source Serif 4", Georgia, serif;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7a1f2b;
+      }
+      #splash span {
+        width: 34px;
+        height: 3px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #ebced3;
+      }
+      #splash span::after {
+        display: block;
+        width: 60%;
+        height: 100%;
+        border-radius: 999px;
+        background: #7a1f2b;
+        animation: splash-slide 1s ease-in-out infinite;
+        content: "";
+      }
+      @keyframes splash-slide {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(200%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash span::after {
+          animation: none;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) #splash {
+          background: #101113;
+        }
+        html:not([data-theme="light"]) #splash p {
+          color: #e8a2ae;
+        }
+        html:not([data-theme="light"]) #splash span {
+          background: #45202a;
+        }
+        html:not([data-theme="light"]) #splash span::after {
+          background: #e8a2ae;
+        }
+      }
+      html[data-theme="dark"] #splash {
+        background: #101113;
+      }
+      html[data-theme="dark"] #splash p {
+        color: #e8a2ae;
+      }
+      html[data-theme="dark"] #splash span {
+        background: #45202a;
+      }
+      html[data-theme="dark"] #splash span::after {
+        background: #e8a2ae;
+      }
+    </style>
   </head>
   <body>
+    <div id="splash">
+      <img src="/icon-192.png" alt="" />
+      <p>SUST CSE</p>
+      <span></span>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

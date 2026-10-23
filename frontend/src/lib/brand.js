@@ -1,12 +1,5 @@
 export const SUST_LOGO = '/brand/sust-logo.png'
 
-export const CSE_LOGO = '/brand/cse-logo.png'
+export const APP_ICON = '/icon-192.png'
 
-export const applyFavicon = () => {
-  const image = new Image()
-  image.onload = () => {
-    const link = document.querySelector('link[rel="icon"]')
-    if (link) link.setAttribute('href', CSE_LOGO)
-  }
-  image.src = CSE_LOGO
-}
+export const APP_NAME = 'SUST CSE'

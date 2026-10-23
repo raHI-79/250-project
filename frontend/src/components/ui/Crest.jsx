@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { CSE_LOGO } from '../../lib/brand'
+import { SUST_LOGO } from '../../lib/brand'
 import cx from '../../lib/cx'
 
 const SIZES = {
-  sm: 'size-8 text-xs',
-  md: 'size-10 text-base',
-  lg: 'size-12 text-lg',
+  sm: 'size-9 text-2xs',
+  md: 'size-11 text-xs',
+  lg: 'size-14 text-sm',
 }
 
 export default function Crest({ size = 'md', tone = 'brand', className }) {
@@ -13,7 +13,7 @@ export default function Crest({ size = 'md', tone = 'brand', className }) {
   if (!broken) {
     return (
       <img
-        src={CSE_LOGO}
+        src={SUST_LOGO}
         alt=""
         aria-hidden="true"
         onError={() => setBroken(true)}
@@ -25,15 +25,15 @@ export default function Crest({ size = 'md', tone = 'brand', className }) {
     <span
       aria-hidden="true"
       className={cx(
-        'font-display grid shrink-0 place-items-center rounded-sm border-2 font-bold',
+        'font-display grid shrink-0 place-items-center rounded-xl border-2 font-bold tracking-tight',
         tone === 'light'
           ? 'border-white/80 bg-transparent text-white'
-          : 'border-brand-600 bg-surface text-brand-600',
+          : 'border-brand-600 bg-brand-600 text-page',
         SIZES[size] || SIZES.md,
         className,
       )}
     >
-      CS
+      CSE
     </span>
   )
 }
