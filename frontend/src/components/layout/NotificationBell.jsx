@@ -8,6 +8,7 @@ import { readRaw, writeRaw } from '../../lib/storage'
 import { relativeTime } from '../../lib/time'
 import { useAuth } from '../../context/auth'
 import Button from '../ui/Button'
+import CountBadge from '../ui/CountBadge'
 import EmptyState from '../ui/EmptyState'
 
 const POLL_INTERVAL = 30000
@@ -88,17 +89,15 @@ export default function NotificationBell() {
         onClick={() => setOpen((current) => !current)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="tap-target relative grid place-items-center rounded-md text-ink-soft transition-colors hover:bg-wash active:scale-95"
+        className="tap-target relative grid place-items-center rounded-xl text-ink-soft transition-colors hover:bg-wash active:scale-95"
       >
         <Bell size={19} />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex min-w-4.5 items-center justify-center rounded-full bg-accent-600 px-1 text-xs font-semibold text-white">
-            {unread > 9 ? '9+' : unread}
-          </span>
+          <CountBadge count={unread} className="absolute -top-0.5 -right-0.5" />
         )}
       </button>
       {open && (
-        <div className="animate-scale-in absolute right-0 z-50 mt-2 flex max-h-[80dvh] w-[min(22rem,calc(100vw-2rem))] origin-top-right flex-col border border-line bg-surface shadow-lg">
+        <div className="animate-scale-in absolute right-0 z-50 mt-2 flex max-h-[80dvh] w-[min(22rem,calc(100vw-2rem))] origin-top-right flex-col overflow-hidden rounded-card border border-line bg-raised shadow-xl">
           <div className="flex items-center gap-2 border-b border-line px-4 py-3">
             <p className="font-display text-sm font-semibold text-ink">Notifications</p>
             {items.length > 0 && (

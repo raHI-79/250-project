@@ -1,7 +1,6 @@
 import { GraduationCap, UserCheck, UserCog, Users } from 'lucide-react'
 import { Alert, PageHeader, SkeletonCard } from '../../components/ui'
 import StatCard from '../../components/StatCard'
-import Masthead from '../../components/layout/Masthead'
 import { useResource } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
 
@@ -21,8 +20,11 @@ export default function OverviewPage() {
   ]
   return (
     <>
-      <Masthead subtitle="How the department is doing right now" />
-      <PageHeader eyebrow="Department office" title="Overview" />
+      <PageHeader
+        eyebrow="Department office"
+        title="Overview"
+        subtitle="How the department is doing right now"
+      />
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
