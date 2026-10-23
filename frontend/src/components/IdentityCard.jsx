@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import cx from '../lib/cx'
 import { initialsOf } from '../lib/account'
+import { SUST_LOGO } from '../lib/brand'
+import { BrandMark } from './ui'
 import { DEPARTMENT, UNIVERSITY } from './ui/IdentityBar'
 
-const BARS = [2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 3, 2, 4, 1, 2]
+const QR_SIZE = 220
 
 export default function IdentityCard({
   name,
@@ -12,22 +14,54 @@ export default function IdentityCard({
   chips = [],
   rows = [],
   code,
+  codeLabel = 'ID',
   footer,
   className,
 }) {
   const [broken, setBroken] = useState(false)
+  const [qr, setQr] = useState('')
   useEffect(() => setBroken(false), [photoUrl])
+  useEffect(() => {
+    if (!code) {
+      setQr('')
+      return undefined
+    }
+    let live = true
+    import('qrcode')
+      .then((module) =>
+        module.default.toDataURL(String(code), {
+          width: QR_SIZE,
+          margin: 0,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#141518ff', light: '#ffffffff' },
+        }),
+      )
+      .then((url) => {
+        if (live) setQr(url)
+      })
+      .catch(() => {
+        if (live) setQr('')
+      })
+    return () => {
+      live = false
+    }
+  }, [code])
   const showPhoto = Boolean(photoUrl) && !broken
   return (
-    <div className={cx('border border-line bg-surface', className)}>
-      <div className="bg-brand-600 px-4 py-3 text-center">
-        <p className="text-xs font-semibold tracking-[0.1em] text-white/70 uppercase">
-          {UNIVERSITY}
-        </p>
-        <p className="font-display mt-1 text-sm font-bold text-white">{DEPARTMENT}</p>
+    <div className={cx('overflow-hidden rounded-card border border-line bg-surface', className)}>
+      <div className="relative overflow-hidden bg-linear-to-br from-maroon-600 to-maroon-900 px-5 pt-5 pb-14 text-center">
+        <div className="flex items-center justify-center gap-2">
+          <span className="grid size-7 place-items-center rounded-full bg-white/95 p-0.5">
+            <BrandMark src={SUST_LOGO} alt="" className="size-full" />
+          </span>
+          <p className="text-2xs font-bold tracking-[0.12em] text-white/85 uppercase">
+            {UNIVERSITY}
+          </p>
+        </div>
+        <p className="mt-1.5 text-2xs tracking-[0.06em] text-white/65 uppercase">{DEPARTMENT}</p>
       </div>
-      <div className="flex flex-col items-center border-b border-line px-5 py-5">
-        <div className="size-24 overflow-hidden border border-line-strong bg-wash">
+      <div className="-mt-11 flex flex-col items-center px-5">
+        <div className="size-22 overflow-hidden rounded-full border-4 border-surface bg-wash">
           {showPhoto ? (
             <img
               src={photoUrl}
@@ -41,9 +75,11 @@ export default function IdentityCard({
             </span>
           )}
         </div>
-        <p className="font-display wrap-long mt-3 text-center text-xl font-bold text-ink">{name}</p>
+        <p className="font-display wrap-long mt-3 text-center text-section font-bold text-ink">
+          {name}
+        </p>
         {role && (
-          <p className="mt-1 text-xs font-semibold tracking-[0.1em] text-brand-600 uppercase">
+          <p className="mt-0.5 text-2xs font-bold tracking-[0.1em] text-brand-600 uppercase">
             {role}
           </p>
         )}
@@ -51,33 +87,36 @@ export default function IdentityCard({
           <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">{chips}</div>
         )}
       </div>
-      <dl className="px-5 py-3">
+      <dl className="mt-4 px-5">
         {rows
           .filter((row) => row.value)
           .map((row) => (
             <div
               key={row.label}
-              className="flex items-baseline justify-between gap-4 border-b border-dashed border-line py-2.5 last:border-b-0"
+              className="flex items-baseline justify-between gap-4 border-b border-line py-2.5 last:border-b-0"
             >
-              <dt className="text-xs font-semibold tracking-[0.08em] text-muted uppercase">
+              <dt className="text-2xs font-bold tracking-[0.08em] text-muted uppercase">
                 {row.label}
               </dt>
-              <dd className="wrap-long min-w-0 text-right text-sm text-ink">{row.value}</dd>
+              <dd className="wrap-long min-w-0 text-right text-sm font-medium text-ink">
+                {row.value}
+              </dd>
             </div>
           ))}
       </dl>
       {code && (
-        <div className="border-t border-line px-5 py-4 text-center">
-          <div aria-hidden="true" className="flex h-8 items-end justify-center gap-[2px]">
-            {BARS.map((width, position) => (
-              <span
-                key={`${width}-${position}`}
-                style={{ width: `${width}px` }}
-                className="h-full bg-ink"
-              />
-            ))}
-          </div>
-          <p className="font-numeral mt-2 text-xs tracking-[0.2em] text-muted">{code}</p>
+        <div className="mt-2 flex flex-col items-center border-t border-line px-5 py-5">
+          {qr ? (
+            <img
+              src={qr}
+              alt={`QR code of ${codeLabel} ${code}`}
+              className="size-36 rounded-lg bg-white p-2"
+            />
+          ) : (
+            <div className="size-36 animate-pulse rounded-lg bg-wash" />
+          )}
+          <p className="label-caps mt-3">{codeLabel}</p>
+          <p className="font-numeral text-base font-bold tracking-[0.12em] text-ink">{code}</p>
         </div>
       )}
       {footer}

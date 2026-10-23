@@ -9,6 +9,7 @@ import {
   SkeletonCard,
   StatusBadge,
   useToast,
+  PullToRefresh,
 } from '../../components/ui'
 import PollResults from '../../components/PollResults'
 import api from '../../lib/api'
@@ -66,7 +67,7 @@ function PollCard({ poll, busy, onVote, flash }) {
                     aria-pressed={chosen}
                     onClick={() => toggle(option.id)}
                     className={cx(
-                      'tap-target flex w-full items-center justify-between gap-3 rounded-md border px-4 py-2.5 text-left text-sm transition-colors disabled:cursor-not-allowed',
+                      'tap-target flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-left text-sm transition-colors disabled:cursor-not-allowed',
                       chosen
                         ? 'border-brand-600 bg-brand-50 font-semibold text-ink'
                         : 'border-line-strong bg-surface text-ink hover:bg-wash',
@@ -116,7 +117,7 @@ export default function PollsPage() {
     }
   }
   return (
-    <>
+    <PullToRefresh onRefresh={reload}>
       <PageHeader eyebrow="Your batch" title="Polls" subtitle="Polls your class representatives opened" />
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
       {loading ? (
@@ -141,6 +142,6 @@ export default function PollsPage() {
           ))}
         </div>
       )}
-    </>
+    </PullToRefresh>
   )
 }

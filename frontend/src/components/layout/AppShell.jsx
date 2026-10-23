@@ -1,23 +1,26 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TabBar from './TabBar'
 import TopBar from './TopBar'
 import PhotoReminder from './PhotoReminder'
+import SearchSheet from './SearchSheet'
 import { ChromeContext } from '../../context/chrome'
 import cx from '../../lib/cx'
 import { useUnreadMessages } from '../../lib/hooks'
 import { MESSAGES_BADGE } from '../../lib/nav'
 
-export default function AppShell({ groups, tabs = [], showBell = true }) {
+export default function AppShell({ groups, tabs = [], showBell = true, showSearch = true }) {
   const location = useLocation()
   const unread = useUnreadMessages()
   const [menuOpen, setMenuOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [collapsed, setCollapsed] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const openSearch = useCallback(() => setSearchOpen(true), [])
   const chrome = useMemo(
-    () => ({ title, setTitle, collapsed, setCollapsed }),
-    [title, collapsed],
+    () => ({ title, setTitle, collapsed, setCollapsed, openSearch: showSearch ? openSearch : null }),
+    [title, collapsed, openSearch, showSearch],
   )
   const withCount = (item) => (item.badge === MESSAGES_BADGE ? { ...item, count: unread } : item)
   const sections = groups.map((group) => ({ ...group, items: group.items.map(withCount) }))
@@ -31,6 +34,7 @@ export default function AppShell({ groups, tabs = [], showBell = true }) {
             title={title}
             collapsed={collapsed}
             onOpenMenu={() => setMenuOpen(true)}
+            onOpenSearch={showSearch ? openSearch : null}
             showBell={showBell}
           />
           <main
@@ -47,6 +51,7 @@ export default function AppShell({ groups, tabs = [], showBell = true }) {
           <TabBar tabs={bar} />
         </div>
       </div>
+      <SearchSheet open={searchOpen} onClose={() => setSearchOpen(false)} />
     </ChromeContext.Provider>
   )
 }
