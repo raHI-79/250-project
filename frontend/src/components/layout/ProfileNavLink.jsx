@@ -16,15 +16,15 @@ export default function ProfileNavLink({ onNavigate }) {
         onClick={onNavigate}
         className={({ isActive }) =>
           cx(
-            'flex min-w-0 flex-1 items-center gap-3 px-1 py-1 transition-colors',
-            isActive ? 'text-white' : 'text-white/80 hover:text-white',
+            'flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 transition-colors',
+            isActive ? 'bg-brand-50 text-brand-700' : 'text-ink-soft hover:bg-wash hover:text-ink',
           )
         }
       >
         <Avatar src={user?.photo_url} name={name} size="sm" />
         <span className="min-w-0 leading-tight">
           <span className="block truncate text-sm font-semibold">{name}</span>
-          <span className="block truncate text-xs tracking-[0.04em] text-white/70 uppercase">
+          <span className="block truncate text-2xs tracking-[0.06em] text-muted uppercase">
             {roleLabel(role)}
           </span>
         </span>
@@ -34,9 +34,9 @@ export default function ProfileNavLink({ onNavigate }) {
         onClick={logout}
         aria-label="Sign out"
         title="Sign out"
-        className="tap-target grid shrink-0 place-items-center text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+        className="tap-target grid shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-wash hover:text-ink"
       >
-        <LogOut size={16} />
+        <LogOut size={17} />
       </button>
     </div>
   )

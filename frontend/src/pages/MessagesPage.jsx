@@ -199,7 +199,7 @@ export default function MessagesPage() {
           {listError}
         </Alert>
       )}
-      <div className="flex h-[70dvh] min-h-[28rem] gap-4">
+      <div className="flex h-[calc(100dvh-11rem)] min-h-[26rem] gap-4 lg:h-[72dvh]">
         <div className={cx('w-full md:w-80 md:shrink-0', activeId && 'hidden md:block')}>
           <ConversationList
             items={items}
@@ -235,17 +235,16 @@ export default function MessagesPage() {
               }}
             />
           ) : active ? (
-            <div className="flex h-full min-h-0 flex-col border border-line bg-page">
-              <div className="flex items-center gap-3 border-b border-line bg-surface px-3 py-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-card border border-line bg-page">
+              <div className="flex items-center gap-2 border-b border-line bg-surface px-2 py-2">
+                <button
+                  type="button"
                   onClick={close}
-                  className="md:hidden"
                   aria-label="Back to the conversations"
+                  className="tap-target grid shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-wash md:hidden"
                 >
-                  <ArrowLeft size={16} />
-                </Button>
+                  <ArrowLeft size={20} />
+                </button>
                 {active.kind === 'group' ? (
                   <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-line bg-wash text-brand-600">
                     <Users size={18} />
@@ -258,20 +257,24 @@ export default function MessagesPage() {
                   <p className="text-xs text-muted">{conversationDetail(active)}</p>
                 </div>
                 {active.kind === 'group' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
+                    type="button"
                     onClick={() => setShowInfo((current) => !current)}
                     aria-pressed={showInfo}
+                    aria-label={showInfo ? 'Hide the members' : 'Show the members'}
+                    className="tap-target grid shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-wash"
                   >
-                    <Info size={15} />
-                    {showInfo ? 'Hide members' : 'Members'}
-                  </Button>
+                    <Info size={19} />
+                  </button>
                 )}
-                <Button variant="ghost" size="sm" onClick={clearChat} aria-label="Delete this chat">
-                  <Trash2 size={15} />
-                  Delete chat
-                </Button>
+                <button
+                  type="button"
+                  onClick={clearChat}
+                  aria-label="Delete this chat"
+                  className="tap-target grid shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-wash hover:text-danger-600"
+                >
+                  <Trash2 size={19} />
+                </button>
               </div>
               {threadError && (
                 <Alert tone="error" className="m-3">

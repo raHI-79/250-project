@@ -6,7 +6,7 @@ export default function AdminLayout() {
   return (
     <>
       <NoIndex />
-      <AppShell groups={adminNav} tone="ink" showBell={false} />
+      <AppShell groups={adminNav} showBell={false} showSearch={false} />
     </>
   )
 }

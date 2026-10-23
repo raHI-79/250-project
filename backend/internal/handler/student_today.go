@@ -7,6 +7,12 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
+	"time"
+)
+
+const (
+	maxSemesterWeeks = 26
+	nextExamCount    = 3
 )
 
 type nextExam struct {
@@ -16,9 +22,13 @@ type nextExam struct {
 
 type todayResponse struct {
 	Date           string       `json:"date"`
+	Semester       string       `json:"semester"`
+	SemesterLabel  string       `json:"semester_label"`
+	Week           int          `json:"week"`
 	ClassesToday   int          `json:"classes_today"`
 	UpcomingExams  int          `json:"upcoming_exams"`
 	NextExam       *nextExam    `json:"next_exam"`
+	NextExams      []examItem   `json:"next_exams"`
 	UnreadMessages int          `json:"unread_messages"`
 	OpenPolls      int          `json:"open_polls"`
 	LatestNotices  []noticeItem `json:"latest_notices"`
@@ -58,11 +68,21 @@ func (s *Student) Today() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		semester, since, err := s.students.RunningSemesterSince(r.Context(), profile.Batch)
+		if err != nil {
+			log.Printf("handler: could not read the running semester of a student: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
 		httpx.WriteJSON(w, http.StatusOK, todayResponse{
 			Date:           day,
+			Semester:       semester,
+			SemesterLabel:  validate.SemesterLabel(semester),
+			Week:           semesterWeek(since, now),
 			ClassesToday:   scheduledCount(groups),
 			UpcomingExams:  len(exams),
 			NextExam:       firstExam(exams),
+			NextExams:      nextExams(exams),
 			UnreadMessages: unread,
 			OpenPolls:      openPollCount(polls),
 			LatestNotices:  latestNotices(notices),
@@ -96,6 +116,29 @@ func scheduledCount(groups []planGroup) int {
 		}
 	}
 	return count
+}
+
+func semesterWeek(since, now time.Time) int {
+	if since.IsZero() || now.Before(since) {
+		return 1
+	}
+	days := int(now.Sub(since).Hours() / 24)
+	week := days/7 + 1
+	if week > maxSemesterWeeks {
+		return maxSemesterWeeks
+	}
+	return week
+}
+
+func nextExams(exams []store.StudentExam) []examItem {
+	items := make([]examItem, 0, nextExamCount)
+	for _, exam := range exams {
+		if len(items) == nextExamCount {
+			break
+		}
+		items = append(items, newExamItem(exam))
+	}
+	return items
 }
 
 func firstExam(exams []store.StudentExam) *nextExam {

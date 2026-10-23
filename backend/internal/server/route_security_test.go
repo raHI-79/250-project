@@ -279,6 +279,7 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodPost, path: "/api/messages/conversations/1/leave", allowed: everyRole()},
 		{method: http.MethodPost, path: "/api/push/subscribe", allowed: panelRoles()},
 		{method: http.MethodDelete, path: "/api/push/subscribe", allowed: panelRoles()},
+		{method: http.MethodPost, path: "/api/push/test", allowed: panelRoles()},
 		{method: http.MethodPost, path: "/api/teacher/notices", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/students/today", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/upcoming-routine", allowed: studentRoles()},

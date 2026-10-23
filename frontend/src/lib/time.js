@@ -25,6 +25,19 @@ export const formatDate = (value) => {
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+export const dayLabel = (value) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const days = Math.floor((start.getTime() - date.getTime()) / 86400000)
+  if (days < 0) return 'Today'
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return date.toLocaleDateString('en-GB', { weekday: 'long' })
+  return formatDate(date)
+}
+
 export const WEEKDAYS = [
   'Sunday',
   'Monday',

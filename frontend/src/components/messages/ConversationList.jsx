@@ -1,5 +1,5 @@
 import { MessageSquare, Users } from 'lucide-react'
-import { Avatar, EmptyState, SkeletonLines } from '../ui'
+import { Avatar, CountBadge, EmptyState, SkeletonRows } from '../ui'
 import cx from '../../lib/cx'
 import { relativeTime } from '../../lib/time'
 
@@ -9,11 +9,11 @@ export default function ConversationList({ items, activeId, onSelect, search, lo
     ? items.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(text))
     : items
   return (
-    <div className="flex h-full min-h-0 flex-col border border-line bg-surface">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-card border border-line bg-surface">
       {header}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
-          <SkeletonLines lines={6} className="p-4" />
+          <SkeletonRows rows={6} className="border-0" />
         ) : shown.length === 0 ? (
           <EmptyState
             icon={MessageSquare}
@@ -29,8 +29,8 @@ export default function ConversationList({ items, activeId, onSelect, search, lo
                   type="button"
                   onClick={() => onSelect(item)}
                   className={cx(
-                    'flex w-full items-center gap-3 border-b border-line px-3 py-3 text-left transition-colors last:border-b-0',
-                    item.id === activeId ? 'bg-wash' : 'hover:bg-wash',
+                    'flex min-h-16 w-full items-center gap-3 border-b border-line px-3 text-left transition-colors last:border-b-0',
+                    item.id === activeId ? 'bg-brand-50' : 'hover:bg-wash',
                   )}
                 >
                   {item.kind === 'group' ? (
@@ -53,11 +53,7 @@ export default function ConversationList({ items, activeId, onSelect, search, lo
                       <span className="truncate text-xs text-muted">
                         {item.preview || 'No message yet'}
                       </span>
-                      {item.unread_count > 0 && (
-                        <span className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-accent-600 px-1.5 text-xs font-semibold text-white">
-                          {item.unread_count > 9 ? '9+' : item.unread_count}
-                        </span>
-                      )}
+                      <CountBadge count={item.unread_count} className="ml-auto shrink-0" />
                     </span>
                   </span>
                 </button>

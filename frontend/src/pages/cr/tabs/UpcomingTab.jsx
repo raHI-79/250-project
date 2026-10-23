@@ -142,7 +142,7 @@ export default function UpcomingTab({ upcoming, highlight }) {
                   key={item.id}
                   ref={highlight.register(item.id)}
                   className={cx(
-                    'rounded-md border border-line p-3 transition-colors',
+                    'rounded-xl border border-line p-3 transition-colors',
                     highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
                   )}
                 >

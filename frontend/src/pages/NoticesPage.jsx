@@ -11,6 +11,7 @@ import {
   SkeletonCard,
   StatusBadge,
   StatusTabs,
+  PullToRefresh,
 } from '../components/ui'
 import { useHighlight, useResource } from '../lib/hooks'
 import cx from '../lib/cx'
@@ -34,13 +35,13 @@ export default function NoticesPage() {
   const [source, setSource] = useState('all')
   const [scope, setScope] = useState('my')
   const highlight = useHighlight(true)
-  const { data, loading, error } = useResource('/api/students/notices', {
+  const { data, loading, error, reload } = useResource('/api/students/notices', {
     source,
     scope: source === 'cr' ? scope : '',
   })
   const items = data?.items || []
   return (
-    <>
+    <PullToRefresh onRefresh={reload}>
       <PageHeader
         eyebrow="Notice board"
         title="Notices"
@@ -122,6 +123,6 @@ export default function NoticesPage() {
           ))}
         </div>
       )}
-    </>
+    </PullToRefresh>
   )
 }

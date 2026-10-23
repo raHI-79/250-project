@@ -32,7 +32,7 @@ const iconFor = (name) => {
 }
 
 const chipClass =
-  'inline-flex max-w-full items-start gap-2 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink-soft transition-colors hover:border-brand-300 hover:bg-wash'
+  'inline-flex max-w-full items-start gap-2 rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink-soft transition-colors hover:border-brand-300 hover:bg-wash'
 
 export default function AttachmentView({
   fileUrl,
@@ -53,7 +53,7 @@ export default function AttachmentView({
           <img
             src={fileUrl}
             alt={name}
-            className="max-h-52 max-w-full rounded-md border border-line object-cover"
+            className="max-h-52 max-w-full rounded-xl border border-line object-cover"
           />
         </a>
       )}

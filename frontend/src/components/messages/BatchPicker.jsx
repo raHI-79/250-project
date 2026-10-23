@@ -54,7 +54,7 @@ export default function BatchPicker({ batches, onAdd, onDrop, lockedBatch }) {
           {batches.map((entry) => (
             <span
               key={`${entry.batch}-${entry.section}`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 py-1 pr-1 pl-2 text-xs text-ink"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 py-1 pr-1 pl-2 text-xs text-ink"
             >
               {entry.batch}
               {entry.section ? ` section ${entry.section}` : ' (both sections)'}

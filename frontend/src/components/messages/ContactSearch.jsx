@@ -39,7 +39,7 @@ export default function ContactSearch({
             className={cx(
               'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
               roleFilter === chip.value
-                ? 'border-brand-600 bg-brand-600 text-white'
+                ? 'border-brand-600 bg-brand-600 text-page'
                 : 'border-line-strong bg-surface text-brand-600 hover:bg-wash',
             )}
           >
@@ -58,7 +58,7 @@ export default function ContactSearch({
         )}
       </div>
       {settled && (
-        <div className="mt-3 rounded-md border border-line">
+        <div className="mt-3 rounded-xl border border-line">
           {contacts.loading ? (
             <SkeletonLines lines={3} className="p-3" />
           ) : people.length === 0 ? (

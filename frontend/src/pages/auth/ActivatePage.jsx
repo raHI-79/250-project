@@ -173,7 +173,7 @@ export default function ActivatePage() {
           <KeyRound size={13} />
           Faculty invitation
         </p>
-        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[26px] font-bold text-ink">
+        <h1 className="font-display mt-2 text-title font-bold text-ink">
           {done ? 'Your account is ready' : 'Activate your account'}
         </h1>
         {invite && !done && (
@@ -185,7 +185,7 @@ export default function ActivatePage() {
         {done && <p className="mt-3 text-sm text-muted">{done.name}</p>}
         {done ? (
           <div className="mt-5 flex flex-col gap-4">
-            <div className="rounded-md border border-line bg-wash p-4">
+            <div className="rounded-xl border border-line bg-wash p-4">
               <p className="text-xs font-medium tracking-wide text-muted uppercase">Your User ID</p>
               <div className="mt-1 flex items-center justify-between gap-3">
                 <p className="font-display text-lg font-semibold text-ink">{done.user_id}</p>
@@ -195,7 +195,7 @@ export default function ActivatePage() {
                 </Button>
               </div>
             </div>
-            <div className="rounded-md border border-line p-4">
+            <div className="rounded-xl border border-line p-4">
               <p className="text-xs font-medium tracking-wide text-muted uppercase">Your password</p>
               <div className="mt-1 flex items-center justify-between gap-3">
                 <p className="font-mono text-sm text-ink">

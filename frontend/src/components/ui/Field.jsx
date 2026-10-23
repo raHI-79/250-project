@@ -3,12 +3,12 @@ import cx from '../../lib/cx'
 
 const controlClass = (invalid, tone) =>
   cx(
-    'h-11 w-full rounded-md border px-3 text-base transition-colors focus:outline-none focus:ring-3',
+    'h-12 w-full rounded-xl border px-3.5 text-base transition-colors focus:outline-none focus:ring-3',
     tone === 'dark'
       ? 'bg-white/5 text-white placeholder:text-white/35'
       : 'bg-surface text-ink placeholder:text-faint',
     invalid
-      ? 'border-accent-500 focus:border-accent-600 focus:ring-accent-100'
+      ? 'border-danger-500 focus:border-danger-600 focus:ring-danger-100'
       : tone === 'dark'
         ? 'border-white/20 focus:border-gold-300 focus:ring-white/10'
         : 'border-line-strong focus:border-brand-600 focus:ring-brand-100',
@@ -33,12 +33,12 @@ export function Field({
           className={cx('text-sm font-semibold', dark ? 'text-white/80' : 'text-ink-soft')}
         >
           {label}
-          {required && <span className={cx('ml-1', dark ? 'text-gold-300' : 'text-brand-600')}>*</span>}
+          {required && <span className={cx('ml-1', dark ? 'text-sand' : 'text-brand-600')}>*</span>}
         </label>
       )}
       {children}
       {error ? (
-        <p className="animate-fade-in text-sm text-accent-600">{error}</p>
+        <p className="animate-fade-in text-sm text-danger-600">{error}</p>
       ) : (
         hint && <p className={cx('text-sm', dark ? 'text-white/60' : 'text-muted')}>{hint}</p>
       )}

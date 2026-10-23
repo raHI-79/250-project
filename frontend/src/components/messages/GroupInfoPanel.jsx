@@ -141,7 +141,7 @@ export default function GroupInfoPanel({ conversation, meId, role, batch, onChan
     }
   }
   return (
-    <div className="flex h-full min-h-0 flex-col border border-line bg-surface">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-card border border-line bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           <p className="label-caps">Group</p>
@@ -157,7 +157,7 @@ export default function GroupInfoPanel({ conversation, meId, role, batch, onChan
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {error && <Alert tone="error" className="mb-4">{error}</Alert>}
         {renaming && (
-          <div className="mb-4 flex flex-col gap-3 border border-line bg-wash p-3">
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-line bg-wash p-3">
             <Input
               label="Group name"
               value={title}
@@ -184,7 +184,7 @@ export default function GroupInfoPanel({ conversation, meId, role, batch, onChan
         {isAdmin && (
           <div className="mb-4">
             {adding ? (
-              <div className="flex flex-col gap-4 border border-line bg-wash p-3">
+              <div className="flex flex-col gap-4 rounded-xl border border-line bg-wash p-3">
                 <PeoplePicker
                   label="Add people"
                   picked={picked}

@@ -34,7 +34,7 @@ export default function FileInput({ file, onChange, label = 'Attachment', hint, 
       className={className}
     >
       {file ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm">
           <span className="inline-flex min-w-0 items-center gap-2 text-ink">
             <Paperclip size={15} className="shrink-0 text-muted" />
             <span className="truncate">{file.name}</span>
@@ -50,7 +50,7 @@ export default function FileInput({ file, onChange, label = 'Attachment', hint, 
           type="file"
           accept={FILE_ACCEPT}
           onChange={pick}
-          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-wash file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-soft hover:file:bg-brand-100"
+          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink-soft file:mr-3 file:rounded-xl file:border-0 file:bg-wash file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-soft hover:file:bg-brand-100"
         />
       )}
     </Field>

@@ -42,7 +42,7 @@ export default function MaterialsPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="font-display wrap-long text-lg font-bold text-ink">{item.title}</p>
                 {item.is_mine && (
-                  <span className="rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-white">
+                  <span className="rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-page">
                     My batch
                   </span>
                 )}

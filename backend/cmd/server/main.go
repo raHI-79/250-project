@@ -7,6 +7,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/db"
 	"github.com/raHI-79/250-project/backend/internal/filestore"
+	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/jobs"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/notify"
@@ -70,9 +71,11 @@ func run() error {
 	}
 	alerts := notify.New(userStore)
 	var pushWorker *push.Worker
+	var pushTests handler.PushTester
 	if cfg.PushEnabled() {
 		sender := push.NewSender(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
 		pushWorker = push.NewWorker(userStore, sender, push.QueueSize)
+		pushTests = pushWorker
 		alerts = alerts.WithPush(pushWorker, cfg.FrontendOrigin)
 		log.Println("push: web push notifications are on")
 	} else {
@@ -87,34 +90,35 @@ func run() error {
 	httpServer := &http.Server{
 		Addr: net.JoinHostPort("", cfg.Port),
 		Handler: server.NewRouter(server.Dependencies{
-			Config:   cfg,
-			Database: pool,
-			Tokens:   tokens,
-			Proofs:   proofs,
-			Photos:   upload.NewPhotosIn(fileStore),
-			Accounts: userStore,
-			Users:    userStore,
-			Auth:     userStore,
-			Numbers:  userStore,
-			Devices:  userStore,
-			People:   userStore,
-			Catalog:  userStore,
-			Lookups:  userStore,
-			Periods:  userStore,
-			Alerts:   alerts,
-			Classes:  userStore,
-			Items:    userStore,
-			Notifier: alerts,
-			Teachers: userStore,
-			Students: userStore,
-			Alarms:   alerts,
-			Notices:  userStore,
-			Drives:   userStore,
-			Contacts: userStore,
-			Chats:    userStore,
-			Shared:   upload.NewAttachmentsIn(fileStore, cfg.MaxUploadMB),
-			Votes:    userStore,
-			Files:    upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
+			Config:    cfg,
+			Database:  pool,
+			Tokens:    tokens,
+			Proofs:    proofs,
+			Photos:    upload.NewPhotosIn(fileStore),
+			Accounts:  userStore,
+			Users:     userStore,
+			Auth:      userStore,
+			Numbers:   userStore,
+			Devices:   userStore,
+			PushTests: pushTests,
+			People:    userStore,
+			Catalog:   userStore,
+			Lookups:   userStore,
+			Periods:   userStore,
+			Alerts:    alerts,
+			Classes:   userStore,
+			Items:     userStore,
+			Notifier:  alerts,
+			Teachers:  userStore,
+			Students:  userStore,
+			Alarms:    alerts,
+			Notices:   userStore,
+			Drives:    userStore,
+			Contacts:  userStore,
+			Chats:     userStore,
+			Shared:    upload.NewAttachmentsIn(fileStore, cfg.MaxUploadMB),
+			Votes:     userStore,
+			Files:     upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
 			Mailer: mailer.New(cfg.MailProvider, mailer.Options{
 				Host:     cfg.SMTPHost,
 				Port:     cfg.SMTPPort,

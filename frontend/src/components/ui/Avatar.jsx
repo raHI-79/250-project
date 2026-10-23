@@ -17,7 +17,7 @@ export default function Avatar({ src, name, size = 'md', className }) {
   return (
     <span
       className={cx(
-        'font-display inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-brand-500 to-brand-900 font-semibold text-white uppercase',
+        'font-display inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-maroon-600 to-maroon-900 font-semibold text-white uppercase',
         sizes[size] || sizes.md,
         className,
       )}

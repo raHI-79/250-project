@@ -41,7 +41,7 @@ export default function AdminLoginPage() {
         note="Department office access for registrations, teachers, courses and the weekly routine."
       >
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-gold-300 uppercase">
+          <p className="text-xs font-semibold tracking-[0.14em] text-sand uppercase">
             Department office
           </p>
           <h1 className="font-display mt-2 border-b border-white/25 pb-3 text-[30px] font-bold text-white">

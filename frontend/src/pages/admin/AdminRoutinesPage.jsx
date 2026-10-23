@@ -302,7 +302,7 @@ export default function AdminRoutinesPage() {
                     disabled={busy === item.id}
                     onChange={(event) => moveEntry(item, event.target.value)}
                     aria-label={`Semester of ${item.course_code}`}
-                    className="rounded-md border border-line-strong bg-surface px-2 py-1 text-xs text-ink"
+                    className="rounded-xl border border-line-strong bg-surface px-2 py-1 text-xs text-ink"
                   >
                     {SEMESTERS.map((entry) => (
                       <option key={entry} value={entry}>

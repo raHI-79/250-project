@@ -220,7 +220,7 @@ export default function RegisterPage() {
     >
       <div>
         <p className="eyebrow">Student registration</p>
-        <h1 className="font-display mt-2 border-b border-ink pb-3 text-[26px] font-bold text-ink sm:text-[28px]">
+        <h1 className="font-display mt-2 text-title font-bold text-ink">
           Create your account
         </h1>
         <div className="mt-5">
@@ -346,12 +346,12 @@ export default function RegisterPage() {
                   <>
                     {emailProof ? (
                       <Field label="University email">
-                        <div className="flex items-center justify-between gap-3 rounded-md border border-line-strong bg-wash px-3 py-2">
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-line-strong bg-wash px-3 py-2">
                           <span className="min-w-0 truncate text-sm text-ink">
                             {form.email}
                           </span>
                           <span className="flex shrink-0 items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-white">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-page">
                               <BadgeCheck size={13} />
                               Verified with Google
                             </span>

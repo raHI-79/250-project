@@ -8,7 +8,7 @@ export default function IdentityBar({ right, className }) {
   return (
     <div
       className={cx(
-        'flex flex-wrap justify-between gap-x-4 gap-y-1 bg-ink px-4 py-2.5 text-xs text-white/85 sm:px-6',
+        'flex flex-wrap justify-between gap-x-4 gap-y-1 bg-night px-4 py-2.5 text-xs text-white/85 sm:px-6',
         className,
       )}
     >

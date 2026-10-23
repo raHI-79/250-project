@@ -24,7 +24,7 @@ export default function PeoplePicker({ picked, onPick, onDrop, search, onSearchC
           {picked.map((contact) => (
             <span
               key={contact.user_id}
-              className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 py-1 pr-1 pl-2 text-xs text-ink"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 py-1 pr-1 pl-2 text-xs text-ink"
             >
               <span className="wrap-long max-w-40">{contact.name}</span>
               <button

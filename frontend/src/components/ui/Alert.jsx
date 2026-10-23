@@ -4,23 +4,23 @@ import cx from '../../lib/cx'
 const tones = {
   success: {
     icon: CheckCircle2,
-    className: 'border-l-[3px] border-emerald-600 bg-emerald-50 text-emerald-800',
-    iconClass: 'text-emerald-600',
+    className: 'border-success-100 bg-success-50 text-success-700',
+    iconClass: 'text-success-600',
   },
   error: {
     icon: XCircle,
-    className: 'border-l-[3px] border-accent-600 bg-accent-50 text-accent-700',
-    iconClass: 'text-accent-600',
+    className: 'border-danger-100 bg-danger-50 text-danger-700',
+    iconClass: 'text-danger-600',
   },
   info: {
     icon: Info,
-    className: 'border-l-[3px] border-brand-600 bg-brand-50 text-ink-soft',
+    className: 'border-brand-100 bg-brand-50 text-ink-soft',
     iconClass: 'text-brand-600',
   },
   warning: {
     icon: AlertTriangle,
-    className: 'border-l-[3px] border-gold-500 bg-gold-100 text-gold-700',
-    iconClass: 'text-gold-600',
+    className: 'border-warning-100 bg-warning-50 text-warning-700',
+    iconClass: 'text-warning-600',
   },
 }
 
@@ -31,7 +31,7 @@ export default function Alert({ tone = 'info', title, children, className }) {
     <div
       role={tone === 'error' ? 'alert' : 'status'}
       className={cx(
-        'animate-fade-in flex items-start gap-3 border border-line px-4 py-3 text-sm',
+        'animate-fade-in flex items-start gap-3 rounded-card border px-4 py-3 text-sm',
         config.className,
         className,
       )}

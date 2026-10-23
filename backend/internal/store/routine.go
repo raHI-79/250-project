@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/raHI-79/250-project/backend/internal/validate"
+	"time"
 )
 
 var (
@@ -93,9 +94,10 @@ WHERE ($1::text = '' OR r.batch = $1::text)
 ORDER BY r.batch, r.semester, r.section, r.day_of_week, r.start_time`
 	updateRoutineSemesterSQL = `UPDATE routines SET semester = $2, updated_at = now()
 WHERE id = $1 RETURNING id`
-	runningSemesterSQL = `SELECT running_semester FROM batch_semesters WHERE batch = $1`
-	listRunningSQL     = `SELECT batch, running_semester FROM batch_semesters ORDER BY batch`
-	seedRunningSQL     = `INSERT INTO batch_semesters (batch, running_semester)
+	runningSemesterSQL      = `SELECT running_semester FROM batch_semesters WHERE batch = $1`
+	runningSemesterSinceSQL = `SELECT running_semester, updated_at FROM batch_semesters WHERE batch = $1`
+	listRunningSQL          = `SELECT batch, running_semester FROM batch_semesters ORDER BY batch`
+	seedRunningSQL          = `INSERT INTO batch_semesters (batch, running_semester)
 VALUES ($1, $2) ON CONFLICT (batch) DO NOTHING`
 	setRunningSQL = `INSERT INTO batch_semesters (batch, running_semester, updated_at)
 VALUES ($1, $2, now())
@@ -204,6 +206,19 @@ func (s *Store) RunningSemester(ctx context.Context, batch string) (string, erro
 		return "", fmt.Errorf("store: could not read the running semester of %s: %w", batch, err)
 	}
 	return semester, nil
+}
+
+func (s *Store) RunningSemesterSince(ctx context.Context, batch string) (string, time.Time, error) {
+	var semester string
+	var since time.Time
+	err := s.pool.QueryRow(ctx, runningSemesterSinceSQL, batch).Scan(&semester, &since)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return validate.DefaultSemester, time.Time{}, nil
+	}
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("store: could not read the running semester of %s: %w", batch, err)
+	}
+	return semester, since, nil
 }
 
 func (s *Store) ListRunningSemesters(ctx context.Context) (map[string]string, error) {

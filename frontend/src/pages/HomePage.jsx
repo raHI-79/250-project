@@ -7,13 +7,15 @@ import {
   MessagesSquare,
   Vote,
 } from 'lucide-react'
+import AppLauncher from '../components/home/AppLauncher'
 import HomeHero from '../components/home/HomeHero'
 import SiteFooter from '../components/home/SiteFooter'
 import StatsStrip from '../components/home/StatsStrip'
-import { BrandMark, Crest, IdentityBar } from '../components/ui'
+import { BrandMark, IdentityBar } from '../components/ui'
 import { DEPARTMENT } from '../components/ui/IdentityBar'
 import { SUST_LOGO } from '../lib/brand'
 import paths from '../lib/paths'
+import { useStandalone } from '../lib/standalone'
 
 const FEATURES = [
   {
@@ -83,14 +85,19 @@ const PORTALS = [
 ]
 
 export default function HomePage() {
+  const installed = useStandalone()
+  if (installed) return <AppLauncher />
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-dvh bg-paper">
       <IdentityBar right="Class and exam coordination" />
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Link to={paths.root()} className="flex min-w-0 items-center gap-3">
-            <BrandMark src={SUST_LOGO} alt="Shahjalal University of Science and Technology" className="size-10" />
-            <Crest />
+            <BrandMark
+              src={SUST_LOGO}
+              alt="Shahjalal University of Science and Technology"
+              className="size-11"
+            />
             <span className="min-w-0">
               <span className="font-display block text-base font-semibold text-ink">
                 SUST CSE
@@ -107,7 +114,7 @@ export default function HomePage() {
             </Link>
             <Link
               to={paths.studentRegister()}
-              className="border border-brand-600 px-3 py-1.5 text-brand-600 hover:bg-brand-50"
+              className="rounded-xl border border-brand-600 px-3 py-1.5 text-brand-600 hover:bg-brand-50"
             >
               Register
             </Link>
@@ -175,7 +182,7 @@ export default function HomePage() {
               <Link
                 key={portal.title}
                 to={portal.to}
-                className="group relative isolate overflow-hidden border border-line bg-linear-to-br from-brand-900 via-brand-800 to-brand-600 p-6 sm:p-8"
+                className="group relative isolate overflow-hidden rounded-card border border-line bg-linear-to-br from-maroon-900 via-maroon-800 to-maroon-600 p-6 sm:p-8"
               >
                 <span
                   aria-hidden="true"
@@ -189,7 +196,7 @@ export default function HomePage() {
                 <p className="relative mt-2 max-w-sm text-sm leading-relaxed text-white/75">
                   {portal.text}
                 </p>
-                <span className="relative mt-6 inline-flex items-center gap-2 text-sm font-semibold text-gold-200 group-hover:text-white">
+                <span className="relative mt-6 inline-flex items-center gap-2 text-sm font-semibold text-sand group-hover:text-white">
                   Continue
                 </span>
               </Link>

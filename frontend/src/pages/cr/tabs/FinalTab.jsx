@@ -172,7 +172,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
                   key={item.id}
                   ref={highlight.register(item.id)}
                   className={cx(
-                    'rounded-md border border-line p-3 transition-colors',
+                    'rounded-xl border border-line p-3 transition-colors',
                     highlight.highlighted(item.id) && 'border-accent-300 bg-accent-50/60',
                   )}
                 >
@@ -198,7 +198,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
                       </div>
                       {item.note && <p className="mt-1 text-xs text-muted">{item.note}</p>}
                       {editing === item.id ? (
-                        <div className="mt-3 flex flex-col gap-4 rounded-md border border-line bg-wash/40 p-3">
+                        <div className="mt-3 flex flex-col gap-4 rounded-xl border border-line bg-wash/40 p-3">
                           <TimeRangeFields
                             periods={periods}
                             start={draft.start}

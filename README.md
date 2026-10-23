@@ -51,11 +51,11 @@ free, follow [docs/DEPLOY.md](docs/DEPLOY.md).
 │   ├── .env.example          copy to .env and fill in your values
 │   └── go.mod
 ├── frontend/                 React + Vite app (the browser client)
-│   ├── public/brand/         sust-logo.png and cse-logo.png when you have them
+│   ├── public/brand/         sust-logo.png, the source for every generated icon
 │   ├── public/campus/        campus photos used by the banners and heroes
 │   └── src/
 │       ├── components/ui/    Button, Card, Field, Alert, Toast, Modal, Skeleton
-│       ├── components/layout/ sidebar, header, banner, notification bell
+│       ├── components/layout/ sidebar, top bar, bottom tabs, search sheet
 │       ├── context/          the signed-in session
 │       ├── lib/              paths, API client, navigation, helpers
 │       └── pages/            one file per screen
@@ -442,44 +442,61 @@ clears the dot. The target pages honour `?date`, `?item`, `?tab` and
 
 ### Interface design
 
-The interface follows one look, an academic ledger: a printed department record
-rather than a colourful dashboard. Panels are white with a one-pixel rule and no
-shadow, headings are set in a serif, numbers are serif and tabular, and status
-tags are small flat uppercase labels.
+The interface is built as a phone app first: calm, card based and quick to
+read, with the department's own identity — maroon `#7A1F2B`, warm paper
+`#FAF9F6` and a muted gold used only for highlights.
 
-The tokens live in `frontend/src/index.css` under `@theme`, so a page never
-writes a raw colour:
+The tokens live in `frontend/src/index.css`. The palette is declared once as
+`--c-*` custom properties and mapped into `@theme`, so every utility resolves
+at runtime and the whole app changes with the theme; a page never writes a raw
+colour:
 
 | Token group | Values | Used for |
 |---|---|---|
-| `brand-50` … `brand-950` | maroon, `brand-600` is `#7A1F2B` | the department colour: links, primary buttons, rails, the sidebar |
-| `gold-50` … `gold-900` | `gold-500` is `#B8860B` | notes, the syllabus block, the active sidebar marker |
+| `brand-50` … `brand-950` | maroon, `brand-600` is `#7A1F2B` | the department colour: links, filled buttons, selected states |
+| `gold-50` … `gold-900` | `gold-500` is `#B8860B` | notes, the syllabus block, highlights |
+| `success-*`, `warning-*`, `danger-*` | green, amber, red | the semantic states; `accent-*` still resolves to `danger-*` |
 | `ink`, `ink-soft`, `muted`, `faint` | near-black to grey | text, in that order of weight |
-| `paper`, `surface`, `wash` | `#FAF9F6`, white, `#F7F6F3` | the page, panels and table stripes |
-| `line`, `line-strong` | `#E7E5E4`, `#D6D3D1` | rules and borders |
-| `accent-*` | red | errors and destructive buttons |
+| `page`, `surface`, `raised`, `wash` | `#FAF9F6`, white, the one elevated card level, the tint behind rows | the page and its panels |
+| `line`, `line-strong` | hairlines | rules and borders |
+| `glass` | translucent surface | the top app bar and the bottom tab bar |
+| `night`, `maroon-*`, `sand` | fixed, never themed | the few surfaces that stay dark in both themes |
 
-Two fonts are loaded in `frontend/index.html`: Source Serif 4 at weight 700 for
-headings, numbers and the crest (the `font-display` and `font-numeral`
-utilities), and Inter for everything else.
+#### Dark theme
 
-Body text is 16 px with a 1.6 line height, secondary text is 14 px (`text-sm`)
-and the smallest label is 13 px (`text-xs`, `eyebrow`, `label-caps`). Page
-titles are 30-32 px, section titles 22-24 px, card titles 18 px and stat numbers
-34-38 px. Buttons, inputs, tabs and icon buttons are at least 44 px tall, which
-is what the `tap-target` utility sets.
+`:root` holds the light values, `:root[data-theme="dark"]` the dark ones, and a
+`prefers-color-scheme` block covers the system setting. `src/lib/theme.js`
+resolves the choice before the first paint, and `My profile → Appearance` sets
+Light, Dark or System. A filled brand surface pairs with `text-page`, so it is
+maroon with paper text in the light theme and a light brand tone with near-black
+text in the dark one.
 
-Every page is built for 360 px upward: the sidebar turns into a drawer below
-1024 px, tables scroll inside their panel with the first column pinned, filter
-bars, tabs and action rows wrap, forms fall to one column, modals cap at
-`92dvh` with a scrolling body and a sticky footer, and long names, emails and
-links wrap through the `wrap-long` utility instead of overflowing.
+Two fonts are loaded in `frontend/index.html`: Source Serif 4 for large page
+titles and the home greeting (the `font-display` and `font-numeral` utilities),
+and Inter for every other piece of interface text.
 
-The shared pieces of the look are `Crest`, `IdentityBar`, `Masthead` (the date
-line and the greeting on each dashboard home), `PageHeader` (an eyebrow over a
-serif title), `DateBlock` (the calendar block on notices and exams),
-`TimelineItem` (the time rail on every routine) and `IdentityCard` (the ID card
-on a profile).
+Body text is 15-16 px, captions are 13 px (`text-xs`, `eyebrow`, `label-caps`),
+section titles are 22 px (`text-section`) and large titles 30-34 px
+(`text-title`, `text-title-lg`). Cards use a 16 px radius (`rounded-card`) and
+sheets a 24 px one (`rounded-sheet`), spacing follows an 8 px grid, icons are
+lucide outlines that fill when active, and anything tappable is at least 48 px
+(`tap-target`).
+
+Every page is built for 360 px upward and respects `env(safe-area-inset-*)`.
+Below 1024 px the chrome is a translucent top app bar whose compact title
+appears as the large title scrolls away, plus a translucent bottom tab bar with
+five role tabs and unread badges; from 1024 px the same components sit in a
+sidebar layout, and the office keeps its desktop layout. Modals are bottom
+sheets with a drag handle on a phone and centred dialogs on a desktop, lists
+pull to refresh, toasts sit above the tab bar, and transitions respect
+`prefers-reduced-motion`.
+
+The shared pieces are `TopBar`, `TabBar`, `Sheet`, `Segmented`, `Chip`,
+`ListRow`, `CountBadge`, `Carousel`, `PullToRefresh`, `Skeleton`, `EmptyState`,
+`Crest`, `PageHeader` (the large title that the top bar collapses into),
+`DateBlock` (the calendar block on notices and exams), `TimelineItem` (the time
+rail on every routine) and `IdentityCard` (the digital ID card, with the QR code
+of the registration number or User ID).
 
 ### Browser push notifications
 
@@ -500,11 +517,32 @@ With any of them missing the feature stays off: `GET /api/push/public-key`
 answers `enabled: false`, the frontend never asks for permission and nothing is
 queued.
 
-In the browser, `public/sw.js` shows the notification and, on click, focuses an
-open tab and navigates it to the page the notification points at, or opens a new
-window. After signing in, students, CRs and teachers see one dismissible
-`Get notifications on this device` banner, and `My profile → Security` has the
-switch for this device. Signing out removes that device's subscription.
+The phone is asked for permission inside the sign-in click itself, so the
+system dialog appears right after a successful sign-in. If the dialog could not
+be shown and the permission is still `default`, the app asks once more on the
+next tap inside the app shell and never again after a decision. There is no
+in-page banner or switch: `My profile → Notifications` only shows the state
+(`Allowed`, `Blocked` or `Not asked`), the phone-settings steps when it is
+blocked, and a `Send test notification` button that calls
+`POST /api/push/test`. That endpoint sends to every subscription on the account
+and answers how many went out.
+
+On every start the app registers `/sw.js` at scope `/`, and on start and on
+each visibility change it re-syncs the subscription: it subscribes when none
+exists, unsubscribes and subscribes again when the stored
+`applicationServerKey` no longer matches the server key, and posts the
+subscription every time. `public/sw.js` uses `skipWaiting` and `clients.claim`,
+always shows a notification (title, body, icon, the monochrome badge, tag,
+`renotify`, vibration and `data.url`) and, on click, focuses an open window and
+navigates it, or opens a new one. Signing out removes that device's
+subscription.
+
+The Go static server serves `/sw.js` as `application/javascript` with
+`Cache-Control: no-cache` and `Service-Worker-Allowed: /`, and
+`manifest.webmanifest` as `application/manifest+json` with `Cache-Control:
+no-cache`. Each push failure is logged with the push service host and the
+status code only — never a key and never a full endpoint. At startup the server
+logs once whether the VAPID keys are configured.
 
 Browsers only allow push on `https://`, with `http://localhost` as the single
 exception — see *Showing the site on a phone over HTTPS* below.
@@ -512,15 +550,34 @@ exception — see *Showing the site on a phone over HTTPS* below.
 ### Installing the site on a phone or a desktop
 
 `frontend/public/manifest.webmanifest` gives the installed app its name
-(`SUST CSE Portal`), its short name (`CSE Portal`), the maroon theme, the cream
-background and the two monogram icons in `frontend/public/`. `index.html` links
-the manifest, so any browser that supports installing offers it.
+(`SUST CSE Portal`), its short name (`SUST CSE`), the maroon theme, the paper
+background, `start_url` `/`, `display: standalone` and the generated icons.
+`index.html` links the manifest, carries a light and a dark `theme-color` and
+paints a branded splash until the first screen is ready. When the app runs
+standalone the browser-only parts of the public page are hidden and a compact
+sign-in launcher takes their place.
 
 - **Android and desktop Chrome** — open the site and choose `Install app` from
   the address bar or the browser menu.
 - **iPhone** — open the site in Safari and choose `Share → Add to Home Screen`.
   Safari only delivers push to an installed site, so this step is required
-  before the notification switch works there.
+  before notifications work there.
+
+#### Generating the icons
+
+Everything in the manifest, `index.html` and the service worker comes from one
+source file, `frontend/public/brand/sust-logo.png`:
+
+```powershell
+cd frontend
+npm run icons
+```
+
+`scripts/icons.mjs` writes `icon-192.png`, `icon-512.png` (purpose `any`),
+`icon-192-maskable.png`, `icon-512-maskable.png` (the crest on a white plate
+over maroon, inside the safe area), `badge-96.png` (the monochrome notification
+badge), `apple-touch-icon.png` and `favicon.png`. The generated files are
+committed, so the script only has to run again when the logo changes.
 
 ### Campus photos and logos
 
@@ -531,12 +588,12 @@ with exactly these names and nothing else has to change:
 | File | Size | Used by |
 |---|---|---|
 | `campus/hero-monument.jpg`, `campus/hero-building.jpg`, `campus/hero-entrance.jpg` | 1920 × 1080 | the home hero slideshow and the sign-in pages |
-| `brand/sust-logo.png` | 512 × 512, transparent | the home page header |
-| `brand/cse-logo.png` | 512 × 512, transparent | the crest in every masthead, and the favicon |
+| `brand/sust-logo.png` | 512 × 512 | every crest, the home hero, the ID card, and the source for `npm run icons` |
 
-When a campus photo is missing the hero falls back to its maroon gradient. When
-a logo is missing the crest falls back to the `CS` monogram and the favicon
-stays on the bundled one, so the app still looks finished without them.
+There is no CSE logo; the SUST logo is the only one the app uses. When a campus
+photo is missing the hero falls back to its maroon gradient, and when the logo
+is missing the crest falls back to its `CSE` monogram, so the app still looks
+finished without them.
 
 ### Showing the site on a phone over HTTPS
 
@@ -563,10 +620,10 @@ The tunnel address changes every run, so update `FRONTEND_ORIGIN` each time.
 
 1. Make sure `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` are set
    in `backend/.env`, and that the site is on `https://` or `http://localhost`.
-2. Sign in as a student, a CR or a teacher. Accept the
-   `Get notifications on this device` banner, or use the switch in
-   `My profile → Security`.
-3. Allow notifications when the browser asks. The switch now reads as on.
+2. Sign in as a student, a CR or a teacher. The phone asks for permission in
+   the same click; if it does not, tap anywhere once inside the app.
+3. Allow notifications. `My profile → Notifications` now reads `Allowed`, and
+   `Send test notification` reaches this device.
 4. From another account, do something that notifies that person: post a notice
    for their batch, send them a message, publish a routine, or open a poll.
 5. The notification arrives even with the tab closed. Clicking it focuses an

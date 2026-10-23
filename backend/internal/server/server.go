@@ -31,6 +31,7 @@ type Dependencies struct {
 	Auth      handler.AuthStore
 	Numbers   handler.PublicStore
 	Devices   handler.PushStore
+	PushTests handler.PushTester
 	People    handler.AdminStore
 	Catalog   handler.CatalogStore
 	Lookups   handler.LookupStore
@@ -115,7 +116,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	authenticated.Handle("GET /api/lookups/periods", periods.List())
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
-	registerPushRoutes(mux, deps, handler.NewPush(deps.Config, deps.Devices))
+	registerPushRoutes(mux, deps, handler.NewPush(deps.Config, deps.Devices, deps.PushTests))
 	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Alarms))
 	authenticated.Handle("PATCH /api/schedule/items/{id}/link",
 		handler.NewSchedule(deps.Config, deps.Items, deps.Alarms).Link())
@@ -343,6 +344,7 @@ func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.P
 	group := NotificationGroup(mux, deps)
 	group.Handle("POST /api/push/subscribe", pushes.Subscribe())
 	group.Handle("DELETE /api/push/subscribe", pushes.Unsubscribe())
+	group.Handle("POST /api/push/test", pushes.Test())
 }
 
 func registerNotificationRoutes(group RouteGroup, notifications *handler.Notifications) {

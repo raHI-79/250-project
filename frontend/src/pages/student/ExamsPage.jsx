@@ -9,6 +9,7 @@ import {
   PageHeader,
   SkeletonCard,
   StatusBadge,
+  PullToRefresh,
 } from '../../components/ui'
 import { useHighlight, useResource } from '../../lib/hooks'
 import paths from '../../lib/paths'
@@ -17,11 +18,11 @@ import { formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
 
 export default function ExamsPage() {
-  const { data, loading, error } = useResource('/api/students/exams')
+  const { data, loading, error, reload } = useResource('/api/students/exams')
   const highlight = useHighlight(Boolean(data))
   const items = data?.items || []
   return (
-    <>
+    <PullToRefresh onRefresh={reload}>
       <PageHeader
         eyebrow="Examinations"
         title="Exams"
@@ -115,6 +116,6 @@ export default function ExamsPage() {
           ))}
         </ul>
       )}
-    </>
+    </PullToRefresh>
   )
 }

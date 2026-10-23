@@ -24,7 +24,7 @@ export default function HomeHero() {
     return () => window.clearInterval(timer)
   }, [])
   return (
-    <section className="relative isolate overflow-hidden bg-linear-to-br from-brand-900 via-brand-700 to-brand-500">
+    <section className="relative isolate overflow-hidden bg-linear-to-br from-maroon-900 via-maroon-700 to-maroon-600">
       {HERO_IMAGES.map((source, position) =>
         broken[source] ? null : (
           <img
@@ -40,13 +40,13 @@ export default function HomeHero() {
           />
         ),
       )}
-      <div className="absolute inset-0 bg-linear-to-r from-brand-950/92 via-brand-900/75 to-brand-700/35" />
+      <div className="absolute inset-0 bg-linear-to-r from-maroon-950/92 via-maroon-900/75 to-maroon-700/35" />
       <div className="relative mx-auto flex min-h-[26rem] max-w-6xl flex-col justify-center px-4 py-14 sm:px-6 sm:py-20 lg:min-h-[32.5rem]">
-        <p className="text-xs font-semibold tracking-[0.14em] text-gold-200 uppercase">
+        <p className="text-xs font-semibold tracking-[0.14em] text-sand uppercase">
           Established 1991 · Sylhet, Bangladesh
         </p>
         <h1 className="font-display mt-4 max-w-2xl text-3xl leading-tight font-semibold text-white sm:text-4xl lg:text-5xl">
-          Class and exam coordination for the <em className="text-gold-200 not-italic">CSE</em>{' '}
+          Class and exam coordination for the <em className="text-sand not-italic">CSE</em>{' '}
           department
         </h1>
         <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/80 sm:text-base">

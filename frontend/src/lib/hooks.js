@@ -15,10 +15,20 @@ export const useResource = (path, query) => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const reload = useCallback(() => setAttempt((current) => current + 1), [])
+  const waiting = useRef([])
+  const settle = useCallback(() => {
+    const waiters = waiting.current
+    waiting.current = []
+    waiters.forEach((resolve) => resolve())
+  }, [])
+  const reload = useCallback(() => {
+    setAttempt((current) => current + 1)
+    return new Promise((resolve) => waiting.current.push(resolve))
+  }, [])
   useEffect(() => {
     if (!path) {
       setLoading(false)
+      settle()
       return undefined
     }
     const controller = new AbortController()
@@ -36,12 +46,13 @@ export const useResource = (path, query) => {
       })
       .finally(() => {
         if (active) setLoading(false)
+        settle()
       })
     return () => {
       active = false
       controller.abort()
     }
-  }, [path, key, attempt])
+  }, [path, key, attempt, settle])
   return { data, loading, error, reload }
 }
 
@@ -151,6 +162,15 @@ export const useAuthConfig = () => {
     googleEnabled: Boolean(config?.google_enabled),
     loaded: Boolean(config),
   }
+}
+
+export const useNow = (interval = 30000) => {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), interval)
+    return () => window.clearInterval(timer)
+  }, [interval])
+  return now
 }
 
 export const useCountdown = (initial = 0) => {
