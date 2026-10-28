@@ -22,6 +22,8 @@ const (
 	defaultDecisionStart   = "16:00"
 	defaultDecisionEnd     = "23:00"
 	defaultDaysAhead       = 7
+	defaultReminderTimes   = "16:00,21:00"
+	defaultMorningRemind   = "07:30"
 	defaultUploadDir       = "uploads"
 	defaultMaxUploadMB     = 10
 	maxDaysAhead           = 31
@@ -59,6 +61,8 @@ type Config struct {
 	DecisionFrom     int
 	DecisionTo       int
 	DaysAhead        int
+	ReminderTimes    []string
+	MorningReminder  string
 	UploadDir        string
 	MaxUploadMB      int
 	FileStorage      string
@@ -165,6 +169,14 @@ func Load() (*Config, error) {
 			maxDaysAhead, rawDaysAhead)
 	}
 	cfg.DaysAhead = daysAhead
+	cfg.ReminderTimes, err = clockList("TEACHER_REMINDER_TIMES", getEnv("TEACHER_REMINDER_TIMES", defaultReminderTimes))
+	if err != nil {
+		return nil, err
+	}
+	cfg.MorningReminder = strings.TrimSpace(getEnv("TEACHER_MORNING_REMINDER", defaultMorningRemind))
+	if _, err := clockMinutes("TEACHER_MORNING_REMINDER", cfg.MorningReminder); err != nil {
+		return nil, err
+	}
 	if cfg.FileStorage != FileStorageDisk && cfg.FileStorage != FileStorageDatabase {
 		return nil, fmt.Errorf("config: FILE_STORAGE must be %s or %s, got %q",
 			FileStorageDisk, FileStorageDatabase, cfg.FileStorage)
@@ -245,6 +257,24 @@ func (c *Config) DecisionMinutesLeft(now time.Time) int {
 		return 0
 	}
 	return c.DecisionTo - (now.Hour()*60 + now.Minute())
+}
+
+func clockList(key, value string) ([]string, error) {
+	times := make([]string, 0, 4)
+	for _, raw := range strings.Split(value, ",") {
+		slot := strings.TrimSpace(raw)
+		if slot == "" {
+			continue
+		}
+		if _, err := clockMinutes(key, slot); err != nil {
+			return nil, err
+		}
+		times = append(times, slot)
+	}
+	if len(times) == 0 {
+		return nil, fmt.Errorf("config: %s needs at least one time like 16:00", key)
+	}
+	return times, nil
 }
 
 func clockMinutes(key, value string) (int, error) {

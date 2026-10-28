@@ -7,6 +7,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { MESSAGES_BADGE } from './nav'
+import { BADGE_EXAMS, BADGE_ROUTINE } from './badges'
 import { paths } from './paths'
 
 const profileTab = { label: 'Profile', to: paths.profile, icon: UserRound }
@@ -20,15 +21,25 @@ const messagesTab = {
 
 export const studentTabs = [
   { label: 'Home', to: paths.student.today, icon: House },
-  { label: 'Routine', to: paths.student.upcomingRoutine, icon: CalendarDays },
-  { label: 'Exams', to: paths.student.exams, icon: ClipboardList },
+  {
+    label: 'Routine',
+    to: paths.student.upcomingRoutine,
+    icon: CalendarDays,
+    badge: BADGE_ROUTINE,
+  },
+  { label: 'Exams', to: paths.student.exams, icon: ClipboardList, badge: BADGE_EXAMS },
   messagesTab,
   profileTab,
 ]
 
 export const crTabs = [
   { label: 'Home', to: paths.student.today, icon: House },
-  { label: 'Routine', to: paths.student.upcomingRoutine, icon: CalendarDays },
+  {
+    label: 'Routine',
+    to: paths.student.upcomingRoutine,
+    icon: CalendarDays,
+    badge: BADGE_ROUTINE,
+  },
   { label: 'CR hub', to: paths.cr.schedule, icon: CalendarPlus },
   messagesTab,
   profileTab,

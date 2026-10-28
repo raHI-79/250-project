@@ -27,6 +27,15 @@ import {
 } from '../../components/ui'
 import { useAuth } from '../../context/auth'
 import { useNow, useResource } from '../../lib/hooks'
+import {
+  BADGE_COURSES,
+  BADGE_EXAMS,
+  BADGE_MATERIALS,
+  BADGE_NOTICES,
+  BADGE_POLLS,
+  BADGE_ROUTINE,
+  useSectionBadges,
+} from '../../lib/badges'
 import { paths } from '../../lib/paths'
 import { STATUS_CANCELLED } from '../../lib/schedule'
 import { today as todayDate } from '../../lib/time'
@@ -55,6 +64,7 @@ function Section({ title, action, children }) {
 
 export default function TodayPage() {
   const { user, role } = useAuth()
+  const badges = useSectionBadges()
   const now = useNow(60000)
   const summary = useResource('/api/students/today')
   const routine = useResource('/api/students/upcoming-routine')
@@ -78,24 +88,49 @@ export default function TodayPage() {
     .filter(Boolean)
     .join(' · ')
   const actions = [
-    { label: 'Routine', icon: CalendarClock, to: paths.student.upcomingRoutine() },
+    {
+      label: 'Routine',
+      icon: CalendarClock,
+      to: paths.student.upcomingRoutine(),
+      count: badges[BADGE_ROUTINE],
+    },
     {
       label: 'Exams',
       icon: ClipboardList,
       to: paths.student.exams(),
-      count: data?.upcoming_exams,
+      count: badges[BADGE_EXAMS] || data?.upcoming_exams,
     },
-    { label: 'Courses', icon: Library, to: paths.student.courses() },
-    { label: 'Notices', icon: Megaphone, to: paths.student.notices() },
+    {
+      label: 'Courses',
+      icon: Library,
+      to: paths.student.courses(),
+      count: badges[BADGE_COURSES],
+    },
+    {
+      label: 'Notices',
+      icon: Megaphone,
+      to: paths.student.notices(),
+      count: badges[BADGE_NOTICES],
+    },
     {
       label: 'Messages',
       icon: MessageCircle,
       to: paths.student.messages(),
       count: data?.unread_messages,
     },
-    { label: 'Polls', icon: Vote, to: paths.student.polls(), count: data?.open_polls },
+    {
+      label: 'Polls',
+      icon: Vote,
+      to: paths.student.polls(),
+      count: badges[BADGE_POLLS] || data?.open_polls,
+    },
     { label: 'Directory', icon: Users, to: paths.student.students() },
-    { label: 'Materials', icon: FolderOpen, to: paths.student.materials() },
+    {
+      label: 'Materials',
+      icon: FolderOpen,
+      to: paths.student.materials(),
+      count: badges[BADGE_MATERIALS],
+    },
   ]
   const refresh = () =>
     Promise.all([summary.reload(), routine.reload(), chats.reload(), crItems.reload(), crFinal.reload()])

@@ -5,7 +5,7 @@ import api from '../../lib/api'
 import cx from '../../lib/cx'
 import { notificationTarget } from '../../lib/paths'
 import { readRaw, writeRaw } from '../../lib/storage'
-import { relativeTime } from '../../lib/time'
+import { stampLabel } from '../../lib/time'
 import { useAuth } from '../../context/auth'
 import Button from '../ui/Button'
 import CountBadge from '../ui/CountBadge'
@@ -143,7 +143,7 @@ export default function NotificationBell() {
                           <span className="mt-0.5 block text-sm text-brand-600">{item.body}</span>
                         )}
                         <span className="mt-1 block text-xs text-faint">
-                          {relativeTime(item.created_at)}
+                          {stampLabel(item.created_at)}
                         </span>
                       </span>
                     </button>

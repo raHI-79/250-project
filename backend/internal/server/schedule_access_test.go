@@ -147,6 +147,11 @@ func (silentAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, b
 	return nil
 }
 
+func (silentAlerts) PushUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
+	return nil
+}
+
 func (silentAlerts) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
 	link store.NotificationLink) error {
 	return nil

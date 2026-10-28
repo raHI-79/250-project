@@ -185,12 +185,19 @@ type recordingAlerts struct {
 	link    store.NotificationLink
 	calls   int
 	users   int
+	pushed  int
 }
 
 func (r *recordingAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, body string,
 	link store.NotificationLink) error {
 	r.title, r.link = title, link
 	r.users++
+	return nil
+}
+
+func (r *recordingAlerts) PushUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
+	r.pushed++
 	return nil
 }
 

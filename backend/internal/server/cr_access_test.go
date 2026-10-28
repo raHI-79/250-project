@@ -99,6 +99,11 @@ func (silentNotifier) NotifyUser(ctx context.Context, userID int64, kind, title,
 	return nil
 }
 
+func (silentNotifier) PushUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
+	return nil
+}
+
 func (silentNotifier) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
 	link store.NotificationLink) error {
 	return nil

@@ -581,7 +581,7 @@ func (c *Conversations) notifyMembers(ctx context.Context, recipients []int64,
 		if recipient == viewer.UserID {
 			continue
 		}
-		if err := c.alerts.NotifyUser(ctx, recipient, notify.TypeMessage, title, body, link); err != nil {
+		if err := c.alerts.PushUser(ctx, recipient, notify.TypeMessage, title, body, link); err != nil {
 			log.Printf("handler: could not notify a conversation member: %v", err)
 		}
 	}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TabBar from './TabBar'
@@ -9,11 +9,14 @@ import SearchSheet from './SearchSheet'
 import { ChromeContext } from '../../context/chrome'
 import cx from '../../lib/cx'
 import { useUnreadMessages } from '../../lib/hooks'
+import { setAppBadge, useSectionBadges } from '../../lib/badges'
 import { MESSAGES_BADGE } from '../../lib/nav'
 
 export default function AppShell({ groups, tabs = [], showBell = true, showSearch = true }) {
   const location = useLocation()
   const unread = useUnreadMessages()
+  const badges = useSectionBadges()
+  useEffect(() => setAppBadge(unread), [unread])
   const [menuOpen, setMenuOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [collapsed, setCollapsed] = useState(false)
@@ -23,7 +26,11 @@ export default function AppShell({ groups, tabs = [], showBell = true, showSearc
     () => ({ title, setTitle, collapsed, setCollapsed, openSearch: showSearch ? openSearch : null }),
     [title, collapsed, openSearch, showSearch],
   )
-  const withCount = (item) => (item.badge === MESSAGES_BADGE ? { ...item, count: unread } : item)
+  const withCount = (item) => {
+    if (!item.badge) return item
+    if (item.badge === MESSAGES_BADGE) return { ...item, count: unread }
+    return { ...item, count: badges[item.badge] || 0 }
+  }
   const sections = groups.map((group) => ({ ...group, items: group.items.map(withCount) }))
   const bar = tabs.map(withCount)
   return (

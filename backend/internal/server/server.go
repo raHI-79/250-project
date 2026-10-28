@@ -51,6 +51,7 @@ type Dependencies struct {
 	Chats     handler.ConversationStore
 	Shared    *upload.Attachments
 	Votes     handler.PollStore
+	Badges    handler.BadgeStore
 }
 
 type RouteGroup struct {
@@ -108,6 +109,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
 	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
 	authenticated.Handle("GET /api/me", handler.Me())
+	badges := handler.NewBadges(deps.Config, deps.Badges)
+	authenticated.Handle("GET /api/me/badges", badges.List())
+	authenticated.Handle("POST /api/me/badges/{section}/seen", badges.Seen())
 	registerProfileRoutes(authenticated, handler.NewProfile(deps.Config, deps.Accounts, photos))
 	admin := handler.NewAdmin(deps.Config, deps.People, deps.Notifier, mail, photos)
 	periods := handler.NewPeriods(deps.Periods)

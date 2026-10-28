@@ -48,6 +48,11 @@ func (f *fakeNotifier) NotifyUser(ctx context.Context, userID int64, kind, title
 	return nil
 }
 
+func (f *fakeNotifier) PushUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
+	return nil
+}
+
 func (f *fakeNotifier) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
 	link store.NotificationLink) error {
 	if f.err != nil {

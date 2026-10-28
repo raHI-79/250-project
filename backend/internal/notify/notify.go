@@ -202,6 +202,27 @@ func (s *Service) NotifyUser(ctx context.Context, userID int64, kind, title, bod
 	return nil
 }
 
+func (s *Service) PushUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
+	if userID <= 0 {
+		return ErrInvalidRecipient
+	}
+	kind, title, body, err := content(kind, title, body)
+	if err != nil {
+		return err
+	}
+	if !KnownLink(link.Kind) {
+		return ErrInvalidLink
+	}
+	role, err := s.notifications.NotificationRole(ctx, userID)
+	if err != nil {
+		log.Printf("notify: could not read the role of a push recipient: %v", err)
+		role = ""
+	}
+	s.queue(ctx, []int64{userID}, PageURL(s.origin, role, link), kind, title, body)
+	return nil
+}
+
 func (s *Service) NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
 	link store.NotificationLink) error {
 	role = strings.ToLower(strings.TrimSpace(role))

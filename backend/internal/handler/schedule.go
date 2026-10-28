@@ -242,6 +242,8 @@ type Notifier interface {
 
 type BroadcastNotifier interface {
 	Notifier
+	PushUser(ctx context.Context, userID int64, kind, title, body string,
+		link store.NotificationLink) error
 	NotifyBroadcast(ctx context.Context, role, batch, section, kind, title, body string,
 		link store.NotificationLink) error
 }

@@ -16,8 +16,10 @@ import paths from '../../lib/paths'
 import { courseLine, isOnline, sectionShort } from '../../lib/schedule'
 import { formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
+import { BADGE_EXAMS, useSectionSeen } from '../../lib/badges'
 
 export default function ExamsPage() {
+  useSectionSeen(BADGE_EXAMS)
   const { data, loading, error, reload } = useResource('/api/students/exams')
   const highlight = useHighlight(Boolean(data))
   const items = data?.items || []
