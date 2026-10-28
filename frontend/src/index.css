@@ -568,6 +568,54 @@
   }
 }
 
+@media (max-width: 767px) {
+  .table-stack thead {
+    display: none;
+  }
+  .table-stack,
+  .table-stack tbody,
+  .table-stack tr,
+  .table-stack td {
+    display: block;
+    width: 100%;
+  }
+  .table-stack tr {
+    margin-bottom: 0.75rem;
+    border-radius: var(--radius-card);
+    background-color: var(--c-glass-card);
+    border: 1px solid var(--c-glass-line);
+    box-shadow: var(--shadow-glass);
+    padding: 0.25rem 0;
+  }
+  .table-stack tr:last-child {
+    margin-bottom: 0;
+  }
+  .table-stack td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 0;
+    padding: 0.5rem 0.875rem;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .table-stack td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .table-stack td:empty {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
