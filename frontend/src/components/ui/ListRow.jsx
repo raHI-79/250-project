@@ -34,7 +34,7 @@ export default function ListRow({
       type={Tag === 'button' ? 'button' : undefined}
       className={cx(
         'flex w-full min-h-12 items-center gap-3 px-4 py-3 text-left',
-        tappable && 'transition-colors hover:bg-wash active:bg-wash',
+        tappable && 'press transition-colors hover:bg-wash',
         className,
       )}
       {...rest}

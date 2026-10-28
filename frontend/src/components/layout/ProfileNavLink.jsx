@@ -34,7 +34,7 @@ export default function ProfileNavLink({ onNavigate }) {
         onClick={logout}
         aria-label="Sign out"
         title="Sign out"
-        className="tap-target grid shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-wash hover:text-ink"
+        className="press tap-target grid shrink-0 place-items-center rounded-full text-muted hover:bg-wash hover:text-ink"
       >
         <LogOut size={17} />
       </button>

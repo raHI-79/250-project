@@ -1,29 +1,44 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import cx from '../../lib/cx'
 
-const controlClass = (invalid, tone) =>
+const shell = (invalid, tone, focused) =>
   cx(
-    'h-12 w-full rounded-xl border px-3.5 text-base transition-colors focus:outline-none focus:ring-3',
-    tone === 'dark'
-      ? 'bg-white/5 text-white placeholder:text-white/35'
-      : 'bg-surface text-ink placeholder:text-faint',
+    'relative rounded-xl border transition-all duration-200',
+    tone === 'dark' ? 'bg-white/5' : 'glass-chip',
     invalid
-      ? 'border-danger-500 focus:border-danger-600 focus:ring-danger-100'
-      : tone === 'dark'
-        ? 'border-white/20 focus:border-gold-300 focus:ring-white/10'
-        : 'border-line-strong focus:border-brand-600 focus:ring-brand-100',
+      ? 'border-danger-500'
+      : focused
+        ? tone === 'dark'
+          ? 'border-gold-300'
+          : 'border-brand-600'
+        : tone === 'dark'
+          ? 'border-white/20'
+          : 'border-line-strong',
+    focused && !invalid && 'shadow-[0_0_0_3px_var(--color-brand-100)]',
+    focused && invalid && 'shadow-[0_0_0_3px_var(--color-danger-100)]',
   )
 
-export function Field({
-  label,
-  error,
-  hint,
-  htmlFor,
-  required = false,
-  tone,
-  className,
-  children,
-}) {
+const control = (tone, floating) =>
+  cx(
+    'w-full bg-transparent px-3.5 text-base outline-none',
+    tone === 'dark' ? 'text-white placeholder:text-white/35' : 'text-ink placeholder:text-faint',
+    floating ? 'h-12 pt-5 pb-1.5' : 'h-12',
+  )
+
+const labelClass = (tone, floated, invalid) =>
+  cx(
+    'pointer-events-none absolute left-3.5 origin-left transition-all duration-200 motion-reduce:transition-none',
+    floated ? 'top-1.5 text-2xs font-semibold' : 'top-1/2 -translate-y-1/2 text-base',
+    invalid
+      ? 'text-danger-600'
+      : tone === 'dark'
+        ? 'text-white/65'
+        : floated
+          ? 'text-brand-600'
+          : 'text-muted',
+  )
+
+export function Field({ label, error, hint, htmlFor, required = false, tone, className, children }) {
   const dark = tone === 'dark'
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
@@ -46,64 +61,179 @@ export function Field({
   )
 }
 
+function Floating({ label, error, hint, required, tone, className, id, children }) {
+  const dark = tone === 'dark'
+  return (
+    <div className={cx('flex flex-col gap-1.5', className)}>
+      {children}
+      {error ? (
+        <p className="animate-fade-in px-1 text-sm text-danger-600">{error}</p>
+      ) : (
+        hint && (
+          <p className={cx('px-1 text-sm', dark ? 'text-white/60' : 'text-muted')}>{hint}</p>
+        )
+      )}
+      {label && (
+        <label htmlFor={id} className="sr-only">
+          {label}
+          {required ? ' (required)' : ''}
+        </label>
+      )}
+    </div>
+  )
+}
+
+const useFloating = (value, defaultValue) => {
+  const [focused, setFocused] = useState(false)
+  const filled = value !== undefined ? String(value ?? '') !== '' : Boolean(defaultValue)
+  return { focused, setFocused, floated: focused || filled }
+}
+
 export function Input({ label, error, hint, required, tone, className, id, ...rest }) {
   const generated = useId()
   const fieldId = id || generated
+  const { focused, setFocused, floated } = useFloating(rest.value, rest.defaultValue)
   return (
-    <Field
+    <Floating
       label={label}
       error={error}
       hint={hint}
       required={required}
-      htmlFor={fieldId}
       tone={tone}
       className={className}
+      id={fieldId}
     >
-      <input id={fieldId} className={controlClass(Boolean(error), tone)} {...rest} />
-    </Field>
+      <div className={shell(Boolean(error), tone, focused)}>
+        <input
+          id={fieldId}
+          aria-label={label}
+          required={required}
+          className={cx(
+            control(tone, Boolean(label)),
+            !floated && 'placeholder:text-transparent',
+          )}
+          {...rest}
+          onFocus={(event) => {
+            setFocused(true)
+            rest.onFocus?.(event)
+          }}
+          onBlur={(event) => {
+            setFocused(false)
+            rest.onBlur?.(event)
+          }}
+        />
+        {label && (
+          <span className={labelClass(tone, floated, Boolean(error))}>
+            {label}
+            {required && <span className="ml-0.5">*</span>}
+          </span>
+        )}
+      </div>
+    </Floating>
   )
 }
 
 export function Select({ label, error, hint, required, tone, className, id, children, ...rest }) {
   const generated = useId()
   const fieldId = id || generated
+  const { focused, setFocused } = useFloating(rest.value, rest.defaultValue)
   return (
-    <Field
+    <Floating
       label={label}
       error={error}
       hint={hint}
       required={required}
-      htmlFor={fieldId}
       tone={tone}
       className={className}
+      id={fieldId}
     >
-      <select id={fieldId} className={controlClass(Boolean(error), tone)} {...rest}>
-        {children}
-      </select>
-    </Field>
+      <div className={shell(Boolean(error), tone, focused)}>
+        <select
+          id={fieldId}
+          aria-label={label}
+          required={required}
+          className={control(tone, Boolean(label))}
+          {...rest}
+          onFocus={(event) => {
+            setFocused(true)
+            rest.onFocus?.(event)
+          }}
+          onBlur={(event) => {
+            setFocused(false)
+            rest.onBlur?.(event)
+          }}
+        >
+          {children}
+        </select>
+        {label && (
+          <span className={labelClass(tone, true, Boolean(error))}>
+            {label}
+            {required && <span className="ml-0.5">*</span>}
+          </span>
+        )}
+      </div>
+    </Floating>
   )
 }
 
 export function Textarea({ label, error, hint, required, tone, className, id, rows = 4, ...rest }) {
   const generated = useId()
   const fieldId = id || generated
+  const { focused, setFocused, floated } = useFloating(rest.value, rest.defaultValue)
   return (
-    <Field
+    <Floating
       label={label}
       error={error}
       hint={hint}
       required={required}
-      htmlFor={fieldId}
       tone={tone}
       className={className}
+      id={fieldId}
     >
-      <textarea
-        id={fieldId}
-        rows={rows}
-        className={cx(controlClass(Boolean(error), tone), 'h-auto resize-y py-2.5 leading-relaxed')}
-        {...rest}
-      />
-    </Field>
+      <div className={shell(Boolean(error), tone, focused)}>
+        <textarea
+          id={fieldId}
+          rows={rows}
+          aria-label={label}
+          required={required}
+          className={cx(
+            'w-full resize-y bg-transparent px-3.5 leading-relaxed outline-none',
+            tone === 'dark'
+              ? 'text-white placeholder:text-white/35'
+              : 'text-ink placeholder:text-faint',
+            label ? 'pt-6 pb-2.5' : 'py-2.5',
+            !floated && 'placeholder:text-transparent',
+          )}
+          {...rest}
+          onFocus={(event) => {
+            setFocused(true)
+            rest.onFocus?.(event)
+          }}
+          onBlur={(event) => {
+            setFocused(false)
+            rest.onBlur?.(event)
+          }}
+        />
+        {label && (
+          <span
+            className={cx(
+              'pointer-events-none absolute left-3.5 origin-left transition-all duration-200 motion-reduce:transition-none',
+              floated ? 'top-2 text-2xs font-semibold' : 'top-3.5 text-base',
+              error
+                ? 'text-danger-600'
+                : tone === 'dark'
+                  ? 'text-white/65'
+                  : floated
+                    ? 'text-brand-600'
+                    : 'text-muted',
+            )}
+          >
+            {label}
+            {required && <span className="ml-0.5">*</span>}
+          </span>
+        )}
+      </div>
+    </Floating>
   )
 }
 

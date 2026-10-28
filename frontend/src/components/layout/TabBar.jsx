@@ -7,7 +7,7 @@ export default function TabBar({ tabs }) {
   return (
     <nav
       aria-label="Main"
-      className="glass fixed inset-x-0 bottom-0 z-50 border-t border-line pb-[env(safe-area-inset-bottom,0px)] lg:hidden"
+      className="glass fixed inset-x-0 bottom-0 z-50 border-t pb-[env(safe-area-inset-bottom,0px)] lg:hidden"
     >
       <ul className="flex items-stretch">
         {tabs.map((tab) => {
@@ -19,16 +19,31 @@ export default function TabBar({ tabs }) {
                 end={tab.end}
                 className={({ isActive }) =>
                   cx(
-                    'flex min-h-14 flex-col items-center justify-center gap-0.5 pt-1.5 pb-1 transition-colors',
+                    'press relative flex min-h-14 flex-col items-center justify-center gap-1 pt-2 pb-1',
                     isActive ? 'text-brand-600' : 'text-muted',
                   )
                 }
               >
                 {({ isActive }) => (
                   <>
+                    <span
+                      aria-hidden="true"
+                      className={cx(
+                        'absolute inset-x-5 top-0 h-0.5 rounded-full bg-brand-600 transition-all duration-300 motion-reduce:transition-none',
+                        isActive ? 'opacity-100' : 'scale-x-0 opacity-0',
+                      )}
+                    />
                     <span className="relative">
+                      <span
+                        aria-hidden="true"
+                        className={cx(
+                          'absolute -inset-x-3 -inset-y-1.5 rounded-full bg-brand-50 transition-all duration-300 motion-reduce:transition-none',
+                          isActive ? 'scale-100 opacity-100' : 'scale-75 opacity-0',
+                        )}
+                      />
                       <Icon
-                        size={23}
+                        size={22}
+                        className="relative"
                         strokeWidth={isActive ? 2.2 : 1.8}
                         fill={isActive ? 'currentColor' : 'none'}
                         fillOpacity={isActive ? 0.2 : 0}

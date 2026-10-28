@@ -24,7 +24,7 @@ export default function Chip({
       type={Tag === 'button' ? 'button' : undefined}
       aria-pressed={Tag === 'button' ? selected : undefined}
       className={cx(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap',
+        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors duration-200',
         selected ? 'border-brand-600 bg-brand-600 text-page' : TONES[tone] || TONES.neutral,
         interactive && 'min-h-9 transition-colors',
         interactive && !selected && 'hover:border-brand-300 hover:bg-brand-50',
