@@ -11,30 +11,31 @@ import (
 )
 
 const (
-	defaultPort           = "8080"
-	defaultAppEnv         = "development"
-	defaultTimezone       = "Asia/Dhaka"
-	defaultJWTTTL         = "24h"
-	defaultFrontendOrigin = "http://localhost:5173"
-	DecisionStateBefore   = "before"
-	DecisionStateOpen     = "open"
-	DecisionStateClosed   = "closed"
-	defaultDecisionStart  = "16:00"
-	defaultDecisionEnd    = "23:00"
-	defaultDaysAhead      = 7
-	defaultUploadDir      = "uploads"
-	defaultMaxUploadMB    = 10
-	maxDaysAhead          = 31
-	defaultSMTPPort       = 587
-	defaultStudentDomain  = "student.sust.edu"
-	minJWTSecretLength    = 32
-	defaultMailFromName   = "SUST CSE Portal"
-	defaultMaxConns       = 10
-	maxDatabaseConns      = 100
-	FileStorageDisk       = "disk"
-	FileStorageDatabase   = "database"
-	MailProviderSMTP      = "smtp"
-	MailProviderBrevo     = "brevo"
+	defaultPort            = "8080"
+	defaultAppEnv          = "development"
+	defaultTimezone        = "Asia/Dhaka"
+	defaultJWTTTL          = "24h"
+	defaultFrontendOrigin  = "http://localhost:5173"
+	DecisionStateBefore    = "before"
+	DecisionStateOpen      = "open"
+	DecisionStateClosed    = "closed"
+	defaultDecisionStart   = "16:00"
+	defaultDecisionEnd     = "23:00"
+	defaultDaysAhead       = 7
+	defaultUploadDir       = "uploads"
+	defaultMaxUploadMB     = 10
+	maxDaysAhead           = 31
+	defaultSMTPPort        = 587
+	defaultStudentDomain   = "student.sust.edu"
+	minJWTSecretLength     = 32
+	defaultMailFromName    = "SUST CSE Portal"
+	defaultMaxConns        = 10
+	maxDatabaseConns       = 100
+	FileStorageDisk        = "disk"
+	FileStorageDatabase    = "database"
+	MailProviderSMTP       = "smtp"
+	MailProviderBrevo      = "brevo"
+	MailProviderAppsScript = "appsscript"
 )
 
 var (
@@ -44,42 +45,44 @@ var (
 )
 
 type Config struct {
-	Port            string
-	AppEnv          string
-	Timezone        string
-	Location        *time.Location
-	DatabaseURL     string
-	TestDatabaseURL string
-	JWTSecret       string
-	JWTTTL          time.Duration
-	FrontendOrigin  string
-	DecisionStart   string
-	DecisionEnd     string
-	DecisionFrom    int
-	DecisionTo      int
-	DaysAhead       int
-	UploadDir       string
-	MaxUploadMB     int
-	FileStorage     string
-	StaticDir       string
-	MailProvider    string
-	MailFromName    string
-	BrevoAPIKey     string
-	DBMaxConns      int
-	AdminIdentifier string
-	AdminPassword   string
-	AdminEmail      string
-	AdminPhone      string
-	SMTPHost        string
-	SMTPPort        int
-	SMTPUsername    string
-	SMTPPassword    string
-	MailFrom        string
-	StudentDomain   string
-	GoogleClientID  string
-	VAPIDPublicKey  string
-	VAPIDPrivateKey string
-	VAPIDSubject    string
+	Port             string
+	AppEnv           string
+	Timezone         string
+	Location         *time.Location
+	DatabaseURL      string
+	TestDatabaseURL  string
+	JWTSecret        string
+	JWTTTL           time.Duration
+	FrontendOrigin   string
+	DecisionStart    string
+	DecisionEnd      string
+	DecisionFrom     int
+	DecisionTo       int
+	DaysAhead        int
+	UploadDir        string
+	MaxUploadMB      int
+	FileStorage      string
+	StaticDir        string
+	MailProvider     string
+	MailFromName     string
+	BrevoAPIKey      string
+	AppsScriptURL    string
+	AppsScriptSecret string
+	DBMaxConns       int
+	AdminIdentifier  string
+	AdminPassword    string
+	AdminEmail       string
+	AdminPhone       string
+	SMTPHost         string
+	SMTPPort         int
+	SMTPUsername     string
+	SMTPPassword     string
+	MailFrom         string
+	StudentDomain    string
+	GoogleClientID   string
+	VAPIDPublicKey   string
+	VAPIDPrivateKey  string
+	VAPIDSubject     string
 }
 
 func (c *Config) PushEnabled() bool {
@@ -91,32 +94,34 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{
-		Port:            getEnv("PORT", defaultPort),
-		AppEnv:          getEnv("APP_ENV", defaultAppEnv),
-		Timezone:        getEnv("APP_TIMEZONE", defaultTimezone),
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		TestDatabaseURL: os.Getenv("TEST_DATABASE_URL"),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		FrontendOrigin:  getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
-		UploadDir:       getEnv("UPLOAD_DIR", defaultUploadDir),
-		FileStorage:     strings.ToLower(getEnv("FILE_STORAGE", FileStorageDisk)),
-		StaticDir:       strings.TrimSpace(os.Getenv("STATIC_DIR")),
-		MailProvider:    strings.ToLower(getEnv("MAIL_PROVIDER", MailProviderSMTP)),
-		MailFromName:    getEnv("MAIL_FROM_NAME", defaultMailFromName),
-		BrevoAPIKey:     strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
-		AdminIdentifier: os.Getenv("ADMIN_IDENTIFIER"),
-		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
-		AdminEmail:      os.Getenv("ADMIN_EMAIL"),
-		AdminPhone:      os.Getenv("ADMIN_PHONE"),
-		SMTPHost:        os.Getenv("SMTP_HOST"),
-		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
-		MailFrom:        os.Getenv("MAIL_FROM"),
-		StudentDomain:   strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
-		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
-		VAPIDPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
-		VAPIDPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
-		VAPIDSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
+		Port:             getEnv("PORT", defaultPort),
+		AppEnv:           getEnv("APP_ENV", defaultAppEnv),
+		Timezone:         getEnv("APP_TIMEZONE", defaultTimezone),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		TestDatabaseURL:  os.Getenv("TEST_DATABASE_URL"),
+		JWTSecret:        os.Getenv("JWT_SECRET"),
+		FrontendOrigin:   getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		UploadDir:        getEnv("UPLOAD_DIR", defaultUploadDir),
+		FileStorage:      strings.ToLower(getEnv("FILE_STORAGE", FileStorageDisk)),
+		StaticDir:        strings.TrimSpace(os.Getenv("STATIC_DIR")),
+		MailProvider:     strings.ToLower(getEnv("MAIL_PROVIDER", MailProviderSMTP)),
+		MailFromName:     getEnv("MAIL_FROM_NAME", defaultMailFromName),
+		BrevoAPIKey:      strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
+		AppsScriptURL:    strings.TrimSpace(os.Getenv("APPS_SCRIPT_URL")),
+		AppsScriptSecret: strings.TrimSpace(os.Getenv("APPS_SCRIPT_SECRET")),
+		AdminIdentifier:  os.Getenv("ADMIN_IDENTIFIER"),
+		AdminPassword:    os.Getenv("ADMIN_PASSWORD"),
+		AdminEmail:       os.Getenv("ADMIN_EMAIL"),
+		AdminPhone:       os.Getenv("ADMIN_PHONE"),
+		SMTPHost:         os.Getenv("SMTP_HOST"),
+		SMTPUsername:     os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:     os.Getenv("SMTP_PASSWORD"),
+		MailFrom:         os.Getenv("MAIL_FROM"),
+		StudentDomain:    strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
+		GoogleClientID:   os.Getenv("GOOGLE_CLIENT_ID"),
+		VAPIDPublicKey:   strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
+		VAPIDPrivateKey:  strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
+		VAPIDSubject:     strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL
@@ -164,9 +169,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: FILE_STORAGE must be %s or %s, got %q",
 			FileStorageDisk, FileStorageDatabase, cfg.FileStorage)
 	}
-	if cfg.MailProvider != MailProviderSMTP && cfg.MailProvider != MailProviderBrevo {
-		return nil, fmt.Errorf("config: MAIL_PROVIDER must be %s or %s, got %q",
-			MailProviderSMTP, MailProviderBrevo, cfg.MailProvider)
+	switch cfg.MailProvider {
+	case MailProviderSMTP, MailProviderBrevo, MailProviderAppsScript:
+	default:
+		return nil, fmt.Errorf("config: MAIL_PROVIDER must be %s, %s or %s, got %q",
+			MailProviderSMTP, MailProviderBrevo, MailProviderAppsScript, cfg.MailProvider)
 	}
 	rawMaxConns := getEnv("DB_MAX_CONNS", strconv.Itoa(defaultMaxConns))
 	maxConns, err := strconv.Atoi(rawMaxConns)
@@ -253,7 +260,14 @@ func (c *Config) HasAdminSeed() bool {
 }
 
 func (c *Config) HasMailer() bool {
-	return c.SMTPHost != ""
+	switch c.MailProvider {
+	case MailProviderBrevo:
+		return c.BrevoAPIKey != "" && c.MailFrom != ""
+	case MailProviderAppsScript:
+		return c.AppsScriptURL != "" && c.AppsScriptSecret != ""
+	default:
+		return c.SMTPHost != ""
+	}
 }
 
 func (c *Config) IsProduction() bool {

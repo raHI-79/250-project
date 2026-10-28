@@ -145,7 +145,9 @@ Postgres with everything else, so one dump holds the whole portal.
    Neon connection string.
 3. The workflow `.github/workflows/backup.yml` then runs every night at 21:30
    UTC, which is 03:30 in Dhaka, and you can also start it by hand from the
-   **Actions** tab with **Run workflow**.
+   **Actions** tab with **Run workflow**. It installs the PostgreSQL 18 client
+   from the PostgreSQL apt repository, because Neon runs PostgreSQL 18 and
+   `pg_dump` refuses a server newer than itself.
 
 ### Downloading a backup
 

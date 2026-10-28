@@ -94,7 +94,7 @@ all you have to do is create two empty databases and set your password.
    ```
 
    If `psql` is not found, add PostgreSQL's `bin` folder to your PATH, for
-   example `C:\Program Files\PostgreSQL\17\bin`.
+   example `C:\Program Files\PostgreSQL\18\bin`.
 
 3. **Create your local env file** by copying the example:
 

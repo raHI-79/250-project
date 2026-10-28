@@ -127,6 +127,8 @@ func run() error {
 				From:     cfg.MailFrom,
 				FromName: cfg.MailFromName,
 				APIKey:   cfg.BrevoAPIKey,
+				Endpoint: cfg.AppsScriptURL,
+				Secret:   cfg.AppsScriptSecret,
 			}),
 		}),
 		ReadTimeout:  readTimeout,
