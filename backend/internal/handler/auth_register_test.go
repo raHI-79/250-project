@@ -112,11 +112,10 @@ func TestRegisterValidation(t *testing.T) {
 			wantError: "Blood group must be one of A+, A-, B+, B-, AB+, AB-, O+, O-.",
 		},
 		{
-			name:      "no photo",
-			values:    registrationForm(),
-			noPhoto:   true,
-			wantCode:  http.StatusBadRequest,
-			wantError: MessagePhotoRequired,
+			name:     "no photo",
+			values:   registrationForm(),
+			noPhoto:  true,
+			wantCode: http.StatusCreated,
 		},
 		{
 			name:      "the photo is a pdf",
@@ -173,7 +172,11 @@ func TestRegisterValidation(t *testing.T) {
 			if saved.Status != store.StatusUnverified {
 				t.Errorf("status = %q, want %q", saved.Status, store.StatusUnverified)
 			}
-			if saved.PhotoPath == "" || savedPhotos(t, photos) != 1 {
+			if test.noPhoto {
+				if saved.PhotoPath != "" || savedPhotos(t, photos) != 0 {
+					t.Error("the registration kept a photo although none was sent")
+				}
+			} else if saved.PhotoPath == "" || savedPhotos(t, photos) != 1 {
 				t.Error("the registration did not keep the uploaded photo")
 			}
 			if saved.PasswordHash == "" || strings.Contains(saved.PasswordHash, "sust-250-project") {

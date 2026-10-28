@@ -78,10 +78,6 @@ func (a *Auth) Register() http.HandlerFunc {
 			httpx.WriteError(w, status, message)
 			return
 		}
-		if photoPath == "" {
-			httpx.WriteError(w, http.StatusBadRequest, MessagePhotoRequired)
-			return
-		}
 		registration.PhotoPath = photoPath
 		code := ""
 		now := a.cfg.Now()

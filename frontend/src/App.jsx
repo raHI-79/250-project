@@ -5,8 +5,10 @@ import ThemeProvider from './context/ThemeProvider'
 import ConfirmProvider from './components/ui/ConfirmProvider'
 import ToastProvider from './components/ui/ToastProvider'
 import Router from './router'
+import { useKeyboardAwareFocus } from './lib/keyboard'
 
 export default function App() {
+  useKeyboardAwareFocus()
   return (
     <BrowserRouter>
       <ThemeProvider>

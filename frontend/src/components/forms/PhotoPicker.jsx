@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ImagePlus } from 'lucide-react'
 import { Button, Field } from '../ui'
+import CropDialog from './CropDialog'
 import cx from '../../lib/cx'
 
 export const PHOTO_MAX_MB = 2
@@ -28,7 +29,12 @@ export default function PhotoPicker({
   const [problem, setProblem] = useState('')
   const [preview, setPreview] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [cropping, setCropping] = useState(null)
   const control = useRef(null)
+  useEffect(() => {
+    if (!cropping) return undefined
+    return () => URL.revokeObjectURL(cropping.source)
+  }, [cropping])
   useEffect(() => {
     if (!file) {
       setPreview('')
@@ -56,7 +62,13 @@ export default function PhotoPicker({
       return
     }
     setProblem('')
-    onChange(chosen)
+    setCropping({ source: URL.createObjectURL(chosen), name: chosen.name })
+    clearControl()
+  }
+  const cancelCrop = () => setCropping(null)
+  const finishCrop = (cropped) => {
+    setCropping(null)
+    onChange(cropped)
   }
   const onPick = (event) => accept(event.target.files?.[0] || null)
   const onDrop = (event) => {
@@ -66,6 +78,7 @@ export default function PhotoPicker({
   }
   const remove = () => {
     setProblem('')
+    setCropping(null)
     onChange(null)
     clearControl()
   }
@@ -81,7 +94,7 @@ export default function PhotoPicker({
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={cx(
-            'relative size-28 shrink-0 overflow-hidden border-2 border-dashed transition-colors',
+            'relative size-24 shrink-0 overflow-hidden rounded-full border-2 border-dashed transition-colors sm:size-28',
             dragging ? 'border-brand-500 bg-wash' : 'border-line-strong bg-wash/50',
           )}
         >
@@ -120,6 +133,13 @@ export default function PhotoPicker({
         accept={PHOTO_ACCEPT}
         onChange={onPick}
         className="hidden"
+      />
+      <CropDialog
+        open={Boolean(cropping)}
+        source={cropping?.source || ''}
+        fileName={cropping?.name || 'photo.jpg'}
+        onCancel={cancelCrop}
+        onDone={finishCrop}
       />
     </Field>
   )

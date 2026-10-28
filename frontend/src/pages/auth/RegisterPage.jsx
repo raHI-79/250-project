@@ -73,7 +73,6 @@ export default function RegisterPage() {
     if (!form.regNo.trim()) found.regNo = 'Registration number is required.'
     const birth = birthDateError(form.dateOfBirth)
     if (birth) found.dateOfBirth = birth
-    if (!photo) found.photo = 'A profile photo is required.'
     return found
   }
   const checkAcademic = () => {
@@ -140,7 +139,7 @@ export default function RegisterPage() {
     body.append('date_of_birth', form.dateOfBirth)
     body.append('password', form.password)
     body.append('confirm_password', form.confirmPassword)
-    body.append('photo', photo)
+    appendIf(body, 'photo', photo)
     appendIf(body, 'email_proof', emailProof)
     setLoading(true)
     try {
@@ -245,7 +244,7 @@ export default function RegisterPage() {
                         setErrors((current) => ({ ...current, photo: '' }))
                       }}
                       error={errors.photo}
-                      required
+                      hint="Optional. Your initials are shown until you add one."
                     />
                     <Input
                       label="Full name"
