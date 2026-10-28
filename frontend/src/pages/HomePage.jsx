@@ -11,9 +11,8 @@ import AppLauncher from '../components/home/AppLauncher'
 import HomeHero from '../components/home/HomeHero'
 import SiteFooter from '../components/home/SiteFooter'
 import StatsStrip from '../components/home/StatsStrip'
-import { BrandMark, IdentityBar } from '../components/ui'
+import { IdentityBar, LogoBadge } from '../components/ui'
 import { DEPARTMENT } from '../components/ui/IdentityBar'
-import { SUST_LOGO } from '../lib/brand'
 import paths from '../lib/paths'
 import { useStandalone } from '../lib/standalone'
 
@@ -93,11 +92,7 @@ export default function HomePage() {
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Link to={paths.root()} className="flex min-w-0 items-center gap-3">
-            <BrandMark
-              src={SUST_LOGO}
-              alt="Shahjalal University of Science and Technology"
-              className="size-11"
-            />
+            <LogoBadge size="md" />
             <span className="min-w-0">
               <span className="font-display block text-base font-semibold text-ink">
                 SUST CSE
