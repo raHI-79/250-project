@@ -16,6 +16,9 @@ import (
 )
 
 const (
+	MessageUnknownDropCourse = "Every drop course must be one of the courses offered in a fixed routine."
+	fieldDropCourseIDs       = "drop_course_ids"
+
 	MessageProfileMissing  = "No profile found for this account."
 	MessageProfileUpdated  = "Profile updated."
 	MessageProfileField    = "This field cannot be changed from the profile page."

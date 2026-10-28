@@ -109,6 +109,16 @@ WHERE EXISTS (SELECT 1 FROM routines r
        OR c.title ILIKE '%' || $1::text || '%')
 ORDER BY c.code
 LIMIT $2`
+	otherBatchDropCourseOptionsSQL = `SELECT c.id, c.code, c.title
+FROM courses c
+WHERE EXISTS (SELECT 1 FROM routines r
+              JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+              WHERE r.course_id = c.id AND ($1::text = '' OR r.batch <> $1::text))
+  AND ($2::text = ''
+       OR replace(c.code, ' ', '') ILIKE '%' || replace(replace(upper($2::text), '-', ''), ' ', '') || '%'
+       OR c.title ILIKE '%' || $2::text || '%')
+ORDER BY c.code
+LIMIT $3`
 	filterDropCourseIDsSQL = `SELECT c.id
 FROM courses c
 WHERE c.id = ANY($1::bigint[])
@@ -226,6 +236,27 @@ func replaceDropCourses(ctx context.Context, tx pgx.Tx, studentID int64, courseI
 
 func (s *Store) SearchDropCourseOptions(ctx context.Context, search string) ([]Course, error) {
 	rows, err := s.pool.Query(ctx, searchDropCourseOptionsSQL, search, DropCourseOptionLimit)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the drop course options: %w", err)
+	}
+	defer rows.Close()
+	courses := make([]Course, 0)
+	for rows.Next() {
+		var course Course
+		if err := rows.Scan(&course.ID, &course.Code, &course.Title); err != nil {
+			return nil, fmt.Errorf("store: could not scan a drop course option: %w", err)
+		}
+		courses = append(courses, course)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the drop course options: %w", err)
+	}
+	return courses, nil
+}
+
+func (s *Store) SearchOtherBatchDropCourses(ctx context.Context, batch,
+	search string) ([]Course, error) {
+	rows, err := s.pool.Query(ctx, otherBatchDropCourseOptionsSQL, batch, search, DropCourseOptionLimit)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the drop course options: %w", err)
 	}

@@ -7,8 +7,8 @@ import { useDebounced } from '../../lib/hooks'
 export default function CourseMultiSelect({
   value = [],
   onChange,
-  label = 'Drop courses',
-  hint = 'Search by course code or title, then pick the ones you are retaking',
+  label = 'My drop courses',
+  hint = 'Search the running courses of the other batches, then pick the ones you are retaking',
   error = '',
   className,
 }) {
@@ -29,10 +29,9 @@ export default function CourseMultiSelect({
     setLoading(true)
     setProblem('')
     api
-      .get('/api/auth/drop-course-options', {
+      .get('/api/students/drop-course-options', {
         query: { search: term },
         signal: controller.signal,
-        auth: false,
       })
       .then((data) => {
         if (active) setOptions(data?.items || [])

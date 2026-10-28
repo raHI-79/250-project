@@ -11,7 +11,6 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -23,7 +22,6 @@ const (
 	MessagePhotoNotImage         = "The profile photo must be a JPG, PNG or WEBP image."
 	MessagePhotoTooLarge         = "The profile photo must be 2 MB or smaller."
 	MessagePhotoTooSmall         = "The profile photo must be at least 200 by 200 pixels."
-	MessageUnknownDropCourse     = "Every drop course must be one of the courses offered in a fixed routine."
 	MessageInvalidEmailProof     = "The Google verification has expired. Please verify your email again."
 	MessageInvalidEmailCode      = "Invalid or expired code."
 	MessageTooManyEmailCodes     = "Too many wrong codes. Request a new code."
@@ -40,7 +38,6 @@ const (
 	fieldDateOfBirth             = "date_of_birth"
 	fieldPassword                = "password"
 	fieldConfirmPassword         = "confirm_password"
-	fieldDropCourseIDs           = "drop_course_ids"
 	fieldEmailProof              = "email_proof"
 	emailCodeLifetime            = 15 * time.Minute
 	emailCodeResendCooldown      = time.Minute
@@ -75,12 +72,6 @@ func (a *Auth) Register() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		courseIDs, err := a.dropCourseIDs(r, r.MultipartForm.Value[fieldDropCourseIDs])
-		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		registration.DropCourseIDs = courseIDs
 		photoPath, err := a.photos.Save(r)
 		if err != nil {
 			status, message := photoError(err)
@@ -192,40 +183,6 @@ func (a *Auth) registrationFrom(r *http.Request) (store.Registration, error) {
 	}
 	registration.PasswordHash = hash
 	return registration, nil
-}
-
-func (a *Auth) dropCourseIDs(r *http.Request, raw []string) ([]int64, error) {
-	wanted := make([]int64, 0, len(raw))
-	seen := make(map[int64]bool, len(raw))
-	for _, value := range raw {
-		for _, part := range strings.Split(value, ",") {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-			courseID, err := strconv.ParseInt(part, 10, 64)
-			if err != nil || courseID <= 0 {
-				return nil, errors.New(MessageUnknownDropCourse)
-			}
-			if seen[courseID] {
-				continue
-			}
-			seen[courseID] = true
-			wanted = append(wanted, courseID)
-		}
-	}
-	if len(wanted) == 0 {
-		return nil, nil
-	}
-	allowed, err := a.users.FilterDropCourseIDs(r.Context(), wanted)
-	if err != nil {
-		log.Printf("handler: could not check the drop course choices: %v", err)
-		return nil, errors.New(MessageUnknownDropCourse)
-	}
-	if len(allowed) != len(wanted) {
-		return nil, errors.New(MessageUnknownDropCourse)
-	}
-	return wanted, nil
 }
 
 func (a *Auth) sendVerificationCode(r *http.Request, email, code string, body *registerResponse) {

@@ -444,3 +444,32 @@ func TestProfilesAndPeople(t *testing.T) {
 		t.Errorf("UpdateProfile() with an unknown role error = %v, want ErrUnknownRole", err)
 	}
 }
+
+func TestSearchOtherBatchDropCourses(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	other := seedRoutineCourse(t, ctx, store, pool, "CSE 233", "Algorithms")
+	if other == 0 {
+		t.Fatal("the seeded course has no id")
+	}
+	courses, err := store.SearchOtherBatchDropCourses(ctx, "CSE-23", "")
+	if err != nil {
+		t.Fatalf("SearchOtherBatchDropCourses() returned an unexpected error: %v", err)
+	}
+	if len(courses) != 1 || courses[0].ID != other {
+		t.Fatalf("courses = %+v, want only the other batch course", courses)
+	}
+	own, err := store.SearchOtherBatchDropCourses(ctx, "CSE-22", "")
+	if err != nil {
+		t.Fatalf("SearchOtherBatchDropCourses() returned an unexpected error: %v", err)
+	}
+	if len(own) != 0 {
+		t.Errorf("courses = %+v, want nothing from the student's own batch", own)
+	}
+	matched, err := store.SearchOtherBatchDropCourses(ctx, "CSE-23", "algo")
+	if err != nil {
+		t.Fatalf("SearchOtherBatchDropCourses() returned an unexpected error: %v", err)
+	}
+	if len(matched) != 1 {
+		t.Errorf("courses = %+v, want the search to match the title", matched)
+	}
+}

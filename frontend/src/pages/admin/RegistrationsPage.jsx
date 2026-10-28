@@ -8,7 +8,6 @@ import {
   EmptyState,
   PageHeader,
   SkeletonTable,
-  StatusBadge,
   useConfirm,
   useToast,
 } from '../../components/ui'
@@ -25,7 +24,6 @@ const HEADINGS = [
   'Phone',
   'Blood Group',
   'Date of Birth',
-  'Drop Courses',
   'Registered',
   '',
 ]
@@ -101,17 +99,6 @@ export default function RegistrationsPage() {
                 <td className="px-4 py-3 text-ink-soft">{item.blood_group}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
                   {item.date_of_birth ? formatDate(item.date_of_birth) : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  {(item.drop_courses || []).length === 0 ? (
-                    <span className="text-muted">No</span>
-                  ) : (
-                    <span className="flex flex-wrap gap-1">
-                      {item.drop_courses.map((course) => (
-                        <StatusBadge key={course.id} status="yours" label={course.code} />
-                      ))}
-                    </span>
-                  )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
                   {formatDate(item.created_at)}

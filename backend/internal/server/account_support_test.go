@@ -101,6 +101,28 @@ func registerStudent(t *testing.T, router http.Handler, body string, dropCourseI
 	return formCall(t, router, http.MethodPost, "/api/auth/register", "", values, flowPhoto(t))
 }
 
+func profileBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("body is not valid JSON: %v (body = %q)", err, rec.Body.String())
+	}
+	return payload
+}
+
+func chooseDropCourses(t *testing.T, router http.Handler, regNo string, courseIDs []int64) {
+	t.Helper()
+	values := map[string][]string{}
+	for _, courseID := range courseIDs {
+		values["drop_course_ids"] = append(values["drop_course_ids"], strconv.FormatInt(courseID, 10))
+	}
+	saved := formCall(t, router, http.MethodPatch, "/api/profile",
+		loginToken(t, router, regNo), values, nil)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("drop course patch status = %d, want 200 (body = %q)", saved.Code, saved.Body.String())
+	}
+}
+
 func verifyStudentEmail(t *testing.T, router http.Handler, registered *httptest.ResponseRecorder, regNo string) {
 	t.Helper()
 	code := field(t, registered, "dev_code")
@@ -113,13 +135,17 @@ func verifyStudentEmail(t *testing.T, router http.Handler, registered *httptest.
 
 func onboardStudent(t *testing.T, router http.Handler, adminToken, body string, dropCourseIDs ...int64) int64 {
 	t.Helper()
-	registered := registerStudent(t, router, body, dropCourseIDs...)
+	registered := registerStudent(t, router, body)
 	if registered.Code != http.StatusCreated {
 		t.Fatalf("register status = %d, want 201 (body = %q)", registered.Code, registered.Body.String())
 	}
 	regNo := regNoOf(t, body)
 	verifyStudentEmail(t, router, registered, regNo)
-	return approveStudent(t, router, adminToken, regNo)
+	userID := approveStudent(t, router, adminToken, regNo)
+	if len(dropCourseIDs) > 0 {
+		chooseDropCourses(t, router, regNo, dropCourseIDs)
+	}
+	return userID
 }
 
 func onboardCR(t *testing.T, router http.Handler, adminToken, body string) int64 {

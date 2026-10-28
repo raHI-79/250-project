@@ -106,6 +106,11 @@ func (emptyStudentStore) RunningSemester(ctx context.Context, batch string) (str
 	return "1-1", nil
 }
 
+func (emptyStudentStore) SearchOtherBatchDropCourses(ctx context.Context, batch,
+	search string) ([]store.Course, error) {
+	return nil, nil
+}
+
 func (emptyStudentStore) RunningSemesterSince(ctx context.Context,
 	batch string) (string, time.Time, error) {
 	return "1-1", time.Time{}, nil

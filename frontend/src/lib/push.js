@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import api from './api'
 import { readRaw, remove, writeRaw } from './storage'
 
@@ -16,12 +16,6 @@ export const PERMISSION_DENIED = 'denied'
 
 export const PERMISSION_DEFAULT = 'default'
 
-export const PERMISSION_LABELS = {
-  granted: 'Allowed',
-  denied: 'Blocked',
-  default: 'Not asked',
-}
-
 export const pushSupported = () =>
   typeof window !== 'undefined' &&
   'serviceWorker' in navigator &&
@@ -29,8 +23,6 @@ export const pushSupported = () =>
   'Notification' in window
 
 export const pushAllowed = (role) => PUSH_ROLES.includes(role) && pushSupported()
-
-export const permissionNow = () => (pushSupported() ? Notification.permission : PERMISSION_DENIED)
 
 const base64ToBytes = (value) => {
   const padded = value.padEnd(value.length + ((4 - (value.length % 4)) % 4), '=')
@@ -118,8 +110,6 @@ export const closePushAsk = () => writeRaw(STAGE_KEY, STAGE_DONE)
 
 export const resetPushAsk = () => remove(STAGE_KEY)
 
-export const sendTestPush = () => api.post('/api/push/test')
-
 export const usePushSync = (role) => {
   useEffect(() => {
     if (!pushSupported()) return undefined
@@ -137,60 +127,6 @@ export const usePushSync = (role) => {
       document.removeEventListener('visibilitychange', sync)
     }
   }, [role])
-}
-
-export const usePushStatus = (role) => {
-  const allowed = pushAllowed(role)
-  const [permission, setPermission] = useState(() => permissionNow())
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [sent, setSent] = useState(0)
-  const refresh = useCallback(() => setPermission(permissionNow()), [])
-  useEffect(() => {
-    const onVisible = () => refresh()
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [refresh])
-  const test = useCallback(async () => {
-    setBusy(true)
-    setError('')
-    setSent(0)
-    try {
-      await syncPushSubscription()
-      const result = await sendTestPush()
-      setSent(Number(result?.sent) || 0)
-      return true
-    } catch (failure) {
-      setError(failure.message)
-      return false
-    } finally {
-      setBusy(false)
-      refresh()
-    }
-  }, [refresh])
-  const ask = useCallback(async () => {
-    setBusy(true)
-    setError('')
-    try {
-      const next = await askPushPermission(role)
-      setPermission(next)
-      return next
-    } finally {
-      setBusy(false)
-    }
-  }, [role])
-  return {
-    allowed,
-    supported: pushSupported(),
-    permission,
-    label: PERMISSION_LABELS[permission] || PERMISSION_LABELS.default,
-    busy,
-    error,
-    sent,
-    ask,
-    test,
-    refresh,
-  }
 }
 
 export const dropPushOnSignOut = async () => {
