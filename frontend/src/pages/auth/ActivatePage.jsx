@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, X } from 'lucide-react'
-import { Alert, Button, Input, SkeletonLines, Stepper } from '../../components/ui'
+import { Check, Copy, Eye, EyeOff, Loader2, X } from 'lucide-react'
+import { Alert, Button, Input, PasswordInput, SkeletonLines, Stepper } from '../../components/ui'
 import PhotoPicker from '../../components/forms/PhotoPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
+import AuthHeading from '../../components/layout/AuthHeading'
 import api from '../../lib/api'
 import { HERO_BUILDING } from '../../lib/campus'
 import { useDebounced } from '../../lib/hooks'
@@ -169,13 +170,10 @@ export default function ActivatePage() {
       note="Teachers choose their own user ID while activating the invitation from the office."
     >
       <div>
-        <p className="eyebrow flex items-center gap-1.5">
-          <KeyRound size={13} />
-          Faculty invitation
-        </p>
-        <h1 className="font-display mt-2 text-title font-bold text-ink">
-          {done ? 'Your account is ready' : 'Activate your account'}
-        </h1>
+        <AuthHeading
+          eyebrow="Faculty invitation"
+          title={done ? 'Your account is ready' : 'Activate your account'}
+        />
         {invite && !done && (
           <p className="mt-3 text-sm text-muted">
             {invite.name}
@@ -268,18 +266,16 @@ export default function ActivatePage() {
                     />
                     <Availability checking={checking} result={availability} />
                   </div>
-                  <Input
+                  <PasswordInput
                     label="New password"
-                    type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     autoComplete="new-password"
                     hint="At least 8 characters"
                     required
                   />
-                  <Input
+                  <PasswordInput
                     label="Confirm password"
-                    type="password"
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     autoComplete="new-password"

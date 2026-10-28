@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import cx from '../../lib/cx'
 
 const shell = (invalid, tone, focused) =>
@@ -130,6 +131,29 @@ export function Input({ label, error, hint, required, tone, className, id, ...re
         )}
       </div>
     </Floating>
+  )
+}
+
+export function PasswordInput({ className, ...rest }) {
+  const [shown, setShown] = useState(false)
+  const dark = rest.tone === 'dark'
+  return (
+    <div className={cx('relative', className)}>
+      <Input {...rest} type={shown ? 'text' : 'password'} className="[&_input]:pr-12" />
+      <button
+        type="button"
+        onClick={() => setShown((current) => !current)}
+        aria-label={shown ? 'Hide password' : 'Show password'}
+        aria-pressed={shown}
+        title={shown ? 'Hide password' : 'Show password'}
+        className={cx(
+          'absolute top-0 right-0 grid h-12 w-12 place-items-center rounded-xl transition-colors',
+          dark ? 'text-white/60 hover:text-white' : 'text-muted hover:text-ink',
+        )}
+      >
+        {shown ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
   )
 }
 

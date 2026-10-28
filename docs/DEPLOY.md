@@ -165,6 +165,30 @@ Restore into an empty database. In Neon, the simplest way to get one is
 **Branches → New branch**, which gives a fresh connection string you can point
 the command at, test, and then promote.
 
+## 9. Rebuilding the Android app
+
+The installed Android app is a Trusted Web Activity wrapper around the same
+site, package `edu.sust.cse.portal`. The web part updates itself on the next
+launch, so a rebuild is only needed when the wrapper itself changes, for
+example after the status bar colour changed.
+
+1. Open [PWABuilder](https://www.pwabuilder.com/) and enter the live address.
+2. Choose **Package for stores → Android**, then **All settings**.
+3. Set **Status bar colour** and **Navigation bar colour** to `#7A1F2B`, and
+   leave **Display mode** on `standalone`.
+4. Keep the package id `edu.sust.cse.portal` exactly as it is. A different id
+   installs as a second app instead of updating the first one.
+5. Raise **App version code** by one above the installed build and give
+   **App version** the same number as `frontend/package.json`.
+6. Under **Signing key**, choose **Use mine** and upload the original
+   `signing.keystore` with its key alias and both passwords. A new key makes
+   Android refuse the update and breaks the verified link.
+7. Download the zip, install `app-release-signed.apk` on the phone over the
+   old one, and confirm the address bar stays hidden.
+
+The digital asset link is unchanged as long as the signing key is the same, so
+`frontend/public/.well-known/assetlinks.json` needs no edit on a rebuild.
+
 ## Updating the portal
 
 Push to `main`. Render sees the commit, builds the image again and swaps the

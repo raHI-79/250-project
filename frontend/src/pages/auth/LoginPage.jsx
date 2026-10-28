@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { GraduationCap, Users } from 'lucide-react'
 import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
-import { Input } from '../../components/ui/Field'
+import { Input, PasswordInput } from '../../components/ui/Field'
 import AuthScreen from '../../components/layout/AuthScreen'
+import AuthHeading from '../../components/layout/AuthHeading'
 import { useAuth } from '../../context/auth'
 import { HERO_IMAGES } from '../../lib/campus'
 import { askPushPermission } from '../../lib/push'
@@ -26,9 +26,6 @@ const copy = {
     note: 'Your day, the published routine, exams, notices and materials in one place.',
     identifier: 'Registration number',
     forgot: () => paths.studentForgotPassword(),
-    otherLabel: 'Are you a teacher?',
-    otherLink: () => paths.teacherLogin(),
-    otherIcon: GraduationCap,
   },
   teacher: {
     eyebrow: 'Faculty portal',
@@ -37,9 +34,6 @@ const copy = {
     note: 'The classes awaiting your decision, your weekly routine and the exams you set.',
     identifier: 'User ID or email',
     forgot: () => paths.teacherForgotPassword(),
-    otherLabel: 'Are you a student?',
-    otherLink: () => paths.studentLogin(),
-    otherIcon: Users,
   },
 }
 
@@ -68,15 +62,15 @@ export default function LoginPage({ portal }) {
       setLoading(false)
     }
   }
-  const OtherIcon = page.otherIcon
   return (
     <AuthScreen images={HERO_IMAGES} rotateAfter={SLIDE_AFTER} note={page.note}>
       <div>
-        <p className="eyebrow">{page.eyebrow}</p>
-        <h1 className="font-display mt-2 text-title font-bold text-ink">
-          {page.heading}
-        </h1>
-        <p className="mt-3 text-sm text-muted">{page.subtitle}</p>
+        <AuthHeading
+          eyebrow={page.eyebrow}
+          title={page.heading}
+          subtitle={page.subtitle}
+          switcher
+        />
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
           {notice && <Alert tone="success">{notice}</Alert>}
           {error && (
@@ -115,9 +109,8 @@ export default function LoginPage({ portal }) {
             autoComplete="username"
             required
           />
-          <Input
+          <PasswordInput
             label="Password"
-            type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
@@ -147,13 +140,6 @@ export default function LoginPage({ portal }) {
             </p>
           )}
         </div>
-        <Link
-          to={page.otherLink()}
-          className="mt-5 flex items-center gap-1.5 border-t border-line pt-4 text-xs text-muted transition-colors hover:text-ink-soft"
-        >
-          <OtherIcon size={14} />
-          {page.otherLabel}
-        </Link>
       </div>
     </AuthScreen>
   )

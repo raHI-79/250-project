@@ -34,6 +34,7 @@
   --color-glass: var(--c-glass);
   --color-glass-card: var(--c-glass-card);
   --color-glass-bar: var(--c-glass-bar);
+  --color-glass-panel: var(--c-glass-panel);
   --color-glass-chip: var(--c-glass-chip);
   --color-glass-line: var(--c-glass-line);
   --color-night: #141518;
@@ -232,7 +233,9 @@
     --c-faint: #8b9098;
     --c-glass: rgb(250 249 246 / 0.78);
     --c-glass-card: rgb(255 255 255 / 0.62);
-    --c-glass-bar: rgb(250 249 246 / 0.72);
+    --c-glass-bar: rgb(250 249 246 / 0.92);
+    --c-glass-panel: rgb(252 251 249 / 0.94);
+    --c-glass-auth: rgb(255 255 255 / 0.9);
     --c-glass-chip: rgb(255 255 255 / 0.55);
     --c-glass-line: rgb(255 255 255 / 0.65);
     --c-glass-edge: rgb(20 21 24 / 0.07);
@@ -297,7 +300,9 @@
     --c-faint: #7b8189;
     --c-glass: rgb(23 25 28 / 0.76);
     --c-glass-card: rgb(38 41 46 / 0.55);
-    --c-glass-bar: rgb(16 17 19 / 0.72);
+    --c-glass-bar: rgb(16 17 19 / 0.9);
+    --c-glass-panel: rgb(20 22 25 / 0.92);
+    --c-glass-auth: rgb(22 24 27 / 0.88);
     --c-glass-chip: rgb(48 52 58 / 0.5);
     --c-glass-line: rgb(255 255 255 / 0.1);
     --c-glass-edge: rgb(0 0 0 / 0.4);
@@ -363,7 +368,9 @@
       --c-faint: #7b8189;
       --c-glass: rgb(23 25 28 / 0.76);
     --c-glass-card: rgb(38 41 46 / 0.55);
-    --c-glass-bar: rgb(16 17 19 / 0.72);
+    --c-glass-bar: rgb(16 17 19 / 0.9);
+    --c-glass-panel: rgb(20 22 25 / 0.92);
+    --c-glass-auth: rgb(22 24 27 / 0.88);
     --c-glass-chip: rgb(48 52 58 / 0.5);
     --c-glass-line: rgb(255 255 255 / 0.1);
     --c-glass-edge: rgb(0 0 0 / 0.4);
@@ -432,6 +439,17 @@
     line-height: 1.6;
     font-synthesis-weight: none;
     -webkit-tap-highlight-color: transparent;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 100;
+    height: env(safe-area-inset-top, 0px);
+    background-color: #7a1f2b;
+    pointer-events: none;
   }
   h1,
   h2,
@@ -515,6 +533,14 @@
 @utility glass {
   background-color: var(--c-glass-bar);
   border-color: var(--c-glass-line);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+}
+
+@utility glass-auth {
+  background-color: var(--c-glass-auth);
+  border: 1px solid var(--c-glass-line);
+  box-shadow: var(--shadow-glass-lift);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
@@ -528,11 +554,11 @@
 }
 
 @utility glass-sheet {
-  background-color: var(--c-glass-bar);
+  background-color: var(--c-glass-panel);
   border: 1px solid var(--c-glass-line);
   box-shadow: var(--shadow-glass-lift);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(28px);
+  -webkit-backdrop-filter: saturate(180%) blur(28px);
 }
 
 @utility glass-chip {
@@ -546,12 +572,17 @@
   .glass,
   .glass-card,
   .glass-sheet,
+  .glass-auth,
   .glass-chip {
     background-color: var(--color-surface);
   }
   .glass {
     background-color: var(--color-page);
   }
+}
+
+@utility text-shadow-hero {
+  text-shadow: 0 1px 2px rgb(20 10 12 / 0.45), 0 2px 12px rgb(20 10 12 / 0.3);
 }
 
 @utility press {

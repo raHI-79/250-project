@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, Button, Input, Stepper } from '../../components/ui'
+import { Alert, Button, Input, PasswordInput, Stepper } from '../../components/ui'
 import PhoneInput from '../../components/forms/PhoneInput'
 import AuthScreen from '../../components/layout/AuthScreen'
+import AuthHeading from '../../components/layout/AuthHeading'
 import api from '../../lib/api'
 import { HERO_IMAGES } from '../../lib/campus'
 import { useCountdown } from '../../lib/hooks'
@@ -142,11 +143,7 @@ export default function ForgotPasswordPage({ portal }) {
       note="Lost your password? The account is checked before a code is sent."
     >
       <div>
-        <p className="eyebrow">Password reset</p>
-        <h1 className="font-display mt-2 text-title font-bold text-ink">
-          {page.heading}
-        </h1>
-        <p className="mt-3 text-sm text-muted">{page.subtitle}</p>
+        <AuthHeading eyebrow="Password reset" title={page.heading} subtitle={page.subtitle} />
         {step < 4 && <Stepper steps={STEPS} current={step} className="mt-5" />}
         {step === 4 ? (
           <div className="mt-5 flex flex-col gap-4">
@@ -230,18 +227,16 @@ export default function ForgotPasswordPage({ portal }) {
             )}
             {step === 3 && (
               <>
-                <Input
+                <PasswordInput
                   label="New password"
-                  type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
                   hint="At least 8 characters"
                   required
                 />
-                <Input
+                <PasswordInput
                   label="Confirm new password"
-                  type="password"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"

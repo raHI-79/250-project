@@ -16,6 +16,7 @@ import {
   Card,
   Input,
   ListRow,
+  PasswordInput,
   PageHeader,
   Segmented,
   Sheet,
@@ -366,26 +367,23 @@ export default function ProfilePage() {
       <Sheet open={sheet === 'password'} onClose={close} title="Change password">
         <form onSubmit={changePassword} className="flex flex-col gap-4">
           {passwordProblem && <Alert tone="error">{passwordProblem}</Alert>}
-          <Input
+          <PasswordInput
             label="Current password"
-            type="password"
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
             autoComplete="current-password"
             required
           />
-          <Input
+          <PasswordInput
             label="New password"
-            type="password"
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
             autoComplete="new-password"
             hint="At least 8 characters"
             required
           />
-          <Input
+          <PasswordInput
             label="Confirm new password"
-            type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             autoComplete="new-password"
