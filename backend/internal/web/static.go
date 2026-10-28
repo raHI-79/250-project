@@ -15,11 +15,14 @@ const (
 	UploadsPrefix = "/uploads/"
 	WorkerPath    = "/sw.js"
 	ManifestPath  = "/manifest.webmanifest"
+	AssetLinkPath = "/.well-known/assetlinks.json"
 	WorkerType    = "application/javascript; charset=utf-8"
 	ManifestType  = "application/manifest+json; charset=utf-8"
+	AssetLinkType = "application/json"
 	WorkerScope   = "/"
 	assetCache    = "public, max-age=31536000, immutable"
 	pageCache     = "no-cache"
+	linkCache     = "public, max-age=300"
 )
 
 func Static(dir string, fallback http.Handler) http.Handler {
@@ -46,6 +49,9 @@ func Static(dir string, fallback http.Handler) http.Handler {
 			case name == ManifestPath:
 				w.Header().Set("Content-Type", ManifestType)
 				w.Header().Set("Cache-Control", pageCache)
+			case name == AssetLinkPath:
+				w.Header().Set("Content-Type", AssetLinkType)
+				w.Header().Set("Cache-Control", linkCache)
 			case strings.HasPrefix(name, AssetsPrefix):
 				w.Header().Set("Cache-Control", assetCache)
 			default:

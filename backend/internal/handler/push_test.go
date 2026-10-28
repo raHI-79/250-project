@@ -25,6 +25,19 @@ func (f *fakePushStore) SavePushSubscription(ctx context.Context,
 	return int64(len(f.saved)), nil
 }
 
+func (f *fakePushStore) CountPushSubscriptions(ctx context.Context, userID int64) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	count := 0
+	for _, subscription := range f.saved {
+		if subscription.UserID == userID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (f *fakePushStore) DeletePushSubscription(ctx context.Context, userID int64, endpoint string) error {
 	if f.err != nil {
 		return f.err

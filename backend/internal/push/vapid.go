@@ -27,6 +27,7 @@ func (s *VAPIDSender) Send(ctx context.Context, subscription store.PushSubscript
 		VAPIDPublicKey:  s.publicKey,
 		VAPIDPrivateKey: s.privateKey,
 		TTL:             TTLSeconds,
+		Urgency:         webpush.UrgencyHigh,
 	})
 	if err != nil {
 		return 0, err

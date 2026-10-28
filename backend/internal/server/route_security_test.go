@@ -22,6 +22,10 @@ func (emptyPushStore) DeletePushSubscription(ctx context.Context, userID int64, 
 	return nil
 }
 
+func (emptyPushStore) CountPushSubscriptions(ctx context.Context, userID int64) (int, error) {
+	return 0, nil
+}
+
 type emptyChatStore struct{}
 
 func (emptyChatStore) GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error) {

@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "edu.sust.cse.portal",
+        "sha256_cert_fingerprints": ["AF:25:10:84:E4:D2:31:18:0B:0B:FA:C9:9D:85:7C:86:C2:68:4F:58:39:05:22:8F:41:F2:65:AB:A4:76:DC:C1"]
+      }
+    }]
