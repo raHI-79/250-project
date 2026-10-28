@@ -11,7 +11,7 @@ export default function ExamStrip({ exams, to }) {
         <Link
           key={exam.id}
           to={`${to}${to.includes('?') ? '&' : '?'}highlight=${exam.id}`}
-          className="flex w-[15rem] shrink-0 snap-start gap-3 rounded-card border border-line bg-surface p-4 transition-colors active:bg-wash"
+          className="glass-card press flex w-[15rem] shrink-0 snap-start gap-3 rounded-card p-4"
         >
           <DateBlock value={exam.item_date} />
           <div className="min-w-0 flex-1">

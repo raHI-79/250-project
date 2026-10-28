@@ -47,7 +47,7 @@ export default function MessageComposer({ onSend }) {
   }
   const attached = Boolean(file) || Boolean(link.trim())
   return (
-    <div className="sticky bottom-0 border-t border-line bg-surface px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+    <div className="glass sticky bottom-0 border-t px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
       {error && (
         <Alert tone="error" className="mb-2">
           {error}
@@ -75,7 +75,7 @@ export default function MessageComposer({ onSend }) {
           type="button"
           onClick={() => setAttachOpen(true)}
           aria-label="Add an attachment"
-          className="grid size-11 shrink-0 place-items-center rounded-full bg-wash text-brand-600 transition-colors hover:bg-brand-50"
+          className="press glass-chip grid size-11 shrink-0 place-items-center rounded-full text-brand-600"
         >
           <Paperclip size={19} />
         </button>
@@ -87,14 +87,14 @@ export default function MessageComposer({ onSend }) {
           maxLength={MAX_MESSAGE_BODY}
           placeholder="Message"
           aria-label="Message"
-          className="max-h-32 min-h-11 flex-1 resize-none rounded-2xl border border-line-strong bg-surface px-4 py-2.5 text-base text-ink placeholder:text-faint focus:border-brand-600 focus:ring-3 focus:ring-brand-100 focus:outline-none"
+          className="glass-chip max-h-32 min-h-11 flex-1 resize-none rounded-2xl px-4 py-2.5 text-base text-ink placeholder:text-faint focus:border-brand-600 focus:ring-3 focus:ring-brand-100 focus:outline-none"
         />
         <button
           type="button"
           onClick={submit}
           disabled={sending}
           aria-label="Send"
-          className="grid size-11 shrink-0 place-items-center rounded-full bg-brand-600 text-page transition-colors hover:bg-brand-700 disabled:bg-brand-300"
+          className="press grid size-11 shrink-0 place-items-center rounded-full bg-linear-to-b from-brand-500 to-brand-700 text-page shadow-[var(--shadow-glass)] hover:from-brand-600 hover:to-brand-800 disabled:from-brand-300 disabled:to-brand-300"
         >
           <SendHorizontal size={19} />
         </button>

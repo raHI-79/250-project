@@ -80,7 +80,7 @@ export default function MessageThread({ items, meId, loading, onEdit, onDelete }
     <div className="flex flex-col gap-4 px-3 py-4">
       {byDay(items).map((day) => (
         <section key={day.key}>
-          <p className="sticky top-2 z-10 mx-auto w-fit rounded-full bg-wash px-3 py-1 text-2xs font-semibold text-muted">
+          <p className="glass-chip sticky top-2 z-10 mx-auto w-fit rounded-full px-3 py-1 text-2xs font-semibold text-muted">
             {dayLabel(day.items[0].created_at)}
           </p>
           <ul className="mt-3 flex flex-col gap-1">
@@ -145,7 +145,7 @@ export default function MessageThread({ items, meId, loading, onEdit, onDelete }
                             'rounded-2xl px-3.5 py-2 text-sm',
                             mine
                               ? 'bg-brand-600 text-page'
-                              : 'border border-line bg-surface text-ink',
+                              : 'glass-card text-ink',
                             mine && !grouped && 'rounded-tr-md',
                             !mine && !grouped && 'rounded-tl-md',
                           )}

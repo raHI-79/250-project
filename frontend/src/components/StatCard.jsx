@@ -7,7 +7,7 @@ export default function StatCard({ icon: Icon, label, value, to, hint }) {
   const body = (
     <div
       className={cx(
-        'h-full rounded-card border border-line bg-surface p-4',
+        'glass-card h-full rounded-card p-4',
         to && 'card-hover',
       )}
     >

@@ -12,7 +12,7 @@ export default function NoticeCarousel({ notices, role }) {
         <Link
           key={notice.id}
           to={noticesFor(role, { highlight: notice.id })}
-          className="flex w-[17rem] shrink-0 snap-start gap-3 rounded-card border border-line bg-surface p-4 transition-colors active:bg-wash"
+          className="glass-card press flex w-[17rem] shrink-0 snap-start gap-3 rounded-card p-4"
         >
           <DateBlock value={notice.created_at} />
           <div className="min-w-0 flex-1">

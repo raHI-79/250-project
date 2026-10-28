@@ -17,7 +17,7 @@ export default function DateChips({ value, onChange, label = 'Pick a day', min, 
   const days = Array.from({ length: CHIP_DAYS }, (_, index) => shiftDate(start, index))
   const chips = min ? days.filter((day) => day >= min) : days
   return (
-    <div className={cx('mb-5 rounded-card border border-line bg-surface p-4 sm:p-5', className)}>
+    <div className={cx('glass-card mb-5 rounded-card p-4 sm:p-5', className)}>
       <div className="flex flex-wrap gap-2">
         {chips.map((day) => (
           <button

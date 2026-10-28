@@ -141,7 +141,7 @@ export default function GroupInfoPanel({ conversation, meId, role, batch, onChan
     }
   }
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-card border border-line bg-surface">
+    <div className="glass-card flex h-full min-h-0 flex-col overflow-hidden rounded-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           <p className="label-caps">Group</p>

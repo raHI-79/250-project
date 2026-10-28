@@ -1,7 +1,6 @@
 import { Search } from 'lucide-react'
-import { BrandMark } from '../ui'
+import LogoBadge from '../ui/LogoBadge'
 import cx from '../../lib/cx'
-import { SUST_LOGO } from '../../lib/brand'
 import { HERO_BUILDING } from '../../lib/campus'
 import { useChrome } from '../../context/chrome'
 
@@ -41,13 +40,7 @@ export default function TodayHero({ name, meta, now = new Date(), className }) {
       />
       <div className="relative">
         <div className="flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-full bg-white/95 p-1">
-            <BrandMark
-              src={SUST_LOGO}
-              alt="Shahjalal University of Science and Technology"
-              className="size-full"
-            />
-          </span>
+          <LogoBadge size="sm" tone="light" />
           <p className="text-2xs font-bold tracking-[0.14em] text-white/80 uppercase">SUST CSE</p>
         </div>
         <h1 className="font-display mt-4 text-title leading-tight font-bold text-white">

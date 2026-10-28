@@ -9,7 +9,7 @@ export default function ConversationList({ items, activeId, onSelect, search, lo
     ? items.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(text))
     : items
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-card border border-line bg-surface">
+    <div className="glass-card flex h-full min-h-0 flex-col overflow-hidden rounded-card">
       {header}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (

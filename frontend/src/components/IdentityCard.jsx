@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import cx from '../lib/cx'
 import { initialsOf } from '../lib/account'
-import { SUST_LOGO } from '../lib/brand'
-import { BrandMark } from './ui'
+import LogoBadge from './ui/LogoBadge'
 import { DEPARTMENT, UNIVERSITY } from './ui/IdentityBar'
 
 const QR_SIZE = 220
@@ -48,12 +47,10 @@ export default function IdentityCard({
   }, [code])
   const showPhoto = Boolean(photoUrl) && !broken
   return (
-    <div className={cx('overflow-hidden rounded-card border border-line bg-surface', className)}>
+    <div className={cx('glass-card overflow-hidden rounded-card', className)}>
       <div className="relative overflow-hidden bg-linear-to-br from-maroon-600 to-maroon-900 px-5 pt-5 pb-14 text-center">
         <div className="flex items-center justify-center gap-2">
-          <span className="grid size-7 place-items-center rounded-full bg-white/95 p-0.5">
-            <BrandMark src={SUST_LOGO} alt="" className="size-full" />
-          </span>
+          <LogoBadge size="sm" tone="light" className="size-8 rounded-lg p-1" />
           <p className="text-2xs font-bold tracking-[0.12em] text-white/85 uppercase">
             {UNIVERSITY}
           </p>

@@ -61,7 +61,7 @@ export default function Sheet({
         aria-label={typeof title === 'string' ? title : undefined}
         style={drag ? { transform: `translateY(${drag}px)` } : undefined}
         className={cx(
-          'animate-sheet-up relative flex w-full flex-col overflow-hidden rounded-t-sheet border border-line bg-surface shadow-2xl sm:animate-scale-in sm:rounded-card',
+          'glass-sheet animate-sheet-up relative flex w-full flex-col overflow-hidden rounded-t-sheet sm:animate-scale-in sm:rounded-card',
           full ? 'h-[100dvh] sm:h-[90dvh] sm:max-w-2xl' : 'max-h-[92dvh] sm:max-w-lg',
           className,
         )}
@@ -88,7 +88,7 @@ export default function Sheet({
             type="button"
             onClick={() => onClose?.()}
             aria-label="Close"
-            className="tap-target -mt-1.5 -mr-3 grid shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-wash hover:text-ink"
+            className="press tap-target -mt-1.5 -mr-3 grid shrink-0 place-items-center rounded-full text-muted hover:bg-wash hover:text-ink"
           >
             <X size={20} />
           </button>
