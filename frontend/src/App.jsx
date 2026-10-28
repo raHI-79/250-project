@@ -1,4 +1,5 @@
 import { BrowserRouter } from 'react-router-dom'
+import GlassBackdrop from './components/layout/GlassBackdrop'
 import AuthProvider from './context/AuthProvider'
 import ThemeProvider from './context/ThemeProvider'
 import ConfirmProvider from './components/ui/ConfirmProvider'
@@ -12,6 +13,7 @@ export default function App() {
         <AuthProvider>
           <ToastProvider>
             <ConfirmProvider>
+              <GlassBackdrop />
               <Router />
             </ConfirmProvider>
           </ToastProvider>

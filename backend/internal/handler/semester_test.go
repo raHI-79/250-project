@@ -197,6 +197,11 @@ func (f *fakeCourseStore) RunningSemester(ctx context.Context, batch string) (st
 	return f.running, nil
 }
 
+func (f *fakeCourseStore) SearchOtherBatchDropCourses(ctx context.Context, batch,
+	search string) ([]store.Course, error) {
+	return nil, nil
+}
+
 func (f *fakeCourseStore) RunningSemesterSince(ctx context.Context,
 	batch string) (string, time.Time, error) {
 	semester, err := f.RunningSemester(ctx, batch)

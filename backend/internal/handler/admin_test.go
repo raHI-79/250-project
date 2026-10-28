@@ -294,7 +294,6 @@ func TestAdminRegistrations(t *testing.T) {
 			BloodGroup:  "O+",
 			DateOfBirth: "2003-05-14",
 			PhotoPath:   "/uploads/photos/aaaa.jpg",
-			DropCourses: []store.Course{{ID: 4, Code: "CSE-233", Title: "Algorithms"}},
 			CreatedAt:   adminNow,
 		},
 	}}
@@ -326,12 +325,8 @@ func TestAdminRegistrations(t *testing.T) {
 			t.Errorf("item %s = %v, want %v", name, got, want)
 		}
 	}
-	courses, ok := list[0]["drop_courses"].([]any)
-	if !ok || len(courses) != 1 {
-		t.Fatalf("drop_courses = %v, want one course", list[0]["drop_courses"])
-	}
-	if course, ok := courses[0].(map[string]any); !ok || course["code"] != "CSE-233" {
-		t.Errorf("drop course = %v, want CSE-233", courses[0])
+	if _, present := list[0]["drop_courses"]; present {
+		t.Error("the registrations response still carries drop courses")
 	}
 	if strings.Contains(rec.Body.String(), "password") {
 		t.Error("the registrations response mentions a password field")

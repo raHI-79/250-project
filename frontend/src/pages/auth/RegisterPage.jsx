@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BadgeCheck } from 'lucide-react'
 import { Alert, Button, Field, Input, Select, Stepper } from '../../components/ui'
-import CourseMultiSelect from '../../components/forms/CourseMultiSelect'
 import GoogleVerifyButton from '../../components/forms/GoogleVerifyButton'
 import PhoneInput from '../../components/forms/PhoneInput'
 import PhotoPicker from '../../components/forms/PhotoPicker'
@@ -37,8 +36,6 @@ const EMPTY = {
   dateOfBirth: '',
   batch: '',
   section: '',
-  hasDropCourse: false,
-  dropCourses: [],
   email: '',
   phone: '',
   bloodGroup: '',
@@ -84,8 +81,6 @@ export default function RegisterPage() {
       found.batch = 'Batch must look like CSE-23.'
     if (!SECTION_PATTERN.test(form.section.trim().toUpperCase()))
       found.section = 'Section must be a single letter from A to Z.'
-    if (form.hasDropCourse && form.dropCourses.length === 0)
-      found.dropCourses = 'Pick at least one drop course, or answer No.'
     return found
   }
   const checkAccount = () => {
@@ -146,9 +141,6 @@ export default function RegisterPage() {
     body.append('confirm_password', form.confirmPassword)
     body.append('photo', photo)
     appendIf(body, 'email_proof', emailProof)
-    if (form.hasDropCourse) {
-      form.dropCourses.forEach((course) => body.append('drop_course_ids', String(course.id)))
-    }
     setLoading(true)
     try {
       const data = await api.post('/api/auth/register', body, { auth: false })
@@ -306,40 +298,6 @@ export default function RegisterPage() {
                         onChange={(section) => setForm((current) => ({ ...current, section }))}
                       />
                     </div>
-                    <Field label="Do you have any drop course?">
-                      <div className="flex gap-2">
-                        <Button
-                          variant={form.hasDropCourse ? 'primary' : 'secondary'}
-                          onClick={() =>
-                            setForm((current) => ({ ...current, hasDropCourse: true }))
-                          }
-                        >
-                          Yes
-                        </Button>
-                        <Button
-                          variant={form.hasDropCourse ? 'secondary' : 'primary'}
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              hasDropCourse: false,
-                              dropCourses: [],
-                            }))
-                          }
-                        >
-                          No
-                        </Button>
-                      </div>
-                    </Field>
-                    {form.hasDropCourse && (
-                      <CourseMultiSelect
-                        value={form.dropCourses}
-                        onChange={(next) =>
-                          setForm((current) => ({ ...current, dropCourses: next }))
-                        }
-                        error={errors.dropCourses}
-                        className="animate-fade-in"
-                      />
-                    )}
                   </>
                 )}
                 {step === 3 && (

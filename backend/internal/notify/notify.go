@@ -43,11 +43,17 @@ var (
 	ErrInvalidLink      = errors.New("notify: a notification needs a known link kind")
 )
 
+const (
+	TabNextDay  = "next-day"
+	TabFinal    = "final"
+	TabUpcoming = "upcoming"
+)
+
 var linkPages = map[string]string{
-	LinkTeacherNextDay: "/teacher/next-day",
-	LinkTeacherFinal:   "/teacher/final-routine",
-	LinkCRUpcoming:     "/cr/upcoming",
-	LinkCRFinal:        "/cr/final-routine",
+	LinkTeacherNextDay: "/teacher/upcoming-routine",
+	LinkTeacherFinal:   "/teacher/upcoming-routine",
+	LinkCRUpcoming:     "/cr/create-class",
+	LinkCRFinal:        "/cr/create-class",
 	LinkRoutine:        "/student/upcoming-routine",
 	LinkExam:           "/student/exams",
 	LinkNotice:         "/student/notices",
@@ -56,19 +62,14 @@ var linkPages = map[string]string{
 	LinkCRRole:         "/profile",
 }
 
-var linkAnchors = map[string]string{
-	LinkCRUpcoming: "item",
-	LinkExam:       "exam",
-	LinkNotice:     "notice",
-	LinkPoll:       "poll",
-}
-
 type Store interface {
 	CreateDirectNotification(ctx context.Context, userID int64, kind, title, body string, link store.NotificationLink) error
 	CreateBroadcastNotification(ctx context.Context, role, batch, section, kind, title, body string, link store.NotificationLink) error
 	ListNotifications(ctx context.Context, userID int64, limit int) ([]store.Notification, error)
 	CountNotificationsSince(ctx context.Context, userID int64, since time.Time) (int, error)
 	ListNotificationRecipients(ctx context.Context, role, batch, section string) ([]int64, error)
+	ListNotificationAudience(ctx context.Context, role, batch, section string) ([]store.NotificationRecipient, error)
+	NotificationRole(ctx context.Context, userID int64) (string, error)
 }
 
 type Pusher interface {
@@ -108,20 +109,71 @@ func KnownLink(kind string) bool {
 	return ok
 }
 
-func PageURL(origin string, link store.NotificationLink) string {
-	page, ok := linkPages[link.Kind]
+func pageFor(kind, role string) (string, bool) {
+	switch kind {
+	case LinkExam:
+		if role == auth.RoleTeacher {
+			return "/teacher/create-exam", true
+		}
+	case LinkNotice:
+		if role == auth.RoleTeacher {
+			return "/teacher/notices", true
+		}
+	case LinkMessage:
+		if role == auth.RoleTeacher {
+			return "/teacher/messages", true
+		}
+	case LinkPoll:
+		if role == auth.RoleCR {
+			return "/cr/polls", true
+		}
+	}
+	page, ok := linkPages[kind]
+	return page, ok
+}
+
+func linkQuery(link store.NotificationLink) url.Values {
+	query := url.Values{}
+	switch link.Kind {
+	case LinkTeacherNextDay:
+		query.Set("tab", TabNextDay)
+	case LinkTeacherFinal:
+		query.Set("tab", TabFinal)
+	case LinkCRUpcoming:
+		query.Set("tab", TabUpcoming)
+	case LinkCRFinal:
+		query.Set("tab", TabFinal)
+	}
+	switch link.Kind {
+	case LinkTeacherNextDay, LinkTeacherFinal, LinkCRUpcoming, LinkCRFinal:
+		if link.Ref > 0 {
+			query.Set("item", strconv.FormatInt(link.Ref, 10))
+		}
+	case LinkMessage:
+		if link.Ref > 0 {
+			query.Set("c", strconv.FormatInt(link.Ref, 10))
+		}
+	case LinkExam, LinkNotice, LinkPoll:
+		if link.Ref > 0 {
+			query.Set("highlight", strconv.FormatInt(link.Ref, 10))
+		}
+	case LinkRoutine:
+		if link.Date != "" {
+			query.Set("date", link.Date)
+		}
+	}
+	return query
+}
+
+func PageURL(origin, role string, link store.NotificationLink) string {
+	base := strings.TrimSuffix(origin, "/")
+	page, ok := pageFor(link.Kind, role)
 	if !ok {
-		return strings.TrimSuffix(origin, "/")
+		return base
 	}
-	address := strings.TrimSuffix(origin, "/") + page
-	if link.Date != "" {
-		address += "?date=" + url.QueryEscape(link.Date)
-	}
-	if link.Kind == LinkMessage && link.Ref > 0 {
-		return address + "?conversation=" + strconv.FormatInt(link.Ref, 10)
-	}
-	if anchor, has := linkAnchors[link.Kind]; has && link.Ref > 0 {
-		return address + "#" + anchor + "-" + strconv.FormatInt(link.Ref, 10)
+	address := base + page
+	if query := linkQuery(link); len(query) > 0 {
+		address += "?" + query.Encode()
 	}
 	return address
 }
@@ -141,7 +193,12 @@ func (s *Service) NotifyUser(ctx context.Context, userID int64, kind, title, bod
 	if err := s.notifications.CreateDirectNotification(ctx, userID, kind, title, body, link); err != nil {
 		return err
 	}
-	s.queue(ctx, []int64{userID}, kind, title, body, link)
+	role, err := s.notifications.NotificationRole(ctx, userID)
+	if err != nil {
+		log.Printf("notify: could not read the role of a push recipient: %v", err)
+		role = ""
+	}
+	s.queue(ctx, []int64{userID}, PageURL(s.origin, role, link), kind, title, body)
 	return nil
 }
 
@@ -170,29 +227,46 @@ func (s *Service) NotifyBroadcast(ctx context.Context, role, batch, section, kin
 	if err != nil {
 		return err
 	}
-	recipients, err := s.notifications.ListNotificationRecipients(ctx, role, batch, section)
+	audience, err := s.notifications.ListNotificationAudience(ctx, role, batch, section)
 	if err != nil {
 		log.Printf("notify: could not list the push recipients: %v", err)
 		return nil
 	}
-	s.queue(ctx, recipients, kind, title, body, link)
+	for page, userIDs := range s.pagesFor(audience, link) {
+		s.queue(ctx, userIDs, page, kind, title, body)
+	}
 	return nil
 }
 
-func (s *Service) queue(ctx context.Context, userIDs []int64, kind, title, body string,
-	link store.NotificationLink) {
+func (s *Service) pagesFor(audience []store.NotificationRecipient,
+	link store.NotificationLink) map[string][]int64 {
+	pages := make(map[string][]int64)
+	for role, userIDs := range GroupByRole(audience) {
+		page := PageURL(s.origin, role, link)
+		pages[page] = append(pages[page], userIDs...)
+	}
+	return pages
+}
+
+func GroupByRole(audience []store.NotificationRecipient) map[string][]int64 {
+	grouped := make(map[string][]int64)
+	for _, recipient := range audience {
+		if recipient.UserID <= 0 {
+			continue
+		}
+		grouped[recipient.Role] = append(grouped[recipient.Role], recipient.UserID)
+	}
+	return grouped
+}
+
+func (s *Service) queue(ctx context.Context, userIDs []int64, page, kind, title, body string) {
 	if s.pushes == nil || len(userIDs) == 0 {
 		return
 	}
 	if ctx.Err() != nil {
 		return
 	}
-	s.pushes.Queue(userIDs, push.Payload{
-		Title: title,
-		Body:  body,
-		URL:   PageURL(s.origin, link),
-		Tag:   kind,
-	})
+	s.pushes.Queue(userIDs, push.Payload{Title: title, Body: body, URL: page, Tag: kind})
 }
 
 func (s *Service) Recent(ctx context.Context, userID int64, limit int) ([]store.Notification, error) {

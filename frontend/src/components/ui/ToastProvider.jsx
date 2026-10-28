@@ -58,7 +58,7 @@ export default function ToastProvider({ children }) {
               key={toast.id}
               role="status"
               className={cx(
-                'animate-fade-in-up pointer-events-auto flex items-start gap-3 rounded-card border border-line bg-raised px-4 py-3 text-sm shadow-lg',
+                'glass-sheet animate-fade-in-up pointer-events-auto flex items-start gap-3 rounded-card px-4 py-3 text-sm',
                 config.className,
               )}
             >

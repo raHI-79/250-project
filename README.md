@@ -408,8 +408,8 @@ enters for a batch sets it; after that the **Running semester** control on the
 admin Routines page moves the batch on.
 
 Only the running semester becomes dated classes, fills the class
-representative's course helper, offers drop courses at registration and is
-checked for room clashes — so the same room may hold a class in two semesters.
+representative's course helper, offers the drop courses a student can pick in
+their profile and is checked for room clashes — so the same room may hold a class in two semesters.
 Older entries stay readable: the admin Routines page and the student
 `Weekly routine` page both carry a semester picker and show sections A and B
 side by side, as tabs on a phone.
@@ -517,15 +517,21 @@ With any of them missing the feature stays off: `GET /api/push/public-key`
 answers `enabled: false`, the frontend never asks for permission and nothing is
 queued.
 
+A push carries `{title, body, url, tag}`, goes out with `Urgency: high` and a
+24 hour TTL, and its `url` is the real page for the recipient's role, so a
+teacher and a student following the same notice each land on their own screen.
+A broadcast is resolved to user ids with their effective roles and queued once
+per distinct page. Every send is logged with the push service host and the
+status code, and each subscribe logs how many subscriptions that account now
+has — never a key, never a full endpoint.
+
 The phone is asked for permission inside the sign-in click itself, so the
 system dialog appears right after a successful sign-in. If the dialog could not
 be shown and the permission is still `default`, the app asks once more on the
 next tap inside the app shell and never again after a decision. There is no
-in-page banner or switch: `My profile → Notifications` only shows the state
-(`Allowed`, `Blocked` or `Not asked`), the phone-settings steps when it is
-blocked, and a `Send test notification` button that calls
-`POST /api/push/test`. That endpoint sends to every subscription on the account
-and answers how many went out.
+in-page banner, switch or state: the permission dialog is the only thing that
+asks. `POST /api/push/test` stays on the backend for debugging; it sends to
+every subscription on the account and answers how many went out.
 
 On every start the app registers `/sw.js` at scope `/`, and on start and on
 each visibility change it re-syncs the subscription: it subscribes when none
@@ -562,6 +568,17 @@ sign-in launcher takes their place.
 - **iPhone** — open the site in Safari and choose `Share → Add to Home Screen`.
   Safari only delivers push to an installed site, so this step is required
   before notifications work there.
+
+#### Installing as an Android app
+
+`frontend/public/.well-known/assetlinks.json` carries the statement PWABuilder
+generates for the signed APK. Vite copies the folder into `dist/`, and the Go
+server answers `/.well-known/assetlinks.json` as `application/json` without a
+redirect, which is what Android checks to verify the app. Once it verifies, the
+URL bar disappears inside the installed app and the app may show the
+notifications the site asks for. If either breaks, open
+`https://<your host>/.well-known/assetlinks.json` in a browser first: it has to
+return the JSON, not the page shell.
 
 #### Generating the icons
 
@@ -709,7 +726,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `PATCH` | `/api/profile` | any signed-in role | `multipart/form-data`; only the fields that role may change |
 | `POST` | `/api/profile/password` | any signed-in role | `{current_password, new_password, confirm_password}`; logs every session out |
 | `GET` | `/api/people/{user_id}` | any signed-in role | Public card of an active student, CR or teacher; `404` otherwise |
-| `GET` | `/api/admin/registrations` | admin | Pending student registrations, oldest first, with their drop course |
+| `GET` | `/api/admin/registrations` | admin | Pending student registrations, oldest first |
 | `POST` | `/api/admin/registrations/{id}/approve` | admin | Turns a pending account into `active`; `404` unknown, `409` already decided |
 | `POST` | `/api/admin/registrations/{id}/reject` | admin | Turns a pending account into `rejected`; `404` unknown, `409` already decided |
 | `GET` | `/api/admin/students` | admin | `{items, total}` with `search`, `batch`, `section`, `status`, `limit`, `offset` |
@@ -741,6 +758,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `PATCH` | `/api/admin/routines/{id}` | admin | `{semester}` moves one routine entry to another semester |
 | `GET` | `/api/admin/batches/running-semester` | admin | Every batch with the semester it is running now |
 | `PUT` | `/api/admin/batches/{batch}/running-semester` | admin | `{semester}` sets what that batch runs now |
+| `GET` | `/api/students/drop-course-options` | student, CR | Searchable running-semester courses of the **other** batches, for the drop course picker |
 | `GET` | `/api/students/courses` | student, CR | `?batch=` (own batch by default): the running semester, the total credits and one entry per course |
 | `GET` | `/api/admin/periods` | admin | The same list for the Class periods page |
 | `POST` | `/api/admin/periods` | admin | `{label, start_time, end_time, is_break}`; `409` when it overlaps another period |
@@ -894,15 +912,14 @@ minute."}`.
 It is **`multipart/form-data`**, not JSON, because the profile photo is
 required. The fields are `full_name`, `reg_no`, `batch`, `section`, `email`,
 `phone`, `blood_group`, `date_of_birth`, `password`, `confirm_password`, the
-file field `photo`, and optionally `email_proof` and `drop_course_ids` repeated
-once per course.
+file field `photo`, and optionally `email_proof`. Registration no longer asks
+about drop courses; a `drop_course_ids` field is ignored.
 
 `batch` must look like `CSE-23`, `section` is a single letter, `blood_group` is
 one of `A+ A- B+ B- AB+ AB- O+ O-`, `phone` is exactly 11 digits matching
 `^01[3-9][0-9]{8}$`, `date_of_birth` is `YYYY-MM-DD` and belongs to somebody
 between 15 and 60 years old, `email` must end with `@` plus
-`STUDENT_EMAIL_DOMAIN`, and every `drop_course_ids` entry must be one of the
-courses from `GET /api/auth/drop-course-options`. A rejected field answers `400`
+`STUDENT_EMAIL_DOMAIN`. A rejected field answers `400`
 with a message naming it, for example `{"error":"Batch must look like
 CSE-23."}`, and a rejected phone always answers `{"error":"Phone number must be
 11 digits, for example 01712345678."}`.
@@ -1290,7 +1307,9 @@ before so the CR sets the time and the room.
 
 ### What a student sees
 
-Batch, section and the drop courses come from the caller's own student row, and
+Batch, section and the drop courses come from the caller's own student row —
+drop courses are chosen in **My profile → My drop courses**, saved through
+`PATCH /api/profile` — and
 a student reads **only published items**.
 `GET /api/students/upcoming-routine` defaults to **today** in `APP_TIMEZONE`
 and answers `date`, `date_label` (`DD.MM.YY`), `weekday`, `batch` and `groups`:

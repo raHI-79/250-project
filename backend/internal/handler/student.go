@@ -32,6 +32,7 @@ type StudentStore interface {
 	ListStudentExams(ctx context.Context, batch, section string, now time.Time) ([]store.StudentExam, error)
 	ListFilteredRoutines(ctx context.Context, filter store.RoutineFilter) ([]store.RoutineRow, error)
 	RunningSemester(ctx context.Context, batch string) (string, error)
+	SearchOtherBatchDropCourses(ctx context.Context, batch, search string) ([]store.Course, error)
 	RunningSemesterSince(ctx context.Context, batch string) (string, time.Time, error)
 	ListRunningCourseSlots(ctx context.Context, batch string) ([]store.RunningCourseSlot, error)
 	ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error)

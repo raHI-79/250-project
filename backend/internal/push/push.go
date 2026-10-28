@@ -145,6 +145,7 @@ func (w *Worker) send(ctx context.Context, subscription store.PushSubscription, 
 		log.Printf("push: %s answered %d", host, status)
 		return false
 	}
+	log.Printf("push: %s answered %d", host, status)
 	if err := w.subscriptions.TouchPushSubscription(ctx, subscription.Endpoint, w.now()); err != nil {
 		log.Printf("push: could not mark a subscription used: %v", err)
 	}

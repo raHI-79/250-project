@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import paths from '../../lib/paths'
-import { Crest } from '../ui'
+import { LogoBadge } from '../ui'
 import { DEPARTMENT, UNIVERSITY } from '../ui/IdentityBar'
 
 export default function SiteFooter() {
@@ -9,7 +9,7 @@ export default function SiteFooter() {
       <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <div className="flex items-center gap-3">
-            <Crest tone="light" />
+            <LogoBadge size="md" tone="light" />
             <p className="font-display text-sm font-semibold text-white">{UNIVERSITY}</p>
           </div>
           <p className="mt-3 text-xs leading-relaxed">{DEPARTMENT}</p>

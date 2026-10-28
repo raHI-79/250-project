@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BellRing,
   BookOpen,
   Briefcase,
   Camera,
@@ -15,7 +14,6 @@ import {
   Alert,
   Button,
   Card,
-  Chip,
   Input,
   ListRow,
   PageHeader,
@@ -33,22 +31,14 @@ import { useAuth } from '../context/auth'
 import { useTheme } from '../context/theme'
 import api from '../lib/api'
 import { useResource } from '../lib/hooks'
-import { PERMISSION_DEFAULT, PERMISSION_DENIED, usePushStatus } from '../lib/push'
 import { loginFor } from '../lib/paths'
 import { THEME_CHOICES } from '../lib/theme'
 import { MAX_BIO, PHONE_MESSAGE, accountRoleLabel, isPhone, passwordError } from '../lib/account'
 import { formatDate } from '../lib/time'
 
-const BLOCKED_STEPS = [
-  'Open your phone settings and find this app or your browser.',
-  'Open Notifications and allow them for SUST CSE.',
-  'Come back and send a test notification.',
-]
-
 export default function ProfilePage() {
   const { role, updateUser, logout } = useAuth()
   const theme = useTheme()
-  const push = usePushStatus(role)
   const navigate = useNavigate()
   const toast = useToast()
   const { data, loading, error, reload } = useResource('/api/profile')
@@ -154,10 +144,6 @@ export default function ProfilePage() {
       setChanging(false)
     }
   }
-  const sendTest = async () => {
-    const ok = await push.test()
-    if (ok) toast.success('Test notification sent to this device')
-  }
   if (loading) {
     return (
       <>
@@ -212,7 +198,7 @@ export default function ProfilePage() {
             {isStudent && (
               <ListRow
                 icon={BookOpen}
-                title="Drop courses"
+                title="My drop courses"
                 subtitle={
                   (data?.drop_courses || []).length === 0
                     ? 'No drop course'
@@ -237,15 +223,6 @@ export default function ProfilePage() {
             />
           </Card>
           <Card hover={false} flush className="divide-y divide-line overflow-hidden">
-            {push.allowed && (
-              <ListRow
-                icon={BellRing}
-                title="Notifications"
-                subtitle="Classes, exams, notices and messages on this device"
-                value={push.label}
-                onClick={() => setSheet('push')}
-              />
-            )}
             <ListRow
               icon={Palette}
               title="Appearance"
@@ -282,7 +259,7 @@ export default function ProfilePage() {
       <Sheet
         open={sheet === 'courses'}
         onClose={close}
-        title="Drop courses"
+        title="My drop courses"
         description="Courses you repeat with another batch"
       >
         {saveError && (
@@ -374,62 +351,6 @@ export default function ProfilePage() {
             </p>
           </div>
         )}
-      </Sheet>
-      <Sheet
-        open={sheet === 'push'}
-        onClose={close}
-        title="Notifications"
-        description="This device only"
-      >
-        <div className="flex items-center gap-2">
-          <Chip
-            tone={
-              push.permission === PERMISSION_DENIED
-                ? 'danger'
-                : push.permission === PERMISSION_DEFAULT
-                  ? 'warning'
-                  : 'success'
-            }
-          >
-            {push.label}
-          </Chip>
-        </div>
-        {push.permission === PERMISSION_DENIED && (
-          <ol className="mt-4 flex flex-col gap-2 text-sm text-ink-soft">
-            {BLOCKED_STEPS.map((step, index) => (
-              <li key={step} className="flex gap-2">
-                <span className="font-numeral shrink-0 font-bold text-brand-600">{index + 1}.</span>
-                {step}
-              </li>
-            ))}
-          </ol>
-        )}
-        {push.permission === PERMISSION_DEFAULT && (
-          <p className="mt-4 text-sm text-muted">
-            Your phone has not been asked yet. Allow notifications to get classes, exams, notices
-            and messages while the app is closed.
-          </p>
-        )}
-        {push.error && (
-          <Alert tone="error" className="mt-4">
-            {push.error}
-          </Alert>
-        )}
-        {push.sent > 0 && (
-          <Alert tone="success" className="mt-4">
-            Sent to {push.sent} device{push.sent === 1 ? '' : 's'} on your account.
-          </Alert>
-        )}
-        <div className="mt-5 flex flex-col gap-2">
-          {push.permission === PERMISSION_DEFAULT && (
-            <Button loading={push.busy} onClick={push.ask}>
-              Allow notifications
-            </Button>
-          )}
-          <Button variant="secondary" loading={push.busy} onClick={sendTest}>
-            Send test notification
-          </Button>
-        </div>
       </Sheet>
       <Sheet open={sheet === 'theme'} onClose={close} title="Appearance">
         <Segmented

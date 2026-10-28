@@ -301,72 +301,21 @@ func TestRegisterWithAnEmailProof(t *testing.T) {
 	}
 }
 
-func TestRegisterDropCourses(t *testing.T) {
+func TestRegisterIgnoresDropCourses(t *testing.T) {
 	silenceLog(t)
-	tests := []struct {
-		name       string
-		ids        []string
-		allowed    []int64
-		wantStatus int
-		wantIDs    []int64
-	}{
-		{name: "no drop course", ids: nil, wantStatus: http.StatusCreated},
-		{name: "one allowed course", ids: []string{"4"}, allowed: []int64{4}, wantStatus: http.StatusCreated, wantIDs: []int64{4}},
-		{
-			name:       "two allowed courses",
-			ids:        []string{"4", "9"},
-			allowed:    []int64{4, 9},
-			wantStatus: http.StatusCreated,
-			wantIDs:    []int64{4, 9},
-		},
-		{
-			name:       "the same course twice",
-			ids:        []string{"4", "4"},
-			allowed:    []int64{4},
-			wantStatus: http.StatusCreated,
-			wantIDs:    []int64{4},
-		},
-		{name: "a course outside the options", ids: []string{"4", "77"}, allowed: []int64{4}, wantStatus: http.StatusBadRequest},
-		{name: "not a number", ids: []string{"abc"}, allowed: []int64{4}, wantStatus: http.StatusBadRequest},
-		{name: "a negative id", ids: []string{"-4"}, allowed: []int64{4}, wantStatus: http.StatusBadRequest},
+	users := newAccountStore()
+	photos := testPhotos(t)
+	handler := newAccountAuth(t, users, photos, &fakeGoogle{}, &fakeMailer{})
+	values := registrationForm()
+	values["drop_course_ids"] = []string{"4", "9"}
+	request := multipartRequest(t, http.MethodPost, "/api/auth/register", values,
+		formFile{field: "photo", name: "photo.png", data: pngPhoto(t, 240, 240)})
+	rec := serve(handler.Register(), request)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body = %q)", rec.Code, rec.Body.String())
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			users := newAccountStore()
-			for _, courseID := range test.allowed {
-				users.allowedIDs[courseID] = true
-			}
-			photos := testPhotos(t)
-			handler := newAccountAuth(t, users, photos, &fakeGoogle{}, &fakeMailer{})
-			values := registrationForm()
-			if test.ids != nil {
-				values["drop_course_ids"] = test.ids
-			}
-			request := multipartRequest(t, http.MethodPost, "/api/auth/register", values,
-				formFile{field: "photo", name: "photo.png", data: pngPhoto(t, 240, 240)})
-			rec := serve(handler.Register(), request)
-			if rec.Code != test.wantStatus {
-				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
-			}
-			if test.wantStatus != http.StatusCreated {
-				if got := errorMessage(t, rec); got != MessageUnknownDropCourse {
-					t.Errorf("error = %q, want %q", got, MessageUnknownDropCourse)
-				}
-				if savedPhotos(t, photos) != 0 {
-					t.Error("a photo stayed on disk although the drop course was refused")
-				}
-				return
-			}
-			saved := users.registrations[0].DropCourseIDs
-			if len(saved) != len(test.wantIDs) {
-				t.Fatalf("drop courses = %v, want %v", saved, test.wantIDs)
-			}
-			for i, want := range test.wantIDs {
-				if saved[i] != want {
-					t.Errorf("drop course %d = %d, want %d", i, saved[i], want)
-				}
-			}
-		})
+	if saved := users.registrations[0].DropCourseIDs; len(saved) != 0 {
+		t.Errorf("drop courses = %v, want none kept at registration", saved)
 	}
 }
 

@@ -28,6 +28,7 @@ const (
 type PushStore interface {
 	SavePushSubscription(ctx context.Context, subscription store.PushSubscription) (int64, error)
 	DeletePushSubscription(ctx context.Context, userID int64, endpoint string) error
+	CountPushSubscriptions(ctx context.Context, userID int64) (int, error)
 }
 
 type PushTester interface {
@@ -118,6 +119,12 @@ func (p *Push) Subscribe() http.HandlerFunc {
 			log.Printf("handler: could not save a push subscription: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
+		}
+		count, err := p.subscriptions.CountPushSubscriptions(r.Context(), current.ID)
+		if err != nil {
+			log.Printf("handler: could not count the push subscriptions of an account: %v", err)
+		} else {
+			log.Printf("push: account %d now has %d subscriptions", current.ID, count)
 		}
 		httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessagePushSaved})
 	}

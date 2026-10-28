@@ -89,7 +89,7 @@ export default function NotificationBell() {
         onClick={() => setOpen((current) => !current)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="tap-target relative grid place-items-center rounded-xl text-ink-soft transition-colors hover:bg-wash active:scale-95"
+        className="press tap-target relative grid place-items-center rounded-full text-ink-soft hover:bg-wash"
       >
         <Bell size={19} />
         {unread > 0 && (
@@ -97,7 +97,7 @@ export default function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="animate-scale-in absolute right-0 z-50 mt-2 flex max-h-[80dvh] w-[min(22rem,calc(100vw-2rem))] origin-top-right flex-col overflow-hidden rounded-card border border-line bg-raised shadow-xl">
+        <div className="glass-sheet animate-scale-in absolute right-0 z-50 mt-2 flex max-h-[80dvh] w-[min(22rem,calc(100vw-2rem))] origin-top-right flex-col overflow-hidden rounded-card">
           <div className="flex items-center gap-2 border-b border-line px-4 py-3">
             <p className="font-display text-sm font-semibold text-ink">Notifications</p>
             {items.length > 0 && (

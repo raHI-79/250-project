@@ -79,9 +79,8 @@ func TestAccountFlowFromRegistrationToLogin(t *testing.T) {
 	if entry["reg_no"] != "2023331950" {
 		t.Fatalf("pending registration = %v, want the new student", entry)
 	}
-	dropCourses, ok := entry["drop_courses"].([]any)
-	if !ok || len(dropCourses) != 1 {
-		t.Fatalf("drop_courses = %v, want the chosen course", entry["drop_courses"])
+	if _, present := entry["drop_courses"]; present {
+		t.Error("the pending registration still carries drop courses")
 	}
 	photoURL, _ := entry["photo_url"].(string)
 	if photoURL == "" {
@@ -124,6 +123,18 @@ func TestAccountFlowFromRegistrationToLogin(t *testing.T) {
 	if got := field(t, profile, "date_of_birth"); got != flowBirthDate {
 		t.Errorf("profile date_of_birth = %q, want %q", got, flowBirthDate)
 	}
+	if courses, ok := profileBody(t, profile)["drop_courses"].([]any); ok && len(courses) != 0 {
+		t.Errorf("drop_courses = %v, want none kept from registration", courses)
+	}
+	chosen := formCall(t, router, http.MethodPatch, "/api/profile", studentToken,
+		map[string][]string{"drop_course_ids": {strconv.FormatInt(courseID, 10)}}, nil)
+	if chosen.Code != http.StatusOK {
+		t.Fatalf("drop course patch status = %d, want 200 (body = %q)", chosen.Code, chosen.Body.String())
+	}
+	picked, ok := profileBody(t, chosen)["drop_courses"].([]any)
+	if !ok || len(picked) != 1 {
+		t.Fatalf("drop_courses = %v, want the course chosen in the profile", profileBody(t, chosen)["drop_courses"])
+	}
 	cleared := formCall(t, router, http.MethodPatch, "/api/profile", studentToken,
 		map[string][]string{"phone": {"01799999950"}, "drop_course_ids": {""}}, nil)
 	if cleared.Code != http.StatusOK {
@@ -131,6 +142,9 @@ func TestAccountFlowFromRegistrationToLogin(t *testing.T) {
 	}
 	if got := field(t, cleared, "phone"); got != "01799999950" {
 		t.Errorf("profile phone = %q, want the new number", got)
+	}
+	if courses, ok := profileBody(t, cleared)["drop_courses"].([]any); ok && len(courses) != 0 {
+		t.Errorf("drop_courses = %v, want the list emptied", courses)
 	}
 	refused := formCall(t, router, http.MethodPatch, "/api/profile", studentToken,
 		map[string][]string{"batch": {"CSE-22"}}, nil)

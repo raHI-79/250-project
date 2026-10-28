@@ -129,3 +129,40 @@ func TestNotificationRecipientsSkipTheOffice(t *testing.T) {
 		})
 	}
 }
+
+func TestListNotificationAudienceCarriesTheEffectiveRole(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	plain := insertUser(t, ctx, pool, "student", "2023331400", StatusActive, 0)
+	insertStudent(t, ctx, pool, plain, "2023331400", false)
+	representative := insertUser(t, ctx, pool, "student", "2023331401", StatusActive, 0)
+	insertStudent(t, ctx, pool, representative, "2023331401", true)
+	insertUser(t, ctx, pool, "admin", "audienceoffice", StatusActive, 0)
+	audience, err := store.ListNotificationAudience(ctx, "", "CSE-23", "")
+	if err != nil {
+		t.Fatalf("ListNotificationAudience() returned an unexpected error: %v", err)
+	}
+	roles := make(map[string]int)
+	for _, recipient := range audience {
+		if recipient.UserID <= 0 {
+			t.Errorf("recipient %+v has no user id", recipient)
+		}
+		roles[recipient.Role]++
+	}
+	if roles["cr"] != 1 {
+		t.Errorf("representatives = %d, want 1 (roles = %v)", roles["cr"], roles)
+	}
+	if roles["student"] != 1 {
+		t.Errorf("students = %d, want 1 (roles = %v)", roles["student"], roles)
+	}
+	if roles["admin"] != 0 {
+		t.Errorf("the office is in the push audience (roles = %v)", roles)
+	}
+	for _, recipient := range audience {
+		if recipient.UserID == representative && recipient.Role != "cr" {
+			t.Errorf("the representative came back as %q, want cr", recipient.Role)
+		}
+		if recipient.UserID == plain && recipient.Role != "student" {
+			t.Errorf("the student came back as %q, want student", recipient.Role)
+		}
+	}
+}

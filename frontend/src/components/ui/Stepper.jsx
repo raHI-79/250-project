@@ -3,7 +3,7 @@ import cx from '../../lib/cx'
 
 export default function Stepper({ steps, current, className }) {
   return (
-    <ol className={cx('flex overflow-x-auto rounded-card border border-line bg-surface', className)}>
+    <ol className={cx('glass-card flex overflow-x-auto rounded-card', className)}>
       {steps.map((label, index) => {
         const step = index + 1
         const done = step < current

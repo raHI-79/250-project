@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import cx from '../../lib/cx'
 import paths from '../../lib/paths'
-import Crest from '../ui/Crest'
+import LogoBadge from '../ui/LogoBadge'
 import { DEPARTMENT, UNIVERSITY } from '../ui/IdentityBar'
 import CampusBackdrop from './CampusBackdrop'
 
@@ -43,7 +43,7 @@ export default function AuthScreen({
         />
         <div className="relative flex h-full flex-col justify-between p-8 xl:p-10">
           <Link to={paths.root()} className="flex items-center gap-3">
-            <Crest tone="light" />
+            <LogoBadge size="md" tone="light" />
             <span>
               <span className="font-display block text-sm font-semibold text-white">
                 {UNIVERSITY}

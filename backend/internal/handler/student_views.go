@@ -108,6 +108,27 @@ func newExamItem(exam store.StudentExam) examItem {
 	}
 }
 
+func (s *Student) DropCourseOptions() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := s.profile(w, r)
+		if !ok {
+			return
+		}
+		search, err := validate.Search("search", r.URL.Query().Get("search"))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		courses, err := s.students.SearchOtherBatchDropCourses(r.Context(), profile.Batch, search)
+		if err != nil {
+			log.Printf("handler: could not list the drop course options of a student: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, coursesResponse{Items: courseItems(courses)})
+	}
+}
+
 func (s *Student) Routine() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		profile, ok := s.profile(w, r)

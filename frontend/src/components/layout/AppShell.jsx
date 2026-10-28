@@ -28,7 +28,7 @@ export default function AppShell({ groups, tabs = [], showBell = true, showSearc
   const bar = tabs.map(withCount)
   return (
     <ChromeContext.Provider value={chrome}>
-      <div className="flex min-h-dvh bg-page">
+      <div className="flex min-h-dvh">
         <Sidebar groups={sections} open={menuOpen} onClose={() => setMenuOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar

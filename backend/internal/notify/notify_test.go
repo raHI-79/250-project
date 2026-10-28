@@ -3,6 +3,8 @@ package notify
 import (
 	"context"
 	"errors"
+	"github.com/raHI-79/250-project/backend/internal/auth"
+	"github.com/raHI-79/250-project/backend/internal/push"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"testing"
 	"time"
@@ -36,6 +38,8 @@ type fakeStore struct {
 	askedUser  int64
 	askedSince time.Time
 	recipients []int64
+	audience   []store.NotificationRecipient
+	roles      map[int64]string
 }
 
 func (f *fakeStore) ListNotificationRecipients(ctx context.Context, role, batch,
@@ -44,6 +48,28 @@ func (f *fakeStore) ListNotificationRecipients(ctx context.Context, role, batch,
 		return nil, f.err
 	}
 	return f.recipients, nil
+}
+
+func (f *fakeStore) ListNotificationAudience(ctx context.Context, role, batch,
+	section string) ([]store.NotificationRecipient, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.audience != nil {
+		return f.audience, nil
+	}
+	audience := make([]store.NotificationRecipient, 0, len(f.recipients))
+	for _, userID := range f.recipients {
+		audience = append(audience, store.NotificationRecipient{UserID: userID, Role: auth.RoleStudent})
+	}
+	return audience, nil
+}
+
+func (f *fakeStore) NotificationRole(ctx context.Context, userID int64) (string, error) {
+	if role, ok := f.roles[userID]; ok {
+		return role, nil
+	}
+	return auth.RoleStudent, nil
 }
 
 func (f *fakeStore) CreateDirectNotification(ctx context.Context, userID int64, kind, title, body string,
@@ -267,5 +293,135 @@ func TestUnreadCount(t *testing.T) {
 	failing := &fakeStore{err: errors.New("database is down")}
 	if _, err := New(failing).UnreadCount(context.Background(), 9, since); err == nil {
 		t.Error("the store failure was swallowed")
+	}
+}
+
+type recordedPush struct {
+	userIDs []int64
+	payload push.Payload
+}
+
+type fakePusher struct {
+	calls []recordedPush
+}
+
+func (f *fakePusher) Queue(userIDs []int64, payload push.Payload) {
+	f.calls = append(f.calls, recordedPush{userIDs: append([]int64(nil), userIDs...), payload: payload})
+}
+
+func TestPageURLPointsAtTheRoutesTheAppKnows(t *testing.T) {
+	const origin = "https://portal.example/"
+	tests := []struct {
+		name string
+		role string
+		link store.NotificationLink
+		want string
+	}{
+		{
+			name: "a teacher decision",
+			role: auth.RoleTeacher,
+			link: store.NotificationLink{Kind: LinkTeacherNextDay, Ref: 12},
+			want: "https://portal.example/teacher/upcoming-routine?item=12&tab=next-day",
+		},
+		{
+			name: "a final routine for the representative",
+			role: auth.RoleCR,
+			link: store.NotificationLink{Kind: LinkCRFinal, Ref: 7},
+			want: "https://portal.example/cr/create-class?item=7&tab=final",
+		},
+		{
+			name: "a notice for a student",
+			role: auth.RoleStudent,
+			link: store.NotificationLink{Kind: LinkNotice, Ref: 3},
+			want: "https://portal.example/student/notices?highlight=3",
+		},
+		{
+			name: "the same notice for a teacher",
+			role: auth.RoleTeacher,
+			link: store.NotificationLink{Kind: LinkNotice, Ref: 3},
+			want: "https://portal.example/teacher/notices?highlight=3",
+		},
+		{
+			name: "a message for a teacher",
+			role: auth.RoleTeacher,
+			link: store.NotificationLink{Kind: LinkMessage, Ref: 9},
+			want: "https://portal.example/teacher/messages?c=9",
+		},
+		{
+			name: "a poll for the representative",
+			role: auth.RoleCR,
+			link: store.NotificationLink{Kind: LinkPoll, Ref: 4},
+			want: "https://portal.example/cr/polls?highlight=4",
+		},
+		{
+			name: "a published routine",
+			role: auth.RoleStudent,
+			link: store.NotificationLink{Kind: LinkRoutine, Date: "2026-03-09"},
+			want: "https://portal.example/student/upcoming-routine?date=2026-03-09",
+		},
+		{
+			name: "an unknown kind falls back to the home page",
+			role: auth.RoleStudent,
+			link: store.NotificationLink{Kind: "nothing"},
+			want: "https://portal.example",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := PageURL(origin, test.role, test.link); got != test.want {
+				t.Errorf("PageURL = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestNotifyBroadcastResolvesTheAudienceToEachRole(t *testing.T) {
+	notifications := &fakeStore{audience: []store.NotificationRecipient{
+		{UserID: 4, Role: auth.RoleStudent},
+		{UserID: 5, Role: auth.RoleCR},
+		{UserID: 6, Role: auth.RoleStudent},
+		{UserID: 7, Role: auth.RoleTeacher},
+	}}
+	pusher := &fakePusher{}
+	service := New(notifications).WithPush(pusher, "https://portal.example")
+	err := service.NotifyBroadcast(context.Background(), "", "CSE-23", "", TypeNotice,
+		"New notice", "Quiz on Monday", Ref(LinkNotice, 11))
+	if err != nil {
+		t.Fatalf("NotifyBroadcast returned %v", err)
+	}
+	if len(pusher.calls) != 2 {
+		t.Fatalf("queued %d payloads, want one per page", len(pusher.calls))
+	}
+	byURL := make(map[string][]int64)
+	for _, call := range pusher.calls {
+		byURL[call.payload.URL] = append(byURL[call.payload.URL], call.userIDs...)
+		if call.payload.Title != "New notice" || call.payload.Tag != TypeNotice {
+			t.Errorf("payload = %+v, want the broadcast title and tag", call.payload)
+		}
+	}
+	student := "https://portal.example/student/notices?highlight=11"
+	teacher := "https://portal.example/teacher/notices?highlight=11"
+	if got := byURL[student]; len(got) != 3 {
+		t.Errorf("students = %v, want both students and the representative on %s", got, student)
+	}
+	if got := byURL[teacher]; len(got) != 1 || got[0] != 7 {
+		t.Errorf("teachers = %v, want only account 7 on %s", got, teacher)
+	}
+	if len(byURL) != 2 {
+		t.Errorf("urls = %v, want one payload per distinct page", byURL)
+	}
+}
+
+func TestGroupByRoleSkipsEmptyRecipients(t *testing.T) {
+	grouped := GroupByRole([]store.NotificationRecipient{
+		{UserID: 0, Role: auth.RoleStudent},
+		{UserID: 3, Role: auth.RoleStudent},
+		{UserID: 4, Role: auth.RoleTeacher},
+	})
+	if len(grouped[auth.RoleStudent]) != 1 || grouped[auth.RoleStudent][0] != 3 {
+		t.Errorf("students = %v, want only account 3", grouped[auth.RoleStudent])
+	}
+	if len(grouped[auth.RoleTeacher]) != 1 {
+		t.Errorf("teachers = %v, want one account", grouped[auth.RoleTeacher])
 	}
 }

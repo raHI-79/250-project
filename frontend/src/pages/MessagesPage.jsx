@@ -241,7 +241,7 @@ export default function MessagesPage() {
                   type="button"
                   onClick={close}
                   aria-label="Back to the conversations"
-                  className="tap-target grid shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-wash md:hidden"
+                  className="press tap-target grid shrink-0 place-items-center rounded-full text-ink-soft hover:bg-wash md:hidden"
                 >
                   <ArrowLeft size={20} />
                 </button>
@@ -262,7 +262,7 @@ export default function MessagesPage() {
                     onClick={() => setShowInfo((current) => !current)}
                     aria-pressed={showInfo}
                     aria-label={showInfo ? 'Hide the members' : 'Show the members'}
-                    className="tap-target grid shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-wash"
+                    className="press tap-target grid shrink-0 place-items-center rounded-full text-ink-soft hover:bg-wash"
                   >
                     <Info size={19} />
                   </button>
@@ -271,7 +271,7 @@ export default function MessagesPage() {
                   type="button"
                   onClick={clearChat}
                   aria-label="Delete this chat"
-                  className="tap-target grid shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-wash hover:text-danger-600"
+                  className="press tap-target grid shrink-0 place-items-center rounded-full text-ink-soft hover:bg-wash hover:text-danger-600"
                 >
                   <Trash2 size={19} />
                 </button>

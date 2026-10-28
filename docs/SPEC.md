@@ -233,10 +233,12 @@ was published; a new publication replaces it.
 | Teachers | Teacher contact details |
 | Polls | Open polls for them, with their own answer marked |
 | Messages | Direct chats and group chats |
-| My profile | Their ID card, details, photo and security settings |
+| My profile | Their ID card, details, photo, drop courses and security settings |
 
 A student with a drop course sees that course's classes from the batch that
-actually runs it.
+actually runs it. Drop courses are chosen in **My profile → My drop courses**,
+a searchable picker over the running-semester courses of the other batches, and
+are never asked for at registration.
 
 ## 6. Class representative pages
 
@@ -382,8 +384,11 @@ office never does.
 - Permission is asked inside the sign-in click itself, so the phone shows its
   own dialog. If it could not be shown, the app asks once more on the next tap
   and never again after a decision.
-- **My profile → Notifications** shows only the state (Allowed, Blocked or Not
-  asked), the phone-settings steps when it is blocked, and a test button.
+- My profile carries no notification section at all; the system dialog is the
+  only thing that asks.
+- A push carries `{title, body, url, tag}` with `Urgency: high` and a 24 hour
+  TTL, and its url is the page for the recipient's own role. Broadcasts resolve
+  to user ids with their roles and queue once per distinct page.
 - `POST /api/push/test` sends to every subscription of the caller and answers
   how many went out. Each failure is logged with the push service host and the
   status code, never a key and never a full endpoint. The server logs once at
@@ -391,7 +396,10 @@ office never does.
 
 ### 11.3 Installable site
 
-A web manifest and a service worker make the site installable. The app registers
+`/.well-known/assetlinks.json` is served as `application/json` without a
+redirect, so Android can verify the installed app, drop the URL bar and accept
+the delegated notifications. A web manifest and a service worker make the site
+installable. The app registers
 `/sw.js` at scope `/` on every start and re-syncs its subscription on start and
 on each visibility change, subscribing again whenever the server key changed.
 The service worker always shows the notification and, on click, focuses an open
@@ -401,8 +409,10 @@ the manifest as `application/manifest+json` with `no-cache`.
 
 ## 12. Interface
 
-- A mobile app look on the department's own colours: maroon `#7A1F2B`, paper
-  `#FAF9F6` and a muted gold for highlights. Inter for interface text, Source
+- A frosted glass look on the department's own colours: maroon `#7A1F2B`, paper
+  `#FAF9F6` and a muted gold for highlights. A soft background of blurred maroon
+  and gold blobs sits behind translucent cards, bars, sheets and the sidebar,
+  with a solid fallback wherever `backdrop-filter` is unsupported. Inter for interface text, Source
   Serif 4 for large titles and the home greeting.
 - A dark theme that follows the system setting, with Light, Dark and System in
   **My profile → Appearance**.

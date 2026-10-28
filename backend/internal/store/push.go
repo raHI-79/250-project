@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+type NotificationRecipient struct {
+	UserID int64
+	Role   string
+}
+
 type PushSubscription struct {
 	ID        int64
 	UserID    int64
@@ -28,8 +33,24 @@ RETURNING id`
 FROM push_subscriptions
 WHERE user_id = ANY($1::bigint[])
 ORDER BY id`
-	touchPushSubscriptionSQL = `UPDATE push_subscriptions SET last_used_at = $2 WHERE endpoint = $1`
-	pushAudienceSQL          = `SELECT u.id
+	touchPushSubscriptionSQL  = `UPDATE push_subscriptions SET last_used_at = $2 WHERE endpoint = $1`
+	countPushSubscriptionsSQL = `SELECT COUNT(*) FROM push_subscriptions WHERE user_id = $1`
+	pushRoleSQL               = `SELECT CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END
+FROM users u
+LEFT JOIN students s ON s.user_id = u.id
+WHERE u.id = $1`
+	pushAudienceRolesSQL = `SELECT u.id,
+       CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END AS effective_role
+FROM users u
+LEFT JOIN students s ON s.user_id = u.id
+WHERE u.status = 'active' AND u.role <> 'admin'
+  AND ($1::text = ''
+       OR $1::text = CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END
+       OR ($1::text = 'student' AND u.role = 'student'))
+  AND ($2::text = '' OR s.batch = $2::text)
+  AND ($3::text = '' OR s.section = $3::text)
+ORDER BY u.id`
+	pushAudienceSQL = `SELECT u.id
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 WHERE u.status = 'active' AND u.role <> 'admin'
@@ -110,4 +131,41 @@ func (s *Store) TouchPushSubscription(ctx context.Context, endpoint string, at t
 
 func (s *Store) ListNotificationRecipients(ctx context.Context, role, batch, section string) ([]int64, error) {
 	return s.userIDs(ctx, pushAudienceSQL, role, batch, section)
+}
+
+func (s *Store) ListNotificationAudience(ctx context.Context, role, batch,
+	section string) ([]NotificationRecipient, error) {
+	rows, err := s.pool.Query(ctx, pushAudienceRolesSQL, role, batch, section)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the push audience: %w", err)
+	}
+	defer rows.Close()
+	audience := make([]NotificationRecipient, 0)
+	for rows.Next() {
+		var recipient NotificationRecipient
+		if err := rows.Scan(&recipient.UserID, &recipient.Role); err != nil {
+			return nil, fmt.Errorf("store: could not scan a push recipient: %w", err)
+		}
+		audience = append(audience, recipient)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the push audience: %w", err)
+	}
+	return audience, nil
+}
+
+func (s *Store) NotificationRole(ctx context.Context, userID int64) (string, error) {
+	var role string
+	if err := s.pool.QueryRow(ctx, pushRoleSQL, userID).Scan(&role); err != nil {
+		return "", fmt.Errorf("store: could not read the role of an account: %w", err)
+	}
+	return role, nil
+}
+
+func (s *Store) CountPushSubscriptions(ctx context.Context, userID int64) (int, error) {
+	var count int
+	if err := s.pool.QueryRow(ctx, countPushSubscriptionsSQL, userID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("store: could not count the push subscriptions: %w", err)
+	}
+	return count, nil
 }

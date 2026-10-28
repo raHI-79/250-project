@@ -6,7 +6,7 @@ import { relativeTime } from '../../lib/time'
 
 export default function MessagePreview({ conversations, role }) {
   return (
-    <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+    <div className="glass-card divide-y divide-line overflow-hidden rounded-card">
       {conversations.map((conversation) => (
         <ListRow
           key={conversation.id}

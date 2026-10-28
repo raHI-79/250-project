@@ -87,19 +87,18 @@ func NewAdmin(cfg *config.Config, people AdminStore, alerts Notifier, mail maile
 }
 
 type registrationItem struct {
-	ID          int64           `json:"id"`
-	UserID      int64           `json:"user_id"`
-	FullName    string          `json:"full_name"`
-	RegNo       string          `json:"reg_no"`
-	Batch       string          `json:"batch"`
-	Section     string          `json:"section"`
-	Email       string          `json:"email"`
-	Phone       string          `json:"phone"`
-	BloodGroup  string          `json:"blood_group"`
-	DateOfBirth string          `json:"date_of_birth,omitempty"`
-	PhotoURL    string          `json:"photo_url,omitempty"`
-	DropCourses []profileCourse `json:"drop_courses"`
-	CreatedAt   string          `json:"created_at"`
+	ID          int64  `json:"id"`
+	UserID      int64  `json:"user_id"`
+	FullName    string `json:"full_name"`
+	RegNo       string `json:"reg_no"`
+	Batch       string `json:"batch"`
+	Section     string `json:"section"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	BloodGroup  string `json:"blood_group"`
+	DateOfBirth string `json:"date_of_birth,omitempty"`
+	PhotoURL    string `json:"photo_url,omitempty"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type registrationsResponse struct {
@@ -188,7 +187,6 @@ func (a *Admin) Registrations() http.HandlerFunc {
 				BloodGroup:  registration.BloodGroup,
 				DateOfBirth: registration.DateOfBirth,
 				PhotoURL:    registration.PhotoPath,
-				DropCourses: profileCourses(registration.DropCourses),
 				CreatedAt:   timestamp(registration.CreatedAt),
 			})
 		}

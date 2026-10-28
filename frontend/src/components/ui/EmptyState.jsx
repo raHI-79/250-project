@@ -5,7 +5,7 @@ export default function EmptyState({ icon: Icon = Inbox, title, text, action, cl
   return (
     <div
       className={cx(
-        'flex flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-surface px-5 py-10 text-center',
+        'glass-card flex flex-col items-center justify-center gap-3 rounded-card border-dashed px-5 py-10 text-center',
         className,
       )}
     >
