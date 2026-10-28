@@ -346,6 +346,16 @@ func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.P
 	group.Handle("POST /api/push/subscribe", pushes.Subscribe())
 	group.Handle("DELETE /api/push/subscribe", pushes.Unsubscribe())
 	group.Handle("POST /api/push/test", pushes.Test())
+	reports := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
+	limited := RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			reports.Middleware,
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
+		},
+	}
+	limited.Handle("POST /api/push/client-log", pushes.ClientLog())
 }
 
 func registerNotificationRoutes(group RouteGroup, notifications *handler.Notifications) {

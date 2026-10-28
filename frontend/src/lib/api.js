@@ -27,11 +27,14 @@ const PUBLIC_ENDPOINTS = [
   '/api/auth/forgot-password',
   '/api/auth/verify-reset-code',
   '/api/auth/reset-password',
+  '/api/push/public-key',
 ]
 
 const isPublicEndpoint = (path) => PUBLIC_ENDPOINTS.some((entry) => path.startsWith(entry))
 
 const currentToken = () => readJson(SESSION_KEY)?.token || null
+
+export const hasSession = () => Boolean(currentToken())
 
 const currentRole = () => readJson(SESSION_KEY)?.user?.role || null
 

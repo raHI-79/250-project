@@ -12,6 +12,7 @@ import (
 const (
 	MessageTooManyAttempts = "Too many attempts. Please try again in a minute."
 	DefaultRateLimit       = 10
+	ClientLogRateLimit     = 20
 	DefaultRateWindow      = time.Minute
 )
 

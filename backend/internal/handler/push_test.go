@@ -7,6 +7,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -261,5 +262,86 @@ func TestPushTestAnswersHowManyWereSent(t *testing.T) {
 				t.Errorf("title = %q, want %q", tester.title, TestPushTitle)
 			}
 		})
+	}
+}
+
+func TestPushSubscribeKeepsTheDeviceDetails(t *testing.T) {
+	silenceLog(t)
+	devices := &fakePushStore{}
+	handler := NewPush(pushConfig(t, true), devices, &fakePushTester{})
+	body := `{"endpoint":"  https://push.example/trim  ","keys":{"p256dh":" key ","auth":" secret "},` +
+		`"user_agent":"` + strings.Repeat("a", MaxAgentLength+40) + `"}`
+	request := jsonRequest(t, http.MethodPost, "/api/push/subscribe", body, noticeCRID, auth.RoleCR)
+	rec := serve(handler.Subscribe(), request)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d (body = %q)", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	saved := devices.saved[0]
+	if saved.Endpoint != "https://push.example/trim" {
+		t.Errorf("endpoint = %q, want it trimmed", saved.Endpoint)
+	}
+	if saved.P256dh != "key" || saved.Auth != "secret" {
+		t.Errorf("keys = %+v, want them trimmed", saved)
+	}
+	if len(saved.UserAgent) != MaxAgentLength {
+		t.Errorf("user agent length = %d, want %d", len(saved.UserAgent), MaxAgentLength)
+	}
+}
+
+func TestPushSubscribeRefusesAnOversizedEndpoint(t *testing.T) {
+	silenceLog(t)
+	devices := &fakePushStore{}
+	handler := NewPush(pushConfig(t, true), devices, &fakePushTester{})
+	body := `{"endpoint":"https://push.example/` + strings.Repeat("x", MaxEndpointLength) +
+		`","keys":{"p256dh":"key","auth":"secret"}}`
+	request := jsonRequest(t, http.MethodPost, "/api/push/subscribe", body, noticeCRID, auth.RoleCR)
+	rec := serve(handler.Subscribe(), request)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if len(devices.saved) != 0 {
+		t.Error("the store saved an oversized endpoint")
+	}
+}
+
+func TestPushSubscribeFallsBackToTheRequestUserAgent(t *testing.T) {
+	silenceLog(t)
+	devices := &fakePushStore{}
+	handler := NewPush(pushConfig(t, true), devices, &fakePushTester{})
+	body := `{"endpoint":"https://push.example/abc","keys":{"p256dh":"key","auth":"secret"}}`
+	request := jsonRequest(t, http.MethodPost, "/api/push/subscribe", body, noticeCRID, auth.RoleCR)
+	request.Header.Set("User-Agent", "Portal Android")
+	rec := serve(handler.Subscribe(), request)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if devices.saved[0].UserAgent != "Portal Android" {
+		t.Errorf("user agent = %q, want the request header", devices.saved[0].UserAgent)
+	}
+}
+
+func TestPushClientLogRecordsAFailure(t *testing.T) {
+	silenceLog(t)
+	handler := NewPush(pushConfig(t, true), &fakePushStore{}, &fakePushTester{})
+	body := `{"stage":"subscribe","name":"NotAllowedError","message":"` +
+		strings.Repeat("b", MaxLogFieldLength+30) + `"}`
+	request := jsonRequest(t, http.MethodPost, "/api/push/client-log", body, noticeCRID, auth.RoleCR)
+	rec := serve(handler.ClientLog(), request)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d (body = %q)", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+}
+
+func TestPushClientLogRefusesAnEmptyReport(t *testing.T) {
+	silenceLog(t)
+	handler := NewPush(pushConfig(t, true), &fakePushStore{}, &fakePushTester{})
+	request := jsonRequest(t, http.MethodPost, "/api/push/client-log", `{"stage":"  "}`,
+		noticeCRID, auth.RoleCR)
+	rec := serve(handler.ClientLog(), request)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if got := errorMessage(t, rec); got != MessagePushLogEmpty {
+		t.Errorf("error = %q, want %q", got, MessagePushLogEmpty)
 	}
 }

@@ -8,6 +8,7 @@
     "build": "vite build",
     "icons": "node scripts/icons.mjs",
     "lint": "eslint .",
+    "test": "node --test src/lib",
     "preview": "vite preview"
   },
   "dependencies": {
