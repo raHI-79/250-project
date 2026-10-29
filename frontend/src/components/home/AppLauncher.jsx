@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { GraduationCap, Users } from 'lucide-react'
 import { Button, LogoBadge } from '../ui'
+import AndroidDownload from './AndroidDownload'
 import { DEPARTMENT, UNIVERSITY } from '../ui/IdentityBar'
 import paths from '../../lib/paths'
 
@@ -27,6 +28,7 @@ export default function AppLauncher() {
             <GraduationCap size={18} />
             Teacher sign in
           </Button>
+          <AndroidDownload variant="ghost" className="w-full" />
         </div>
         <p className="mt-6 text-xs text-muted">
           New student?{' '}

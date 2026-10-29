@@ -5,6 +5,7 @@ import TimelineItem from './TimelineItem'
 import CourseName from './CourseName'
 import { STATUS_CANCELLED, isOnline, kindLabel, statusLabel } from '../../lib/schedule'
 import cx from '../../lib/cx'
+import { externalLinkProps } from '../../lib/native'
 
 export default function PublishedLine({ item, showBatch = false }) {
   const cancelled = item.status === STATUS_CANCELLED
@@ -27,7 +28,7 @@ export default function PublishedLine({ item, showBatch = false }) {
         {cancelled && <StatusBadge status="cancelled" label={statusLabel(item.status)} />}
         {isOnline(item) && <StatusBadge status="gold" label="Online" />}
         {isOnline(item) && item.meeting_link && !cancelled && (
-          <a href={item.meeting_link} target="_blank" rel="noreferrer">
+          <a {...externalLinkProps(item.meeting_link)}>
             <Button size="sm" variant="secondary">
               <Video size={13} />
               Join

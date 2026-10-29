@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import cx from '../../lib/cx'
 import { initialsOf } from '../../lib/account'
+import { assetURL } from '../../lib/native'
 
 const sizes = {
   xs: 'size-7 text-xs',
@@ -23,7 +24,7 @@ export default function Avatar({ src, name, size = 'md', className }) {
       )}
     >
       {showImage ? (
-        <img src={src} alt="" onError={() => setBroken(true)} className="size-full object-cover" />
+        <img src={assetURL(src)} alt="" onError={() => setBroken(true)} className="size-full object-cover" />
       ) : (
         initialsOf(name)
       )}

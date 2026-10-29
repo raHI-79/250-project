@@ -4,6 +4,7 @@ import { HERO_IMAGES } from '../../lib/campus'
 import cx from '../../lib/cx'
 import paths from '../../lib/paths'
 import { Button } from '../ui'
+import AndroidDownload from './AndroidDownload'
 
 const ROTATE_AFTER = 7000
 
@@ -61,6 +62,7 @@ export default function HomeHero() {
           <Button as={Link} to={paths.teacherLogin()} size="lg" variant="outlineLight">
             Teacher sign in
           </Button>
+          <AndroidDownload variant="outlineLight" />
         </div>
         <div className="mt-10 flex items-center gap-3">
           <div className="flex gap-2">

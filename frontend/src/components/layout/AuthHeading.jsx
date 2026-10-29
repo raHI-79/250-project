@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import cx from '../../lib/cx'
 import paths from '../../lib/paths'
 import LogoBadge from '../ui/LogoBadge'
+import AndroidDownload from '../home/AndroidDownload'
 
 const PORTALS = [
   { label: 'Student', to: paths.studentLogin() },
@@ -44,6 +45,7 @@ export default function AuthHeading({ eyebrow, title, subtitle, switcher = false
       <h1 className="font-display mt-1.5 text-title font-bold text-ink">{title}</h1>
       {subtitle && <p className="mt-2 text-sm text-muted">{subtitle}</p>}
       {switcher && <PortalSwitch className="mt-5 w-full" />}
+      {switcher && <AndroidDownload variant="ghost" size="sm" className="mt-4 w-full" />}
     </div>
   )
 }

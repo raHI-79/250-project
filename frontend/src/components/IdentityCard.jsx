@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import cx from '../lib/cx'
 import { initialsOf } from '../lib/account'
+import { assetURL } from '../lib/native'
 import LogoBadge from './ui/LogoBadge'
 import { DEPARTMENT, UNIVERSITY } from './ui/IdentityBar'
 
@@ -61,7 +62,7 @@ export default function IdentityCard({
         <div className="size-22 overflow-hidden rounded-full border-4 border-surface bg-wash">
           {showPhoto ? (
             <img
-              src={photoUrl}
+              src={assetURL(photoUrl)}
               alt=""
               onError={() => setBroken(true)}
               className="size-full object-cover"

@@ -7,11 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "icons": "node scripts/icons.mjs",
+    "android:icons": "node scripts/android-icons.mjs",
+    "android:config": "node scripts/android-config.mjs",
+    "android:sync": "npm run build && npm run android:config && cap sync android",
     "lint": "eslint .",
     "test": "node --test src/lib",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/browser": "^6.0.5",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/push-notifications": "^6.0.4",
+    "@capacitor/status-bar": "^6.0.2",
     "lucide-react": "^1.59.0",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
@@ -20,6 +29,7 @@
     "react-router-dom": "^7.9.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
     "@eslint/js": "^9.36.0",
     "@tailwindcss/vite": "^4.1.16",
     "@types/react": "^19.1.13",

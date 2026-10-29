@@ -7,6 +7,7 @@ import {
   Presentation,
 } from 'lucide-react'
 import cx from '../lib/cx'
+import { assetURL, externalLinkProps } from '../lib/native'
 import {
   extensionOf,
   fileNameOf,
@@ -49,16 +50,16 @@ export default function AttachmentView({
   return (
     <div className={cx('flex flex-col items-start gap-2', className)}>
       {fileUrl && isImageFile(fileMime, name) && (
-        <a href={fileUrl} target="_blank" rel="noreferrer" className="block">
+        <a {...externalLinkProps(fileUrl)} className="block">
           <img
-            src={fileUrl}
+            src={assetURL(fileUrl)}
             alt={name}
             className="max-h-52 max-w-full rounded-xl border border-line object-cover"
           />
         </a>
       )}
       {fileUrl && !isImageFile(fileMime, name) && (
-        <a href={fileUrl} target="_blank" rel="noreferrer" className={chipClass}>
+        <a {...externalLinkProps(fileUrl)} className={chipClass}>
           <Icon size={16} className="shrink-0 text-muted" />
           <span className="wrap-long">{name}</span>
           {fileSize > 0 && (
@@ -70,7 +71,7 @@ export default function AttachmentView({
         </a>
       )}
       {linkUrl && (
-        <a href={linkUrl} target="_blank" rel="noreferrer" className={chipClass}>
+        <a {...externalLinkProps(linkUrl)} className={chipClass}>
           <Link2 size={16} className="shrink-0 text-muted" />
           <span className="wrap-long">{linkLabel(linkUrl)}</span>
         </a>
