@@ -23,7 +23,7 @@ services:
       - key: FILE_STORAGE
         value: database
       - key: MAIL_PROVIDER
-        value: brevo
+        value: appsscript
       - key: DB_MAX_CONNS
         value: "5"
       - key: STUDENT_EMAIL_DOMAIN

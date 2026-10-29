@@ -242,9 +242,15 @@ go run ./cmd/server
 | `FILE_STORAGE` | `disk` | `disk` keeps uploads under `UPLOAD_DIR`, `database` keeps them in Postgres |
 | `STATIC_DIR` | none — optional | When set, the server also serves the built frontend from this folder |
 | `DB_MAX_CONNS` | `10` | Largest connection pool; use `5` on a free Neon database |
-| `MAIL_PROVIDER` | `smtp` | `smtp` or `brevo`, which sends over HTTPS where SMTP ports are blocked |
+| `MAIL_PROVIDER` | `smtp` | `smtp`, `brevo` or `appsscript`, the last two send over HTTPS where SMTP ports are blocked |
 | `BREVO_API_KEY` | none — optional | The Brevo API key, needed when `MAIL_PROVIDER=brevo` |
 | `MAIL_FROM_NAME` | `SUST CSE Portal` | The name beside the sender address |
+| `APPS_SCRIPT_URL` | none — optional | The `/exec` address of the Apps Script web app, needed when `MAIL_PROVIDER=appsscript` |
+| `APPS_SCRIPT_SECRET` | none — optional | Shared secret the script checks on every request; never logged |
+| `TURNSTILE_SITE_KEY` | none — optional | Cloudflare Turnstile site key; with either key empty the human check is skipped |
+| `TURNSTILE_SECRET_KEY` | none — optional | Cloudflare Turnstile secret key, used server side only |
+| `APP_VERSION` | `0.0.0` | Version reported by `/api/health` and announced once per release |
+| `APP_COMMIT` | `RENDER_GIT_COMMIT` or `unknown` | Short commit reported by `/api/health` |
 
 Never commit real values. `backend/.env` is gitignored; only
 `backend/.env.example` is tracked.
@@ -526,22 +532,32 @@ status code, and each subscribe logs how many subscriptions that account now
 has — never a key, never a full endpoint.
 
 The phone is asked for permission inside the sign-in click itself, so the
-system dialog appears right after a successful sign-in. If the dialog could not
-be shown and the permission is still `default`, the app asks once more on the
-next tap inside the app shell and never again after a decision. There is no
-in-page banner, switch or state: the permission dialog is the only thing that
-asks. `POST /api/push/test` stays on the backend for debugging; it sends to
-every subscription on the account and answers how many went out.
+system dialog appears right after a successful sign-in. When the permission is
+already `granted` the app subscribes silently instead, on sign-in and on every
+app start, without showing anything. If the dialog could not be shown and the
+permission is still `default`, the app asks once more on the next tap inside the
+app shell and never again after a decision. There is no in-page banner, switch
+or state: the permission dialog is the only thing that asks.
+`POST /api/push/test` stays on the backend for debugging; it sends to every
+subscription on the account and answers how many went out.
 
 On every start the app registers `/sw.js` at scope `/`, and on start and on
 each visibility change it re-syncs the subscription: it subscribes when none
 exists, unsubscribes and subscribes again when the stored
 `applicationServerKey` no longer matches the server key, and posts the
-subscription every time. `public/sw.js` uses `skipWaiting` and `clients.claim`,
-always shows a notification (title, body, icon, the monochrome badge, tag,
-`renotify`, vibration and `data.url`) and, on click, focuses an open window and
-navigates it, or opens a new one. Signing out removes that device's
-subscription.
+subscription every time. The server key is trimmed, read as base64url and
+checked to be a 65 byte uncompressed point, so a key pasted with a stray
+newline fails with a clear message instead of silently never subscribing. Every
+failure is reported to `POST /api/push/client-log` with only an error name and
+message, so a problem that happens on a phone shows up in the Render log.
+
+`public/sw.js` waits instead of calling `skipWaiting`, so a new version raises
+*A new version is ready · Reload*; it takes over only when the page sends it
+`SKIP_WAITING`. It claims its clients on activation, always shows a notification
+(title, body, icon, the monochrome badge, tag, `renotify`, vibration and
+`data.url`) and, on click, focuses an open window and navigates it, or opens a
+new one. Signing out removes that device's subscription **row** but keeps the
+browser subscription, so signing back in re-registers at once.
 
 The Go static server serves `/sw.js` as `application/javascript` with
 `Cache-Control: no-cache` and `Service-Worker-Allowed: /`, and
@@ -702,7 +718,8 @@ Every route lives under `/api`. Errors always use the same shape:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/health` | public | `status`, `environment`, `database` (`ok` / `unavailable`) and the current time |
+| `GET` | `/api/health` | public | `status`, `environment`, `version`, `commit`, `database` (`ok` / `unavailable`) and the current time |
+| `POST` | `/api/human/verify` | public | `{token, standalone}` checks a Turnstile token with Cloudflare and returns a signed pass; `503` when the keys are missing |
 | `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
 | `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
 | `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students, out of `A` and `B` |
@@ -722,6 +739,8 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/auth/reset-password` | public | Sets a new password with that reset token |
 | `POST` | `/api/auth/logout` | any signed-in role | Invalidates **every** token of the account |
 | `GET` | `/api/me` | any signed-in role | The signed-in user: `id`, `user_id`, `identifier`, `role`, `photo_url` |
+| `GET` | `/api/me/badges` | any signed-in role | How many items are new in each of `notices`, `materials`, `polls`, `exams`, `routine` and `courses` |
+| `POST` | `/api/me/badges/{section}/seen` | any signed-in role | Clears the badge of one section; the section page calls it as it opens |
 | `GET` | `/api/profile` | any signed-in role | The caller's own profile, shaped by their role |
 | `PATCH` | `/api/profile` | any signed-in role | `multipart/form-data`; only the fields that role may change |
 | `POST` | `/api/profile/password` | any signed-in role | `{current_password, new_password, confirm_password}`; logs every session out |
@@ -801,14 +820,18 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/students/routine` | student, CR | Fixed routine browser with `batch`, `section`, `day` and `course` filters |
 | `POST` | `/api/admin/notices` | admin | `multipart/form-data` with `title`, optional `description`, optional `batch`, optional `link` and optional `file`; an empty `batch` means every batch |
 | `GET` | `/api/admin/notices` | admin | Every administration notice, newest first |
-| `DELETE` | `/api/admin/notices/{id}` | admin | Deletes one administration notice and its attachment; `204` on success, `404` if it does not exist |
+| `PATCH` | `/api/admin/notices/{id}` | admin | `{title, description?, link_url?}` rewrites **any** notice and stamps `edited_at` |
+| `DELETE` | `/api/admin/notices/{id}` | admin | Deletes **any** notice and its attachment; `204` on success, `404` if it does not exist |
 | `POST` | `/api/cr/notices` | CR | `multipart/form-data` with `title`, optional `description`, `target` (`own` or another batch code), optional `link` and optional `file` |
 | `GET` | `/api/cr/notices` | CR | The notices this CR posted, newest first |
+| `PATCH` | `/api/cr/notices/{id}` | CR | `{title, description?, link_url?}` rewrites one of this CR's own notices |
+| `DELETE` | `/api/cr/notices/{id}` | CR | Deletes one of this CR's own notices; `204` on success, `404` otherwise |
 | `GET` | `/api/cr/drive-link` | CR | The Drive link of the CR's own batch; an empty `link` when there is none yet |
 | `PUT` | `/api/cr/drive-link` | CR | `{link}` saves the Drive link of the CR's own batch; the title is always the batch code |
 | `DELETE` | `/api/cr/drive-link` | CR | Removes the Drive link of the CR's own batch; `204` on success, `404` if there is none |
 | `POST` | `/api/teacher/notices` | teacher | `multipart/form-data` with `title`, optional `description`, `batch`, optional `section`, optional `link` and optional `file` |
 | `GET` | `/api/teacher/notices` | teacher | The notices this teacher posted, newest first |
+| `PATCH` | `/api/teacher/notices/{id}` | teacher | `{title, description?, link_url?}` rewrites one of this teacher's own notices |
 | `DELETE` | `/api/teacher/notices/{id}` | teacher | Deletes one of this teacher's own notices; `204` on success, `404` otherwise |
 | `GET` | `/api/students/notices` | student, CR | One list for every source, filtered with `source` (`all`, `admin`, `teacher`, `cr`) and `scope` (`my`, `other`) |
 | `GET` | `/api/students/drive-links` | student, CR | Every batch that has a Drive link, sorted by batch, each with `is_mine` |
@@ -833,11 +856,15 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/messages/unread-count` | any signed-in role | How many unread messages the caller has across every conversation |
 | `POST` | `/api/cr/polls` | CR | `{question, options, scope, max_choices}`; 2 to 10 unique options, `scope` is `section` or `batch`, `max_choices` is 1 to the number of options |
 | `POST` | `/api/cr/polls/{id}/close` | CR | Closes one of this CR's own polls; `404` otherwise, `409` if it is already closed |
+| `POST` | `/api/cr/polls/{id}/reopen` | CR | Reopens a closed poll of this CR; `409` if it is already open |
+| `PATCH` | `/api/cr/polls/{id}` | CR | `{question, options, max_choices}` rewrites a poll that has **no votes**; `409` once anyone voted |
+| `DELETE` | `/api/cr/polls/{id}` | CR | Deletes one of this CR's own polls at any time |
 | `GET` | `/api/cr/polls` | CR | The polls this CR made, with the counted results |
 | `GET` | `/api/students/polls` | student, CR | Polls for the own batch and section with `options`, `max_choices`, `total_voters` and `my_option_ids` |
 | `POST` | `/api/students/polls/{id}/vote` | student, CR | `{option_ids}`; 1 to `max_choices` distinct options, `409` when the poll is closed or the student already voted |
 | `POST` | `/api/push/subscribe` | student, CR, teacher | `{endpoint, keys:{p256dh, auth}, user_agent?}` stores this browser; `503` when the server has no VAPID keys |
 | `DELETE` | `/api/push/subscribe` | student, CR, teacher | `{endpoint}` forgets this browser |
+| `POST` | `/api/push/client-log` | student, CR, teacher | `{stage, name, message}` records why a device could not subscribe; rate limited per IP |
 | `GET` | `/uploads/{name}` | public | Serves one older uploaded PDF inline; only the generated file names resolve, anything else is `404` |
 | `GET` | `/uploads/files/{name}` | public | Serves one attachment with its real type and `nosniff`; images and PDFs inline, everything else as a download |
 | `GET` | `/uploads/photos/{name}` | public | Serves one profile photo inline with `nosniff`; only the generated names resolve |
@@ -909,11 +936,13 @@ minute."}`.
 
 `POST /api/auth/register`
 
-It is **`multipart/form-data`**, not JSON, because the profile photo is
-required. The fields are `full_name`, `reg_no`, `batch`, `section`, `email`,
-`phone`, `blood_group`, `date_of_birth`, `password`, `confirm_password`, the
-file field `photo`, and optionally `email_proof`. Registration no longer asks
-about drop courses; a `drop_course_ids` field is ignored.
+It is **`multipart/form-data`**, not JSON, because of the optional profile
+photo. The fields are `full_name`, `reg_no`, `batch`, `section`, `email`,
+`phone`, `blood_group`, `date_of_birth`, `password`, `confirm_password`, and
+optionally the file field `photo` and `email_proof`. The photo is **optional**:
+without one the account shows the student's initials until a photo is added in
+**My profile → Change photo**. Registration does not ask about drop courses; a
+`drop_course_ids` field is ignored.
 
 `batch` must look like `CSE-23`, `section` is a single letter, `blood_group` is
 one of `A+ A- B+ B- AB+ AB- O+ O-`, `phone` is exactly 11 digits matching
@@ -1321,11 +1350,19 @@ and `ALL` (`Both sections`) last. Each item carries `start_time`, `end_time`,
 `room` or `meeting_link` for an online class, `teacher_name`, the item `status`
 and the `note`. Nothing appears before the CR publishes it.
 
-A student may carry **several** drop courses, kept in `student_drop_courses`.
-When they do, the same answer carries one more group, keyed `drop_courses` and
-marked `drop_course: true`, holding the published items of those courses **in
-the other batches** on that date. Every item of that group names its own
-`batch`.
+A student may carry **any number** of drop courses, kept in
+`student_drop_courses` and picked in **My profile → My drop courses**: a
+searchable multi-select over the running-semester courses of the other batches,
+shown as chips, saved in one `PATCH /api/profile` with `drop_course_ids`, and
+removed one at a time behind a confirm.
+
+When a student carries drop courses, the day answer carries one more group,
+keyed `drop_courses`, labelled **Drop courses** and marked `drop_course: true`,
+holding the published classes and labs of those courses **in the other batches**
+on that date. Every item of that group names its own `batch`. `Today`, the
+upcoming routine and the exam list all include them, their section badges and
+notifications count them, and removing a drop course makes all of it disappear
+at once.
 
 `GET /api/students/exams` answers two kinds of exam. A **teacher exam** shows up
 the moment the teacher creates it, with its date, syllabus and instructions, and

@@ -21,6 +21,7 @@ const (
 
 var expectedTables = []string{
 	"admin_audit",
+	"app_meta",
 	"batch_drive_links",
 	"batch_semesters",
 	"class_periods",
@@ -33,6 +34,7 @@ var expectedTables = []string{
 	"polls",
 	"push_subscriptions",
 	"publications",
+	"reminder_log",
 	"published_items",
 	"schedule_items",
 	"routines",
@@ -41,6 +43,7 @@ var expectedTables = []string{
 	"conversation_reads",
 	"conversations",
 	"schema_migrations",
+	"section_views",
 	"student_drop_courses",
 	"stored_files",
 	"students",
