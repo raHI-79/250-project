@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import cx from '../../lib/cx'
+import { isNative } from '../../lib/native'
 
 const shell = (invalid, tone, focused) =>
   cx(
@@ -19,16 +20,19 @@ const shell = (invalid, tone, focused) =>
     focused && invalid && 'shadow-[0_0_0_3px_var(--color-danger-100)]',
   )
 
-const control = (tone, floating) =>
+const control = (tone, floating, tall, leading) =>
   cx(
-    'w-full bg-transparent px-3.5 text-base outline-none',
+    'w-full bg-transparent text-base outline-none',
+    leading ? 'pr-3.5 pl-11' : 'px-3.5',
     tone === 'dark' ? 'text-white placeholder:text-white/35' : 'text-ink placeholder:text-faint',
-    floating ? 'h-12 pt-5 pb-1.5' : 'h-12',
+    tall ? 'h-13' : 'h-12',
+    floating && (tall ? 'pt-6 pb-1.5' : 'pt-5 pb-1.5'),
   )
 
-const labelClass = (tone, floated, invalid) =>
+const labelClass = (tone, floated, invalid, leading) =>
   cx(
-    'pointer-events-none absolute left-3.5 origin-left transition-all duration-200 motion-reduce:transition-none',
+    'pointer-events-none absolute origin-left transition-all duration-200 motion-reduce:transition-none',
+    leading ? 'left-11' : 'left-3.5',
     floated ? 'top-1.5 text-2xs font-semibold' : 'top-1/2 -translate-y-1/2 text-base',
     invalid
       ? 'text-danger-600'
@@ -38,6 +42,21 @@ const labelClass = (tone, floated, invalid) =>
           ? 'text-brand-600'
           : 'text-muted',
   )
+
+function LeadingIcon({ icon: Icon, tone }) {
+  if (!Icon) return null
+  return (
+    <span
+      aria-hidden="true"
+      className={cx(
+        'pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2',
+        tone === 'dark' ? 'text-white/55' : 'text-muted',
+      )}
+    >
+      <Icon size={18} />
+    </span>
+  )
+}
 
 export function Field({ label, error, hint, htmlFor, required = false, tone, className, children }) {
   const dark = tone === 'dark'
@@ -90,10 +109,12 @@ const useFloating = (value, defaultValue) => {
   return { focused, setFocused, floated: focused || filled }
 }
 
-export function Input({ label, error, hint, required, tone, className, id, ...rest }) {
+export function Input({ label, error, hint, required, tone, className, id, icon, ...rest }) {
   const generated = useId()
   const fieldId = id || generated
   const { focused, setFocused, floated } = useFloating(rest.value, rest.defaultValue)
+  const tall = isNative()
+  const Icon = tall ? icon : null
   return (
     <Floating
       label={label}
@@ -105,12 +126,13 @@ export function Input({ label, error, hint, required, tone, className, id, ...re
       id={fieldId}
     >
       <div className={shell(Boolean(error), tone, focused)}>
+        <LeadingIcon icon={Icon} tone={tone} />
         <input
           id={fieldId}
           aria-label={label}
           required={required}
           className={cx(
-            control(tone, Boolean(label)),
+            control(tone, Boolean(label), tall, Boolean(Icon)),
             !floated && 'placeholder:text-transparent',
           )}
           {...rest}
@@ -124,7 +146,7 @@ export function Input({ label, error, hint, required, tone, className, id, ...re
           }}
         />
         {label && (
-          <span className={labelClass(tone, floated, Boolean(error))}>
+          <span className={labelClass(tone, floated, Boolean(error), Boolean(Icon))}>
             {label}
             {required && <span className="ml-0.5">*</span>}
           </span>
@@ -137,6 +159,7 @@ export function Input({ label, error, hint, required, tone, className, id, ...re
 export function PasswordInput({ className, ...rest }) {
   const [shown, setShown] = useState(false)
   const dark = rest.tone === 'dark'
+  const tall = isNative()
   return (
     <div className={cx('relative', className)}>
       <Input {...rest} type={shown ? 'text' : 'password'} className="[&_input]:pr-12" />
@@ -147,7 +170,8 @@ export function PasswordInput({ className, ...rest }) {
         aria-pressed={shown}
         title={shown ? 'Hide password' : 'Show password'}
         className={cx(
-          'absolute top-0 right-0 grid h-12 w-12 place-items-center rounded-xl transition-colors',
+          'absolute top-0 right-0 grid w-12 place-items-center rounded-xl transition-colors',
+          tall ? 'h-13' : 'h-12',
           dark ? 'text-white/60 hover:text-white' : 'text-muted hover:text-ink',
         )}
       >
@@ -161,6 +185,7 @@ export function Select({ label, error, hint, required, tone, className, id, chil
   const generated = useId()
   const fieldId = id || generated
   const { focused, setFocused } = useFloating(rest.value, rest.defaultValue)
+  const tall = isNative()
   return (
     <Floating
       label={label}
@@ -176,7 +201,7 @@ export function Select({ label, error, hint, required, tone, className, id, chil
           id={fieldId}
           aria-label={label}
           required={required}
-          className={control(tone, Boolean(label))}
+          className={control(tone, Boolean(label), tall, false)}
           {...rest}
           onFocus={(event) => {
             setFocused(true)
@@ -190,7 +215,7 @@ export function Select({ label, error, hint, required, tone, className, id, chil
           {children}
         </select>
         {label && (
-          <span className={labelClass(tone, true, Boolean(error))}>
+          <span className={labelClass(tone, true, Boolean(error), false)}>
             {label}
             {required && <span className="ml-0.5">*</span>}
           </span>

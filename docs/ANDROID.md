@@ -10,6 +10,41 @@ reliably in the old wrapper.
 The website is unchanged. iPhone and desktop users keep using it, and web push
 stays as the fallback there.
 
+## How the app looks
+
+Inside the app the first screens are the app's own, not the website's. The
+campus photo slideshow is gone: the sign-in, register, password reset and
+teacher activation screens sit on plain paper with the SUST logo centred near
+the top, a Student | Teacher control, 52 px inputs and one full-width button.
+`Capacitor.isNativePlatform()` decides this, so the website is untouched.
+
+The launcher icon is the SUST logo on white, as an adaptive icon with a
+`#FFFFFF` background and the logo as the foreground inside the safe zone. The
+splash is white (`#121212` in dark mode) with the logo centred and nothing else,
+and it fades out as soon as the first screen is ready. Run
+`npm run icons && npm run android:icons` after changing
+`frontend/public/brand/sust-logo.png`: the first writes the web icons and the
+transparent logo the app draws, the second writes the launcher, splash and
+notification drawables.
+
+There is no human check inside the app. The API accepts the app's requests
+without `X-Human-Pass` because of the `X-Client: android` header; the rate
+limits still apply. On the website the check is a Turnstile widget inside each
+sign-in form.
+
+## How notifications look
+
+`PortalMessagingService` builds every notification in the app, so they look the
+same whether the app is open, closed or the phone is locked. The small icon is
+the monochrome SUST silhouette tinted maroon `#7A1F2B`, the large icon is the
+full-colour logo, long text expands, and the **SUST CSE** channel is
+high-importance with sound and vibration. Tapping one opens the page the
+notification points at.
+
+The server sends data-only messages with high priority (`title`, `body`, `url`,
+`tag`) so Android always hands them to that service instead of drawing its own
+notification. Web push on the website is unchanged.
+
 ## Who the app is for
 
 Students, class representatives and teachers. Inside the app the only sign-in

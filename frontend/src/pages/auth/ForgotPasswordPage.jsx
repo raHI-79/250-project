@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { IdCard, KeyRound, Lock } from 'lucide-react'
 import { Alert, Button, Input, PasswordInput, Stepper } from '../../components/ui'
 import PhoneInput from '../../components/forms/PhoneInput'
 import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
+import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
+import { useHumanCheck } from '../../lib/human'
 import { HERO_IMAGES } from '../../lib/campus'
 import { useCountdown } from '../../lib/hooks'
 import { PORTAL_ADMIN, loginForPortal } from '../../lib/paths'
@@ -43,6 +46,7 @@ export default function ForgotPasswordPage({ portal }) {
   const byPhone = portal === PORTAL_ADMIN
   const loginPath = loginForPortal(portal)
   const bounds = birthDateBounds()
+  const human = useHumanCheck()
   const [step, setStep] = useState(1)
   const [identifier, setIdentifier] = useState('')
   const [phone, setPhone] = useState('')
@@ -68,6 +72,7 @@ export default function ForgotPasswordPage({ portal }) {
     }
     setLoading(true)
     try {
+      await human.confirm()
       const body = byPhone
         ? { identifier: identifier.trim(), phone: phone.trim() }
         : { identifier: identifier.trim(), date_of_birth: dateOfBirth }
@@ -79,6 +84,7 @@ export default function ForgotPasswordPage({ portal }) {
       setStep(2)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -91,6 +97,7 @@ export default function ForgotPasswordPage({ portal }) {
     }
     setLoading(true)
     try {
+      await human.confirm()
       const data = await api.post(
         '/api/auth/verify-reset-code',
         { identifier: identifier.trim(), code: code.trim() },
@@ -100,6 +107,7 @@ export default function ForgotPasswordPage({ portal }) {
       setStep(3)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -113,6 +121,7 @@ export default function ForgotPasswordPage({ portal }) {
     }
     setLoading(true)
     try {
+      await human.confirm()
       await api.post(
         '/api/auth/reset-password',
         {
@@ -126,6 +135,7 @@ export default function ForgotPasswordPage({ portal }) {
       setStep(4)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -161,6 +171,7 @@ export default function ForgotPasswordPage({ portal }) {
               <>
                 <Input
                   label={page.identifier}
+                  icon={IdCard}
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
                   autoComplete="username"
@@ -186,7 +197,19 @@ export default function ForgotPasswordPage({ portal }) {
                     required
                   />
                 )}
-                <Button type="submit" loading={loading} className="w-full">
+                {human.needed && (
+                  <HumanCheck
+                    siteKey={human.siteKey}
+                    round={human.round}
+                    onToken={human.setToken}
+                  />
+                )}
+                <Button
+                  type="submit"
+                  loading={loading}
+                  disabled={human.blocked}
+                  className="w-full"
+                >
                   Send the code
                 </Button>
               </>
@@ -205,6 +228,7 @@ export default function ForgotPasswordPage({ portal }) {
                 )}
                 <Input
                   label="6-digit code"
+                  icon={KeyRound}
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
                   inputMode="numeric"
@@ -212,13 +236,25 @@ export default function ForgotPasswordPage({ portal }) {
                   autoComplete="one-time-code"
                   required
                 />
-                <Button type="submit" loading={loading} className="w-full">
+                {human.needed && (
+                  <HumanCheck
+                    siteKey={human.siteKey}
+                    round={human.round}
+                    onToken={human.setToken}
+                  />
+                )}
+                <Button
+                  type="submit"
+                  loading={loading}
+                  disabled={human.blocked}
+                  className="w-full"
+                >
                   Verify the code
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={requestCode}
-                  disabled={loading || seconds > 0}
+                  disabled={loading || seconds > 0 || human.blocked}
                   className="w-full"
                 >
                   {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
@@ -229,6 +265,7 @@ export default function ForgotPasswordPage({ portal }) {
               <>
                 <PasswordInput
                   label="New password"
+                  icon={Lock}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
@@ -237,12 +274,25 @@ export default function ForgotPasswordPage({ portal }) {
                 />
                 <PasswordInput
                   label="Confirm new password"
+                  icon={Lock}
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"
                   required
                 />
-                <Button type="submit" loading={loading} className="w-full">
+                {human.needed && (
+                  <HumanCheck
+                    siteKey={human.siteKey}
+                    round={human.round}
+                    onToken={human.setToken}
+                  />
+                )}
+                <Button
+                  type="submit"
+                  loading={loading}
+                  disabled={human.blocked}
+                  className="w-full"
+                >
                   Save the new password
                 </Button>
               </>

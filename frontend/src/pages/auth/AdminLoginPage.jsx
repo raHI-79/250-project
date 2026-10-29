@@ -6,7 +6,9 @@ import { Input, PasswordInput } from '../../components/ui/Field'
 import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
 import NoIndex from '../../components/layout/NoIndex'
+import HumanCheck from '../../components/forms/HumanCheck'
 import { useAuth } from '../../context/auth'
+import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
 import { homeFor, paths } from '../../lib/paths'
 
@@ -14,6 +16,7 @@ export default function AdminLoginPage() {
   const { adminLogin, isAuthenticated, role } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const human = useHumanCheck()
   const notice = location.state?.notice || ''
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -25,10 +28,12 @@ export default function AdminLoginPage() {
     setError('')
     setLoading(true)
     try {
+      await human.confirm()
       const user = await adminLogin(identifier.trim(), password)
       navigate(homeFor(user.role), { replace: true })
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -64,7 +69,10 @@ export default function AdminLoginPage() {
               autoComplete="current-password"
               required
             />
-            <Button type="submit" loading={loading} className="w-full">
+            {human.needed && (
+              <HumanCheck siteKey={human.siteKey} round={human.round} onToken={human.setToken} />
+            )}
+            <Button type="submit" loading={loading} disabled={human.blocked} className="w-full">
               Sign in
             </Button>
           </form>

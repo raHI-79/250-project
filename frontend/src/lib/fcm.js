@@ -36,9 +36,31 @@ const postToken = (token) =>
 
 let started = false
 
+const OPEN_EVENT = 'sustcse:open'
+
+const REPEAT_WITHIN = 5000
+
+let lastOpened = { url: '', at: 0 }
+
+let pendingOpen = ''
+
+let openHandler = null
+
+const onNativeOpen = (event) => {
+  const url = event?.detail?.url || event?.url || ''
+  if (!url) return
+  if (openHandler) openHandler(url)
+  else pendingOpen = url
+}
+
+if (typeof window !== 'undefined') window.addEventListener(OPEN_EVENT, onNativeOpen)
+
 const openTarget = (data, navigate) => {
   const url = String(data?.url || '')
   if (!url) return
+  const now = Date.now()
+  if (url === lastOpened.url && now - lastOpened.at < REPEAT_WITHIN) return
+  lastOpened = { url, at: now }
   try {
     const target = url.startsWith('http') ? new URL(url) : null
     navigate(target ? `${target.pathname}${target.search}` : url)
@@ -96,9 +118,18 @@ export const useFCM = (role, navigate) => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') sync()
     }
+    openHandler = (url) => {
+      if (live) openTarget({ url }, navigate)
+    }
+    if (pendingOpen) {
+      const waiting = pendingOpen
+      pendingOpen = ''
+      openHandler(waiting)
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       live = false
+      openHandler = null
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [role, navigate])

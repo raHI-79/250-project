@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
+import { mark as logoMark } from './logo.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -75,6 +76,7 @@ const targets = [
   { name: 'apple-touch-icon.png', build: () => onWhite(180, 0.1) },
   { name: 'favicon.png', build: () => onWhite(64, 0.04) },
   { name: 'badge-96.png', build: () => badge(96) },
+  { name: 'brand/sust-logo-mark.png', build: () => logoMark(512) },
 ]
 
 const run = async () => {

@@ -7,8 +7,6 @@ export const SESSION_KEY = 'sustcse.session'
 
 export const HUMAN_CHECK_NEEDED = 'Please complete the human check.'
 
-export const HUMAN_EVENT = 'sustcse:human'
-
 export class ApiError extends Error {
   constructor(status, message) {
     super(message)
@@ -108,7 +106,6 @@ const request = async (method, path, { body, query, signal, auth = true } = {}) 
   }
   if (response.status === 403 && data?.error === HUMAN_CHECK_NEEDED) {
     clearHumanPass()
-    window.dispatchEvent(new Event(HUMAN_EVENT))
   }
   const message =
     (data && typeof data === 'object' && data.error) ||

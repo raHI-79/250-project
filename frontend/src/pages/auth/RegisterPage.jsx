@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { BadgeCheck } from 'lucide-react'
+import { BadgeCheck, IdCard, KeyRound, Lock, Mail } from 'lucide-react'
 import { Alert, Button, Field, Input, PasswordInput, Select, Stepper } from '../../components/ui'
 import GoogleVerifyButton from '../../components/forms/GoogleVerifyButton'
 import PhoneInput from '../../components/forms/PhoneInput'
@@ -8,7 +8,9 @@ import PhotoPicker from '../../components/forms/PhotoPicker'
 import SectionPicker from '../../components/forms/SectionPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
+import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
+import { useHumanCheck } from '../../lib/human'
 import { HERO_IMAGES } from '../../lib/campus'
 import { useAuthConfig, useCountdown } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
@@ -46,6 +48,7 @@ const EMPTY = {
 
 export default function RegisterPage() {
   const { studentEmailDomain, googleEnabled } = useAuthConfig()
+  const human = useHumanCheck()
   const [params] = useSearchParams()
   const resuming = params.get('verify') || ''
   const [step, setStep] = useState(resuming ? 4 : 1)
@@ -109,6 +112,7 @@ export default function RegisterPage() {
     setError('')
     setLoading(true)
     try {
+      await human.confirm()
       const data = await api.post(
         '/api/auth/google/verify-email',
         { credential },
@@ -119,6 +123,7 @@ export default function RegisterPage() {
       setErrors((current) => ({ ...current, email: '' }))
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -143,6 +148,7 @@ export default function RegisterPage() {
     appendIf(body, 'email_proof', emailProof)
     setLoading(true)
     try {
+      await human.confirm()
       const data = await api.post('/api/auth/register', body, { auth: false })
       setEmailHint(data?.email_hint || '')
       setDevCode(data?.dev_code || '')
@@ -154,6 +160,7 @@ export default function RegisterPage() {
       setStep(4)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -166,6 +173,7 @@ export default function RegisterPage() {
     }
     setLoading(true)
     try {
+      await human.confirm()
       await api.post(
         '/api/auth/verify-email',
         { reg_no: form.regNo.trim(), code: code.trim() },
@@ -174,6 +182,7 @@ export default function RegisterPage() {
       setStep(5)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -182,6 +191,7 @@ export default function RegisterPage() {
     setError('')
     setLoading(true)
     try {
+      await human.confirm()
       const data = await api.post(
         '/api/auth/resend-verification',
         { reg_no: form.regNo.trim() },
@@ -193,6 +203,7 @@ export default function RegisterPage() {
       setSeconds(RESEND_SECONDS)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -257,6 +268,7 @@ export default function RegisterPage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <Input
                         label="Registration number"
+                        icon={IdCard}
                         value={form.regNo}
                         onChange={set('regNo')}
                         error={errors.regNo}
@@ -329,6 +341,7 @@ export default function RegisterPage() {
                         <Input
                           label="University email"
                           type="email"
+                          icon={Mail}
                           value={form.email}
                           onChange={set('email')}
                           error={errors.email}
@@ -382,7 +395,8 @@ export default function RegisterPage() {
                       </Select>
                       <PasswordInput
                         label="New password"
-                                                value={form.password}
+                        icon={Lock}
+                        value={form.password}
                         onChange={set('password')}
                         error={errors.password}
                         autoComplete="new-password"
@@ -391,7 +405,8 @@ export default function RegisterPage() {
                       />
                       <PasswordInput
                         label="Confirm password"
-                                                value={form.confirmPassword}
+                        icon={Lock}
+                        value={form.confirmPassword}
                         onChange={set('confirmPassword')}
                         autoComplete="new-password"
                         required
@@ -422,6 +437,7 @@ export default function RegisterPage() {
                     )}
                     <Input
                       label="6-digit code"
+                      icon={KeyRound}
                       value={code}
                       onChange={(event) => setCode(event.target.value)}
                       inputMode="numeric"
@@ -432,12 +448,19 @@ export default function RegisterPage() {
                     <Button
                       variant="secondary"
                       onClick={resend}
-                      disabled={loading || seconds > 0}
+                      disabled={loading || seconds > 0 || human.blocked}
                       className="w-full"
                     >
                       {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
                     </Button>
                   </>
+                )}
+                {human.needed && step >= 3 && (
+                  <HumanCheck
+                    siteKey={human.siteKey}
+                    round={human.round}
+                    onToken={human.setToken}
+                  />
                 )}
                 <div className="flex gap-2">
                   {step > 1 && step < 4 && (
@@ -452,7 +475,12 @@ export default function RegisterPage() {
                       Back
                     </Button>
                   )}
-                  <Button type="submit" loading={loading} className="flex-1">
+                  <Button
+                    type="submit"
+                    loading={loading}
+                    disabled={step >= 3 && human.blocked}
+                    className="flex-1"
+                  >
                     {step === 3 ? 'Create account' : step === 4 ? 'Confirm email' : 'Continue'}
                   </Button>
                 </div>

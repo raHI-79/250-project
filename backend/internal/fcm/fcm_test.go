@@ -96,17 +96,61 @@ func TestSendPostsTheMessage(t *testing.T) {
 	if gotAuth != "Bearer test-access-token" {
 		t.Errorf("authorization = %q, want the bearer token", gotAuth)
 	}
-	if got.Message.Token != "device-token" || got.Message.Notification.Title != "New notice" {
-		t.Errorf("message = %+v, want the token and the title", got.Message)
+	if got.Message.Token != "device-token" {
+		t.Errorf("token = %q, want the device token", got.Message.Token)
 	}
-	if got.Message.Data["url"] != "https://portal.example/student/notices" {
-		t.Errorf("data url = %q, want the page url", got.Message.Data["url"])
+	want := map[string]string{
+		"title":   "New notice",
+		"body":    "Mid term routine is out",
+		"url":     "https://portal.example/student/notices",
+		"tag":     "notice",
+		"channel": "sust_cse",
+	}
+	for key, value := range want {
+		if got.Message.Data[key] != value {
+			t.Errorf("data %s = %q, want %q", key, got.Message.Data[key], value)
+		}
 	}
 	if got.Message.Android.Priority != PriorityHigh || got.Message.Android.TTL != "86400s" {
 		t.Errorf("android = %+v, want high priority and a 24 hour ttl", got.Message.Android)
 	}
-	if got.Message.Android.Notification.ChannelID != "sust_cse" {
-		t.Errorf("channel = %q, want sust_cse", got.Message.Android.Notification.ChannelID)
+}
+
+func TestSendOnlyCarriesData(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("could not decode the request: %v", err)
+		}
+		_, _ = io.WriteString(w, `{"name":"projects/x/messages/1"}`)
+	}))
+	defer server.Close()
+	err := testClient(t, server.URL).Send(context.Background(), Message{
+		Token: "device-token",
+		Title: "New notice",
+		Body:  "Mid term routine is out",
+		URL:   "https://portal.example/student/notices",
+		Tag:   "notice",
+	})
+	if err != nil {
+		t.Fatalf("Send() returned %v", err)
+	}
+	message, ok := raw["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload = %+v, want a message object", raw)
+	}
+	if _, found := message["notification"]; found {
+		t.Error("the message carries a notification block, so the app service would be skipped")
+	}
+	android, ok := message["android"].(map[string]any)
+	if !ok {
+		t.Fatalf("android = %+v, want an android object", message["android"])
+	}
+	if _, found := android["notification"]; found {
+		t.Error("the android block carries a notification, so the app service would be skipped")
+	}
+	if android["priority"] != PriorityHigh {
+		t.Errorf("android priority = %v, want %q", android["priority"], PriorityHigh)
 	}
 }
 

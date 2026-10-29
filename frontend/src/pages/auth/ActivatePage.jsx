@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Check, Copy, Eye, EyeOff, Loader2, X } from 'lucide-react'
+import { Check, Copy, Eye, EyeOff, Loader2, Lock, UserRound, X } from 'lucide-react'
 import { Alert, Button, Input, PasswordInput, SkeletonLines, Stepper } from '../../components/ui'
 import PhotoPicker from '../../components/forms/PhotoPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
+import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
+import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
 import { useDebounced } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
@@ -43,6 +45,7 @@ export default function ActivatePage() {
   const [params] = useSearchParams()
   const token = params.get('token') || ''
   const bounds = birthDateBounds()
+  const human = useHumanCheck()
   const [invite, setInvite] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [loadingInvite, setLoadingInvite] = useState(true)
@@ -133,10 +136,12 @@ export default function ActivatePage() {
     if (photo) body.append('photo', photo)
     setSaving(true)
     try {
+      await human.confirm()
       const result = await api.post('/api/auth/activate', body, { auth: false })
       setDone(result)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setSaving(false)
     }
@@ -257,6 +262,7 @@ export default function ActivatePage() {
                   <div className="flex flex-col gap-1.5">
                     <Input
                       label="Choose your User ID"
+                      icon={UserRound}
                       value={userId}
                       onChange={(event) => setUserId(event.target.value)}
                       autoComplete="username"
@@ -268,6 +274,7 @@ export default function ActivatePage() {
                   </div>
                   <PasswordInput
                     label="New password"
+                    icon={Lock}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     autoComplete="new-password"
@@ -276,6 +283,7 @@ export default function ActivatePage() {
                   />
                   <PasswordInput
                     label="Confirm password"
+                    icon={Lock}
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     autoComplete="new-password"
@@ -288,6 +296,13 @@ export default function ActivatePage() {
                     hint="Optional, JPG, PNG or WEBP, at most 2 MB, at least 200 by 200 pixels"
                   />
                 </>
+              )}
+              {human.needed && step === 2 && (
+                <HumanCheck
+                  siteKey={human.siteKey}
+                  round={human.round}
+                  onToken={human.setToken}
+                />
               )}
               <div className="flex gap-2">
                 {step === 2 && (
@@ -302,7 +317,12 @@ export default function ActivatePage() {
                     Back
                   </Button>
                 )}
-                <Button type="submit" loading={saving} className="flex-1">
+                <Button
+                  type="submit"
+                  loading={saving}
+                  disabled={step === 2 && human.blocked}
+                  className="flex-1"
+                >
                   {step === 1 ? 'Continue' : 'Activate my account'}
                 </Button>
               </div>

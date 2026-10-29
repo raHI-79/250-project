@@ -50,6 +50,7 @@ const STUDENT_ROLES = ['student', 'cr']
 function Root() {
   const { isAuthenticated, role } = useAuth()
   if (isAuthenticated) return <Navigate to={homeFor(role)} replace />
+  if (isNative()) return <Navigate to={paths.studentLogin()} replace />
   return <HomePage />
 }
 

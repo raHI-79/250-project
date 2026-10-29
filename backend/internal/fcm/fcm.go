@@ -43,31 +43,15 @@ type account struct {
 	ProjectID string `json:"project_id"`
 }
 
-type androidNotification struct {
-	Icon        string `json:"icon,omitempty"`
-	Color       string `json:"color,omitempty"`
-	Sound       string `json:"sound,omitempty"`
-	ChannelID   string `json:"channel_id,omitempty"`
-	Tag         string `json:"tag,omitempty"`
-	ClickAction string `json:"click_action,omitempty"`
-}
-
 type androidConfig struct {
-	Priority     string              `json:"priority"`
-	TTL          string              `json:"ttl"`
-	Notification androidNotification `json:"notification"`
-}
-
-type notification struct {
-	Title string `json:"title"`
-	Body  string `json:"body,omitempty"`
+	Priority string `json:"priority"`
+	TTL      string `json:"ttl"`
 }
 
 type payload struct {
-	Token        string            `json:"token"`
-	Notification notification      `json:"notification"`
-	Data         map[string]string `json:"data,omitempty"`
-	Android      androidConfig     `json:"android"`
+	Token   string            `json:"token"`
+	Data    map[string]string `json:"data,omitempty"`
+	Android androidConfig     `json:"android"`
 }
 
 type envelope struct {
@@ -142,24 +126,17 @@ func (c *Client) Send(ctx context.Context, message Message) error {
 		return ErrNoToken
 	}
 	body, err := json.Marshal(envelope{Message: payload{
-		Token:        message.Token,
-		Notification: notification{Title: message.Title, Body: message.Body},
+		Token: message.Token,
 		Data: map[string]string{
-			"url":   message.URL,
-			"tag":   message.Tag,
-			"title": message.Title,
-			"body":  message.Body,
+			"title":   message.Title,
+			"body":    message.Body,
+			"url":     message.URL,
+			"tag":     message.Tag,
+			"channel": c.channelID,
 		},
 		Android: androidConfig{
 			Priority: PriorityHigh,
 			TTL:      fmt.Sprintf("%ds", int(TTL.Seconds())),
-			Notification: androidNotification{
-				Icon:      "ic_stat_notify",
-				Color:     "#7A1F2B",
-				Sound:     "default",
-				ChannelID: c.channelID,
-				Tag:       message.Tag,
-			},
 		},
 	}})
 	if err != nil {
