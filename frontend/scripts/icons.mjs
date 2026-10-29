@@ -9,7 +9,7 @@ const source = join(root, 'public', 'brand', 'sust-logo.png')
 
 const outDir = join(root, 'public')
 
-const MAROON = '#7A1F2B'
+const PRIMARY = '#1D4ED8'
 
 const WHITE = { r: 255, g: 255, b: 255, alpha: 1 }
 
@@ -36,7 +36,7 @@ const maskable = async (size) => {
     `<svg width="${plate}" height="${plate}"><circle cx="${plate / 2}" cy="${plate / 2}" r="${plate / 2}" fill="#ffffff"/></svg>`,
   )
   return sharp({
-    create: { width: size, height: size, channels: 4, background: MAROON },
+    create: { width: size, height: size, channels: 4, background: PRIMARY },
   })
     .composite([
       { input: circle, gravity: 'centre' },

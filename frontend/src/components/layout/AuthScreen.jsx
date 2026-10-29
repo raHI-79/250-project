@@ -5,16 +5,16 @@ import LogoBadge from '../ui/LogoBadge'
 import { DEPARTMENT, UNIVERSITY } from '../ui/IdentityBar'
 import CampusBackdrop from './CampusBackdrop'
 import AppAuthScreen from './AppAuthScreen'
+import { useCampusSlideshow } from '../../lib/campus'
 import { isNative } from '../../lib/native'
 
 const TONES = {
   brand: {
-    overlay:
-      'bg-linear-to-b from-maroon-950/45 via-maroon-900/25 to-maroon-950/55',
+    overlay: 'bg-linear-to-b from-deep-950/55 via-deep-950/20 to-deep-950/70',
     card: 'glass-auth',
   },
   dark: {
-    overlay: 'bg-linear-to-b from-black/70 via-maroon-950/55 to-black/75',
+    overlay: 'bg-linear-to-b from-black/70 via-deep-950/55 to-black/80',
     card: 'glass-auth',
   },
 }
@@ -29,7 +29,9 @@ export default function AuthScreen({
   className,
   children,
 }) {
-  if (isNative()) {
+  const onWeb = !isNative()
+  const slideshow = useCampusSlideshow(images, rotateAfter)
+  if (!onWeb) {
     return (
       <AppAuthScreen wide={wide} className={className}>
         {children}
@@ -37,11 +39,13 @@ export default function AuthScreen({
     )
   }
   const skin = TONES[tone] || TONES.brand
+  const slides = images || []
   return (
     <div className="relative flex min-h-dvh flex-col">
       <CampusBackdrop
         images={images}
-        rotateAfter={rotateAfter}
+        index={slideshow.index}
+        still={slideshow.still}
         overlay={overlay || skin.overlay}
         className="fixed"
       />
@@ -67,6 +71,26 @@ export default function AuthScreen({
             {children}
           </div>
         </div>
+        {slides.length > 1 && (
+          <div className="mx-auto flex max-w-md flex-col items-center gap-2 pb-2">
+            <div className="flex gap-2">
+              {slides.map((source, position) => (
+                <button
+                  key={source}
+                  type="button"
+                  aria-label={`Show campus photo ${position + 1}`}
+                  aria-current={position === slideshow.index}
+                  onClick={() => slideshow.show(position)}
+                  className={cx(
+                    'h-1.5 rounded-full transition-all duration-500 motion-reduce:transition-none',
+                    position === slideshow.index ? 'w-7 bg-white/85' : 'w-2.5 bg-white/35 hover:bg-white/60',
+                  )}
+                />
+              ))}
+            </div>
+            <p className="text-center text-2xs text-white/65">{slideshow.caption}</p>
+          </div>
+        )}
         {note && (
           <p className="mx-auto max-w-md text-center text-xs leading-relaxed text-white/80">
             {note}

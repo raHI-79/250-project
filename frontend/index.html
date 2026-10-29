@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#7A1F2B" />
+    <meta name="theme-color" content="#F7F8FA" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="SUST CSE" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -38,7 +38,7 @@
         align-items: center;
         justify-content: center;
         gap: 18px;
-        background: #faf9f6;
+        background: #f7f8fa;
         transition: opacity 0.25s ease;
       }
       #splash img {
@@ -53,21 +53,21 @@
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: #7a1f2b;
+        color: #1d4ed8;
       }
       #splash span {
         width: 34px;
         height: 3px;
         overflow: hidden;
         border-radius: 999px;
-        background: #ebced3;
+        background: #dbe6fe;
       }
       #splash span::after {
         display: block;
         width: 60%;
         height: 100%;
         border-radius: 999px;
-        background: #7a1f2b;
+        background: #1d4ed8;
         animation: splash-slide 1s ease-in-out infinite;
         content: "";
       }
@@ -86,29 +86,29 @@
       }
       @media (prefers-color-scheme: dark) {
         html:not([data-theme="light"]) #splash {
-          background: #101113;
+          background: #0e1014;
         }
         html:not([data-theme="light"]) #splash p {
-          color: #e8a2ae;
+          color: #93b4fb;
         }
         html:not([data-theme="light"]) #splash span {
-          background: #45202a;
+          background: #1b2d52;
         }
         html:not([data-theme="light"]) #splash span::after {
-          background: #e8a2ae;
+          background: #93b4fb;
         }
       }
       html[data-theme="dark"] #splash {
-        background: #101113;
+        background: #0e1014;
       }
       html[data-theme="dark"] #splash p {
-        color: #e8a2ae;
+        color: #93b4fb;
       }
       html[data-theme="dark"] #splash span {
-        background: #45202a;
+        background: #1b2d52;
       }
       html[data-theme="dark"] #splash span::after {
-        background: #e8a2ae;
+        background: #93b4fb;
       }
       html[data-app="native"] #splash {
         gap: 0;
