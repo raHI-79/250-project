@@ -3,6 +3,6 @@
     <color name="colorPrimary">#7A1F2B</color>
     <color name="colorPrimaryDark">#5C141E</color>
     <color name="colorAccent">#7A1F2B</color>
-    <color name="splashBackground">#7A1F2B</color>
+    <color name="splashBackground">#FFFFFF</color>
     <color name="notificationAccent">#7A1F2B</color>
 </resources>

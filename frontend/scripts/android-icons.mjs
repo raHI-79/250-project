@@ -1,19 +1,12 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
+import { CLEAR, WHITE, mark, onBackground, silhouette } from './logo.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-const source = join(root, 'public', 'brand', 'sust-logo.png')
-
 const resDir = join(root, 'android', 'app', 'src', 'main', 'res')
-
-const MAROON = { r: 122, g: 31, b: 43, alpha: 1 }
-
-const WHITE = { r: 255, g: 255, b: 255, alpha: 1 }
-
-const CLEAR = { r: 0, g: 0, b: 0, alpha: 0 }
 
 const LAUNCHER = [
   ['mipmap-mdpi', 48],
@@ -39,25 +32,36 @@ const SMALL_ICON = [
   ['drawable-xxxhdpi', 96],
 ]
 
-const SPLASH = [
-  ['drawable-port-mdpi', 320, 480],
-  ['drawable-port-hdpi', 480, 800],
-  ['drawable-port-xhdpi', 720, 1280],
-  ['drawable-port-xxhdpi', 960, 1600],
-  ['drawable-port-xxxhdpi', 1280, 1920],
-  ['drawable-land-mdpi', 480, 320],
-  ['drawable-land-hdpi', 800, 480],
-  ['drawable-land-xhdpi', 1280, 720],
-  ['drawable-land-xxhdpi', 1600, 960],
-  ['drawable-land-xxxhdpi', 1920, 1280],
-  ['drawable', 480, 800],
+const SPLASH_LOGO = [
+  ['drawable-mdpi', 96],
+  ['drawable-hdpi', 144],
+  ['drawable-xhdpi', 192],
+  ['drawable-xxhdpi', 288],
+  ['drawable-xxxhdpi', 384],
 ]
 
-const mark = (size) =>
-  sharp(source)
-    .trim({ background: WHITE, threshold: 12 })
-    .resize(size, size, { fit: 'contain', background: CLEAR })
-    .toBuffer()
+const STALE_SPLASH = [
+  'drawable',
+  'drawable-port-mdpi',
+  'drawable-port-hdpi',
+  'drawable-port-xhdpi',
+  'drawable-port-xxhdpi',
+  'drawable-port-xxxhdpi',
+  'drawable-land-mdpi',
+  'drawable-land-hdpi',
+  'drawable-land-xhdpi',
+  'drawable-land-xxhdpi',
+  'drawable-land-xxxhdpi',
+]
+
+const SPLASH_XML = `<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splashBackground" />
+    <item>
+        <bitmap android:src="@drawable/splash_logo" android:gravity="center" />
+    </item>
+</layer-list>
+`
 
 const save = async (folder, name, buffer) => {
   const target = join(resDir, folder)
@@ -65,16 +69,8 @@ const save = async (folder, name, buffer) => {
   await writeFile(join(target, name), buffer)
 }
 
-const square = async (size, padding, background) => {
-  const logo = await mark(Math.round(size * (1 - padding * 2)))
-  return sharp({ create: { width: size, height: size, channels: 4, background } })
-    .composite([{ input: logo, gravity: 'centre' }])
-    .png()
-    .toBuffer()
-}
-
 const roundIcon = async (size) => {
-  const face = await square(size, 0.16, WHITE)
+  const face = await onBackground(size, 0.16, WHITE)
   const circle = Buffer.from(
     `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`,
   )
@@ -84,50 +80,25 @@ const roundIcon = async (size) => {
     .toBuffer()
 }
 
-const monochrome = async (size) => {
-  const logo = await mark(Math.round(size * 0.82))
-  return sharp({ create: { width: size, height: size, channels: 4, background: CLEAR } })
-    .composite([{ input: logo, gravity: 'centre' }])
-    .ensureAlpha()
-    .toColourspace('b-w')
-    .png()
-    .toBuffer()
-}
-
-const splash = async (width, height) => {
-  const side = Math.round(Math.min(width, height) * 0.3)
-  const logo = await square(side, 0.12, WHITE)
-  const rounded = await sharp(logo)
-    .composite([
-      {
-        input: Buffer.from(
-          `<svg width="${side}" height="${side}"><rect width="${side}" height="${side}" rx="${Math.round(side * 0.22)}" fill="#fff"/></svg>`,
-        ),
-        blend: 'dest-in',
-      },
-    ])
-    .png()
-    .toBuffer()
-  return sharp({ create: { width, height, channels: 4, background: MAROON } })
-    .composite([{ input: rounded, gravity: 'centre' }])
-    .png()
-    .toBuffer()
-}
-
 const run = async () => {
   for (const [folder, size] of LAUNCHER) {
-    await save(folder, 'ic_launcher.png', await square(size, 0.14, WHITE))
+    await save(folder, 'ic_launcher.png', await onBackground(size, 0.14, WHITE))
     await save(folder, 'ic_launcher_round.png', await roundIcon(size))
   }
   for (const [folder, size] of FOREGROUND) {
-    await save(folder, 'ic_launcher_foreground.png', await square(size, 0.28, CLEAR))
+    await save(folder, 'ic_launcher_foreground.png', await onBackground(size, 0.21, CLEAR))
   }
   for (const [folder, size] of SMALL_ICON) {
-    await save(folder, 'ic_stat_notify.png', await monochrome(size))
+    await save(folder, 'ic_stat_notify.png', await silhouette(size))
   }
-  for (const [folder, width, height] of SPLASH) {
-    await save(folder, 'splash.png', await splash(width, height))
+  for (const [folder, size] of SPLASH_LOGO) {
+    await save(folder, 'splash_logo.png', await mark(size))
   }
+  await save('drawable-nodpi', 'sust_logo.png', await mark(256))
+  for (const folder of STALE_SPLASH) {
+    await rm(join(resDir, folder, 'splash.png'), { force: true })
+  }
+  await save('drawable', 'splash.xml', Buffer.from(SPLASH_XML, 'utf8'))
   console.log('android icons written')
 }
 
