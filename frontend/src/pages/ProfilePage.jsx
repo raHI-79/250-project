@@ -4,6 +4,7 @@ import {
   BookOpen,
   Briefcase,
   Camera,
+  Info,
   KeyRound,
   LogOut,
   Mail,
@@ -37,6 +38,7 @@ import { loginFor } from '../lib/paths'
 import { THEME_CHOICES } from '../lib/theme'
 import { MAX_BIO, PHONE_MESSAGE, accountRoleLabel, isPhone, passwordError } from '../lib/account'
 import { formatDate } from '../lib/time'
+import { buildLabel } from '../lib/version'
 
 export default function ProfilePage() {
   const { role, updateUser, logout } = useAuth()
@@ -44,6 +46,7 @@ export default function ProfilePage() {
   const navigate = useNavigate()
   const toast = useToast()
   const confirm = useConfirm()
+  const health = useResource('/api/health')
   const confirmDropCourse = (course) =>
     confirm({
       title: 'Remove this drop course?',
@@ -243,6 +246,12 @@ export default function ProfilePage() {
               icon={KeyRound}
               title="Change password"
               onClick={() => setSheet('password')}
+            />
+            <ListRow
+              icon={Info}
+              title="About"
+              subtitle={buildLabel(health.data?.commit)}
+              chevron={false}
             />
             <ListRow icon={LogOut} title="Sign out" danger onClick={logout} chevron={false} />
           </Card>

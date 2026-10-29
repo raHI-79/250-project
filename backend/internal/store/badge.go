@@ -218,3 +218,45 @@ func (s *Store) ClaimReminder(ctx context.Context, userID int64, slot, date stri
 	}
 	return true, nil
 }
+
+const (
+	MetaAnnouncedVersion = "announced_version"
+	claimVersionSQL      = `INSERT INTO app_meta (key, value)
+VALUES ($1, $2)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+WHERE app_meta.value <> EXCLUDED.value
+RETURNING value`
+	listPushTargetsSQL = `SELECT DISTINCT user_id FROM push_subscriptions`
+)
+
+func (s *Store) ClaimVersionAnnouncement(ctx context.Context, version string) (bool, error) {
+	var stored string
+	err := s.pool.QueryRow(ctx, claimVersionSQL, MetaAnnouncedVersion, version).Scan(&stored)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("store: could not claim the release announcement: %w", err)
+	}
+	return true, nil
+}
+
+func (s *Store) ListPushTargets(ctx context.Context) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, listPushTargetsSQL)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the push targets: %w", err)
+	}
+	defer rows.Close()
+	targets := make([]int64, 0)
+	for rows.Next() {
+		var userID int64
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("store: could not scan a push target: %w", err)
+		}
+		targets = append(targets, userID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the push targets: %w", err)
+	}
+	return targets, nil
+}

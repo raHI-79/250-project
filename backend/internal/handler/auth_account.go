@@ -18,6 +18,8 @@ const (
 type authConfigResponse struct {
 	StudentEmailDomain string `json:"student_email_domain"`
 	GoogleEnabled      bool   `json:"google_enabled"`
+	HumanCheckEnabled  bool   `json:"human_check_enabled"`
+	TurnstileSiteKey   string `json:"turnstile_site_key,omitempty"`
 }
 
 type dropCourseOption struct {
@@ -45,6 +47,8 @@ func (a *Auth) Config() http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, authConfigResponse{
 			StudentEmailDomain: a.cfg.StudentDomain,
 			GoogleEnabled:      a.cfg.GoogleEnabled(),
+			HumanCheckEnabled:  a.cfg.HumanCheckEnabled(),
+			TurnstileSiteKey:   a.cfg.TurnstileSiteKey,
 		})
 	}
 }

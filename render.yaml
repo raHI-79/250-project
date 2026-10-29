@@ -6,11 +6,18 @@ services:
     region: singapore
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    buildFilter:
+      ignoredPaths:
+        - docs/**
+    dockerBuildArgs:
+      APP_VERSION: 2.0.0
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: APP_ENV
         value: production
+      - key: APP_VERSION
+        value: 2.0.0
       - key: APP_TIMEZONE
         value: Asia/Dhaka
       - key: FILE_STORAGE

@@ -1,7 +1,12 @@
 import { readJson, remove } from './storage'
+import { HUMAN_HEADER, clearHumanPass, humanPass } from './human'
 import { loginFor } from './paths'
 
 export const SESSION_KEY = 'sustcse.session'
+
+export const HUMAN_CHECK_NEEDED = 'Please complete the human check.'
+
+export const HUMAN_EVENT = 'sustcse:human'
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -84,6 +89,8 @@ const request = async (method, path, { body, query, signal, auth = true } = {}) 
     const token = currentToken()
     if (token) headers.Authorization = `Bearer ${token}`
   }
+  const pass = humanPass()
+  if (pass) headers[HUMAN_HEADER] = pass
   const url = withQuery(path, query)
   let response
   try {
@@ -96,6 +103,10 @@ const request = async (method, path, { body, query, signal, auth = true } = {}) 
   if (response.ok) return data
   if (response.status === 401 && !isPublicEndpoint(path)) {
     expireSession()
+  }
+  if (response.status === 403 && data?.error === HUMAN_CHECK_NEEDED) {
+    clearHumanPass()
+    window.dispatchEvent(new Event(HUMAN_EVENT))
   }
   const message =
     (data && typeof data === 'object' && data.error) ||

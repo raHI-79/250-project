@@ -63,6 +63,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	passes, err := auth.NewHumanPasses(cfg.JWTSecret)
+	if err != nil {
+		return err
+	}
 	userStore := store.New(pool)
 	fileStore := upload.Store(upload.NewDisk(cfg.UploadDir))
 	if cfg.FilesInDatabase() {
@@ -81,6 +85,15 @@ func run() error {
 	} else {
 		log.Println("push: VAPID keys are missing, web push notifications stay off")
 	}
+	if pushWorker != nil {
+		sent, err := jobs.AnnounceRelease(startupContext, userStore, pushWorker, cfg.Version,
+			cfg.FrontendOrigin)
+		if err != nil {
+			log.Printf("server: could not announce the release: %v", err)
+		} else if sent > 0 {
+			log.Printf("server: announced version %s to %d devices", cfg.Version, sent)
+		}
+	}
 	if cfg.HasAdminSeed() {
 		if err := seedAdmin(startupContext, userStore, cfg); err != nil {
 			return err
@@ -94,6 +107,7 @@ func run() error {
 			Database:  pool,
 			Tokens:    tokens,
 			Proofs:    proofs,
+			Passes:    passes,
 			Photos:    upload.NewPhotosIn(fileStore),
 			Accounts:  userStore,
 			Users:     userStore,

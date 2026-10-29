@@ -13,6 +13,8 @@ import (
 const (
 	defaultPort            = "8080"
 	defaultAppEnv          = "development"
+	defaultVersion         = "0.0.0"
+	defaultCommit          = "unknown"
 	defaultTimezone        = "Asia/Dhaka"
 	defaultJWTTTL          = "24h"
 	defaultFrontendOrigin  = "http://localhost:5173"
@@ -42,42 +44,50 @@ var (
 )
 
 type Config struct {
-	Port             string
-	AppEnv           string
-	Timezone         string
-	Location         *time.Location
-	DatabaseURL      string
-	TestDatabaseURL  string
-	JWTSecret        string
-	JWTTTL           time.Duration
-	FrontendOrigin   string
-	DaysAhead        int
-	ReminderTimes    []string
-	MorningReminder  string
-	UploadDir        string
-	MaxUploadMB      int
-	FileStorage      string
-	StaticDir        string
-	MailProvider     string
-	MailFromName     string
-	BrevoAPIKey      string
-	AppsScriptURL    string
-	AppsScriptSecret string
-	DBMaxConns       int
-	AdminIdentifier  string
-	AdminPassword    string
-	AdminEmail       string
-	AdminPhone       string
-	SMTPHost         string
-	SMTPPort         int
-	SMTPUsername     string
-	SMTPPassword     string
-	MailFrom         string
-	StudentDomain    string
-	GoogleClientID   string
-	VAPIDPublicKey   string
-	VAPIDPrivateKey  string
-	VAPIDSubject     string
+	Port               string
+	AppEnv             string
+	Version            string
+	Commit             string
+	Timezone           string
+	Location           *time.Location
+	DatabaseURL        string
+	TestDatabaseURL    string
+	JWTSecret          string
+	JWTTTL             time.Duration
+	FrontendOrigin     string
+	DaysAhead          int
+	ReminderTimes      []string
+	MorningReminder    string
+	UploadDir          string
+	MaxUploadMB        int
+	FileStorage        string
+	StaticDir          string
+	MailProvider       string
+	MailFromName       string
+	BrevoAPIKey        string
+	AppsScriptURL      string
+	AppsScriptSecret   string
+	DBMaxConns         int
+	AdminIdentifier    string
+	AdminPassword      string
+	AdminEmail         string
+	AdminPhone         string
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUsername       string
+	SMTPPassword       string
+	MailFrom           string
+	StudentDomain      string
+	GoogleClientID     string
+	VAPIDPublicKey     string
+	VAPIDPrivateKey    string
+	VAPIDSubject       string
+	TurnstileSiteKey   string
+	TurnstileSecretKey string
+}
+
+func (c *Config) HumanCheckEnabled() bool {
+	return c.TurnstileSiteKey != "" && c.TurnstileSecretKey != ""
 }
 
 func (c *Config) PushEnabled() bool {
@@ -89,34 +99,36 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{
-		Port:             getEnv("PORT", defaultPort),
-		AppEnv:           getEnv("APP_ENV", defaultAppEnv),
-		Timezone:         getEnv("APP_TIMEZONE", defaultTimezone),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		TestDatabaseURL:  os.Getenv("TEST_DATABASE_URL"),
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		FrontendOrigin:   getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
-		UploadDir:        getEnv("UPLOAD_DIR", defaultUploadDir),
-		FileStorage:      strings.ToLower(getEnv("FILE_STORAGE", FileStorageDisk)),
-		StaticDir:        strings.TrimSpace(os.Getenv("STATIC_DIR")),
-		MailProvider:     strings.ToLower(getEnv("MAIL_PROVIDER", MailProviderSMTP)),
-		MailFromName:     getEnv("MAIL_FROM_NAME", defaultMailFromName),
-		BrevoAPIKey:      strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
-		AppsScriptURL:    strings.TrimSpace(os.Getenv("APPS_SCRIPT_URL")),
-		AppsScriptSecret: strings.TrimSpace(os.Getenv("APPS_SCRIPT_SECRET")),
-		AdminIdentifier:  os.Getenv("ADMIN_IDENTIFIER"),
-		AdminPassword:    os.Getenv("ADMIN_PASSWORD"),
-		AdminEmail:       os.Getenv("ADMIN_EMAIL"),
-		AdminPhone:       os.Getenv("ADMIN_PHONE"),
-		SMTPHost:         os.Getenv("SMTP_HOST"),
-		SMTPUsername:     os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:     os.Getenv("SMTP_PASSWORD"),
-		MailFrom:         os.Getenv("MAIL_FROM"),
-		StudentDomain:    strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
-		GoogleClientID:   os.Getenv("GOOGLE_CLIENT_ID"),
-		VAPIDPublicKey:   strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
-		VAPIDPrivateKey:  strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
-		VAPIDSubject:     strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
+		Port:               getEnv("PORT", defaultPort),
+		AppEnv:             getEnv("APP_ENV", defaultAppEnv),
+		Timezone:           getEnv("APP_TIMEZONE", defaultTimezone),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		TestDatabaseURL:    os.Getenv("TEST_DATABASE_URL"),
+		JWTSecret:          os.Getenv("JWT_SECRET"),
+		FrontendOrigin:     getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		UploadDir:          getEnv("UPLOAD_DIR", defaultUploadDir),
+		FileStorage:        strings.ToLower(getEnv("FILE_STORAGE", FileStorageDisk)),
+		StaticDir:          strings.TrimSpace(os.Getenv("STATIC_DIR")),
+		MailProvider:       strings.ToLower(getEnv("MAIL_PROVIDER", MailProviderSMTP)),
+		MailFromName:       getEnv("MAIL_FROM_NAME", defaultMailFromName),
+		BrevoAPIKey:        strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
+		AppsScriptURL:      strings.TrimSpace(os.Getenv("APPS_SCRIPT_URL")),
+		AppsScriptSecret:   strings.TrimSpace(os.Getenv("APPS_SCRIPT_SECRET")),
+		AdminIdentifier:    os.Getenv("ADMIN_IDENTIFIER"),
+		AdminPassword:      os.Getenv("ADMIN_PASSWORD"),
+		AdminEmail:         os.Getenv("ADMIN_EMAIL"),
+		AdminPhone:         os.Getenv("ADMIN_PHONE"),
+		SMTPHost:           os.Getenv("SMTP_HOST"),
+		SMTPUsername:       os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
+		MailFrom:           os.Getenv("MAIL_FROM"),
+		StudentDomain:      strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		VAPIDPublicKey:     strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
+		VAPIDPrivateKey:    strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
+		VAPIDSubject:       strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
+		TurnstileSiteKey:   strings.TrimSpace(os.Getenv("TURNSTILE_SITE_KEY")),
+		TurnstileSecretKey: strings.TrimSpace(os.Getenv("TURNSTILE_SECRET_KEY")),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL

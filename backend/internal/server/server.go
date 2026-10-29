@@ -8,6 +8,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/turnstile"
 	"github.com/raHI-79/250-project/backend/internal/upload"
 	"github.com/raHI-79/250-project/backend/internal/web"
 	"net/http"
@@ -52,6 +53,8 @@ type Dependencies struct {
 	Shared    *upload.Attachments
 	Votes     handler.PollStore
 	Badges    handler.BadgeStore
+	Passes    handler.HumanPassIssuer
+	Humans    turnstile.Checker
 }
 
 type RouteGroup struct {
@@ -88,25 +91,36 @@ func NewRouter(deps Dependencies) http.Handler {
 		rateLimit = middleware.DefaultRateLimit
 	}
 	limiter := middleware.NewRateLimiter(rateLimit, middleware.DefaultRateWindow)
+	humans := deps.Humans
+	if humans == nil && deps.Config.HumanCheckEnabled() {
+		humans = turnstile.New(deps.Config.TurnstileSecretKey, "")
+	}
+	humanOnly := handler.RequireHuman(deps.Config, deps.Passes)
 	throttled := RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{limiter.Middleware}}
+	guarded := RouteGroup{
+		mux:        mux,
+		middleware: []func(http.Handler) http.Handler{limiter.Middleware, humanOnly},
+	}
 	authenticated := AuthenticatedGroup(mux, deps)
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
 	mux.HandleFunc("GET /api/auth/config", authHandler.Config())
-	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
-	mux.HandleFunc("POST /api/auth/register", authHandler.Register())
+	throttled.Handle("POST /api/human/verify", handler.NewHuman(deps.Config, deps.Passes, humans).Verify())
+	guarded.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
+	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{humanOnly}}.
+		Handle("POST /api/auth/register", authHandler.Register())
 	throttled.Handle("GET /api/auth/drop-course-options", authHandler.DropCourseOptions())
 	throttled.Handle("GET /api/auth/sections", authHandler.Sections())
-	throttled.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())
-	throttled.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
-	throttled.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())
+	guarded.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())
+	guarded.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
+	guarded.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())
 	mux.HandleFunc("GET /api/auth/invite", authHandler.Invite())
-	throttled.Handle("GET /api/auth/user-id-available", authHandler.UserIDAvailable())
-	throttled.Handle("POST /api/auth/activate", authHandler.Activate())
-	throttled.Handle("POST /api/auth/login", authHandler.Login())
-	throttled.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
-	throttled.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
-	throttled.Handle("POST /api/auth/verify-reset-code", authHandler.VerifyResetCode())
-	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
+	guarded.Handle("GET /api/auth/user-id-available", authHandler.UserIDAvailable())
+	guarded.Handle("POST /api/auth/activate", authHandler.Activate())
+	guarded.Handle("POST /api/auth/login", authHandler.Login())
+	guarded.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
+	guarded.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
+	guarded.Handle("POST /api/auth/verify-reset-code", authHandler.VerifyResetCode())
+	guarded.Handle("POST /api/auth/reset-password", authHandler.ResetPassword())
 	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
 	authenticated.Handle("GET /api/me", handler.Me())
 	badges := handler.NewBadges(deps.Config, deps.Badges)
