@@ -1,6 +1,7 @@
 import { registerPlugin } from '@capacitor/core'
 import api from './api'
 import { isAndroidApp } from './native'
+import { newerThan } from './semver'
 import { readRaw, writeRaw } from './storage'
 import { APP_VERSION } from './version'
 
@@ -12,24 +13,7 @@ export const CHECK_EVENT = 'sustcse.update-check'
 
 const GUIDED_KEY = 'sustcse.installguide'
 
-const CODE_STEP = 100
-
-export const versionCode = (version) => {
-  const numbers = String(version || '')
-    .trim()
-    .replace(/^v/, '')
-    .split('-')[0]
-    .split('.')
-  let code = 0
-  for (let index = 0; index < 3; index += 1) {
-    const piece = Number.parseInt(numbers[index] || '0', 10)
-    code = code * CODE_STEP + (Number.isFinite(piece) && piece > 0 ? piece : 0)
-  }
-  return code
-}
-
-export const isNewer = (latest, installed = APP_VERSION) =>
-  versionCode(latest) > versionCode(installed)
+export const isNewer = (latest, installed = APP_VERSION) => newerThan(latest, installed)
 
 export const fetchLatest = () => api.get(LATEST_PATH, { auth: false })
 
