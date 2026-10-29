@@ -37,6 +37,8 @@ type fakeItems struct {
 	todays     []store.UndecidedTeacher
 	claimed    []string
 	taken      map[string]bool
+	low        []store.AttendanceAlert
+	warned     []string
 	err        error
 }
 
@@ -80,6 +82,25 @@ func (f *fakeItems) ClaimReminder(ctx context.Context, userID int64, slot, date 
 	}
 	f.taken[key] = true
 	f.claimed = append(f.claimed, key)
+	return true, nil
+}
+
+func (f *fakeItems) ListLowAttendance(ctx context.Context, minSessions int,
+	threshold float64) ([]store.AttendanceAlert, error) {
+	return f.low, f.err
+}
+
+func (f *fakeItems) ClaimAttendanceAlert(ctx context.Context, studentID, courseID int64,
+	before time.Time) (bool, error) {
+	if f.taken == nil {
+		f.taken = make(map[string]bool)
+	}
+	key := fmt.Sprintf("alert|%d|%d", studentID, courseID)
+	if f.taken[key] {
+		return false, nil
+	}
+	f.taken[key] = true
+	f.warned = append(f.warned, key)
 	return true, nil
 }
 

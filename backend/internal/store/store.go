@@ -19,6 +19,9 @@ const (
 	StatusRemoved    = "removed"
 	StatusUnverified = "unverified"
 	StatusInvited    = "invited"
+	RequestPending   = "pending"
+	RequestApproved  = "approved"
+	RequestRejected  = "rejected"
 )
 
 var (
