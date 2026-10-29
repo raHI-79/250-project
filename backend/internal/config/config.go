@@ -16,6 +16,7 @@ const (
 	defaultVersion         = "0.0.0"
 	defaultCommit          = "unknown"
 	defaultChannelID       = "sust_cse"
+	defaultReleasesRepo    = "raHI-79/250-project"
 	defaultTimezone        = "Asia/Dhaka"
 	defaultJWTTTL          = "24h"
 	defaultFrontendOrigin  = "http://localhost:5173"
@@ -87,6 +88,8 @@ type Config struct {
 	TurnstileSecretKey string
 	FirebaseAccount    string
 	FCMChannelID       string
+	ReleasesRepo       string
+	ReleasesAPI        string
 }
 
 func (c *Config) FirebaseEnabled() bool {
@@ -108,6 +111,8 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:               getEnv("PORT", defaultPort),
 		AppEnv:             getEnv("APP_ENV", defaultAppEnv),
+		Version:            getEnv("APP_VERSION", defaultVersion),
+		Commit:             getEnv("APP_COMMIT", defaultCommit),
 		Timezone:           getEnv("APP_TIMEZONE", defaultTimezone),
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
 		TestDatabaseURL:    os.Getenv("TEST_DATABASE_URL"),
@@ -138,6 +143,8 @@ func Load() (*Config, error) {
 		TurnstileSecretKey: strings.TrimSpace(os.Getenv("TURNSTILE_SECRET_KEY")),
 		FirebaseAccount:    strings.TrimSpace(os.Getenv("FIREBASE_SERVICE_ACCOUNT")),
 		FCMChannelID:       getEnv("FCM_CHANNEL_ID", defaultChannelID),
+		ReleasesRepo:       strings.Trim(getEnv("GITHUB_RELEASES_REPO", defaultReleasesRepo), "/"),
+		ReleasesAPI:        strings.TrimRight(strings.TrimSpace(os.Getenv("GITHUB_API_URL")), "/"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL

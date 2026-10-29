@@ -21,6 +21,7 @@ const query = (path, params) => {
 
 export const paths = {
   root: () => build(),
+  downloadAndroid: () => '/download/android',
   profile: () => build('profile'),
   person: (userId) => build('people', String(userId)),
   personPattern: () => routePattern('people', ':userId'),

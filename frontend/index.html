@@ -6,7 +6,6 @@
     <title>SUST CSE · Class and Exam Coordination</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#F7F8FA" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="SUST CSE" />
@@ -25,7 +24,20 @@
         var native = bridge && typeof bridge.isNativePlatform === 'function'
           ? bridge.isNativePlatform()
           : Boolean(bridge && bridge.platform && bridge.platform !== 'web')
-        if (native) document.documentElement.setAttribute('data-app', 'native')
+        if (native) {
+          document.documentElement.setAttribute('data-app', 'native')
+          return
+        }
+        if (/Android/i.test(navigator.userAgent || '')) {
+          window.addEventListener('beforeinstallprompt', function (event) {
+            event.preventDefault()
+          })
+          return
+        }
+        var link = document.createElement('link')
+        link.rel = 'manifest'
+        link.href = '/manifest.webmanifest'
+        document.head.appendChild(link)
       })()
     </script>
     <style>

@@ -5,6 +5,7 @@ import ThemeProvider from './context/ThemeProvider'
 import ConfirmProvider from './components/ui/ConfirmProvider'
 import ToastProvider from './components/ui/ToastProvider'
 import Router from './router'
+import AppBanner from './components/layout/AppBanner'
 import UpdateBanner from './components/layout/UpdateBanner'
 import { useKeyboardAwareFocus } from './lib/keyboard'
 
@@ -18,6 +19,7 @@ export default function App() {
             <ConfirmProvider>
               <GlassBackdrop />
               <Router />
+              <AppBanner />
               <UpdateBanner />
             </ConfirmProvider>
           </ToastProvider>

@@ -6,8 +6,6 @@ export const CLIENT_HEADER = 'X-Client'
 
 export const CLIENT_ANDROID = 'android'
 
-export const LATEST_APK = 'https://github.com/raHI-79/250-project/releases/latest'
-
 export const isNative = () => Capacitor.isNativePlatform()
 
 export const nativePlatform = () => Capacitor.getPlatform()
@@ -21,6 +19,13 @@ export const assetURL = (path) => {
   if (!text || !text.startsWith('/') || !isNative()) return text
   return `${API_BASE}${text}`
 }
+
+export const isAndroidPhone = () => {
+  if (typeof navigator === 'undefined') return false
+  return /Android/i.test(navigator.userAgent || '')
+}
+
+export const isAndroidBrowser = () => !isNative() && isAndroidPhone()
 
 export const isApplePhone = () => {
   if (typeof navigator === 'undefined') return false
