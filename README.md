@@ -251,6 +251,8 @@ go run ./cmd/server
 | `TURNSTILE_SECRET_KEY` | none — optional | Cloudflare Turnstile secret key, used server side only |
 | `APP_VERSION` | `0.0.0` | Version reported by `/api/health` and announced once per release |
 | `APP_COMMIT` | `RENDER_GIT_COMMIT` or `unknown` | Short commit reported by `/api/health` |
+| `FIREBASE_SERVICE_ACCOUNT` | none — optional | The Firebase service account JSON, base64; empty turns the Android notifications off |
+| `FCM_CHANNEL_ID` | `sust_cse` | The Android notification channel the messages land in |
 
 Never commit real values. `backend/.env` is gitignored; only
 `backend/.env.example` is tracked.
@@ -865,6 +867,8 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/push/subscribe` | student, CR, teacher | `{endpoint, keys:{p256dh, auth}, user_agent?}` stores this browser; `503` when the server has no VAPID keys |
 | `DELETE` | `/api/push/subscribe` | student, CR, teacher | `{endpoint}` forgets this browser |
 | `POST` | `/api/push/client-log` | student, CR, teacher | `{stage, name, message}` records why a device could not subscribe; rate limited per IP |
+| `POST` | `/api/push/fcm` | student, CR, teacher | `{token, platform, device_id}` stores the Android device token of the app |
+| `DELETE` | `/api/push/fcm` | student, CR, teacher | `{token}` forgets that device, used on sign-out |
 | `GET` | `/uploads/{name}` | public | Serves one older uploaded PDF inline; only the generated file names resolve, anything else is `404` |
 | `GET` | `/uploads/files/{name}` | public | Serves one attachment with its real type and `nosniff`; images and PDFs inline, everything else as a download |
 | `GET` | `/uploads/photos/{name}` | public | Serves one profile photo inline with `nosniff`; only the generated names resolve |
