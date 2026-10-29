@@ -1,0 +1,21 @@
+{
+  "appId": "edu.sust.cse.portal",
+  "appName": "SUST CSE Portal",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#7A1F2B",
+      "overlaysWebView": false
+    }
+  }
+}

@@ -18,6 +18,7 @@ import { isOnline, sectionShort } from '../../lib/schedule'
 import { formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
 import { BADGE_EXAMS, useSectionSeen } from '../../lib/badges'
+import { externalLinkProps } from '../../lib/native'
 
 export default function ExamsPage() {
   useSectionSeen(BADGE_EXAMS)
@@ -88,9 +89,7 @@ export default function ExamsPage() {
                     </p>
                     {isOnline(item) && item.meeting_link && (
                       <a
-                        href={item.meeting_link}
-                        target="_blank"
-                        rel="noreferrer"
+                        {...externalLinkProps(item.meeting_link)}
                         className="mt-2 inline-block"
                       >
                         <Button size="sm" variant="secondary">

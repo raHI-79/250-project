@@ -1,5 +1,6 @@
 import { readJson, remove } from './storage'
 import { HUMAN_HEADER, clearHumanPass, humanPass } from './human'
+import { CLIENT_ANDROID, CLIENT_HEADER, apiURL, isAndroidApp } from './native'
 import { loginFor } from './paths'
 
 export const SESSION_KEY = 'sustcse.session'
@@ -91,7 +92,8 @@ const request = async (method, path, { body, query, signal, auth = true } = {}) 
   }
   const pass = humanPass()
   if (pass) headers[HUMAN_HEADER] = pass
-  const url = withQuery(path, query)
+  if (isAndroidApp()) headers[CLIENT_HEADER] = CLIENT_ANDROID
+  const url = apiURL(withQuery(path, query))
   let response
   try {
     response = await fetch(url, { method, headers, body: payload, signal })

@@ -651,3 +651,50 @@ func TestCORS(t *testing.T) {
 		})
 	}
 }
+
+func TestCORSAllowsTheNativeOrigins(t *testing.T) {
+	tests := []struct {
+		name   string
+		origin string
+		want   string
+	}{
+		{name: "the website", origin: "https://portal.example", want: "https://portal.example"},
+		{name: "the https app origin", origin: CapacitorHTTPS, want: CapacitorHTTPS},
+		{name: "the capacitor scheme", origin: CapacitorScheme, want: CapacitorScheme},
+		{name: "a stranger", origin: "https://evil.example", want: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := CORS("https://portal.example")(http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+			request := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+			request.Header.Set("Origin", test.origin)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, request)
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != test.want {
+				t.Errorf("allow origin = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestFromAndroidAppReadsTheClientHeader(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{value: "android", want: true},
+		{value: " Android ", want: true},
+		{value: "web", want: false},
+		{value: "", want: false},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+		if test.value != "" {
+			request.Header.Set(ClientHeader, test.value)
+		}
+		if got := FromAndroidApp(request); got != test.want {
+			t.Errorf("FromAndroidApp(%q) = %v, want %v", test.value, got, test.want)
+		}
+	}
+}

@@ -133,6 +133,7 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 | `TURNSTILE_SITE_KEY` | the Cloudflare Turnstile site key |
 | `TURNSTILE_SECRET_KEY` | the Cloudflare Turnstile secret key |
 | `APP_VERSION` | `2.0.0` |
+| `FIREBASE_SERVICE_ACCOUNT` | the Firebase service account JSON, base64 |
 
 `FRONTEND_ORIGIN` is a chicken and egg: Render shows the address only after the
 service is created. Create it with your best guess, then open
@@ -226,6 +227,13 @@ example after the status bar colour changed.
 
 The digital asset link is unchanged as long as the signing key is the same, so
 `frontend/public/.well-known/assetlinks.json` needs no edit on a rebuild.
+
+## 10. The Android app
+
+The installed Android app is now a Capacitor build, not a web wrapper, and its
+notifications come through Firebase. `docs/ANDROID.md` covers the Firebase
+setup, the four GitHub secrets, `FIREBASE_SERVICE_ACCOUNT` and how to get the
+APK out of GitHub Actions.
 
 ## Updating the portal
 

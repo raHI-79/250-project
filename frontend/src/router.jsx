@@ -41,6 +41,8 @@ import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
 import ActivityLogPage from './pages/admin/ActivityLogPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { useAuth } from './context/auth'
+import { isNative } from './lib/native'
+import { useNativeBackButton } from './lib/shell'
 import { PORTAL_ADMIN, PORTAL_STUDENT, PORTAL_TEACHER, homeFor, paths } from './lib/paths'
 
 const STUDENT_ROLES = ['student', 'cr']
@@ -52,6 +54,8 @@ function Root() {
 }
 
 export default function Router() {
+  useNativeBackButton()
+  const office = !isNative()
   return (
     <Routes>
       <Route path={paths.root()} element={<Root />} />
@@ -67,11 +71,17 @@ export default function Router() {
         element={<ForgotPasswordPage portal={PORTAL_TEACHER} />}
       />
       <Route path={paths.teacherActivate()} element={<ActivatePage />} />
-      <Route path={paths.adminLogin()} element={<AdminLoginPage />} />
-      <Route
-        path={paths.adminForgotPassword()}
-        element={<ForgotPasswordPage portal={PORTAL_ADMIN} />}
-      />
+      {office ? (
+        <>
+          <Route path={paths.adminLogin()} element={<AdminLoginPage />} />
+          <Route
+            path={paths.adminForgotPassword()}
+            element={<ForgotPasswordPage portal={PORTAL_ADMIN} />}
+          />
+        </>
+      ) : (
+        <Route path={`${paths.adminLogin()}/*`} element={<Navigate to={paths.root()} replace />} />
+      )}
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path={paths.profile()} element={<ProfilePage />} />
@@ -122,6 +132,7 @@ export default function Router() {
           <Route path={paths.teacher.messages()} element={<MessagesPage />} />
         </Route>
       </Route>
+      {office && (
       <Route element={<RequireRole roles="admin" />}>
         <Route element={<AdminLayout />}>
           <Route path={paths.admin.overview()} element={<OverviewPage />} />
@@ -137,6 +148,7 @@ export default function Router() {
           <Route path={paths.admin.activity()} element={<ActivityLogPage />} />
         </Route>
       </Route>
+      )}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )

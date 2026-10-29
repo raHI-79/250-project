@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SUST CSE Portal</string>
+    <string name="title_activity_main">SUST CSE Portal</string>
+    <string name="package_name">edu.sust.cse.portal</string>
+    <string name="custom_url_scheme">edu.sust.cse.portal</string>
+    <string name="notification_channel_id">sust_cse</string>
+    <string name="notification_channel_name">SUST CSE</string>
+</resources>

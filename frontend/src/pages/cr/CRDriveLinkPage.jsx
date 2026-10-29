@@ -14,6 +14,7 @@ import {
 import api from '../../lib/api'
 import { useResource } from '../../lib/hooks'
 import { relativeTime } from '../../lib/time'
+import { externalLinkProps } from '../../lib/native'
 
 export default function CRDriveLinkPage() {
   const toast = useToast()
@@ -82,7 +83,7 @@ export default function CRDriveLinkPage() {
             </Button>
           </div>
           <p className="text-xs text-muted">Updated {relativeTime(saved.updated_at)}</p>
-          <Button as="a" href={saved.link} target="_blank" rel="noreferrer" className="w-fit">
+          <Button as="a" {...externalLinkProps(saved.link)} className="w-fit">
             <ExternalLink size={16} />
             Open Drive
           </Button>

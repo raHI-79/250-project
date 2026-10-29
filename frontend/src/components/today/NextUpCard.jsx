@@ -10,6 +10,7 @@ import {
 } from '../../lib/schedule'
 import { formatTimeRange } from '../../lib/time'
 import CourseName from '../schedule/CourseName'
+import { externalLinkProps } from '../../lib/native'
 
 export default function NextUpCard({ item }) {
   const [seconds, setSeconds] = useState(() => secondsUntilClock(item?.start_time))
@@ -65,7 +66,7 @@ export default function NextUpCard({ item }) {
         {item.teacher_name && <span>{item.teacher_name}</span>}
       </div>
       {online && item.meeting_link && !cancelled && (
-        <a href={item.meeting_link} target="_blank" rel="noreferrer" className="mt-4 block">
+        <a {...externalLinkProps(item.meeting_link)} className="mt-4 block">
           <Button as="span" className="w-full">
             <Video size={16} />
             Join the class

@@ -26,6 +26,18 @@ func (emptyPushStore) CountPushSubscriptions(ctx context.Context, userID int64) 
 	return 0, nil
 }
 
+func (emptyPushStore) SaveFCMToken(ctx context.Context, token store.FCMToken) (int64, error) {
+	return 0, nil
+}
+
+func (emptyPushStore) DeleteFCMToken(ctx context.Context, userID int64, token string) error {
+	return nil
+}
+
+func (emptyPushStore) CountFCMTokens(ctx context.Context, userID int64) (int, error) {
+	return 0, nil
+}
+
 type emptyChatStore struct{}
 
 func (emptyChatStore) GetMessageViewer(ctx context.Context, userID int64) (store.MessageViewer, error) {
@@ -298,6 +310,8 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodDelete, path: "/api/push/subscribe", allowed: panelRoles()},
 		{method: http.MethodPost, path: "/api/push/test", allowed: panelRoles()},
 		{method: http.MethodPost, path: "/api/push/client-log", allowed: panelRoles()},
+		{method: http.MethodPost, path: "/api/push/fcm", allowed: panelRoles()},
+		{method: http.MethodDelete, path: "/api/push/fcm", allowed: panelRoles()},
 		{method: http.MethodPatch, path: "/api/admin/notices/7", allowed: adminOnly()},
 		{method: http.MethodPatch, path: "/api/teacher/notices/7", allowed: teacherOnly()},
 		{method: http.MethodPatch, path: "/api/cr/notices/7", allowed: crOnly()},

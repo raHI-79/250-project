@@ -226,7 +226,8 @@ VALUES ($1, $2)
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
 WHERE app_meta.value <> EXCLUDED.value
 RETURNING value`
-	listPushTargetsSQL = `SELECT DISTINCT user_id FROM push_subscriptions`
+	listPushTargetsSQL   = `SELECT DISTINCT user_id FROM push_subscriptions`
+	listDeviceTargetsSQL = `SELECT DISTINCT user_id FROM fcm_tokens`
 )
 
 func (s *Store) ClaimVersionAnnouncement(ctx context.Context, version string) (bool, error) {
@@ -241,8 +242,16 @@ func (s *Store) ClaimVersionAnnouncement(ctx context.Context, version string) (b
 	return true, nil
 }
 
+func (s *Store) ListDeviceTargets(ctx context.Context) ([]int64, error) {
+	return s.pushTargets(ctx, listDeviceTargetsSQL)
+}
+
 func (s *Store) ListPushTargets(ctx context.Context) ([]int64, error) {
-	rows, err := s.pool.Query(ctx, listPushTargetsSQL)
+	return s.pushTargets(ctx, listPushTargetsSQL)
+}
+
+func (s *Store) pushTargets(ctx context.Context, query string) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the push targets: %w", err)
 	}

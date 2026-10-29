@@ -1,10 +1,11 @@
 package auth
 
 const (
-	RoleStudent = "student"
-	RoleCR      = "cr"
-	RoleTeacher = "teacher"
-	RoleAdmin   = "admin"
+	RoleStudent    = "student"
+	RoleCR         = "cr"
+	RoleTeacher    = "teacher"
+	RoleAdmin      = "admin"
+	RoleSuperAdmin = "super_admin"
 )
 
 func EffectiveRole(dbRole string, isCR bool) string {

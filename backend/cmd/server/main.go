@@ -6,6 +6,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/db"
+	"github.com/raHI-79/250-project/backend/internal/fcm"
 	"github.com/raHI-79/250-project/backend/internal/filestore"
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/jobs"
@@ -76,6 +77,18 @@ func run() error {
 	alerts := notify.New(userStore)
 	var pushWorker *push.Worker
 	var pushTests handler.PushTester
+	var devices *fcm.Worker
+	if cfg.FirebaseEnabled() {
+		sender, err := fcm.New(cfg.FirebaseAccount, "", cfg.FCMChannelID)
+		if err != nil {
+			return err
+		}
+		devices = fcm.NewWorker(userStore, sender)
+		alerts = alerts.WithDevices(devices)
+		log.Println("fcm: app notifications are on")
+	} else {
+		log.Println("fcm: FIREBASE_SERVICE_ACCOUNT is missing, app notifications stay off")
+	}
 	if cfg.PushEnabled() {
 		sender := push.NewSender(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
 		pushWorker = push.NewWorker(userStore, sender, push.QueueSize)
@@ -85,8 +98,8 @@ func run() error {
 	} else {
 		log.Println("push: VAPID keys are missing, web push notifications stay off")
 	}
-	if pushWorker != nil {
-		sent, err := jobs.AnnounceRelease(startupContext, userStore, pushWorker, cfg.Version,
+	if pushWorker != nil || devices.Ready() {
+		sent, err := jobs.AnnounceRelease(startupContext, userStore, pushWorker, devices, cfg.Version,
 			cfg.FrontendOrigin)
 		if err != nil {
 			log.Printf("server: could not announce the release: %v", err)

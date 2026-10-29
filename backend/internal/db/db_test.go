@@ -26,6 +26,7 @@ var expectedTables = []string{
 	"batch_semesters",
 	"class_periods",
 	"courses",
+	"fcm_tokens",
 	"messages",
 	"notices",
 	"notifications",

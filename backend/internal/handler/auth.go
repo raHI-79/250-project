@@ -180,6 +180,10 @@ func (a *Auth) AdminLogin() http.HandlerFunc {
 
 func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if adminOnly && middleware.FromAndroidApp(r) {
+			httpx.WriteError(w, http.StatusForbidden, middleware.MessageAppForbidden)
+			return
+		}
 		var request loginRequest
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
@@ -208,7 +212,7 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		isAdmin := user.Role == auth.RoleAdmin
+		isAdmin := user.Role == auth.RoleAdmin || user.Role == auth.RoleSuperAdmin
 		if isAdmin != adminOnly {
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return

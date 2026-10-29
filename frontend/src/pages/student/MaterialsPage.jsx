@@ -4,6 +4,7 @@ import { useResource } from '../../lib/hooks'
 import { relativeTime } from '../../lib/time'
 import cx from '../../lib/cx'
 import { BADGE_MATERIALS, useSectionSeen } from '../../lib/badges'
+import { externalLinkProps } from '../../lib/native'
 
 export default function MaterialsPage() {
   useSectionSeen(BADGE_MATERIALS)
@@ -52,9 +53,7 @@ export default function MaterialsPage() {
               <p className="text-xs text-muted">Updated {relativeTime(item.updated_at)}</p>
               <Button
                 as="a"
-                href={item.link}
-                target="_blank"
-                rel="noreferrer"
+                {...externalLinkProps(item.link)}
                 className="w-fit"
               >
                 <ExternalLink size={16} />

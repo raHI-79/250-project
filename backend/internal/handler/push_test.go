@@ -12,9 +12,34 @@ import (
 )
 
 type fakePushStore struct {
-	saved   []store.PushSubscription
-	deleted []string
-	err     error
+	saved        []store.PushSubscription
+	deleted      []string
+	tokens       []store.FCMToken
+	droppedToken string
+	err          error
+}
+
+func (f *fakePushStore) SaveFCMToken(ctx context.Context, token store.FCMToken) (int64, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	f.tokens = append(f.tokens, token)
+	return int64(len(f.tokens)), nil
+}
+
+func (f *fakePushStore) DeleteFCMToken(ctx context.Context, userID int64, token string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.droppedToken = token
+	return nil
+}
+
+func (f *fakePushStore) CountFCMTokens(ctx context.Context, userID int64) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	return len(f.tokens), nil
 }
 
 func (f *fakePushStore) SavePushSubscription(ctx context.Context,
@@ -343,5 +368,57 @@ func TestPushClientLogRefusesAnEmptyReport(t *testing.T) {
 	}
 	if got := errorMessage(t, rec); got != MessagePushLogEmpty {
 		t.Errorf("error = %q, want %q", got, MessagePushLogEmpty)
+	}
+}
+
+func TestSaveTokenKeepsTheDevice(t *testing.T) {
+	silenceLog(t)
+	devices := &fakePushStore{}
+	handler := NewPush(pushConfig(t, true), devices, &fakePushTester{})
+	body := `{"token":"  fcm-token-value  ","platform":" ANDROID ","device_id":"device-7"}`
+	request := jsonRequest(t, http.MethodPost, "/api/push/fcm", body, noticeCRID, auth.RoleCR)
+	rec := serve(handler.SaveToken(), request)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body = %q)", rec.Code, rec.Body.String())
+	}
+	saved := devices.tokens[0]
+	if saved.Token != "fcm-token-value" || saved.Platform != "android" {
+		t.Errorf("saved = %+v, want the trimmed token and platform", saved)
+	}
+	if saved.UserID != noticeCRID || saved.DeviceID != "device-7" {
+		t.Errorf("saved = %+v, want the caller and the device id", saved)
+	}
+}
+
+func TestSaveTokenRefusesABlankToken(t *testing.T) {
+	silenceLog(t)
+	devices := &fakePushStore{}
+	handler := NewPush(pushConfig(t, true), devices, &fakePushTester{})
+	request := jsonRequest(t, http.MethodPost, "/api/push/fcm", `{"token":"  "}`,
+		noticeCRID, auth.RoleCR)
+	rec := serve(handler.SaveToken(), request)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if got := errorMessage(t, rec); got != MessageTokenMissing {
+		t.Errorf("error = %q, want %q", got, MessageTokenMissing)
+	}
+	if len(devices.tokens) != 0 {
+		t.Error("the store saved a blank token")
+	}
+}
+
+func TestDeleteTokenForgetsTheDevice(t *testing.T) {
+	silenceLog(t)
+	devices := &fakePushStore{}
+	handler := NewPush(pushConfig(t, true), devices, &fakePushTester{})
+	request := jsonRequest(t, http.MethodDelete, "/api/push/fcm", `{"token":"fcm-token-value"}`,
+		noticeCRID, auth.RoleCR)
+	rec := serve(handler.DeleteToken(), request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if devices.droppedToken != "fcm-token-value" {
+		t.Errorf("dropped = %q, want the token", devices.droppedToken)
 	}
 }

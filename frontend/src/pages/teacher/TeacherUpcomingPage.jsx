@@ -43,6 +43,7 @@ import {
 } from '../../lib/schedule'
 import { formatDate, formatTimeRange, today as todayDate } from '../../lib/time'
 import cx from '../../lib/cx'
+import { externalLinkProps } from '../../lib/native'
 
 const TABS = [
   { value: TEACHER_TAB_NEXT_DAY, label: 'Tomorrow' },
@@ -160,7 +161,7 @@ export default function TeacherUpcomingPage() {
                   </span>
                 </span>
                 {isOnline(item) && item.meeting_link && (
-                  <a href={item.meeting_link} target="_blank" rel="noreferrer">
+                  <a {...externalLinkProps(item.meeting_link)}>
                     <Button as="span" size="sm" variant="secondary">
                       <Video size={14} />
                       Join
