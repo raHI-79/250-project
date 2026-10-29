@@ -48,6 +48,8 @@ export const paths = {
     polls: (params) => query(build('student', 'polls'), params),
     teachers: () => build('student', 'teachers'),
     messages: (params) => query(build('student', 'messages'), params),
+    attendance: (params) => query(build('student', 'attendance'), params),
+    myAttendance: (params) => query(build('student', 'my-attendance'), params),
   },
   cr: {
     home: () => build('cr'),
@@ -63,6 +65,8 @@ export const paths = {
     createExam: (params) => query(build('teacher', 'create-exam'), params),
     notices: (params) => query(build('teacher', 'notices'), params),
     messages: (params) => query(build('teacher', 'messages'), params),
+    attendance: (params) => query(build('teacher', 'attendance'), params),
+    phoneRequests: (params) => query(build('teacher', 'phone-requests'), params),
   },
   admin: {
     home: () => build('office-portal', 'overview'),
@@ -77,6 +81,8 @@ export const paths = {
     notices: (params) => query(build('office-portal', 'notices'), params),
     messages: (params) => query(build('office-portal', 'messages'), params),
     activity: () => build('office-portal', 'activity'),
+    attendance: (params) => query(build('office-portal', 'attendance'), params),
+    phoneChanges: () => build('office-portal', 'phone-changes'),
   },
 }
 
@@ -160,6 +166,10 @@ export const notificationTarget = (link, role) => {
   if (kind === 'notice') return noticesFor(role, { highlight: ref })
   if (kind === 'message') return messagesFor(role, { c: ref })
   if (kind === 'poll') return pollsFor(role, { highlight: ref })
+  if (kind === 'attendance_mark') return paths.student.attendance({ session: ref })
+  if (kind === 'attendance_mine') return paths.student.myAttendance({ course: ref })
+  if (kind === 'attendance_teacher') return paths.teacher.attendance({ highlight: ref })
+  if (kind === 'phone_requests') return paths.teacher.phoneRequests({ highlight: ref })
   if (kind === 'cr_role') return paths.profile()
   return homeFor(role)
 }

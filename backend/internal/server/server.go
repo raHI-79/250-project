@@ -57,6 +57,7 @@ type Dependencies struct {
 	Passes    handler.HumanPassIssuer
 	Humans    turnstile.Checker
 	Releases  handler.ReleaseLookup
+	Marks     handler.AttendanceStore
 }
 
 type RouteGroup struct {
@@ -148,6 +149,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	authenticated.Handle("PATCH /api/schedule/items/{id}/link",
 		handler.NewSchedule(deps.Config, deps.Items, deps.Alarms).Link())
 	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
+	marks := handler.NewAttendance(deps.Config, deps.Marks, deps.Alarms)
+	registerAttendanceTeacherRoutes(TeacherGroup(mux, deps), marks)
 	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
 	files := deps.Files
 	if files == nil {
@@ -260,6 +263,19 @@ func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
 	group.Handle("PATCH /api/teacher/exams/{id}", teacher.UpdateExam())
 	group.Handle("POST /api/teacher/exams/{id}/cancel", teacher.CancelExam())
 	group.Handle("DELETE /api/teacher/exams/{id}", teacher.DeleteExam())
+}
+
+func registerAttendanceTeacherRoutes(group RouteGroup, marks *handler.Attendance) {
+	group.Handle("GET /api/teacher/attendance/options", marks.Options())
+	group.Handle("GET /api/teacher/attendance/sessions", marks.History())
+	group.Handle("POST /api/teacher/attendance/sessions", marks.Start())
+	group.Handle("GET /api/teacher/attendance/sessions/{id}", marks.Session())
+	group.Handle("POST /api/teacher/attendance/sessions/{id}/location", marks.Location())
+	group.Handle("POST /api/teacher/attendance/sessions/{id}/extend", marks.Extend())
+	group.Handle("POST /api/teacher/attendance/sessions/{id}/close", marks.Close())
+	group.Handle("PATCH /api/teacher/attendance/sessions/{id}/students/{student_id}", marks.EditMark())
+	group.Handle("GET /api/teacher/attendance/classes", marks.Classes())
+	group.Handle("GET /api/teacher/attendance/export", marks.Export())
 }
 
 func registerStudentRoutes(group RouteGroup, student *handler.Student) {

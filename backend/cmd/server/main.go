@@ -140,6 +140,7 @@ func run() error {
 			Shared:    upload.NewAttachmentsIn(fileStore, cfg.MaxUploadMB),
 			Votes:     userStore,
 			Badges:    userStore,
+			Marks:     userStore,
 			Files:     upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
 			Mailer: mailer.New(cfg.MailProvider, mailer.Options{
 				Host:     cfg.SMTPHost,

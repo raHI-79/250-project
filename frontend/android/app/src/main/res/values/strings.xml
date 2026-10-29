@@ -6,4 +6,6 @@
     <string name="custom_url_scheme">edu.sust.cse.portal</string>
     <string name="notification_channel_id">sust_cse</string>
     <string name="notification_channel_name">SUST CSE</string>
+    <string name="attendance_channel_name">Attendance</string>
+    <string name="attendance_notification_title">Attendance open</string>
 </resources>

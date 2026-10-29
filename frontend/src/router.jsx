@@ -29,6 +29,7 @@ import TeacherFixedRoutinePage from './pages/teacher/TeacherFixedRoutinePage'
 import TeacherUpcomingPage from './pages/teacher/TeacherUpcomingPage'
 import TeacherCreateExamPage from './pages/teacher/TeacherCreateExamPage'
 import TeacherNoticesPage from './pages/teacher/TeacherNoticesPage'
+import TeacherAttendancePage from './pages/teacher/TeacherAttendancePage'
 import OverviewPage from './pages/admin/OverviewPage'
 import RegistrationsPage from './pages/admin/RegistrationsPage'
 import AdminStudentsPage from './pages/admin/AdminStudentsPage'
@@ -130,6 +131,7 @@ export default function Router() {
           <Route path={paths.teacher.upcoming()} element={<TeacherUpcomingPage />} />
           <Route path={paths.teacher.createExam()} element={<TeacherCreateExamPage />} />
           <Route path={paths.teacher.notices()} element={<TeacherNoticesPage />} />
+          <Route path={paths.teacher.attendance()} element={<TeacherAttendancePage />} />
           <Route path={paths.teacher.messages()} element={<MessagesPage />} />
         </Route>
       </Route>
