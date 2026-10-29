@@ -80,6 +80,10 @@ func VerifyToken(tokens TokenParser, users UserStore) func(http.Handler) http.Ha
 				httpx.WriteError(w, http.StatusUnauthorized, MessageSessionExpired)
 				return
 			}
+			if FromAndroidApp(r) && OfficeRole(effectiveRole) {
+				httpx.WriteError(w, http.StatusForbidden, MessageAppForbidden)
+				return
+			}
 			current := User{
 				ID:         user.ID,
 				Identifier: user.Identifier,
@@ -124,4 +128,18 @@ func bearerToken(header string) (string, bool) {
 		return "", false
 	}
 	return token, true
+}
+
+const (
+	ClientHeader        = "X-Client"
+	ClientAndroid       = "android"
+	MessageAppForbidden = "The Android app is for students and teachers. Office accounts use the website."
+)
+
+func OfficeRole(role string) bool {
+	return role == auth.RoleAdmin || role == auth.RoleSuperAdmin
+}
+
+func FromAndroidApp(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get(ClientHeader)), ClientAndroid)
 }

@@ -3,6 +3,7 @@ import api, { SESSION_KEY } from '../lib/api'
 import { readJson, remove, writeJson } from '../lib/storage'
 import { PORTAL_STUDENT } from '../lib/paths'
 import { dropPushOnSignOut } from '../lib/push'
+import { dropFCM } from '../lib/fcm'
 import { AuthContext } from './auth'
 
 const loadSession = () => {
@@ -59,6 +60,7 @@ export default function AuthProvider({ children }) {
     [],
   )
   const logout = useCallback(async () => {
+    await dropFCM().catch(() => null)
     await dropPushOnSignOut()
     await api.post('/api/auth/logout').catch(() => null)
     clear()

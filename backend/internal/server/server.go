@@ -371,6 +371,8 @@ func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.P
 	group.Handle("POST /api/push/subscribe", pushes.Subscribe())
 	group.Handle("DELETE /api/push/subscribe", pushes.Unsubscribe())
 	group.Handle("POST /api/push/test", pushes.Test())
+	group.Handle("POST /api/push/fcm", pushes.SaveToken())
+	group.Handle("DELETE /api/push/fcm", pushes.DeleteToken())
 	reports := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
 	limited := RouteGroup{
 		mux: mux,

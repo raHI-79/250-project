@@ -20,6 +20,12 @@ const (
 	MessagePushTestSent   = "Test notification sent."
 	MessagePushLogged     = "Reported."
 	MessagePushLogEmpty   = "The report is empty."
+	MessageTokenSaved     = "This device will receive notifications."
+	MessageTokenRemoved   = "This device will not receive notifications."
+	MessageTokenMissing   = "The app did not send a device token."
+	MaxTokenLength        = 4096
+	MaxPlatformLength     = 20
+	MaxDeviceLength       = 100
 	TestPushTitle         = "SUST CSE"
 	TestPushBody          = "Notifications are working on this device."
 	MaxEndpointLength     = 1000
@@ -32,6 +38,9 @@ type PushStore interface {
 	SavePushSubscription(ctx context.Context, subscription store.PushSubscription) (int64, error)
 	DeletePushSubscription(ctx context.Context, userID int64, endpoint string) error
 	CountPushSubscriptions(ctx context.Context, userID int64) (int, error)
+	SaveFCMToken(ctx context.Context, token store.FCMToken) (int64, error)
+	DeleteFCMToken(ctx context.Context, userID int64, token string) error
+	CountFCMTokens(ctx context.Context, userID int64) (int, error)
 }
 
 type PushTester interface {
@@ -63,6 +72,12 @@ type pushClientLogRequest struct {
 	Stage   string `json:"stage"`
 	Name    string `json:"name"`
 	Message string `json:"message"`
+}
+
+type fcmTokenRequest struct {
+	Token    string `json:"token"`
+	Platform string `json:"platform"`
+	DeviceID string `json:"device_id"`
 }
 
 type publicKeyResponse struct {
@@ -137,6 +152,76 @@ func (p *Push) Subscribe() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessagePushSaved})
 	}
+}
+
+func (p *Push) SaveToken() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		var request fcmTokenRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		token := strings.TrimSpace(request.Token)
+		if token == "" || len(token) > MaxTokenLength {
+			httpx.WriteError(w, http.StatusBadRequest, MessageTokenMissing)
+			return
+		}
+		platform := clip(strings.ToLower(strings.TrimSpace(request.Platform)), MaxPlatformLength)
+		if platform == "" {
+			platform = store.PlatformAndroid
+		}
+		_, err := p.subscriptions.SaveFCMToken(r.Context(), store.FCMToken{
+			UserID:   current.ID,
+			Token:    token,
+			Platform: platform,
+			DeviceID: clip(strings.TrimSpace(request.DeviceID), MaxDeviceLength),
+		})
+		if err != nil {
+			log.Printf("handler: could not save a device token: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		if count, err := p.subscriptions.CountFCMTokens(r.Context(), current.ID); err == nil {
+			log.Printf("push: account %d now has %d device tokens", current.ID, count)
+		}
+		httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessageTokenSaved})
+	}
+}
+
+func (p *Push) DeleteToken() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		var request fcmTokenRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		token := strings.TrimSpace(request.Token)
+		if token == "" {
+			httpx.WriteError(w, http.StatusBadRequest, MessageTokenMissing)
+			return
+		}
+		if err := p.subscriptions.DeleteFCMToken(r.Context(), current.ID, token); err != nil {
+			log.Printf("handler: could not delete a device token: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageTokenRemoved})
+	}
+}
+
+func clip(value string, limit int) string {
+	if len(value) > limit {
+		return value[:limit]
+	}
+	return value
 }
 
 func (p *Push) ClientLog() http.HandlerFunc {
