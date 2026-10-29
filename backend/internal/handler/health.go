@@ -21,6 +21,8 @@ type DatabasePinger interface {
 type healthResponse struct {
 	Status      string `json:"status"`
 	Environment string `json:"environment"`
+	Version     string `json:"version"`
+	Commit      string `json:"commit"`
 	Database    string `json:"database"`
 	Time        string `json:"time"`
 }
@@ -30,6 +32,8 @@ func Health(cfg *config.Config, database DatabasePinger) http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, healthResponse{
 			Status:      "ok",
 			Environment: cfg.AppEnv,
+			Version:     cfg.Version,
+			Commit:      cfg.Commit,
 			Database:    databaseStatus(r.Context(), database),
 			Time:        cfg.Now().Format(time.RFC3339),
 		})

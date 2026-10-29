@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import DateBlock from '../DateBlock'
 import { Carousel } from '../ui'
-import { placeOf } from '../../lib/schedule'
+import { courseCode, courseLine, placeOf } from '../../lib/schedule'
 import { formatTimeRange } from '../../lib/time'
 
 export default function ExamStrip({ exams, to }) {
@@ -15,8 +15,10 @@ export default function ExamStrip({ exams, to }) {
         >
           <DateBlock value={exam.item_date} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-ink">{exam.course_code}</p>
-            <p className="mt-0.5 line-clamp-2 text-xs text-muted">{exam.course_title}</p>
+            <p className="line-clamp-2 text-sm font-semibold text-ink">{courseLine(exam)}</p>
+            {courseCode(exam) && (
+              <p className="mt-0.5 truncate text-2xs font-medium text-muted">{courseCode(exam)}</p>
+            )}
             <p className="mt-1.5 truncate text-2xs text-faint tabular-nums">
               {[formatTimeRange(exam.start_time, exam.end_time), placeOf(exam)]
                 .filter(Boolean)

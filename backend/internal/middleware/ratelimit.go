@@ -12,6 +12,7 @@ import (
 const (
 	MessageTooManyAttempts = "Too many attempts. Please try again in a minute."
 	DefaultRateLimit       = 10
+	ClientLogRateLimit     = 20
 	DefaultRateWindow      = time.Minute
 )
 
@@ -89,6 +90,10 @@ func keepRecent(times []time.Time, cutoff time.Time) []time.Time {
 		}
 	}
 	return recent
+}
+
+func ClientIP(r *http.Request) string {
+	return clientIP(r)
 }
 
 func clientIP(r *http.Request) string {

@@ -15,7 +15,8 @@ import {
 } from '../components/ui'
 import { useHighlight, useResource } from '../lib/hooks'
 import cx from '../lib/cx'
-import { formatDateTime } from '../lib/time'
+import { editedLabel, formatDateTime } from '../lib/time'
+import { BADGE_NOTICES, useSectionSeen } from '../lib/badges'
 
 const TABS = [
   { value: 'all', label: 'All' },
@@ -32,6 +33,7 @@ const SCOPES = [
 const SOURCE_LABELS = { admin: 'Department', teacher: 'Teacher', cr: 'CR' }
 
 export default function NoticesPage() {
+  useSectionSeen(BADGE_NOTICES)
   const [source, setSource] = useState('all')
   const [scope, setScope] = useState('my')
   const highlight = useHighlight(true)
@@ -96,6 +98,7 @@ export default function NoticesPage() {
                     )}
                     <span className="ml-auto text-xs whitespace-nowrap text-muted">
                       {formatDateTime(item.created_at)}
+                      {item.edited_at ? ` · ${editedLabel(item.edited_at)}` : ''}
                     </span>
                   </div>
                   {item.description && (

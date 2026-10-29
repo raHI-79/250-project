@@ -15,7 +15,8 @@ import PollResults from '../../components/PollResults'
 import api from '../../lib/api'
 import { useHighlight, useResource } from '../../lib/hooks'
 import cx from '../../lib/cx'
-import { formatDateTime } from '../../lib/time'
+import { editedLabel, formatDateTime } from '../../lib/time'
+import { BADGE_POLLS, useSectionSeen } from '../../lib/badges'
 
 const limitLine = (max) => (max > 1 ? `Pick up to ${max} options` : 'Pick one option')
 
@@ -42,7 +43,8 @@ function PollCard({ poll, busy, onVote, flash }) {
         />
       </div>
       <p className="mt-1 text-xs text-muted">
-        {poll.created_by_name} · {formatDateTime(poll.created_at)} · {poll.total_voters} voter
+        {poll.created_by_name} · {formatDateTime(poll.created_at)}
+        {poll.edited_at ? ` · ${editedLabel(poll.edited_at)}` : ''} · {poll.total_voters} voter
         {poll.total_voters === 1 ? '' : 's'}
       </p>
       {showResults ? (
@@ -99,6 +101,7 @@ function PollCard({ poll, busy, onVote, flash }) {
 }
 
 export default function PollsPage() {
+  useSectionSeen(BADGE_POLLS)
   const toast = useToast()
   const { data, loading, error, reload } = useResource('/api/students/polls')
   const highlight = useHighlight(Boolean(data))

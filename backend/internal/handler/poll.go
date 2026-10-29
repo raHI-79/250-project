@@ -24,6 +24,11 @@ const (
 	MessageVoteSaved      = "Your vote is saved."
 	MessageTooManyChoices = "This poll allows fewer choices than that."
 	MessagePickAnOption   = "Pick at least one option."
+	MessagePollOpen       = "This poll is already open."
+	MessagePollHasVotes   = "This poll already has votes, so it can no longer be edited."
+	MessagePollEdited     = "Poll updated."
+	MessagePollReopened   = "Poll reopened."
+	MessagePollDeleted    = "Poll deleted."
 	NotificationTypePoll  = "poll"
 )
 
@@ -31,6 +36,10 @@ type PollStore interface {
 	GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error)
 	CreatePoll(ctx context.Context, poll store.NewPoll) (store.PollRow, error)
 	ClosePoll(ctx context.Context, pollID, createdBy int64, now time.Time) error
+	ReopenPoll(ctx context.Context, pollID, createdBy int64) error
+	DeletePoll(ctx context.Context, pollID, createdBy int64) error
+	EditPoll(ctx context.Context, pollID, createdBy int64, question string, maxChoices int,
+		options []string) error
 	ListCreatorPolls(ctx context.Context, viewerUserID, createdBy int64) ([]store.PollRow, error)
 	ListStudentPolls(ctx context.Context, viewerUserID int64, batch, section string) ([]store.PollRow, error)
 	VoteInPoll(ctx context.Context, pollID int64, optionIDs []int64, userID int64, batch, section string) error
@@ -73,6 +82,7 @@ type pollItem struct {
 	MaxChoices    int              `json:"max_choices"`
 	CreatedByName string           `json:"created_by_name"`
 	CreatedAt     string           `json:"created_at"`
+	EditedAt      string           `json:"edited_at,omitempty"`
 	Options       []pollOptionItem `json:"options"`
 	TotalVoters   int              `json:"total_voters"`
 	MyOptionIDs   []int64          `json:"my_option_ids"`
@@ -163,6 +173,98 @@ func (p *Poll) CRClose() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 		default:
 			httpx.WriteJSON(w, http.StatusOK, map[string]string{"message": "Poll closed."})
+		}
+	}
+}
+
+func (p *Poll) CRReopen() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := p.crProfile(w, r)
+		if !ok {
+			return
+		}
+		pollID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		err := p.polls.ReopenPoll(r.Context(), pollID, profile.UserID)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessagePollUnknown)
+		case errors.Is(err, store.ErrPollOpen):
+			httpx.WriteError(w, http.StatusConflict, MessagePollOpen)
+		case err != nil:
+			log.Printf("handler: could not reopen a poll: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessagePollReopened})
+		}
+	}
+}
+
+func (p *Poll) CRDelete() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := p.crProfile(w, r)
+		if !ok {
+			return
+		}
+		pollID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		err := p.polls.DeletePoll(r.Context(), pollID, profile.UserID)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessagePollUnknown)
+		case err != nil:
+			log.Printf("handler: could not delete a poll: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessagePollDeleted})
+		}
+	}
+}
+
+func (p *Poll) CREdit() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := p.crProfile(w, r)
+		if !ok {
+			return
+		}
+		pollID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request createPollRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		question, err := validate.Question("Question", request.Question)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		options, err := validate.PollOptions("Options", request.Options)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		maxChoices, err := validate.PollChoices("Choices", request.MaxChoices, len(options))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		err = p.polls.EditPoll(r.Context(), pollID, profile.UserID, question, maxChoices, options)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			httpx.WriteError(w, http.StatusNotFound, MessagePollUnknown)
+		case errors.Is(err, store.ErrPollHasVotes):
+			httpx.WriteError(w, http.StatusConflict, MessagePollHasVotes)
+		case err != nil:
+			log.Printf("handler: could not edit a poll: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		default:
+			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessagePollEdited})
 		}
 	}
 }
@@ -265,6 +367,7 @@ func newPollItem(poll store.PollRow) pollItem {
 		MaxChoices:    poll.MaxChoices,
 		CreatedByName: poll.CreatedByName,
 		CreatedAt:     poll.CreatedAt.Format(time.RFC3339),
+		EditedAt:      optionalStamp(poll.EditedAt),
 		Options:       options,
 		TotalVoters:   poll.TotalVoters,
 		MyOptionIDs:   mine,

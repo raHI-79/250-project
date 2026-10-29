@@ -46,7 +46,11 @@ func (s *Student) Today() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		exams, err := s.students.ListStudentExams(r.Context(), profile.Batch, profile.Section, now)
+		codes, ok := s.dropCourseCodes(w, r, profile.StudentID)
+		if !ok {
+			return
+		}
+		exams, err := s.students.ListStudentExams(r.Context(), profile.Batch, profile.Section, now, codes)
 		if err != nil {
 			log.Printf("handler: could not count the exams of a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)

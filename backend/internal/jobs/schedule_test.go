@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -32,6 +33,10 @@ type fakeItems struct {
 	exams      []store.ScheduleItem
 	crs        []int64
 	askedDates []string
+	undecided  []store.UndecidedTeacher
+	todays     []store.UndecidedTeacher
+	claimed    []string
+	taken      map[string]bool
 	err        error
 }
 
@@ -54,6 +59,30 @@ func (f *fakeItems) ListActiveCRs(ctx context.Context, batch, section string) ([
 	return f.crs, nil
 }
 
+func (f *fakeItems) ListUndecidedTeachers(ctx context.Context, date string) ([]store.UndecidedTeacher, error) {
+	f.askedDates = append(f.askedDates, date)
+	return f.undecided, f.err
+}
+
+func (f *fakeItems) ListUndecidedTeachersFrom(ctx context.Context, date,
+	after string) ([]store.UndecidedTeacher, error) {
+	f.askedDates = append(f.askedDates, date)
+	return f.todays, f.err
+}
+
+func (f *fakeItems) ClaimReminder(ctx context.Context, userID int64, slot, date string) (bool, error) {
+	if f.taken == nil {
+		f.taken = make(map[string]bool)
+	}
+	key := fmt.Sprintf("%d|%s|%s", userID, slot, date)
+	if f.taken[key] {
+		return false, nil
+	}
+	f.taken[key] = true
+	f.claimed = append(f.claimed, key)
+	return true, nil
+}
+
 type fakeAlerts struct {
 	sent []sentNotification
 }
@@ -71,10 +100,10 @@ func testConfig(t *testing.T) *config.Config {
 		t.Fatalf("could not load the timezone: %v", err)
 	}
 	return &config.Config{
-		Location:     loc,
-		DecisionFrom: 17 * 60,
-		DecisionTo:   23 * 60,
-		DaysAhead:    7,
+		Location:        loc,
+		DaysAhead:       7,
+		ReminderTimes:   []string{"16:00", "21:00"},
+		MorningReminder: "07:30",
 	}
 }
 

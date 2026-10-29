@@ -3,13 +3,13 @@ import { CalendarCheck, MapPin, Video } from 'lucide-react'
 import { Button, Card, StatusBadge } from '../ui'
 import {
   STATUS_CANCELLED,
-  courseLine,
   isOnline,
   kindLabel,
   secondsUntilClock,
   startsInText,
 } from '../../lib/schedule'
 import { formatTimeRange } from '../../lib/time'
+import CourseName from '../schedule/CourseName'
 
 export default function NextUpCard({ item }) {
   const [seconds, setSeconds] = useState(() => secondsUntilClock(item?.start_time))
@@ -43,7 +43,7 @@ export default function NextUpCard({ item }) {
         </span>
       </div>
       <p className="font-display mt-2 text-section leading-tight font-bold text-ink wrap-long">
-        {courseLine(item)}
+        <CourseName item={item} codeClassName="text-white/70" />
       </p>
       <p className="mt-1.5 text-sm font-medium text-ink-soft tabular-nums">
         {formatTimeRange(item.start_time, item.end_time)}

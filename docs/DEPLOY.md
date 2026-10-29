@@ -29,18 +29,51 @@ Work through the steps in order. Each one takes a few minutes.
 The server creates every table itself the first time it starts, so there is
 nothing to import.
 
-## 2. Email on Brevo
+## 2. Email
 
-Render's free plan blocks the outgoing SMTP ports, so the portal sends mail
-through Brevo's HTTPS API instead.
+Render's free plan blocks the outgoing SMTP ports, so the portal sends mail over
+HTTPS. `MAIL_PROVIDER` picks how.
+
+### Google Apps Script, recommended
+
+Brevo delivers reliably only from a verified domain; a Gmail sender lands in
+spam or nowhere. Sending through your own Google account avoids that, because
+the mail really does come from that account.
+
+1. Open [script.google.com](https://script.google.com) and create a project.
+2. Paste a `doPost(e)` that reads `{secret, to, subject, body, name}` from
+   `e.postData.contents`, compares `secret` against a constant you keep in the
+   script, calls `MailApp.sendEmail` with `name` as the display name and
+   answers `ContentService.createTextOutput(JSON.stringify({ok: true}))` with
+   the JSON mime type. Answer `{"ok": false, "error": "..."}` on anything else.
+3. **Deploy → New deployment → Web app**, run it as yourself, give access to
+   **Anyone**, and copy the `/exec` address. That is `APPS_SCRIPT_URL`.
+4. Put the same constant from step 2 in `APPS_SCRIPT_SECRET`, and set
+   `MAIL_PROVIDER=appsscript`.
+
+The portal follows the redirect Google answers with and treats only
+`{"ok": true}` as success. The secret is never written to a log.
+
+Google's free quota is 100 recipients a day for a consumer account, which is
+enough for invitations and reset codes.
+
+### Brevo, the alternative
 
 1. Sign up at [brevo.com](https://www.brevo.com) — the free plan sends 300
-   mails a day, which is plenty.
+   mails a day.
 2. Go to **Senders, Domains & Dedicated IPs → Senders** and add the address the
-   portal will send from, for example `yourname@gmail.com`. Brevo emails you a
-   confirmation link; open it, or mail will be refused later.
+   portal will send from. Brevo emails you a confirmation link; open it, or
+   mail will be refused later. Verify a real domain if you can: a Gmail sender
+   is what made delivery unreliable before.
 3. Go to **SMTP & API → API Keys** and create a key. Copy it once — Brevo never
-   shows it again. This is your `BREVO_API_KEY`.
+   shows it again. This is your `BREVO_API_KEY`, with `MAIL_PROVIDER=brevo`.
+
+### The human check
+
+Cloudflare Turnstile guards the sign-in and registration endpoints. Create a
+free widget at **Cloudflare → Turnstile**, choose the **Managed** mode, add your
+Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
+`TURNSTILE_SECRET_KEY`. Leave either one empty and the gate is skipped.
 
 ## 3. Google sign-in, push keys and the admin password
 
@@ -77,7 +110,7 @@ through Brevo's HTTPS API instead.
 | `FRONTEND_ORIGIN` | your live address, for example `https://sust-cse-portal.onrender.com` |
 | `JWT_SECRET` | your long random string |
 | `JWT_TTL` | `24h` |
-| `MAIL_PROVIDER` | `brevo` |
+| `MAIL_PROVIDER` | `appsscript` |
 | `BREVO_API_KEY` | the key from step 2 |
 | `MAIL_FROM` | the sender address you verified in step 2 |
 | `MAIL_FROM_NAME` | `SUST CSE Portal` |
@@ -91,10 +124,15 @@ through Brevo's HTTPS API instead.
 | `VAPID_PRIVATE_KEY` | your push private key |
 | `VAPID_SUBJECT` | `mailto:` and your address |
 | `STUDENT_EMAIL_DOMAIN` | `student.sust.edu` |
-| `DECISION_WINDOW_START` | `16:00` |
-| `DECISION_WINDOW_END` | `23:00` |
+| `TEACHER_REMINDER_TIMES` | `16:00,21:00` |
+| `TEACHER_MORNING_REMINDER` | `07:30` |
 | `SCHEDULE_DAYS_AHEAD` | `7` |
 | `MAX_UPLOAD_MB` | `10` |
+| `APPS_SCRIPT_URL` | the `/exec` address of your Apps Script web app |
+| `APPS_SCRIPT_SECRET` | the shared secret the script checks |
+| `TURNSTILE_SITE_KEY` | the Cloudflare Turnstile site key |
+| `TURNSTILE_SECRET_KEY` | the Cloudflare Turnstile secret key |
+| `APP_VERSION` | `2.0.0` |
 
 `FRONTEND_ORIGIN` is a chicken and egg: Render shows the address only after the
 service is created. Create it with your best guess, then open
@@ -145,7 +183,9 @@ Postgres with everything else, so one dump holds the whole portal.
    Neon connection string.
 3. The workflow `.github/workflows/backup.yml` then runs every night at 21:30
    UTC, which is 03:30 in Dhaka, and you can also start it by hand from the
-   **Actions** tab with **Run workflow**.
+   **Actions** tab with **Run workflow**. It installs the PostgreSQL 18 client
+   from the PostgreSQL apt repository, because Neon runs PostgreSQL 18 and
+   `pg_dump` refuses a server newer than itself.
 
 ### Downloading a backup
 
@@ -162,6 +202,30 @@ gunzip -c sust-cse-2026-10-23.sql.gz | psql "postgres://...neon.tech/neondb?sslm
 Restore into an empty database. In Neon, the simplest way to get one is
 **Branches → New branch**, which gives a fresh connection string you can point
 the command at, test, and then promote.
+
+## 9. Rebuilding the Android app
+
+The installed Android app is a Trusted Web Activity wrapper around the same
+site, package `edu.sust.cse.portal`. The web part updates itself on the next
+launch, so a rebuild is only needed when the wrapper itself changes, for
+example after the status bar colour changed.
+
+1. Open [PWABuilder](https://www.pwabuilder.com/) and enter the live address.
+2. Choose **Package for stores → Android**, then **All settings**.
+3. Set **Status bar colour** and **Navigation bar colour** to `#7A1F2B`, and
+   leave **Display mode** on `standalone`.
+4. Keep the package id `edu.sust.cse.portal` exactly as it is. A different id
+   installs as a second app instead of updating the first one.
+5. Raise **App version code** by one above the installed build and give
+   **App version** the same number as `frontend/package.json`.
+6. Under **Signing key**, choose **Use mine** and upload the original
+   `signing.keystore` with its key alias and both passwords. A new key makes
+   Android refuse the update and breaks the verified link.
+7. Download the zip, install `app-release-signed.apk` on the phone over the
+   old one, and confirm the address bar stays hidden.
+
+The digital asset link is unchanged as long as the signing key is the same, so
+`frontend/public/.well-known/assetlinks.json` needs no edit on a rebuild.
 
 ## Updating the portal
 

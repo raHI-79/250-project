@@ -208,7 +208,7 @@ func TestTeacherDecisionsOnAProposal(t *testing.T) {
 			}
 			item := items[0]
 			if test.confirm {
-				item, err = store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeRoom, "1003", "", now, true)
+				item, err = store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeRoom, "1003", "", now)
 				if err != nil {
 					t.Fatalf("ConfirmItem() returned an unexpected error: %v", err)
 				}
@@ -270,21 +270,17 @@ func TestConfirmWindowAndLaterChanges(t *testing.T) {
 		t.Fatalf("items = %v, err = %v, want one item", items, err)
 	}
 	item := items[0]
-	_, err = store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeRoom, "1003", "", now, false)
-	if !errors.Is(err, ErrDecisionClosed) {
-		t.Fatalf("the first decision outside the window error = %v, want ErrDecisionClosed", err)
-	}
-	confirmed, err := store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeRoom, "1003", "", now, true)
+	confirmed, err := store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeRoom, "1003", "", now)
 	if err != nil {
-		t.Fatalf("ConfirmItem() inside the window returned an unexpected error: %v", err)
+		t.Fatalf("ConfirmItem() returned an unexpected error: %v", err)
 	}
 	if confirmed.Status != ItemConfirmed {
 		t.Fatalf("status = %q, want %q", confirmed.Status, ItemConfirmed)
 	}
 	changed, err := store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeOnline, "",
-		"https://meet.example.com/x", now, false)
+		"https://meet.example.com/x", now)
 	if err != nil {
-		t.Fatalf("a later change outside the window was refused: %v", err)
+		t.Fatalf("a later change was refused: %v", err)
 	}
 	if changed.Mode != ModeOnline || changed.MeetingLink == "" {
 		t.Errorf("item = %+v, want the online slot", changed)
@@ -294,7 +290,7 @@ func TestConfirmWindowAndLaterChanges(t *testing.T) {
 		item.ID, past); err != nil {
 		t.Fatalf("could not move the item into the past: %v", err)
 	}
-	_, err = store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeRoom, "1003", "", now, true)
+	_, err = store.ConfirmItem(ctx, item.ID, fixture.teacherID, ModeRoom, "1003", "", now)
 	if !errors.Is(err, ErrItemStarted) {
 		t.Errorf("changing a started class error = %v, want ErrItemStarted", err)
 	}
@@ -315,7 +311,7 @@ func TestOwnershipChecks(t *testing.T) {
 			name: "another teacher cannot confirm",
 			call: func() error {
 				_, err := store.ConfirmItem(ctx, item.ID, fixture.teacherID+99, ModeRoom, "1003", "",
-					time.Now(), true)
+					time.Now())
 				return err
 			},
 		},

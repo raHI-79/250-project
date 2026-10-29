@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BadgeCheck } from 'lucide-react'
-import { Alert, Button, Field, Input, Select, Stepper } from '../../components/ui'
+import { Alert, Button, Field, Input, PasswordInput, Select, Stepper } from '../../components/ui'
 import GoogleVerifyButton from '../../components/forms/GoogleVerifyButton'
 import PhoneInput from '../../components/forms/PhoneInput'
 import PhotoPicker from '../../components/forms/PhotoPicker'
 import SectionPicker from '../../components/forms/SectionPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
+import AuthHeading from '../../components/layout/AuthHeading'
 import api from '../../lib/api'
 import { HERO_IMAGES } from '../../lib/campus'
 import { useAuthConfig, useCountdown } from '../../lib/hooks'
@@ -72,7 +73,6 @@ export default function RegisterPage() {
     if (!form.regNo.trim()) found.regNo = 'Registration number is required.'
     const birth = birthDateError(form.dateOfBirth)
     if (birth) found.dateOfBirth = birth
-    if (!photo) found.photo = 'A profile photo is required.'
     return found
   }
   const checkAcademic = () => {
@@ -139,7 +139,7 @@ export default function RegisterPage() {
     body.append('date_of_birth', form.dateOfBirth)
     body.append('password', form.password)
     body.append('confirm_password', form.confirmPassword)
-    body.append('photo', photo)
+    appendIf(body, 'photo', photo)
     appendIf(body, 'email_proof', emailProof)
     setLoading(true)
     try {
@@ -211,10 +211,11 @@ export default function RegisterPage() {
       note="Students register with their registration number and verify their university email."
     >
       <div>
-        <p className="eyebrow">Student registration</p>
-        <h1 className="font-display mt-2 text-title font-bold text-ink">
-          Create your account
-        </h1>
+        <AuthHeading
+          eyebrow="Student registration"
+          title="Create your account"
+          subtitle="Register with your registration number and verify your university email."
+        />
         <div className="mt-5">
           {step === 5 ? (
             <div className="flex flex-col gap-4">
@@ -243,7 +244,7 @@ export default function RegisterPage() {
                         setErrors((current) => ({ ...current, photo: '' }))
                       }}
                       error={errors.photo}
-                      required
+                      hint="Optional. Your initials are shown until you add one."
                     />
                     <Input
                       label="Full name"
@@ -379,20 +380,18 @@ export default function RegisterPage() {
                           </option>
                         ))}
                       </Select>
-                      <Input
+                      <PasswordInput
                         label="New password"
-                        type="password"
-                        value={form.password}
+                                                value={form.password}
                         onChange={set('password')}
                         error={errors.password}
                         autoComplete="new-password"
                         hint="At least 8 characters"
                         required
                       />
-                      <Input
+                      <PasswordInput
                         label="Confirm password"
-                        type="password"
-                        value={form.confirmPassword}
+                                                value={form.confirmPassword}
                         onChange={set('confirmPassword')}
                         autoComplete="new-password"
                         required

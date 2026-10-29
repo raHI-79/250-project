@@ -114,8 +114,10 @@ func TestMessagingAndNoticeFlow(t *testing.T) {
 		t.Errorf("sender unread = %v, want 0", own)
 	}
 	teacherAlerts := listItems(t, call(t, router, http.MethodGet, "/api/notifications", "", teacherToken))
-	if len(teacherAlerts) == 0 || teacherAlerts[0]["title"] != "New message from Chat Student" {
-		t.Fatalf("teacher notifications = %v, want one naming the sender", teacherAlerts)
+	for _, alert := range teacherAlerts {
+		if alert["type"] == "message" {
+			t.Fatalf("teacher notifications = %v, want the messages kept out of the bell", teacherAlerts)
+		}
 	}
 	teacherChats := listItems(t, call(t, router, http.MethodGet, "/api/messages/conversations", "", teacherToken))
 	if len(teacherChats) != 1 || teacherChats[0]["title"] != "Chat Student" {

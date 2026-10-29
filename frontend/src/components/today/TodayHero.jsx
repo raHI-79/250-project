@@ -28,17 +28,13 @@ export default function TodayHero({ name, meta, now = new Date(), className }) {
       <div
         aria-hidden="true"
         style={{ backgroundImage: `url(${HERO_BUILDING[0]})` }}
-        className="absolute inset-0 bg-cover bg-center opacity-20"
+        className="absolute inset-0 bg-cover bg-center"
       />
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-linear-to-br from-maroon-600 via-maroon-700 to-maroon-900 opacity-95 mix-blend-multiply"
+        className="absolute inset-0 bg-linear-to-t from-maroon-950/45 via-maroon-950/35 to-maroon-950/25"
       />
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-linear-to-t from-maroon-950/70 to-transparent"
-      />
-      <div className="relative">
+      <div className="relative text-shadow-hero">
         <div className="flex items-center gap-2.5">
           <LogoBadge size="sm" tone="light" />
           <p className="text-2xs font-bold tracking-[0.14em] text-white/80 uppercase">SUST CSE</p>

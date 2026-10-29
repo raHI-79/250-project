@@ -48,11 +48,11 @@ type TeacherStore interface {
 	ListTeacherFinalItems(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
 	ListTeacherExams(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
 	ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
-		now time.Time, windowOpen bool) (store.ScheduleItem, error)
+		now time.Time) (store.ScheduleItem, error)
 	CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64, reason string,
-		windowOpen bool) (store.ScheduleItem, error)
+		now time.Time) (store.ScheduleItem, error)
 	TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64, message string,
-		windowOpen bool) (store.ScheduleItem, error)
+		now time.Time) (store.ScheduleItem, error)
 	AcceptProposal(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error)
 	DeclineProposal(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error)
 	CreateTeacherExam(ctx context.Context, exam store.NewScheduleItem) (store.ScheduleItem, error)
@@ -73,14 +73,9 @@ func NewTeacher(cfg *config.Config, teachers TeacherStore, alerts BroadcastNotif
 }
 
 type nextDayResponse struct {
-	Date          string     `json:"date"`
-	Weekday       string     `json:"weekday"`
-	DecisionOpen  bool       `json:"decision_open"`
-	DecisionState string     `json:"decision_state"`
-	MinutesLeft   int        `json:"minutes_left"`
-	WindowStart   string     `json:"window_start"`
-	WindowEnd     string     `json:"window_end"`
-	Items         []itemBody `json:"items"`
+	Date    string     `json:"date"`
+	Weekday string     `json:"weekday"`
+	Items   []itemBody `json:"items"`
 }
 
 type confirmRequest struct {
@@ -167,14 +162,9 @@ func (t *Teacher) NextDay() http.HandlerFunc {
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, nextDayResponse{
-			Date:          day,
-			Weekday:       validate.DayName(int(tomorrow.Weekday())),
-			DecisionOpen:  t.cfg.DecisionOpen(now),
-			DecisionState: t.cfg.DecisionState(now),
-			MinutesLeft:   t.cfg.DecisionMinutesLeft(now),
-			WindowStart:   t.cfg.DecisionStart,
-			WindowEnd:     t.cfg.DecisionEnd,
-			Items:         newItemBodies(items),
+			Date:    day,
+			Weekday: validate.DayName(int(tomorrow.Weekday())),
+			Items:   newItemBodies(items),
 		})
 	}
 }
@@ -226,8 +216,7 @@ func (t *Teacher) Confirm() http.HandlerFunc {
 			return
 		}
 		now := t.cfg.Now()
-		item, err := t.teachers.ConfirmItem(r.Context(), itemID, teacher.ID, mode, room, link,
-			now, t.cfg.DecisionOpen(now))
+		item, err := t.teachers.ConfirmItem(r.Context(), itemID, teacher.ID, mode, room, link, now)
 		if scheduleError(w, err) {
 			return
 		}
@@ -257,8 +246,7 @@ func (t *Teacher) Cancel() http.HandlerFunc {
 			return
 		}
 		now := t.cfg.Now()
-		item, err := t.teachers.CancelItemAsTeacher(r.Context(), itemID, teacher.ID, reason,
-			t.cfg.DecisionOpen(now))
+		item, err := t.teachers.CancelItemAsTeacher(r.Context(), itemID, teacher.ID, reason, now)
 		if scheduleError(w, err) {
 			return
 		}
@@ -288,8 +276,7 @@ func (t *Teacher) RequestReschedule() http.HandlerFunc {
 			return
 		}
 		now := t.cfg.Now()
-		item, err := t.teachers.TeacherRequestReschedule(r.Context(), itemID, teacher.ID, message,
-			t.cfg.DecisionOpen(now))
+		item, err := t.teachers.TeacherRequestReschedule(r.Context(), itemID, teacher.ID, message, now)
 		if scheduleError(w, err) {
 			return
 		}

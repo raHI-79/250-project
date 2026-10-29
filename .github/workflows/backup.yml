@@ -10,13 +10,13 @@ jobs:
     name: Nightly dump
     runs-on: ubuntu-latest
     steps:
-      - name: Install the PostgreSQL 17 client
+      - name: Install the PostgreSQL 18 client
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
           sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
+          sudo apt-get install -y postgresql-client-18
       - name: Name the dump
         id: name
         run: echo "file=sust-cse-$(date -u +%Y-%m-%d).sql.gz" >> "$GITHUB_OUTPUT"

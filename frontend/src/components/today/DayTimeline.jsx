@@ -1,7 +1,7 @@
 import { Video } from 'lucide-react'
 import { StatusBadge } from '../ui'
 import cx from '../../lib/cx'
-import { STATUS_CANCELLED, isOnline, kindLabel, placeOf } from '../../lib/schedule'
+import { STATUS_CANCELLED, courseCode, courseLine, isOnline, kindLabel, placeOf } from '../../lib/schedule'
 import { formatClock } from '../../lib/time'
 
 export default function DayTimeline({ items, className }) {
@@ -34,9 +34,13 @@ export default function DayTimeline({ items, className }) {
                   cancelled && 'text-muted line-through',
                 )}
               >
-                {item.course_code}
-                {item.course_title ? ` · ${item.course_title}` : ''}
+                {courseLine(item)}
               </p>
+              {courseCode(item) && (
+                <p className="mt-0.5 truncate text-2xs font-medium text-muted">
+                  {courseCode(item)}
+                </p>
+              )}
               <p className="mt-0.5 truncate text-xs text-muted">
                 {[placeOf(item), item.teacher_name].filter(Boolean).join(' · ')}
               </p>

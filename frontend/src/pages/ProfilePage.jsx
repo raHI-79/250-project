@@ -4,6 +4,7 @@ import {
   BookOpen,
   Briefcase,
   Camera,
+  Info,
   KeyRound,
   LogOut,
   Mail,
@@ -16,12 +17,14 @@ import {
   Card,
   Input,
   ListRow,
+  PasswordInput,
   PageHeader,
   Segmented,
   Sheet,
   SkeletonCard,
   StatusBadge,
   Textarea,
+  useConfirm,
   useToast,
 } from '../components/ui'
 import CourseMultiSelect from '../components/forms/CourseMultiSelect'
@@ -35,12 +38,21 @@ import { loginFor } from '../lib/paths'
 import { THEME_CHOICES } from '../lib/theme'
 import { MAX_BIO, PHONE_MESSAGE, accountRoleLabel, isPhone, passwordError } from '../lib/account'
 import { formatDate } from '../lib/time'
+import { buildLabel } from '../lib/version'
 
 export default function ProfilePage() {
   const { role, updateUser, logout } = useAuth()
   const theme = useTheme()
   const navigate = useNavigate()
   const toast = useToast()
+  const confirm = useConfirm()
+  const health = useResource('/api/health')
+  const confirmDropCourse = (course) =>
+    confirm({
+      title: 'Remove this drop course?',
+      message: `${course.title || course.code} disappears from your today, routine and exams.`,
+      confirmLabel: 'Remove',
+    })
   const { data, loading, error, reload } = useResource('/api/profile')
   const [sheet, setSheet] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -235,6 +247,12 @@ export default function ProfilePage() {
               title="Change password"
               onClick={() => setSheet('password')}
             />
+            <ListRow
+              icon={Info}
+              title="About"
+              subtitle={buildLabel(health.data?.commit)}
+              chevron={false}
+            />
             <ListRow icon={LogOut} title="Sign out" danger onClick={logout} chevron={false} />
           </Card>
         </div>
@@ -267,7 +285,7 @@ export default function ProfilePage() {
             {saveError}
           </Alert>
         )}
-        <CourseMultiSelect value={courses} onChange={setCourses} />
+        <CourseMultiSelect value={courses} onChange={setCourses} onRemove={confirmDropCourse} />
         <Button
           loading={saving}
           onClick={() => save({ drop_course_ids: courses.map((course) => course.id) })}
@@ -366,26 +384,23 @@ export default function ProfilePage() {
       <Sheet open={sheet === 'password'} onClose={close} title="Change password">
         <form onSubmit={changePassword} className="flex flex-col gap-4">
           {passwordProblem && <Alert tone="error">{passwordProblem}</Alert>}
-          <Input
+          <PasswordInput
             label="Current password"
-            type="password"
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
             autoComplete="current-password"
             required
           />
-          <Input
+          <PasswordInput
             label="New password"
-            type="password"
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
             autoComplete="new-password"
             hint="At least 8 characters"
             required
           />
-          <Input
+          <PasswordInput
             label="Confirm new password"
-            type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             autoComplete="new-password"

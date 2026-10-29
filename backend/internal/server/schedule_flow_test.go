@@ -163,9 +163,6 @@ func TestScheduleEngineFullDay(t *testing.T) {
 	if got := field(t, nextDay, "date"); got != tomorrow {
 		t.Errorf("next day date = %q, want %q", got, tomorrow)
 	}
-	if !boolean(t, nextDay, "decision_open") {
-		t.Fatal("the decision window is closed in the test configuration")
-	}
 	items := listItems(t, nextDay)
 	if len(items) != 2 {
 		t.Fatalf("the teacher sees %d items, want 2 (body = %q)", len(items), nextDay.Body.String())
@@ -402,8 +399,7 @@ func TestScheduleEngineDecisionDeadline(t *testing.T) {
 	seedEngine(t, ctx, pool, router)
 	userStore := store.New(pool)
 	closedConfig := flowConfig(t)
-	closedConfig.DecisionFrom = 17 * 60
-	closedConfig.DecisionTo = 23 * 60
+	closedConfig.ReminderTimes = []string{"16:00", "21:00"}
 	scheduler := jobs.NewScheduler(closedConfig, userStore, notify.New(userStore))
 	now := closedConfig.Now()
 	if _, err := scheduler.Generate(ctx, now); err != nil {
@@ -430,7 +426,7 @@ func TestScheduleEngineDecisionDeadline(t *testing.T) {
 	}
 	early := time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, now.Location())
 	if count, err := scheduler.CloseDecisions(ctx, early); err != nil || count != 0 {
-		t.Errorf("CloseDecisions() inside the window closed %d items (err = %v), want none", count, err)
+		t.Errorf("CloseDecisions() before the last slot closed %d items (err = %v), want none", count, err)
 	}
 	tomorrow := validate.DateString(now.AddDate(0, 0, 1))
 	crToken := loginToken(t, router, "2023331500")
@@ -456,7 +452,7 @@ func TestScheduleEngineDecisionDeadline(t *testing.T) {
 	}
 }
 
-func TestScheduleEngineClosedWindowRefusesTheFirstDecision(t *testing.T) {
+func TestScheduleEngineLetsTheTeacherDecideAtAnyHour(t *testing.T) {
 	ctx, pool, router := newFlowRouter(t)
 	seedEngine(t, ctx, pool, router)
 	generateItems(t, ctx, pool)
@@ -473,10 +469,13 @@ func TestScheduleEngineClosedWindowRefusesTheFirstDecision(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("the teacher has no generated items")
 	}
-	_, err = userStore.ConfirmItem(ctx, items[0].ID, teacher.ID, store.ModeRoom, "1003", "",
-		flowConfig(t).Now(), false)
-	if err != store.ErrDecisionClosed {
-		t.Errorf("ConfirmItem() outside the window error = %v, want ErrDecisionClosed", err)
+	confirmed, err := userStore.ConfirmItem(ctx, items[0].ID, teacher.ID, store.ModeRoom, "1003", "",
+		flowConfig(t).Now())
+	if err != nil {
+		t.Fatalf("ConfirmItem() returned an unexpected error: %v", err)
+	}
+	if confirmed.Status != store.ItemConfirmed {
+		t.Errorf("status = %q, want %q", confirmed.Status, store.ItemConfirmed)
 	}
 	_ = router
 }

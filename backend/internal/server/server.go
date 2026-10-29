@@ -8,6 +8,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/turnstile"
 	"github.com/raHI-79/250-project/backend/internal/upload"
 	"github.com/raHI-79/250-project/backend/internal/web"
 	"net/http"
@@ -51,6 +52,9 @@ type Dependencies struct {
 	Chats     handler.ConversationStore
 	Shared    *upload.Attachments
 	Votes     handler.PollStore
+	Badges    handler.BadgeStore
+	Passes    handler.HumanPassIssuer
+	Humans    turnstile.Checker
 }
 
 type RouteGroup struct {
@@ -87,27 +91,41 @@ func NewRouter(deps Dependencies) http.Handler {
 		rateLimit = middleware.DefaultRateLimit
 	}
 	limiter := middleware.NewRateLimiter(rateLimit, middleware.DefaultRateWindow)
+	humans := deps.Humans
+	if humans == nil && deps.Config.HumanCheckEnabled() {
+		humans = turnstile.New(deps.Config.TurnstileSecretKey, "")
+	}
+	humanOnly := handler.RequireHuman(deps.Config, deps.Passes)
 	throttled := RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{limiter.Middleware}}
+	guarded := RouteGroup{
+		mux:        mux,
+		middleware: []func(http.Handler) http.Handler{limiter.Middleware, humanOnly},
+	}
 	authenticated := AuthenticatedGroup(mux, deps)
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
 	mux.HandleFunc("GET /api/auth/config", authHandler.Config())
-	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
-	mux.HandleFunc("POST /api/auth/register", authHandler.Register())
+	throttled.Handle("POST /api/human/verify", handler.NewHuman(deps.Config, deps.Passes, humans).Verify())
+	guarded.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
+	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{humanOnly}}.
+		Handle("POST /api/auth/register", authHandler.Register())
 	throttled.Handle("GET /api/auth/drop-course-options", authHandler.DropCourseOptions())
 	throttled.Handle("GET /api/auth/sections", authHandler.Sections())
-	throttled.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())
-	throttled.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
-	throttled.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())
+	guarded.Handle("POST /api/auth/google/verify-email", authHandler.GoogleVerifyEmail())
+	guarded.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
+	guarded.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())
 	mux.HandleFunc("GET /api/auth/invite", authHandler.Invite())
-	throttled.Handle("GET /api/auth/user-id-available", authHandler.UserIDAvailable())
-	throttled.Handle("POST /api/auth/activate", authHandler.Activate())
-	throttled.Handle("POST /api/auth/login", authHandler.Login())
-	throttled.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
-	throttled.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
-	throttled.Handle("POST /api/auth/verify-reset-code", authHandler.VerifyResetCode())
-	mux.HandleFunc("POST /api/auth/reset-password", authHandler.ResetPassword())
+	guarded.Handle("GET /api/auth/user-id-available", authHandler.UserIDAvailable())
+	guarded.Handle("POST /api/auth/activate", authHandler.Activate())
+	guarded.Handle("POST /api/auth/login", authHandler.Login())
+	guarded.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
+	guarded.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
+	guarded.Handle("POST /api/auth/verify-reset-code", authHandler.VerifyResetCode())
+	guarded.Handle("POST /api/auth/reset-password", authHandler.ResetPassword())
 	authenticated.Handle("POST /api/auth/logout", authHandler.Logout())
 	authenticated.Handle("GET /api/me", handler.Me())
+	badges := handler.NewBadges(deps.Config, deps.Badges)
+	authenticated.Handle("GET /api/me/badges", badges.List())
+	authenticated.Handle("POST /api/me/badges/{section}/seen", badges.Seen())
 	registerProfileRoutes(authenticated, handler.NewProfile(deps.Config, deps.Accounts, photos))
 	admin := handler.NewAdmin(deps.Config, deps.People, deps.Notifier, mail, photos)
 	periods := handler.NewPeriods(deps.Periods)
@@ -265,14 +283,18 @@ func registerNoticeRoutes(mux *http.ServeMux, deps Dependencies, notices *handle
 	admin := AdminGroup(mux, deps)
 	admin.Handle("POST /api/admin/notices", notices.AdminCreate())
 	admin.Handle("GET /api/admin/notices", notices.AdminList())
+	admin.Handle("PATCH /api/admin/notices/{id}", notices.AdminEdit())
 	admin.Handle("DELETE /api/admin/notices/{id}", notices.AdminDelete())
 	cr := CRGroup(mux, deps)
 	teacher := TeacherGroup(mux, deps)
 	teacher.Handle("POST /api/teacher/notices", notices.TeacherCreate())
 	teacher.Handle("GET /api/teacher/notices", notices.TeacherList())
+	teacher.Handle("PATCH /api/teacher/notices/{id}", notices.TeacherEdit())
 	teacher.Handle("DELETE /api/teacher/notices/{id}", notices.TeacherDelete())
 	cr.Handle("POST /api/cr/notices", notices.CRCreate())
 	cr.Handle("GET /api/cr/notices", notices.CRList())
+	cr.Handle("PATCH /api/cr/notices/{id}", notices.CREdit())
+	cr.Handle("DELETE /api/cr/notices/{id}", notices.CRDelete())
 }
 
 func registerDriveLinkRoutes(cr, students RouteGroup, drives *handler.DriveLink) {
@@ -307,6 +329,9 @@ func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Po
 	cr := CRGroup(mux, deps)
 	cr.Handle("POST /api/cr/polls", polls.CRCreate())
 	cr.Handle("POST /api/cr/polls/{id}/close", polls.CRClose())
+	cr.Handle("POST /api/cr/polls/{id}/reopen", polls.CRReopen())
+	cr.Handle("PATCH /api/cr/polls/{id}", polls.CREdit())
+	cr.Handle("DELETE /api/cr/polls/{id}", polls.CRDelete())
 	cr.Handle("GET /api/cr/polls", polls.CRList())
 	student := StudentGroup(mux, deps)
 	student.Handle("GET /api/students/polls", polls.StudentList())
@@ -346,6 +371,16 @@ func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.P
 	group.Handle("POST /api/push/subscribe", pushes.Subscribe())
 	group.Handle("DELETE /api/push/subscribe", pushes.Unsubscribe())
 	group.Handle("POST /api/push/test", pushes.Test())
+	reports := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
+	limited := RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			reports.Middleware,
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
+		},
+	}
+	limited.Handle("POST /api/push/client-log", pushes.ClientLog())
 }
 
 func registerNotificationRoutes(group RouteGroup, notifications *handler.Notifications) {

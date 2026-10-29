@@ -22,25 +22,38 @@ import {
   Vote,
 } from 'lucide-react'
 import { paths } from './paths'
+import {
+  BADGE_COURSES,
+  BADGE_EXAMS,
+  BADGE_MATERIALS,
+  BADGE_NOTICES,
+  BADGE_POLLS,
+  BADGE_ROUTINE,
+} from './badges'
 
 export const MESSAGES_BADGE = 'messages'
 
 const overview = [
   { label: 'Today', to: paths.student.today, icon: Sunrise },
-  { label: 'Upcoming routine', to: paths.student.upcomingRoutine, icon: CalendarClock },
-  { label: 'Exams', to: paths.student.exams, icon: ClipboardList },
+  {
+    label: 'Upcoming routine',
+    to: paths.student.upcomingRoutine,
+    icon: CalendarClock,
+    badge: BADGE_ROUTINE,
+  },
+  { label: 'Exams', to: paths.student.exams, icon: ClipboardList, badge: BADGE_EXAMS },
   { label: 'Weekly routine', to: paths.student.fixedRoutine, icon: BookOpen },
-  { label: 'Courses', to: paths.student.courses, icon: Library },
+  { label: 'Courses', to: paths.student.courses, icon: Library, badge: BADGE_COURSES },
 ]
 
 const communication = [
-  { label: 'Notices', to: paths.student.notices, icon: Megaphone },
+  { label: 'Notices', to: paths.student.notices, icon: Megaphone, badge: BADGE_NOTICES },
   { label: 'Messages', to: paths.student.messages, icon: Mail, badge: MESSAGES_BADGE },
 ]
 
 const community = [
-  { label: 'Polls', to: paths.student.polls, icon: Vote },
-  { label: 'Materials', to: paths.student.materials, icon: FolderOpen },
+  { label: 'Polls', to: paths.student.polls, icon: Vote, badge: BADGE_POLLS },
+  { label: 'Materials', to: paths.student.materials, icon: FolderOpen, badge: BADGE_MATERIALS },
   { label: 'Directory', to: paths.student.students, icon: Users },
   { label: 'Teachers', to: paths.student.teachers, icon: GraduationCap },
 ]

@@ -20,7 +20,7 @@ const (
 	StatusScheduled    = "scheduled"
 	StatusCancelled    = "cancelled"
 	GroupDropCourses   = "drop_courses"
-	LabelDropCourses   = "My drop courses"
+	LabelDropCourses   = "Drop courses"
 	dateLabelLayout    = "02.01.06"
 	latestNoticeCount  = 3
 )
@@ -29,7 +29,8 @@ type StudentStore interface {
 	GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error)
 	ListStudentDropCourses(ctx context.Context, studentID int64) ([]store.Course, error)
 	ListPublishedDay(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error)
-	ListStudentExams(ctx context.Context, batch, section string, now time.Time) ([]store.StudentExam, error)
+	ListStudentExams(ctx context.Context, batch, section string, now time.Time,
+		dropCourseCodes []string) ([]store.StudentExam, error)
 	ListFilteredRoutines(ctx context.Context, filter store.RoutineFilter) ([]store.RoutineRow, error)
 	RunningSemester(ctx context.Context, batch string) (string, error)
 	SearchOtherBatchDropCourses(ctx context.Context, batch, search string) ([]store.Course, error)

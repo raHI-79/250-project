@@ -1,12 +1,15 @@
 import { useEffect } from 'react'
-import api from './api'
+import api, { hasSession } from './api'
+import { PushKeyError, sameApplicationKey, urlBase64ToUint8Array } from './pushkey'
 import { readRaw, remove, writeRaw } from './storage'
 
 const STAGE_KEY = 'sustcse.push.ask'
 
-const STAGE_SIGN_IN = 'sign-in'
+const STAGE_ASKED = 'asked'
 
-const STAGE_DONE = 'done'
+const WORKER_URL = '/sw.js'
+
+const WORKER_SCOPE = '/'
 
 export const PUSH_ROLES = ['student', 'cr', 'teacher']
 
@@ -24,28 +27,35 @@ export const pushSupported = () =>
 
 export const pushAllowed = (role) => PUSH_ROLES.includes(role) && pushSupported()
 
-const base64ToBytes = (value) => {
-  const padded = value.padEnd(value.length + ((4 - (value.length % 4)) % 4), '=')
-  const raw = window.atob(padded.replace(/-/g, '+').replace(/_/g, '/'))
-  const bytes = new Uint8Array(raw.length)
-  for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index)
-  return bytes
+const report = (stage, error) => {
+  if (!hasSession()) return
+  api
+    .post('/api/push/client-log', {
+      stage,
+      name: error?.name || 'Error',
+      message: error?.message || String(error || ''),
+    })
+    .catch(() => null)
 }
 
-const sameKey = (subscription, key) => {
-  const current = subscription.options?.applicationServerKey
-  if (!current) return false
-  const bytes = new Uint8Array(current)
-  if (bytes.length !== key.length) return false
-  return bytes.every((byte, index) => byte === key[index])
-}
+const registerWorker = () => navigator.serviceWorker.register(WORKER_URL, { scope: WORKER_SCOPE })
 
-const registerWorker = () => navigator.serviceWorker.register('/sw.js', { scope: '/' })
+export const registerPushWorker = async () => {
+  if (!pushSupported()) return null
+  try {
+    return await registerWorker()
+  } catch (error) {
+    report('register', error)
+    return null
+  }
+}
 
 const serverKey = async () => {
-  const config = await api.get('/api/push/public-key').catch(() => null)
-  if (!config?.enabled || !config?.public_key) return null
-  return config.public_key
+  const config = await api.get('/api/push/public-key', { auth: false })
+  if (!config?.enabled) {
+    throw new PushKeyError('Notifications are switched off on the server.')
+  }
+  return urlBase64ToUint8Array(config.public_key)
 }
 
 const postSubscription = (subscription) => {
@@ -57,19 +67,12 @@ const postSubscription = (subscription) => {
   })
 }
 
-export const registerPushWorker = async () => {
-  if (!pushSupported()) return null
-  return registerWorker().catch(() => null)
-}
-
-export const syncPushSubscription = async () => {
-  if (!pushSupported() || Notification.permission !== PERMISSION_GRANTED) return false
-  const publicKey = await serverKey()
-  if (!publicKey) return false
-  const registration = await registerWorker()
-  const key = base64ToBytes(publicKey)
+const subscribeNow = async () => {
+  const key = await serverKey()
+  const registration = (await registerWorker()) || (await navigator.serviceWorker.ready)
+  await navigator.serviceWorker.ready
   let subscription = await registration.pushManager.getSubscription()
-  if (subscription && !sameKey(subscription, key)) {
+  if (subscription && !sameApplicationKey(subscription, key)) {
     await subscription.unsubscribe().catch(() => null)
     subscription = null
   }
@@ -83,30 +86,53 @@ export const syncPushSubscription = async () => {
   return true
 }
 
+let running = null
+
+export const syncPushSubscription = async () => {
+  if (!pushSupported() || !hasSession()) return false
+  if (Notification.permission !== PERMISSION_GRANTED) return false
+  if (!running) {
+    running = subscribeNow()
+      .catch((error) => {
+        report('subscribe', error)
+        return false
+      })
+      .finally(() => {
+        running = null
+      })
+  }
+  return running
+}
+
 export const askPushPermission = async (role) => {
   if (!pushAllowed(role)) return PERMISSION_DENIED
-  if (Notification.permission !== PERMISSION_DEFAULT) {
-    writeRaw(STAGE_KEY, STAGE_DONE)
-    await syncPushSubscription().catch(() => null)
-    return Notification.permission
+  if (Notification.permission === PERMISSION_GRANTED) {
+    writeRaw(STAGE_KEY, STAGE_ASKED)
+    await syncPushSubscription()
+    return PERMISSION_GRANTED
+  }
+  if (Notification.permission === PERMISSION_DENIED) {
+    writeRaw(STAGE_KEY, STAGE_ASKED)
+    return PERMISSION_DENIED
   }
   let permission = PERMISSION_DEFAULT
   try {
     permission = await Notification.requestPermission()
-  } catch {
+  } catch (error) {
+    report('permission', error)
     permission = Notification.permission
   }
-  writeRaw(STAGE_KEY, permission === PERMISSION_DEFAULT ? STAGE_SIGN_IN : STAGE_DONE)
-  if (permission === PERMISSION_GRANTED) await syncPushSubscription().catch(() => null)
+  if (permission !== PERMISSION_DEFAULT) writeRaw(STAGE_KEY, STAGE_ASKED)
+  if (permission === PERMISSION_GRANTED) await syncPushSubscription()
   return permission
 }
 
 export const retryAskPending = (role) =>
   pushAllowed(role) &&
   Notification.permission === PERMISSION_DEFAULT &&
-  readRaw(STAGE_KEY) === STAGE_SIGN_IN
+  readRaw(STAGE_KEY) !== STAGE_ASKED
 
-export const closePushAsk = () => writeRaw(STAGE_KEY, STAGE_DONE)
+export const closePushAsk = () => writeRaw(STAGE_KEY, STAGE_ASKED)
 
 export const resetPushAsk = () => remove(STAGE_KEY)
 
@@ -115,31 +141,37 @@ export const usePushSync = (role) => {
     if (!pushSupported()) return undefined
     let live = true
     const sync = () => {
-      if (!live || document.visibilityState !== 'visible') return
+      if (!live) return
       registerPushWorker().then(() => {
-        if (PUSH_ROLES.includes(role)) syncPushSubscription().catch(() => null)
+        if (!live || !PUSH_ROLES.includes(role)) return
+        syncPushSubscription()
       })
     }
     sync()
-    document.addEventListener('visibilitychange', sync)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') sync()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
     return () => {
       live = false
-      document.removeEventListener('visibilitychange', sync)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
     }
   }, [role])
 }
 
 export const dropPushOnSignOut = async () => {
   if (!pushSupported()) return
+  await (running || Promise.resolve())
   resetPushAsk()
   try {
-    const registration = await navigator.serviceWorker.getRegistration('/sw.js')
+    const registration = await navigator.serviceWorker.getRegistration(WORKER_SCOPE)
     const subscription = await registration?.pushManager.getSubscription()
     if (!subscription) return
     await api
       .delete('/api/push/subscribe', { body: { endpoint: subscription.endpoint } })
       .catch(() => null)
-    await subscription.unsubscribe()
   } catch {
     return
   }

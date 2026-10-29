@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CalendarClock,
   CalendarDays,
   ClipboardList,
-  Clock,
   Link2,
   Megaphone,
   MessageCircle,
@@ -35,18 +34,14 @@ import api from '../../lib/api'
 import { useHighlight, useNow, useQueryTab, useResource } from '../../lib/hooks'
 import paths, { TEACHER_TAB_FINAL, TEACHER_TAB_NEXT_DAY } from '../../lib/paths'
 import {
-  STATUS_AWAITING,
   STATUS_CR_ASK,
-  STATUS_NO_RESPONSE,
-  countdownText,
   courseLine,
   isOnline,
   needsLink,
   placeOf,
-  secondsUntilClock,
   sectionShort,
 } from '../../lib/schedule'
-import { formatClock, formatDate, formatTimeRange, today as todayDate } from '../../lib/time'
+import { formatDate, formatTimeRange, today as todayDate } from '../../lib/time'
 import cx from '../../lib/cx'
 
 const TABS = [
@@ -55,42 +50,6 @@ const TABS = [
 ]
 
 const TAB_VALUES = TABS.map((entry) => entry.value)
-
-const lockedHint = 'The decision window is closed for a first decision on this class.'
-
-function WindowLine({ state, start, end }) {
-  const [seconds, setSeconds] = useState(() => secondsUntilClock(end))
-  useEffect(() => {
-    setSeconds(secondsUntilClock(end))
-    const timer = window.setInterval(() => setSeconds(secondsUntilClock(end)), 1000)
-    return () => window.clearInterval(timer)
-  }, [end])
-  if (state === 'before') {
-    return (
-      <Alert tone="info">
-        <span className="inline-flex items-center gap-1.5">
-          <Clock size={14} />
-          Opens at {formatClock(start)} for tomorrow&apos;s classes
-        </span>
-      </Alert>
-    )
-  }
-  if (state === 'closed') {
-    return (
-      <Alert tone="warning">
-        Closed for tomorrow — undecided classes are marked No response
-      </Alert>
-    )
-  }
-  return (
-    <Alert tone="info">
-      <span className="inline-flex items-center gap-1.5">
-        <Clock size={14} />
-        Open until {formatClock(end)} · {countdownText(seconds)}
-      </span>
-    </Alert>
-  )
-}
 
 export default function TeacherUpcomingPage() {
   const { user } = useAuth()
@@ -157,9 +116,6 @@ export default function TeacherUpcomingPage() {
       accept ? 'The new slot is in place' : 'The original slot stays',
     )
   const items = nextDay.data?.items || []
-  const windowOpen = Boolean(nextDay.data?.decision_open)
-  const locked = (item) =>
-    !windowOpen && (item.status === STATUS_AWAITING || item.status === STATUS_NO_RESPONSE)
   const finalItems = final.data?.items || []
   const requests = items.filter((item) => item.status === STATUS_CR_ASK)
   const decisions = items.filter((item) => item.status !== STATUS_CR_ASK)
@@ -171,7 +127,6 @@ export default function TeacherUpcomingPage() {
     { label: 'Weekly routine', icon: CalendarDays, to: paths.teacher.fixedRoutine() },
   ]
   const cardProps = {
-    lockedHint,
     onConfirm: setConfirming,
     onCancel: setCancelling,
     onAsk: setAsking,
@@ -228,7 +183,6 @@ export default function TeacherUpcomingPage() {
                 <TeacherDecisionCard
                   item={item}
                   busy={busy === item.id}
-                  locked={false}
                   highlighted={nextHighlight.highlighted(item.id)}
                   {...cardProps}
                 />
@@ -248,12 +202,7 @@ export default function TeacherUpcomingPage() {
               <Alert tone="error">{nextDay.error}</Alert>
             ) : (
               <>
-                <WindowLine
-                  state={nextDay.data.decision_state}
-                  start={nextDay.data.window_start}
-                  end={nextDay.data.window_end}
-                />
-                <p className="mt-4 mb-3 text-sm font-semibold text-ink-soft">
+                <p className="mb-3 text-sm font-semibold text-ink-soft">
                   {formatDate(nextDay.data.date)} · {nextDay.data.weekday}
                 </p>
                 {items.length === 0 ? (
@@ -279,7 +228,6 @@ export default function TeacherUpcomingPage() {
                         <TeacherDecisionCard
                           item={item}
                           busy={busy === item.id}
-                          locked={locked(item)}
                           highlighted={nextHighlight.highlighted(item.id)}
                           {...cardProps}
                         />

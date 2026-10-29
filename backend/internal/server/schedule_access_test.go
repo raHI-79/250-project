@@ -37,17 +37,17 @@ func (emptyTeacherStore) ListTeacherExams(ctx context.Context, teacherID int64,
 }
 
 func (emptyTeacherStore) ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
-	now time.Time, windowOpen bool) (store.ScheduleItem, error) {
+	now time.Time) (store.ScheduleItem, error) {
 	return store.ScheduleItem{}, store.ErrItemNotFound
 }
 
 func (emptyTeacherStore) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64,
-	reason string, windowOpen bool) (store.ScheduleItem, error) {
+	reason string, now time.Time) (store.ScheduleItem, error) {
 	return store.ScheduleItem{}, store.ErrItemNotFound
 }
 
 func (emptyTeacherStore) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64,
-	message string, windowOpen bool) (store.ScheduleItem, error) {
+	message string, now time.Time) (store.ScheduleItem, error) {
 	return store.ScheduleItem{}, store.ErrItemNotFound
 }
 
@@ -98,7 +98,7 @@ func (emptyStudentStore) ListPublishedDay(ctx context.Context, batch, date strin
 }
 
 func (emptyStudentStore) ListStudentExams(ctx context.Context, batch, section string,
-	now time.Time) ([]store.StudentExam, error) {
+	now time.Time, dropCourseCodes []string) ([]store.StudentExam, error) {
 	return nil, nil
 }
 
@@ -143,6 +143,11 @@ func (emptyStudentStore) CountUnreadMessages(ctx context.Context, viewer store.M
 type silentAlerts struct{}
 
 func (silentAlerts) NotifyUser(ctx context.Context, userID int64, kind, title, body string,
+	link store.NotificationLink) error {
+	return nil
+}
+
+func (silentAlerts) PushUser(ctx context.Context, userID int64, kind, title, body string,
 	link store.NotificationLink) error {
 	return nil
 }

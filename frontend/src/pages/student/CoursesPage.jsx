@@ -14,6 +14,7 @@ import { useAuth } from '../../context/auth'
 import { useResource } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
 import { semesterLabel } from '../../lib/options'
+import { BADGE_COURSES, useSectionSeen } from '../../lib/badges'
 
 const batchOptions = (batches, own) => {
   const all = batches || []
@@ -33,6 +34,7 @@ const weeklyLine = (course) => {
 }
 
 export default function CoursesPage() {
+  useSectionSeen(BADGE_COURSES)
   const { user } = useAuth()
   const [batch, setBatch] = useState(user?.batch || '')
   const batches = useResource('/api/lookups/batches')

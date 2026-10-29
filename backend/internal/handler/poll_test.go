@@ -13,19 +13,26 @@ import (
 )
 
 type fakePollStore struct {
-	profile      store.StudentProfile
-	created      []store.NewPoll
-	polls        []store.PollRow
-	closedID     int64
-	closedBy     int64
-	closeErr     error
-	voted        []int64
-	voteErr      error
-	askedViewer  int64
-	askedCreator int64
-	askedBatch   string
-	askedSection string
-	err          error
+	profile        store.StudentProfile
+	created        []store.NewPoll
+	polls          []store.PollRow
+	reopenedID     int64
+	deletedID      int64
+	editedID       int64
+	editedQuestion string
+	reopenErr      error
+	deleteErr      error
+	editErr        error
+	closedID       int64
+	closedBy       int64
+	closeErr       error
+	voted          []int64
+	voteErr        error
+	askedViewer    int64
+	askedCreator   int64
+	askedBatch     string
+	askedSection   string
+	err            error
 }
 
 func (f *fakePollStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {
@@ -57,6 +64,22 @@ func (f *fakePollStore) CreatePoll(ctx context.Context, poll store.NewPoll) (sto
 func (f *fakePollStore) ClosePoll(ctx context.Context, pollID, createdBy int64, now time.Time) error {
 	f.closedID, f.closedBy = pollID, createdBy
 	return f.closeErr
+}
+
+func (f *fakePollStore) ReopenPoll(ctx context.Context, pollID, createdBy int64) error {
+	f.reopenedID, f.closedBy = pollID, createdBy
+	return f.reopenErr
+}
+
+func (f *fakePollStore) DeletePoll(ctx context.Context, pollID, createdBy int64) error {
+	f.deletedID, f.closedBy = pollID, createdBy
+	return f.deleteErr
+}
+
+func (f *fakePollStore) EditPoll(ctx context.Context, pollID, createdBy int64, question string,
+	maxChoices int, options []string) error {
+	f.editedID, f.editedQuestion = pollID, question
+	return f.editErr
 }
 
 func (f *fakePollStore) ListCreatorPolls(ctx context.Context, viewerUserID, createdBy int64) ([]store.PollRow, error) {
@@ -475,6 +498,75 @@ func TestPollResponsesHideWhoVoted(t *testing.T) {
 					if key != "id" && key != "text" && key != "votes" {
 						t.Errorf("an option carries %q, want only a count", key)
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestPollEditRefusesAPollWithVotes(t *testing.T) {
+	silenceLog(t)
+	polls := &fakePollStore{profile: crPollProfile(true), editErr: store.ErrPollHasVotes}
+	handler := newPollHandler(t, polls, &recordingAlerts{})
+	body := `{"question":"Which day?","options":["Sunday","Monday"],"max_choices":1}`
+	request := jsonRequest(t, http.MethodPatch, "/api/cr/polls/5", body, noticeCRID, auth.RoleCR)
+	request.SetPathValue("id", "5")
+	rec := serve(handler.CREdit(), request)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if got := errorMessage(t, rec); got != MessagePollHasVotes {
+		t.Errorf("error = %q, want %q", got, MessagePollHasVotes)
+	}
+}
+
+func TestPollEditSavesTheNewQuestion(t *testing.T) {
+	silenceLog(t)
+	polls := &fakePollStore{profile: crPollProfile(true)}
+	handler := newPollHandler(t, polls, &recordingAlerts{})
+	body := `{"question":"Which day suits you?","options":["Sunday","Monday"],"max_choices":1}`
+	request := jsonRequest(t, http.MethodPatch, "/api/cr/polls/5", body, noticeCRID, auth.RoleCR)
+	request.SetPathValue("id", "5")
+	rec := serve(handler.CREdit(), request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if polls.editedID != 5 || polls.editedQuestion != "Which day suits you?" {
+		t.Errorf("edited = %d %q, want poll 5 with the new question", polls.editedID, polls.editedQuestion)
+	}
+}
+
+func TestPollReopenAndDelete(t *testing.T) {
+	silenceLog(t)
+	tests := []struct {
+		name       string
+		call       func(*Poll) http.HandlerFunc
+		storeErr   error
+		wantStatus int
+		wantError  string
+	}{
+		{name: "reopen", call: func(p *Poll) http.HandlerFunc { return p.CRReopen() },
+			wantStatus: http.StatusOK},
+		{name: "reopen an open poll", call: func(p *Poll) http.HandlerFunc { return p.CRReopen() },
+			storeErr: store.ErrPollOpen, wantStatus: http.StatusConflict, wantError: MessagePollOpen},
+		{name: "delete", call: func(p *Poll) http.HandlerFunc { return p.CRDelete() },
+			wantStatus: http.StatusOK},
+		{name: "delete another poll", call: func(p *Poll) http.HandlerFunc { return p.CRDelete() },
+			storeErr: store.ErrNotFound, wantStatus: http.StatusNotFound, wantError: MessagePollUnknown},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			polls := &fakePollStore{profile: crPollProfile(true), reopenErr: test.storeErr, deleteErr: test.storeErr}
+			handler := newPollHandler(t, polls, &recordingAlerts{})
+			request := jsonRequest(t, http.MethodPost, "/api/cr/polls/5", "", noticeCRID, auth.RoleCR)
+			request.SetPathValue("id", "5")
+			rec := serve(test.call(handler), request)
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantError != "" {
+				if got := errorMessage(t, rec); got != test.wantError {
+					t.Errorf("error = %q, want %q", got, test.wantError)
 				}
 			}
 		})

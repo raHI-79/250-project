@@ -18,8 +18,8 @@ import api from '../../../lib/api'
 import { usePeriods } from '../../../lib/hooks'
 import {
   MODE_ROOM,
-  ORIGIN_TEACHER_EXAM,
   courseLine,
+  ORIGIN_TEACHER_EXAM,
   periodRangeError,
   placeOf,
   sectionShort,
@@ -27,6 +27,7 @@ import {
 } from '../../../lib/schedule'
 import { formatDate, formatTimeRange } from '../../../lib/time'
 import cx from '../../../lib/cx'
+import CourseName from '../../../components/schedule/CourseName'
 
 export default function FinalTab({ final, highlight, onPublished }) {
   const toast = useToast()
@@ -189,7 +190,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
                         <span className="font-medium tabular-nums text-brand-600">
                           {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                         </span>
-                        <span className="font-medium text-ink">{courseLine(item)}</span>
+                        <CourseName item={item} className="font-medium text-ink" />
                         <span className="text-muted">
                           {sectionShort(item.section)}
                           {placeOf(item) ? ` · ${placeOf(item)}` : ''}

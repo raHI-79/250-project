@@ -7,18 +7,13 @@ import CampusBackdrop from './CampusBackdrop'
 
 const TONES = {
   brand: {
-    page: 'bg-paper',
-    bar: 'bg-night text-white/75',
-    barName: 'text-white',
-    panel: 'bg-surface',
-    overlay: 'bg-linear-to-br from-maroon-950/90 via-maroon-900/70 to-maroon-700/35',
+    overlay:
+      'bg-linear-to-b from-maroon-950/45 via-maroon-900/25 to-maroon-950/55',
+    card: 'glass-auth',
   },
   dark: {
-    page: 'bg-night',
-    bar: 'bg-black/70 text-white/60',
-    barName: 'text-white/90',
-    panel: 'bg-night',
-    overlay: 'bg-linear-to-br from-black/92 via-maroon-950/88 to-maroon-900/70',
+    overlay: 'bg-linear-to-b from-black/70 via-maroon-950/55 to-black/75',
+    card: 'glass-auth',
   },
 }
 
@@ -34,48 +29,28 @@ export default function AuthScreen({
 }) {
   const skin = TONES[tone] || TONES.brand
   return (
-    <div className={cx('grid min-h-dvh lg:grid-cols-[1.1fr_1fr]', skin.page)}>
-      <aside className="relative hidden overflow-hidden lg:block">
-        <CampusBackdrop
-          images={images}
-          rotateAfter={rotateAfter}
-          overlay={overlay || skin.overlay}
-        />
-        <div className="relative flex h-full flex-col justify-between p-8 xl:p-10">
-          <Link to={paths.root()} className="flex items-center gap-3">
-            <LogoBadge size="md" tone="light" />
-            <span>
-              <span className="font-display block text-sm font-semibold text-white">
-                {UNIVERSITY}
-              </span>
-              <span className="block text-xs text-white/65">{DEPARTMENT}</span>
+    <div className="relative flex min-h-dvh flex-col">
+      <CampusBackdrop
+        images={images}
+        rotateAfter={rotateAfter}
+        overlay={overlay || skin.overlay}
+        className="fixed"
+      />
+      <div className="relative flex min-h-dvh flex-col px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:px-6">
+        <Link to={paths.root()} className="flex items-center gap-2.5 self-start">
+          <LogoBadge size="sm" tone="light" />
+          <span className="min-w-0">
+            <span className="font-display block truncate text-sm font-semibold text-white">
+              {UNIVERSITY}
             </span>
-          </Link>
-          <div>
-            <p className="text-xs font-semibold tracking-[0.14em] text-sand uppercase">
-              Class and exam coordination
-            </p>
-            <p className="font-display mt-3 max-w-md text-2xl leading-snug font-semibold text-white xl:text-3xl">
-              {note || 'One record for the routine, the reschedules, the exams and the notices.'}
-            </p>
-          </div>
-          <p className="text-xs text-white/55">Kumargaon, Sylhet 3114, Bangladesh</p>
-        </div>
-      </aside>
-      <main className={cx('flex min-h-dvh flex-col', skin.panel)}>
-        <div
-          className={cx(
-            'flex items-center gap-3 px-4 pt-[max(0.625rem,env(safe-area-inset-top,0px))] pb-2.5 text-xs sm:px-6 lg:hidden',
-            skin.bar,
-          )}
-        >
-          <span className={cx('font-semibold', skin.barName)}>SUST CSE</span>
-          <span className="truncate">{DEPARTMENT}</span>
-        </div>
-        <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-8">
+            <span className="block truncate text-2xs text-white/70">{DEPARTMENT}</span>
+          </span>
+        </Link>
+        <div className="flex flex-1 items-center justify-center py-6">
           <div
             className={cx(
-              'animate-fade-in-up w-full',
+              'animate-fade-in-up w-full rounded-[1.5rem] p-6 sm:p-7',
+              skin.card,
               wide ? 'max-w-2xl' : 'max-w-sm',
               className,
             )}
@@ -83,7 +58,12 @@ export default function AuthScreen({
             {children}
           </div>
         </div>
-      </main>
+        {note && (
+          <p className="mx-auto max-w-md text-center text-xs leading-relaxed text-white/80">
+            {note}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

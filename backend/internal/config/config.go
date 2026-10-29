@@ -11,30 +11,30 @@ import (
 )
 
 const (
-	defaultPort           = "8080"
-	defaultAppEnv         = "development"
-	defaultTimezone       = "Asia/Dhaka"
-	defaultJWTTTL         = "24h"
-	defaultFrontendOrigin = "http://localhost:5173"
-	DecisionStateBefore   = "before"
-	DecisionStateOpen     = "open"
-	DecisionStateClosed   = "closed"
-	defaultDecisionStart  = "16:00"
-	defaultDecisionEnd    = "23:00"
-	defaultDaysAhead      = 7
-	defaultUploadDir      = "uploads"
-	defaultMaxUploadMB    = 10
-	maxDaysAhead          = 31
-	defaultSMTPPort       = 587
-	defaultStudentDomain  = "student.sust.edu"
-	minJWTSecretLength    = 32
-	defaultMailFromName   = "SUST CSE Portal"
-	defaultMaxConns       = 10
-	maxDatabaseConns      = 100
-	FileStorageDisk       = "disk"
-	FileStorageDatabase   = "database"
-	MailProviderSMTP      = "smtp"
-	MailProviderBrevo     = "brevo"
+	defaultPort            = "8080"
+	defaultAppEnv          = "development"
+	defaultVersion         = "0.0.0"
+	defaultCommit          = "unknown"
+	defaultTimezone        = "Asia/Dhaka"
+	defaultJWTTTL          = "24h"
+	defaultFrontendOrigin  = "http://localhost:5173"
+	defaultDaysAhead       = 7
+	defaultReminderTimes   = "16:00,21:00"
+	defaultMorningRemind   = "07:30"
+	defaultUploadDir       = "uploads"
+	defaultMaxUploadMB     = 10
+	maxDaysAhead           = 31
+	defaultSMTPPort        = 587
+	defaultStudentDomain   = "student.sust.edu"
+	minJWTSecretLength     = 32
+	defaultMailFromName    = "SUST CSE Portal"
+	defaultMaxConns        = 10
+	maxDatabaseConns       = 100
+	FileStorageDisk        = "disk"
+	FileStorageDatabase    = "database"
+	MailProviderSMTP       = "smtp"
+	MailProviderBrevo      = "brevo"
+	MailProviderAppsScript = "appsscript"
 )
 
 var (
@@ -44,42 +44,50 @@ var (
 )
 
 type Config struct {
-	Port            string
-	AppEnv          string
-	Timezone        string
-	Location        *time.Location
-	DatabaseURL     string
-	TestDatabaseURL string
-	JWTSecret       string
-	JWTTTL          time.Duration
-	FrontendOrigin  string
-	DecisionStart   string
-	DecisionEnd     string
-	DecisionFrom    int
-	DecisionTo      int
-	DaysAhead       int
-	UploadDir       string
-	MaxUploadMB     int
-	FileStorage     string
-	StaticDir       string
-	MailProvider    string
-	MailFromName    string
-	BrevoAPIKey     string
-	DBMaxConns      int
-	AdminIdentifier string
-	AdminPassword   string
-	AdminEmail      string
-	AdminPhone      string
-	SMTPHost        string
-	SMTPPort        int
-	SMTPUsername    string
-	SMTPPassword    string
-	MailFrom        string
-	StudentDomain   string
-	GoogleClientID  string
-	VAPIDPublicKey  string
-	VAPIDPrivateKey string
-	VAPIDSubject    string
+	Port               string
+	AppEnv             string
+	Version            string
+	Commit             string
+	Timezone           string
+	Location           *time.Location
+	DatabaseURL        string
+	TestDatabaseURL    string
+	JWTSecret          string
+	JWTTTL             time.Duration
+	FrontendOrigin     string
+	DaysAhead          int
+	ReminderTimes      []string
+	MorningReminder    string
+	UploadDir          string
+	MaxUploadMB        int
+	FileStorage        string
+	StaticDir          string
+	MailProvider       string
+	MailFromName       string
+	BrevoAPIKey        string
+	AppsScriptURL      string
+	AppsScriptSecret   string
+	DBMaxConns         int
+	AdminIdentifier    string
+	AdminPassword      string
+	AdminEmail         string
+	AdminPhone         string
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUsername       string
+	SMTPPassword       string
+	MailFrom           string
+	StudentDomain      string
+	GoogleClientID     string
+	VAPIDPublicKey     string
+	VAPIDPrivateKey    string
+	VAPIDSubject       string
+	TurnstileSiteKey   string
+	TurnstileSecretKey string
+}
+
+func (c *Config) HumanCheckEnabled() bool {
+	return c.TurnstileSiteKey != "" && c.TurnstileSecretKey != ""
 }
 
 func (c *Config) PushEnabled() bool {
@@ -91,32 +99,36 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{
-		Port:            getEnv("PORT", defaultPort),
-		AppEnv:          getEnv("APP_ENV", defaultAppEnv),
-		Timezone:        getEnv("APP_TIMEZONE", defaultTimezone),
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		TestDatabaseURL: os.Getenv("TEST_DATABASE_URL"),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		FrontendOrigin:  getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
-		UploadDir:       getEnv("UPLOAD_DIR", defaultUploadDir),
-		FileStorage:     strings.ToLower(getEnv("FILE_STORAGE", FileStorageDisk)),
-		StaticDir:       strings.TrimSpace(os.Getenv("STATIC_DIR")),
-		MailProvider:    strings.ToLower(getEnv("MAIL_PROVIDER", MailProviderSMTP)),
-		MailFromName:    getEnv("MAIL_FROM_NAME", defaultMailFromName),
-		BrevoAPIKey:     strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
-		AdminIdentifier: os.Getenv("ADMIN_IDENTIFIER"),
-		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
-		AdminEmail:      os.Getenv("ADMIN_EMAIL"),
-		AdminPhone:      os.Getenv("ADMIN_PHONE"),
-		SMTPHost:        os.Getenv("SMTP_HOST"),
-		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
-		MailFrom:        os.Getenv("MAIL_FROM"),
-		StudentDomain:   strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
-		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
-		VAPIDPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
-		VAPIDPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
-		VAPIDSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
+		Port:               getEnv("PORT", defaultPort),
+		AppEnv:             getEnv("APP_ENV", defaultAppEnv),
+		Timezone:           getEnv("APP_TIMEZONE", defaultTimezone),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		TestDatabaseURL:    os.Getenv("TEST_DATABASE_URL"),
+		JWTSecret:          os.Getenv("JWT_SECRET"),
+		FrontendOrigin:     getEnv("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		UploadDir:          getEnv("UPLOAD_DIR", defaultUploadDir),
+		FileStorage:        strings.ToLower(getEnv("FILE_STORAGE", FileStorageDisk)),
+		StaticDir:          strings.TrimSpace(os.Getenv("STATIC_DIR")),
+		MailProvider:       strings.ToLower(getEnv("MAIL_PROVIDER", MailProviderSMTP)),
+		MailFromName:       getEnv("MAIL_FROM_NAME", defaultMailFromName),
+		BrevoAPIKey:        strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
+		AppsScriptURL:      strings.TrimSpace(os.Getenv("APPS_SCRIPT_URL")),
+		AppsScriptSecret:   strings.TrimSpace(os.Getenv("APPS_SCRIPT_SECRET")),
+		AdminIdentifier:    os.Getenv("ADMIN_IDENTIFIER"),
+		AdminPassword:      os.Getenv("ADMIN_PASSWORD"),
+		AdminEmail:         os.Getenv("ADMIN_EMAIL"),
+		AdminPhone:         os.Getenv("ADMIN_PHONE"),
+		SMTPHost:           os.Getenv("SMTP_HOST"),
+		SMTPUsername:       os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
+		MailFrom:           os.Getenv("MAIL_FROM"),
+		StudentDomain:      strings.ToLower(getEnv("STUDENT_EMAIL_DOMAIN", defaultStudentDomain)),
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		VAPIDPublicKey:     strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
+		VAPIDPrivateKey:    strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
+		VAPIDSubject:       strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
+		TurnstileSiteKey:   strings.TrimSpace(os.Getenv("TURNSTILE_SITE_KEY")),
+		TurnstileSecretKey: strings.TrimSpace(os.Getenv("TURNSTILE_SECRET_KEY")),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL
@@ -136,20 +148,6 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: JWT_TTL must be a positive duration, got %q", rawTTL)
 	}
 	cfg.JWTTTL = ttl
-	cfg.DecisionStart = getEnv("DECISION_WINDOW_START", defaultDecisionStart)
-	cfg.DecisionFrom, err = clockMinutes("DECISION_WINDOW_START", cfg.DecisionStart)
-	if err != nil {
-		return nil, err
-	}
-	cfg.DecisionEnd = getEnv("DECISION_WINDOW_END", defaultDecisionEnd)
-	cfg.DecisionTo, err = clockMinutes("DECISION_WINDOW_END", cfg.DecisionEnd)
-	if err != nil {
-		return nil, err
-	}
-	if cfg.DecisionFrom >= cfg.DecisionTo {
-		return nil, fmt.Errorf("config: DECISION_WINDOW_START %q must be earlier than DECISION_WINDOW_END %q",
-			cfg.DecisionStart, cfg.DecisionEnd)
-	}
 	rawDaysAhead := getEnv("SCHEDULE_DAYS_AHEAD", strconv.Itoa(defaultDaysAhead))
 	daysAhead, err := strconv.Atoi(rawDaysAhead)
 	if err != nil {
@@ -160,13 +158,23 @@ func Load() (*Config, error) {
 			maxDaysAhead, rawDaysAhead)
 	}
 	cfg.DaysAhead = daysAhead
+	cfg.ReminderTimes, err = clockList("TEACHER_REMINDER_TIMES", getEnv("TEACHER_REMINDER_TIMES", defaultReminderTimes))
+	if err != nil {
+		return nil, err
+	}
+	cfg.MorningReminder = strings.TrimSpace(getEnv("TEACHER_MORNING_REMINDER", defaultMorningRemind))
+	if _, err := clockMinutes("TEACHER_MORNING_REMINDER", cfg.MorningReminder); err != nil {
+		return nil, err
+	}
 	if cfg.FileStorage != FileStorageDisk && cfg.FileStorage != FileStorageDatabase {
 		return nil, fmt.Errorf("config: FILE_STORAGE must be %s or %s, got %q",
 			FileStorageDisk, FileStorageDatabase, cfg.FileStorage)
 	}
-	if cfg.MailProvider != MailProviderSMTP && cfg.MailProvider != MailProviderBrevo {
-		return nil, fmt.Errorf("config: MAIL_PROVIDER must be %s or %s, got %q",
-			MailProviderSMTP, MailProviderBrevo, cfg.MailProvider)
+	switch cfg.MailProvider {
+	case MailProviderSMTP, MailProviderBrevo, MailProviderAppsScript:
+	default:
+		return nil, fmt.Errorf("config: MAIL_PROVIDER must be %s, %s or %s, got %q",
+			MailProviderSMTP, MailProviderBrevo, MailProviderAppsScript, cfg.MailProvider)
 	}
 	rawMaxConns := getEnv("DB_MAX_CONNS", strconv.Itoa(defaultMaxConns))
 	maxConns, err := strconv.Atoi(rawMaxConns)
@@ -213,31 +221,22 @@ func (c *Config) Now() time.Time {
 	return time.Now().In(c.Location)
 }
 
-func (c *Config) DecisionOpen(now time.Time) bool {
-	minutes := now.Hour()*60 + now.Minute()
-	return minutes >= c.DecisionFrom && minutes < c.DecisionTo
-}
-
-func (c *Config) DecisionClosed(now time.Time) bool {
-	return now.Hour()*60+now.Minute() >= c.DecisionTo
-}
-
-func (c *Config) DecisionState(now time.Time) string {
-	switch {
-	case c.DecisionOpen(now):
-		return DecisionStateOpen
-	case c.DecisionClosed(now):
-		return DecisionStateClosed
-	default:
-		return DecisionStateBefore
+func clockList(key, value string) ([]string, error) {
+	times := make([]string, 0, 4)
+	for _, raw := range strings.Split(value, ",") {
+		slot := strings.TrimSpace(raw)
+		if slot == "" {
+			continue
+		}
+		if _, err := clockMinutes(key, slot); err != nil {
+			return nil, err
+		}
+		times = append(times, slot)
 	}
-}
-
-func (c *Config) DecisionMinutesLeft(now time.Time) int {
-	if !c.DecisionOpen(now) {
-		return 0
+	if len(times) == 0 {
+		return nil, fmt.Errorf("config: %s needs at least one time like 16:00", key)
 	}
-	return c.DecisionTo - (now.Hour()*60 + now.Minute())
+	return times, nil
 }
 
 func clockMinutes(key, value string) (int, error) {
@@ -253,7 +252,14 @@ func (c *Config) HasAdminSeed() bool {
 }
 
 func (c *Config) HasMailer() bool {
-	return c.SMTPHost != ""
+	switch c.MailProvider {
+	case MailProviderBrevo:
+		return c.BrevoAPIKey != "" && c.MailFrom != ""
+	case MailProviderAppsScript:
+		return c.AppsScriptURL != "" && c.AppsScriptSecret != ""
+	default:
+		return c.SMTPHost != ""
+	}
 }
 
 func (c *Config) IsProduction() bool {

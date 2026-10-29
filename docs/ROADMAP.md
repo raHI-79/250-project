@@ -39,3 +39,4 @@ Full requirements: [SPEC.md](SPEC.md)
 | 22 | B | Scheduling pages, messaging search and clickable notifications | done |
 | 23 | A | Interface redesign: design system, public home, sign-in and dashboard pages | done |
 | 24 | A+B | Polls, messaging rules, group chats, push notifications, class periods, sections, course credits, demo data, docs and CI, semesters, course list and chat delete | done |
+| 25 | A+B | Release 2 part one: push delivery, Apps Script mail, sign-in and readability, photo cropping, section badges and teacher reminders, owner edits and drop courses, versioning and the human check | done |

@@ -3,8 +3,10 @@ import { Alert, Button, Card, EmptyState, PageHeader, SkeletonCard } from '../..
 import { useResource } from '../../lib/hooks'
 import { relativeTime } from '../../lib/time'
 import cx from '../../lib/cx'
+import { BADGE_MATERIALS, useSectionSeen } from '../../lib/badges'
 
 export default function MaterialsPage() {
+  useSectionSeen(BADGE_MATERIALS)
   const { data, loading, error } = useResource('/api/students/drive-links')
   const items = data?.items || []
   return (

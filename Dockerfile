@@ -1,6 +1,10 @@
 FROM node:22-alpine AS frontend
 ARG VITE_GOOGLE_CLIENT_ID=""
+ARG APP_VERSION="0.0.0"
+ARG APP_COMMIT="unknown"
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+ENV VITE_APP_VERSION=$APP_VERSION
+ENV VITE_APP_COMMIT=$APP_COMMIT
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -8,6 +12,8 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM golang:1.25-alpine AS backend
+ARG APP_VERSION="0.0.0"
+ARG APP_COMMIT="unknown"
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download

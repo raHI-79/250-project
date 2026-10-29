@@ -67,6 +67,32 @@ export const formatTimeRange = (start, end) => {
   return `${from} – ${to}`
 }
 
+export const stampLabel = (value) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const clock = date.toLocaleTimeString('en-GB', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const days = Math.floor((start.getTime() - date.getTime()) / 86400000)
+  if (days < 1) return `Today ${clock}`
+  if (days === 1) return `Yesterday ${clock}`
+  const day = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  if (date.getFullYear() !== new Date().getFullYear()) {
+    return `${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${clock}`
+  }
+  return `${day}, ${clock}`
+}
+
+export const editedLabel = (value) => {
+  if (!value) return ''
+  const stamp = stampLabel(value)
+  return stamp ? `Edited ${stamp}` : ''
+}
+
 export const formatDateTime = (value) => {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''

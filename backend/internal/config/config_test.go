@@ -15,29 +15,27 @@ const (
 func setEnv(t *testing.T, overrides map[string]string) {
 	t.Helper()
 	env := map[string]string{
-		"PORT":                  "",
-		"APP_ENV":               "",
-		"APP_TIMEZONE":          "",
-		"DATABASE_URL":          testDatabaseURL,
-		"TEST_DATABASE_URL":     "",
-		"JWT_SECRET":            testJWTSecret,
-		"JWT_TTL":               "",
-		"FRONTEND_ORIGIN":       "",
-		"UPLOAD_DIR":            "",
-		"MAX_UPLOAD_MB":         "",
-		"ADMIN_IDENTIFIER":      "",
-		"ADMIN_PASSWORD":        "",
-		"STUDENT_EMAIL_DOMAIN":  "",
-		"DECISION_WINDOW_START": "",
-		"DECISION_WINDOW_END":   "",
-		"SCHEDULE_DAYS_AHEAD":   "",
-		"GOOGLE_CLIENT_ID":      "",
-		"FILE_STORAGE":          "",
-		"STATIC_DIR":            "",
-		"MAIL_PROVIDER":         "",
-		"MAIL_FROM_NAME":        "",
-		"BREVO_API_KEY":         "",
-		"DB_MAX_CONNS":          "",
+		"PORT":                 "",
+		"APP_ENV":              "",
+		"APP_TIMEZONE":         "",
+		"DATABASE_URL":         testDatabaseURL,
+		"TEST_DATABASE_URL":    "",
+		"JWT_SECRET":           testJWTSecret,
+		"JWT_TTL":              "",
+		"FRONTEND_ORIGIN":      "",
+		"UPLOAD_DIR":           "",
+		"MAX_UPLOAD_MB":        "",
+		"ADMIN_IDENTIFIER":     "",
+		"ADMIN_PASSWORD":       "",
+		"STUDENT_EMAIL_DOMAIN": "",
+		"SCHEDULE_DAYS_AHEAD":  "",
+		"GOOGLE_CLIENT_ID":     "",
+		"FILE_STORAGE":         "",
+		"STATIC_DIR":           "",
+		"MAIL_PROVIDER":        "",
+		"MAIL_FROM_NAME":       "",
+		"BREVO_API_KEY":        "",
+		"DB_MAX_CONNS":         "",
 	}
 	for key, value := range overrides {
 		env[key] = value
@@ -71,10 +69,6 @@ func TestLoadDefaults(t *testing.T) {
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: ""},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: ""},
 		{name: "StudentDomain", got: cfg.StudentDomain, want: "student.sust.edu"},
-		{name: "DecisionStart", got: cfg.DecisionStart, want: "16:00"},
-		{name: "DecisionEnd", got: cfg.DecisionEnd, want: "23:00"},
-		{name: "DecisionFrom", got: cfg.DecisionFrom, want: 16 * 60},
-		{name: "DecisionTo", got: cfg.DecisionTo, want: 23 * 60},
 		{name: "DaysAhead", got: cfg.DaysAhead, want: 7},
 		{name: "FileStorage", got: cfg.FileStorage, want: FileStorageDisk},
 		{name: "FilesInDatabase", got: cfg.FilesInDatabase(), want: false},
@@ -104,21 +98,19 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	testTimeout := "90m"
 	setEnv(t, map[string]string{
-		"PORT":                  "9090",
-		"APP_ENV":               "production",
-		"APP_TIMEZONE":          "UTC",
-		"TEST_DATABASE_URL":     "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
-		"JWT_TTL":               testTimeout,
-		"FRONTEND_ORIGIN":       "https://coordination.sust.edu",
-		"UPLOAD_DIR":            "files",
-		"MAX_UPLOAD_MB":         "25",
-		"ADMIN_IDENTIFIER":      "admin",
-		"ADMIN_PASSWORD":        "a-long-enough-password",
-		"STUDENT_EMAIL_DOMAIN":  "Student.CSE.SUST.edu",
-		"DECISION_WINDOW_START": "16:30",
-		"DECISION_WINDOW_END":   "22:00",
-		"SCHEDULE_DAYS_AHEAD":   "14",
-		"GOOGLE_CLIENT_ID":      "client-id.apps.googleusercontent.com",
+		"PORT":                 "9090",
+		"APP_ENV":              "production",
+		"APP_TIMEZONE":         "UTC",
+		"TEST_DATABASE_URL":    "postgres://postgres:secret@localhost:5432/sust_coord_test?sslmode=disable",
+		"JWT_TTL":              testTimeout,
+		"FRONTEND_ORIGIN":      "https://coordination.sust.edu",
+		"UPLOAD_DIR":           "files",
+		"MAX_UPLOAD_MB":        "25",
+		"ADMIN_IDENTIFIER":     "admin",
+		"ADMIN_PASSWORD":       "a-long-enough-password",
+		"STUDENT_EMAIL_DOMAIN": "Student.CSE.SUST.edu",
+		"SCHEDULE_DAYS_AHEAD":  "14",
+		"GOOGLE_CLIENT_ID":     "client-id.apps.googleusercontent.com",
 	})
 	cfg, err := Load()
 	if err != nil {
@@ -139,8 +131,6 @@ func TestLoadOverrides(t *testing.T) {
 		{name: "AdminIdentifier", got: cfg.AdminIdentifier, want: "admin"},
 		{name: "AdminPassword", got: cfg.AdminPassword, want: "a-long-enough-password"},
 		{name: "StudentDomain", got: cfg.StudentDomain, want: "student.cse.sust.edu"},
-		{name: "DecisionFrom", got: cfg.DecisionFrom, want: 16*60 + 30},
-		{name: "DecisionTo", got: cfg.DecisionTo, want: 22 * 60},
 		{name: "DaysAhead", got: cfg.DaysAhead, want: 14},
 		{name: "GoogleEnabled", got: cfg.GoogleEnabled(), want: true},
 		{name: "StudentEmailSuffix", got: cfg.StudentEmailSuffix(), want: "@student.cse.sust.edu"},
@@ -309,60 +299,43 @@ func TestGoogleEnabled(t *testing.T) {
 	}
 }
 
-func TestDecisionWindow(t *testing.T) {
-	setEnv(t, map[string]string{"DECISION_WINDOW_START": "17:00", "DECISION_WINDOW_END": "23:00"})
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() returned an unexpected error: %v", err)
-	}
+func TestLoadRejectsBrokenReminderTimes(t *testing.T) {
 	tests := []struct {
-		name       string
-		clock      string
-		wantOpen   bool
-		wantClosed bool
+		name    string
+		times   string
+		morning string
 	}{
-		{name: "the morning", clock: "09:00", wantOpen: false, wantClosed: false},
-		{name: "one minute early", clock: "16:59", wantOpen: false, wantClosed: false},
-		{name: "the window opens", clock: "17:00", wantOpen: true, wantClosed: false},
-		{name: "inside the window", clock: "20:15", wantOpen: true, wantClosed: false},
-		{name: "the last minute", clock: "22:59", wantOpen: true, wantClosed: false},
-		{name: "the deadline", clock: "23:00", wantOpen: false, wantClosed: true},
-		{name: "after the deadline", clock: "23:45", wantOpen: false, wantClosed: true},
+		{name: "a broken slot", times: "four o'clock", morning: "07:30"},
+		{name: "no slot at all", times: " , ", morning: "07:30"},
+		{name: "a broken morning time", times: "16:00", morning: "dawn"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			at, err := time.ParseInLocation("15:04", tc.clock, cfg.Location)
-			if err != nil {
-				t.Fatalf("could not parse %q: %v", tc.clock, err)
-			}
-			if got := cfg.DecisionOpen(at); got != tc.wantOpen {
-				t.Errorf("DecisionOpen(%s) = %v, want %v", tc.clock, got, tc.wantOpen)
-			}
-			if got := cfg.DecisionClosed(at); got != tc.wantClosed {
-				t.Errorf("DecisionClosed(%s) = %v, want %v", tc.clock, got, tc.wantClosed)
+			setEnv(t, map[string]string{
+				"TEACHER_REMINDER_TIMES":   tc.times,
+				"TEACHER_MORNING_REMINDER": tc.morning,
+			})
+			if _, err := Load(); err == nil {
+				t.Fatalf("Load() accepted the reminder times %q and %q", tc.times, tc.morning)
 			}
 		})
 	}
 }
 
-func TestLoadRejectsABrokenWindow(t *testing.T) {
-	tests := []struct {
-		name  string
-		start string
-		end   string
-	}{
-		{name: "a broken start", start: "five", end: "23:00"},
-		{name: "a broken end", start: "17:00", end: "late"},
-		{name: "the end before the start", start: "23:00", end: "17:00"},
-		{name: "the same minute", start: "17:00", end: "17:00"},
+func TestLoadReadsTheReminderTimes(t *testing.T) {
+	setEnv(t, map[string]string{
+		"TEACHER_REMINDER_TIMES":   " 15:30 , 20:45 ",
+		"TEACHER_MORNING_REMINDER": "06:45",
+	})
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned an unexpected error: %v", err)
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			setEnv(t, map[string]string{"DECISION_WINDOW_START": tc.start, "DECISION_WINDOW_END": tc.end})
-			if _, err := Load(); err == nil {
-				t.Fatalf("Load() accepted the window %q to %q", tc.start, tc.end)
-			}
-		})
+	if len(cfg.ReminderTimes) != 2 || cfg.ReminderTimes[0] != "15:30" || cfg.ReminderTimes[1] != "20:45" {
+		t.Errorf("ReminderTimes = %v, want the two trimmed slots", cfg.ReminderTimes)
+	}
+	if cfg.MorningReminder != "06:45" {
+		t.Errorf("MorningReminder = %q, want 06:45", cfg.MorningReminder)
 	}
 }
 

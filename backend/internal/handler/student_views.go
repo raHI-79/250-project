@@ -74,7 +74,12 @@ func (s *Student) Exams() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		exams, err := s.students.ListStudentExams(r.Context(), profile.Batch, profile.Section, s.cfg.Now())
+		codes, ok := s.dropCourseCodes(w, r, profile.StudentID)
+		if !ok {
+			return
+		}
+		exams, err := s.students.ListStudentExams(r.Context(), profile.Batch, profile.Section,
+			s.cfg.Now(), codes)
 		if err != nil {
 			log.Printf("handler: could not list the exams of a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)

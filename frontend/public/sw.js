@@ -6,7 +6,11 @@ const BADGE = '/badge-96.png'
 
 const VIBRATE = [60, 40, 60]
 
-self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('install', () => undefined)
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting()
+})
 
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
 

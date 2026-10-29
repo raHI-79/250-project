@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
-import { Input } from '../../components/ui/Field'
+import { Input, PasswordInput } from '../../components/ui/Field'
 import AuthScreen from '../../components/layout/AuthScreen'
+import AuthHeading from '../../components/layout/AuthHeading'
 import NoIndex from '../../components/layout/NoIndex'
 import { useAuth } from '../../context/auth'
 import { HERO_BUILDING } from '../../lib/campus'
@@ -41,15 +42,11 @@ export default function AdminLoginPage() {
         note="Department office access for registrations, teachers, courses and the weekly routine."
       >
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-sand uppercase">
-            Department office
-          </p>
-          <h1 className="font-display mt-2 border-b border-white/25 pb-3 text-[30px] font-bold text-white">
-            Staff sign in
-          </h1>
-          <p className="mt-3 text-sm text-white/55">
-            This entrance is for department staff accounts only.
-          </p>
+          <AuthHeading
+            eyebrow="Department office"
+            title="Staff sign in"
+            subtitle="This entrance is for department staff accounts only."
+          />
           <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
             {notice && <Alert tone="success">{notice}</Alert>}
             {error && <Alert tone="error">{error}</Alert>}
@@ -58,24 +55,21 @@ export default function AdminLoginPage() {
               value={identifier}
               onChange={(event) => setIdentifier(event.target.value)}
               autoComplete="username"
-              tone="dark"
               required
             />
-            <Input
+            <PasswordInput
               label="Password"
-              type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
-              tone="dark"
               required
             />
-            <Button type="submit" loading={loading} variant="light" className="w-full">
+            <Button type="submit" loading={loading} className="w-full">
               Sign in
             </Button>
           </form>
           <div className="mt-5 text-sm">
-            <Link to={paths.adminForgotPassword()} className="text-gold-300 hover:underline">
+            <Link to={paths.adminForgotPassword()} className="text-brand-600 hover:underline">
               Forgot your password?
             </Link>
           </div>

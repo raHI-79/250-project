@@ -175,25 +175,29 @@ ahead. Every item carries a status:
 | `rescheduled` | A new slot was agreed |
 | `scheduled` | Created by the CR or by a teacher exam |
 
-### 4.3 The decision window (teachers only)
+### 4.3 Teacher decisions and reminders
 
-`DECISION_WINDOW_START` defaults to 16:00 and `DECISION_WINDOW_END` to 23:00.
-The window limits **only a teacher's first decision** — Confirm, Cancel or
-Request reschedule — on tomorrow's fixed classes.
+There is no decision window. Confirm, Cancel and Request reschedule work at any
+hour until the class starts, on `awaiting_teacher` and `no_response` items
+alike. Once a class has started its item can no longer be changed.
 
-The teacher's next-day page says:
+Reminders push and ring the bell instead:
 
-- before the window: *Opens at 4:00 PM for tomorrow's classes*
-- inside it: *Open until 11:00 PM · `<h m>` left*
-- after it: *Closed for tomorrow — undecided classes are marked No response*
+- `TEACHER_REMINDER_TIMES` defaults to `16:00,21:00`. The first slot says
+  *Tomorrow's classes need your decision · `<n>` classes*, the later ones
+  *Reminder: `<n>` classes tomorrow are still undecided*.
+- `TEACHER_MORNING_REMINDER` defaults to `07:30` and covers today's undecided
+  classes that have not started yet.
+- `reminder_log` keeps one row per teacher, slot and day, so a reminder is
+  never sent twice.
 
-Outside the window those buttons are disabled for a first decision. A later
-change to a class the teacher already confirmed stays allowed until it starts.
+After the last slot of `TEACHER_REMINDER_TIMES`, tomorrow's items still
+`awaiting_teacher` become `no_response`. That is only a signal to the class
+representative: the room stays booked and the CR may decide.
 
-The class representative is never limited. Creating a class, asking for a
+The class representative is never limited either. Creating a class, asking for a
 reschedule, setting a new slot, cancelling, adding to the final routine, editing
-a link and publishing all work at any hour, and the CR pages carry no window
-banner.
+a link and publishing all work at any hour.
 
 ### 4.4 Rooms and clashes
 
@@ -356,6 +360,12 @@ audience and a limit on how many options a student may choose.
   caller's own choices. **No endpoint ever returns who voted for what** — not to
   the class representative, not to a teacher, not to the office.
 
+The creator keeps the poll afterwards. `PATCH /api/cr/polls/{id}` rewrites the
+question, the options and the limit while the poll has **no votes** and answers
+`409` once anyone has voted. `DELETE /api/cr/polls/{id}` removes a poll at any
+time, and `POST /api/cr/polls/{id}/close` and `/reopen` flip its status. An
+edited poll carries `edited_at` and the pages show *Edited* with the time.
+
 ## 11. Notifications
 
 ### 11.1 In-app
@@ -366,8 +376,31 @@ highlighted.
 
 Notifications are created when a notice is posted, a class or exam is created,
 changed or cancelled, a reschedule is asked for or decided, a routine is
-published, a message arrives, a poll opens, and when an undecided class is
-marked **No response**.
+published, a poll opens, and when an undecided class is marked **No response**.
+
+**Messages never reach the bell.** A new message still pushes, and it raises the
+Messages unread badge on the sidebar, on the bottom tab bar and on the installed
+app icon through `navigator.setAppBadge`. Every bell row shows a date and a
+time: *Today 4:05 PM*, *Yesterday 9:10 AM*, *28 Oct, 9:10 AM*.
+
+### 11.1.1 Section badges
+
+Notices, Materials, Polls, Exams, Routine and Courses each carry a count of the
+items added since the reader last opened that section. `section_views` keeps one
+row per user and section. `GET /api/me/badges` returns the six counts and
+`POST /api/me/badges/{section}/seen` clears one, which every section page calls
+as it opens. The counts appear on the sidebar rows, the bottom tabs and the
+quick-action tiles.
+
+### 11.1.2 Teacher reminders
+
+Teachers with undecided classes are reminded by push and in the bell:
+
+- at each `TEACHER_REMINDER_TIMES` slot for tomorrow, and
+- at `TEACHER_MORNING_REMINDER` for today's classes that have not started.
+
+`reminder_log` holds one row per teacher, slot and day, so no reminder goes out
+twice. Each one links to the teacher's next-day page.
 
 ### 11.2 Browser push
 
@@ -384,6 +417,17 @@ office never does.
 - Permission is asked inside the sign-in click itself, so the phone shows its
   own dialog. If it could not be shown, the app asks once more on the next tap
   and never again after a decision.
+- When permission is already `granted`, the app subscribes silently on sign-in
+  and on every app start without asking anything.
+- The server key is trimmed, read as base64url and checked to be a 65 byte
+  uncompressed point, so a key pasted with a stray newline fails loudly instead
+  of silently never subscribing.
+- `POST /api/push/client-log` takes `{stage, name, message}` from a signed-in
+  device, rate limited per IP, so a failure that only happens on a phone is
+  visible in the server log. It never carries a key or an endpoint.
+- Signing out removes the subscription row for that account but keeps the
+  browser subscription, so signing back in re-registers at once and a sign-out
+  can never delete a subscription that was created moments earlier.
 - My profile carries no notification section at all; the system dialog is the
   only thing that asks.
 - A push carries `{title, body, url, tag}` with `Urgency: high` and a 24 hour
@@ -406,6 +450,37 @@ The service worker always shows the notification and, on click, focuses an open
 window and navigates it, or opens a new one. The server serves `/sw.js` as
 `application/javascript` with `no-cache` and `Service-Worker-Allowed: /`, and
 the manifest as `application/manifest+json` with `no-cache`.
+
+### 11.4 Version and updates
+
+`APP_VERSION` and `APP_COMMIT` travel through the Docker build into both the
+pages and the Go binary. `GET /api/health` returns them and **My profile →
+About** shows them.
+
+On start, when `APP_VERSION` differs from the version in `app_meta`, the server
+pushes once to every subscription: *SUST CSE Portal updated to `<version>` —
+open the app to get the latest*. The row in `app_meta` makes it once per
+version, no matter how often the service restarts.
+
+In the browser the waiting service worker raises *A new version is ready ·
+Reload*; the app checks for an update on start and whenever it comes back to the
+foreground.
+
+### 11.5 The human check
+
+With `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` both set, a full-screen
+glass gate with the SUST logo and a Cloudflare Turnstile widget stands in front
+of the app until the visitor holds a valid pass.
+
+- `POST /api/human/verify` checks the token with Cloudflare siteverify and
+  returns a signed pass, valid 24 hours in a browser and 30 days in the
+  installed app. The app keeps it in `localStorage`.
+- Sign-in, registration, email verification, forgot and reset password,
+  activation, the user-id check and the public stats all require that pass in
+  `X-Human-Pass` and answer `403 Please complete the human check.` without one.
+  The app clears the stored pass on that answer and shows the gate again.
+- The site key comes from `GET /api/auth/config`. **With either key missing the
+  gate is skipped entirely** and every one of those endpoints works as before.
 
 ## 12. Interface
 

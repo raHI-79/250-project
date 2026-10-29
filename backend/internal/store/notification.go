@@ -48,7 +48,8 @@ WHERE (n.recipient_user_id = v.id
              OR n.recipient_role = v.effective_role
              OR (n.recipient_role = 'student' AND v.base_role = 'student'))
         AND (n.recipient_batch IS NULL OR n.recipient_batch = v.batch)
-        AND (n.recipient_section IS NULL OR n.recipient_section = v.section)))`
+        AND (n.recipient_section IS NULL OR n.recipient_section = v.section)))
+  AND n.type <> 'message'`
 	listNotificationsSQL = notificationAudienceSQL + `
 ORDER BY n.created_at DESC, n.id DESC
 LIMIT $2`

@@ -6,27 +6,34 @@ services:
     region: singapore
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    buildFilter:
+      ignoredPaths:
+        - docs/**
+    dockerBuildArgs:
+      APP_VERSION: 2.0.0
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: APP_ENV
         value: production
+      - key: APP_VERSION
+        value: 2.0.0
       - key: APP_TIMEZONE
         value: Asia/Dhaka
       - key: FILE_STORAGE
         value: database
       - key: MAIL_PROVIDER
-        value: brevo
+        value: appsscript
       - key: DB_MAX_CONNS
         value: "5"
       - key: STUDENT_EMAIL_DOMAIN
         value: student.sust.edu
       - key: MAIL_FROM_NAME
         value: SUST CSE Portal
-      - key: DECISION_WINDOW_START
-        value: "16:00"
-      - key: DECISION_WINDOW_END
-        value: "23:00"
+      - key: TEACHER_REMINDER_TIMES
+        value: "16:00,21:00"
+      - key: TEACHER_MORNING_REMINDER
+        value: "07:30"
       - key: SCHEDULE_DAYS_AHEAD
         value: "7"
       - key: MAX_UPLOAD_MB

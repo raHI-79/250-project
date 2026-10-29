@@ -18,8 +18,9 @@ const (
 )
 
 const (
-	ProviderSMTP  = "smtp"
-	ProviderBrevo = "brevo"
+	ProviderSMTP       = "smtp"
+	ProviderBrevo      = "brevo"
+	ProviderAppsScript = "appsscript"
 )
 
 var (
@@ -41,13 +42,18 @@ type Options struct {
 	FromName string
 	APIKey   string
 	Endpoint string
+	Secret   string
 }
 
 func New(provider string, options Options) Sender {
-	if strings.EqualFold(strings.TrimSpace(provider), ProviderBrevo) {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case ProviderBrevo:
 		return NewBrevo(options)
+	case ProviderAppsScript:
+		return NewAppsScript(options)
+	default:
+		return NewSMTP(options)
 	}
-	return NewSMTP(options)
 }
 
 type SMTP struct {

@@ -24,6 +24,9 @@ type Store interface {
 	MarkNoResponse(ctx context.Context, date string) ([]store.ScheduleItem, error)
 	PromoteExamsToFinal(ctx context.Context, date string) ([]store.ScheduleItem, error)
 	ListActiveCRs(ctx context.Context, batch, section string) ([]int64, error)
+	ListUndecidedTeachers(ctx context.Context, date string) ([]store.UndecidedTeacher, error)
+	ListUndecidedTeachersFrom(ctx context.Context, date, after string) ([]store.UndecidedTeacher, error)
+	ClaimReminder(ctx context.Context, userID int64, slot, date string) (bool, error)
 }
 
 type Notifier interface {
@@ -71,6 +74,11 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	} else if promoted > 0 {
 		log.Printf("jobs: moved %d exams into the final routine", promoted)
 	}
+	if reminded, err := s.RemindTeachers(ctx, now); err != nil {
+		log.Printf("jobs: could not remind the teachers: %v", err)
+	} else if reminded > 0 {
+		log.Printf("jobs: reminded %d teachers about undecided classes", reminded)
+	}
 }
 
 func (s *Scheduler) Generate(ctx context.Context, now time.Time) (int, error) {
@@ -80,7 +88,7 @@ func (s *Scheduler) Generate(ctx context.Context, now time.Time) (int, error) {
 }
 
 func (s *Scheduler) CloseDecisions(ctx context.Context, now time.Time) (int, error) {
-	if !s.cfg.DecisionClosed(now) {
+	if !s.pastLastReminder(now) {
 		return 0, nil
 	}
 	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
@@ -89,10 +97,22 @@ func (s *Scheduler) CloseDecisions(ctx context.Context, now time.Time) (int, err
 		return 0, err
 	}
 	for _, item := range items {
-		body := fmt.Sprintf(noResponseSentence, item.CourseCode, item.ItemDate, item.StartTime)
+		body := fmt.Sprintf(noResponseSentence, item.CourseName(), item.ItemDate, item.StartTime)
 		s.tellCRs(ctx, item, notify.TypeRoutine, TitleNoResponse, body)
 	}
 	return len(items), nil
+}
+
+func (s *Scheduler) pastLastReminder(now time.Time) bool {
+	times := s.cfg.ReminderTimes
+	if len(times) == 0 {
+		return false
+	}
+	last, err := time.Parse(clockLayout, times[len(times)-1])
+	if err != nil {
+		return false
+	}
+	return now.Hour()*60+now.Minute() >= last.Hour()*60+last.Minute()
 }
 
 func (s *Scheduler) PromoteExams(ctx context.Context, now time.Time) (int, error) {
@@ -102,7 +122,7 @@ func (s *Scheduler) PromoteExams(ctx context.Context, now time.Time) (int, error
 		return 0, err
 	}
 	for _, item := range items {
-		body := fmt.Sprintf(examFinalSentence, item.CourseCode, item.ItemDate)
+		body := fmt.Sprintf(examFinalSentence, item.CourseName(), item.ItemDate)
 		s.tellCRs(ctx, item, notify.TypeExam, TitleExamInFinal, body)
 	}
 	return len(items), nil

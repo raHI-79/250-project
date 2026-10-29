@@ -2,6 +2,7 @@ import { CalendarDays } from 'lucide-react'
 import { Alert, Card, EmptyState, PageHeader, SkeletonCard } from '../../components/ui'
 import { useResource } from '../../lib/hooks'
 import { WEEKDAYS, formatTimeRange } from '../../lib/time'
+import CourseName from '../../components/schedule/CourseName'
 import { kindLabel, sectionShort } from '../../lib/schedule'
 
 export default function TeacherFixedRoutinePage() {
@@ -45,10 +46,7 @@ export default function TeacherFixedRoutinePage() {
                       <span className="w-32 shrink-0 font-medium tabular-nums text-brand-600">
                         {formatTimeRange(item.start_time, item.end_time)}
                       </span>
-                      <span className="font-medium text-ink">
-                        {item.course_code}
-                        {item.course_title ? ` ${item.course_title}` : ''}
-                      </span>
+                      <CourseName item={item} className="font-medium text-ink" />
                       <span className="text-muted">
                         {item.batch} {sectionShort(item.section)}
                         {item.room ? ` · ${item.room}` : ''}

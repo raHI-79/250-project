@@ -5,18 +5,16 @@ import cx from '../../lib/cx'
 import {
   STATUS_CANCELLED,
   STATUS_CR_ASK,
-  courseLine,
   isOnline,
   needsLink,
   placeOf,
   sectionShort,
 } from '../../lib/schedule'
 import { formatDate, formatTimeRange } from '../../lib/time'
+import CourseName from '../schedule/CourseName'
 
 export default function TeacherDecisionCard({
   item,
-  locked,
-  lockedHint,
   busy,
   highlighted,
   onConfirm,
@@ -34,7 +32,11 @@ export default function TeacherDecisionCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-display text-base font-bold text-ink wrap-long">{courseLine(item)}</p>
+          <CourseName
+            item={item}
+            as="p"
+            className="font-display text-base font-bold text-ink"
+          />
           <p className="mt-1 text-xs text-muted">
             {item.batch} {sectionShort(item.section)}
             {placeOf(item) ? ` · ${placeOf(item)}` : ''}
@@ -71,8 +73,6 @@ export default function TeacherDecisionCard({
             <>
               <Button
                 size="sm"
-                disabled={locked}
-                title={locked ? lockedHint : undefined}
                 onClick={() => onConfirm(item)}
               >
                 Confirm
@@ -80,8 +80,6 @@ export default function TeacherDecisionCard({
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={locked}
-                title={locked ? lockedHint : undefined}
                 onClick={() => onAsk(item)}
               >
                 Reschedule
@@ -89,8 +87,6 @@ export default function TeacherDecisionCard({
               <Button
                 size="sm"
                 variant="danger"
-                disabled={locked}
-                title={locked ? lockedHint : undefined}
                 onClick={() => onCancel(item)}
               >
                 Cancel

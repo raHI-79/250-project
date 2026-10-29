@@ -8,8 +8,10 @@ import { Alert, Button, Card, EmptyState, PageHeader, SkeletonCard } from '../..
 import { useResource } from '../../lib/hooks'
 import paths from '../../lib/paths'
 import { today } from '../../lib/time'
+import { BADGE_ROUTINE, useSectionSeen } from '../../lib/badges'
 
 export default function UpcomingRoutinePage() {
+  useSectionSeen(BADGE_ROUTINE)
   const [params, setParams] = useSearchParams()
   const [picked, setPicked] = useState(params.get('date') || today())
   useEffect(() => {

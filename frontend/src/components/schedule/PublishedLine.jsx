@@ -2,6 +2,7 @@ import { Video } from 'lucide-react'
 import { Button, StatusBadge } from '../ui'
 import NoteLine from '../NoteLine'
 import TimelineItem from './TimelineItem'
+import CourseName from './CourseName'
 import { STATUS_CANCELLED, isOnline, kindLabel, statusLabel } from '../../lib/schedule'
 import cx from '../../lib/cx'
 
@@ -15,10 +16,10 @@ export default function PublishedLine({ item, showBatch = false }) {
       tone={cancelled ? 'muted' : 'brand'}
     >
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-        <span className={cx('text-sm font-semibold text-ink', struck)}>
-          {item.course_code}
-          {item.course_title ? ` ${item.course_title}` : ''}
-        </span>
+        <CourseName
+          item={item}
+          className={cx('text-sm font-semibold text-ink', struck)}
+        />
         {item.kind !== 'class' && (
           <StatusBadge status="unavailable" label={kindLabel(item.kind)} />
         )}

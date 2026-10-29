@@ -6,9 +6,9 @@ import {
   STATUS_CANCELLED,
   STATUS_CONFIRMED,
   STATUS_TEACHER_ASK,
-  courseLine,
 } from '../../lib/schedule'
 import { formatClock } from '../../lib/time'
+import CourseName from '../schedule/CourseName'
 
 export default function CRPanel({ items, final, today }) {
   const decisions = items.filter(
@@ -41,7 +41,7 @@ export default function CRPanel({ items, final, today }) {
                 ) : (
                   <CircleX size={15} className="shrink-0 text-danger-600" />
                 )}
-                <span className="min-w-0 flex-1 truncate text-ink-soft">{courseLine(item)}</span>
+                <CourseName item={item} className="min-w-0 flex-1 text-ink-soft" />
                 <span className="shrink-0 text-xs text-muted tabular-nums">
                   {formatClock(item.start_time)}
                 </span>

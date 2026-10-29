@@ -18,11 +18,14 @@ const (
 	MessagePushIncomplete = "The browser did not send a complete subscription."
 	MessagePushNoDevice   = "No device on this account is set up for notifications."
 	MessagePushTestSent   = "Test notification sent."
+	MessagePushLogged     = "Reported."
+	MessagePushLogEmpty   = "The report is empty."
 	TestPushTitle         = "SUST CSE"
 	TestPushBody          = "Notifications are working on this device."
 	MaxEndpointLength     = 1000
 	MaxKeyLength          = 400
 	MaxAgentLength        = 300
+	MaxLogFieldLength     = 200
 )
 
 type PushStore interface {
@@ -54,6 +57,12 @@ type pushSubscriptionRequest struct {
 	Endpoint  string   `json:"endpoint"`
 	Keys      pushKeys `json:"keys"`
 	UserAgent string   `json:"user_agent"`
+}
+
+type pushClientLogRequest struct {
+	Stage   string `json:"stage"`
+	Name    string `json:"name"`
+	Message string `json:"message"`
 }
 
 type publicKeyResponse struct {
@@ -128,6 +137,38 @@ func (p *Push) Subscribe() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessagePushSaved})
 	}
+}
+
+func (p *Push) ClientLog() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		var request pushClientLogRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		stage := clipField(request.Stage)
+		name := clipField(request.Name)
+		message := clipField(request.Message)
+		if stage == "" && name == "" && message == "" {
+			httpx.WriteError(w, http.StatusBadRequest, MessagePushLogEmpty)
+			return
+		}
+		log.Printf("push: account %d could not set up notifications at stage %q: %s: %s",
+			current.ID, stage, name, message)
+		httpx.WriteJSON(w, http.StatusAccepted, messageResponse{Message: MessagePushLogged})
+	}
+}
+
+func clipField(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) > MaxLogFieldLength {
+		return trimmed[:MaxLogFieldLength]
+	}
+	return trimmed
 }
 
 func (p *Push) Unsubscribe() http.HandlerFunc {

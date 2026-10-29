@@ -57,7 +57,7 @@ export default function IdentityCard({
         </div>
         <p className="mt-1.5 text-2xs tracking-[0.06em] text-white/65 uppercase">{DEPARTMENT}</p>
       </div>
-      <div className="-mt-11 flex flex-col items-center px-5">
+      <div className="relative z-10 -mt-11 flex flex-col items-center px-5">
         <div className="size-22 overflow-hidden rounded-full border-4 border-surface bg-wash">
           {showPhoto ? (
             <img
