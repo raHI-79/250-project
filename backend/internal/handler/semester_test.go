@@ -163,7 +163,7 @@ func (f *fakeCourseStore) ListPublishedDay(ctx context.Context, batch, date stri
 }
 
 func (f *fakeCourseStore) ListStudentExams(ctx context.Context, batch, section string,
-	now time.Time) ([]store.StudentExam, error) {
+	now time.Time, dropCourseCodes []string) ([]store.StudentExam, error) {
 	return nil, nil
 }
 

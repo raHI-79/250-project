@@ -108,7 +108,6 @@ type fakeScheduleStore struct {
 	finals      map[int64]bool
 	publishIDs  []int64
 	deleted     []int64
-	windowOpen  bool
 	periods     []store.Period
 	linkUser    int64
 	links       []string
@@ -163,11 +162,10 @@ func (f *fakeScheduleStore) ListTeacherExams(ctx context.Context, teacherID int6
 }
 
 func (f *fakeScheduleStore) ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
-	now time.Time, windowOpen bool) (store.ScheduleItem, error) {
+	now time.Time) (store.ScheduleItem, error) {
 	if f.err != nil {
 		return store.ScheduleItem{}, f.err
 	}
-	f.windowOpen = windowOpen
 	f.confirmed = append(f.confirmed, mode+":"+room+":"+link)
 	item := f.item
 	item.Status = store.ItemConfirmed
@@ -183,11 +181,10 @@ func (f *fakeScheduleStore) ListPeriods(ctx context.Context) ([]store.Period, er
 }
 
 func (f *fakeScheduleStore) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64,
-	reason string, windowOpen bool) (store.ScheduleItem, error) {
+	reason string, now time.Time) (store.ScheduleItem, error) {
 	if f.err != nil {
 		return store.ScheduleItem{}, f.err
 	}
-	f.windowOpen = windowOpen
 	f.cancelled = append(f.cancelled, reason)
 	item := f.item
 	item.Status = store.ItemCancelled
@@ -196,11 +193,10 @@ func (f *fakeScheduleStore) CancelItemAsTeacher(ctx context.Context, itemID, tea
 }
 
 func (f *fakeScheduleStore) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64,
-	message string, windowOpen bool) (store.ScheduleItem, error) {
+	message string, now time.Time) (store.ScheduleItem, error) {
 	if f.err != nil {
 		return store.ScheduleItem{}, f.err
 	}
-	f.windowOpen = windowOpen
 	item := f.item
 	item.Status = store.ItemTeacherAsk
 	item.TeacherMessage = message

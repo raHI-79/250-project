@@ -105,7 +105,12 @@ export const sectionShort = (section) => (section === SECTION_ALL ? 'Both' : sec
 
 export const courseLine = (item) => {
   if (!item) return ''
-  return item.course_title ? `${item.course_code} ${item.course_title}` : item.course_code
+  return item.course_title || item.course_code || ''
+}
+
+export const courseCode = (item) => {
+  if (!item) return ''
+  return item.course_title ? item.course_code || '' : ''
 }
 
 export const slotError = (mode, room, link) => {
@@ -117,16 +122,6 @@ export const slotError = (mode, room, link) => {
   }
   if (!String(room || '').trim()) return 'A room is required for a class in a room.'
   return ''
-}
-
-export const countdownText = (seconds) => {
-  if (seconds <= 0) return 'closed'
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const rest = seconds % 60
-  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m left`
-  if (minutes > 0) return `${minutes}m ${String(rest).padStart(2, '0')}s left`
-  return `${rest}s left`
 }
 
 export const startsInText = (seconds) => {

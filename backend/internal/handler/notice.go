@@ -19,6 +19,7 @@ import (
 const (
 	MessageNoticePosted   = "Notice posted."
 	MessageNoticeUnknown  = "No notice found with this ID."
+	MessageNoticeEdited   = "Notice updated."
 	MessageFileTooLarge   = "The attached file is larger than the allowed size."
 	MessageOwnBatchTarget = "Use own to post a notice to your own batch."
 	fieldTitle            = "title"
@@ -35,7 +36,10 @@ type NoticeStore interface {
 	ListTeacherNotices(ctx context.Context, createdBy int64) ([]store.NoticeRow, error)
 	ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]store.NoticeRow, error)
 	DeleteAdminNotice(ctx context.Context, noticeID int64) (string, error)
+	DeleteAnyNotice(ctx context.Context, noticeID int64) (string, error)
 	DeleteOwnNotice(ctx context.Context, noticeID int64, source string, createdBy int64) (string, error)
+	EditNotice(ctx context.Context, noticeID int64, title, description, linkURL, source string,
+		createdBy int64) error
 }
 
 type Notice struct {
@@ -63,6 +67,7 @@ type noticeItem struct {
 	CreatedByName string `json:"created_by_name"`
 	PostedByPhoto string `json:"posted_by_photo_url,omitempty"`
 	CreatedAt     string `json:"created_at"`
+	EditedAt      string `json:"edited_at,omitempty"`
 }
 
 type noticesResponse struct {
@@ -117,7 +122,7 @@ func (n *Notice) AdminDelete() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		filePath, err := n.notices.DeleteAdminNotice(r.Context(), noticeID)
+		filePath, err := n.notices.DeleteAnyNotice(r.Context(), noticeID)
 		if errors.Is(err, store.ErrNotFound) {
 			httpx.WriteError(w, http.StatusNotFound, MessageNoticeUnknown)
 			return
@@ -130,6 +135,102 @@ func (n *Notice) AdminDelete() http.HandlerFunc {
 		n.removeFile(filePath)
 		httpx.WriteJSON(w, http.StatusNoContent, nil)
 	}
+}
+
+type editNoticeRequest struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	LinkURL     string `json:"link_url"`
+}
+
+func (n *Notice) edit(source string, anyOwner bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		noticeID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request editNoticeRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		title, err := validate.Required("Title", request.Title)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		description, err := validate.Description("Description", request.Description)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		link, err := validate.OptionalLink("Link", request.LinkURL)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		owner := current.ID
+		if anyOwner {
+			owner = 0
+		}
+		err = n.notices.EditNotice(r.Context(), noticeID, title, description, link, source, owner)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageNoticeUnknown)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not edit a notice: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageNoticeEdited})
+	}
+}
+
+func (n *Notice) AdminEdit() http.HandlerFunc {
+	return n.edit("", true)
+}
+
+func (n *Notice) TeacherEdit() http.HandlerFunc {
+	return n.edit(store.SourceTeacher, false)
+}
+
+func (n *Notice) CREdit() http.HandlerFunc {
+	return n.edit(store.SourceCR, false)
+}
+
+func (n *Notice) deleteOwn(source string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		noticeID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		filePath, err := n.notices.DeleteOwnNotice(r.Context(), noticeID, source, current.ID)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageNoticeUnknown)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not delete a notice: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		n.removeFile(filePath)
+		httpx.WriteJSON(w, http.StatusNoContent, nil)
+	}
+}
+
+func (n *Notice) CRDelete() http.HandlerFunc {
+	return n.deleteOwn(store.SourceCR)
 }
 
 func (n *Notice) removeFile(filePath string) {
@@ -382,6 +483,7 @@ func newNoticeItem(notice store.NoticeRow) noticeItem {
 		CreatedByName: notice.CreatedByName,
 		PostedByPhoto: notice.CreatedByPhoto,
 		CreatedAt:     notice.CreatedAt.Format(time.RFC3339),
+		EditedAt:      optionalStamp(notice.EditedAt),
 	}
 }
 

@@ -23,10 +23,10 @@ services:
         value: student.sust.edu
       - key: MAIL_FROM_NAME
         value: SUST CSE Portal
-      - key: DECISION_WINDOW_START
-        value: "16:00"
-      - key: DECISION_WINDOW_END
-        value: "23:00"
+      - key: TEACHER_REMINDER_TIMES
+        value: "16:00,21:00"
+      - key: TEACHER_MORNING_REMINDER
+        value: "07:30"
       - key: SCHEDULE_DAYS_AHEAD
         value: "7"
       - key: MAX_UPLOAD_MB

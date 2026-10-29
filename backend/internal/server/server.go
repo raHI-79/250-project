@@ -269,14 +269,18 @@ func registerNoticeRoutes(mux *http.ServeMux, deps Dependencies, notices *handle
 	admin := AdminGroup(mux, deps)
 	admin.Handle("POST /api/admin/notices", notices.AdminCreate())
 	admin.Handle("GET /api/admin/notices", notices.AdminList())
+	admin.Handle("PATCH /api/admin/notices/{id}", notices.AdminEdit())
 	admin.Handle("DELETE /api/admin/notices/{id}", notices.AdminDelete())
 	cr := CRGroup(mux, deps)
 	teacher := TeacherGroup(mux, deps)
 	teacher.Handle("POST /api/teacher/notices", notices.TeacherCreate())
 	teacher.Handle("GET /api/teacher/notices", notices.TeacherList())
+	teacher.Handle("PATCH /api/teacher/notices/{id}", notices.TeacherEdit())
 	teacher.Handle("DELETE /api/teacher/notices/{id}", notices.TeacherDelete())
 	cr.Handle("POST /api/cr/notices", notices.CRCreate())
 	cr.Handle("GET /api/cr/notices", notices.CRList())
+	cr.Handle("PATCH /api/cr/notices/{id}", notices.CREdit())
+	cr.Handle("DELETE /api/cr/notices/{id}", notices.CRDelete())
 }
 
 func registerDriveLinkRoutes(cr, students RouteGroup, drives *handler.DriveLink) {
@@ -311,6 +315,9 @@ func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Po
 	cr := CRGroup(mux, deps)
 	cr.Handle("POST /api/cr/polls", polls.CRCreate())
 	cr.Handle("POST /api/cr/polls/{id}/close", polls.CRClose())
+	cr.Handle("POST /api/cr/polls/{id}/reopen", polls.CRReopen())
+	cr.Handle("PATCH /api/cr/polls/{id}", polls.CREdit())
+	cr.Handle("DELETE /api/cr/polls/{id}", polls.CRDelete())
 	cr.Handle("GET /api/cr/polls", polls.CRList())
 	student := StudentGroup(mux, deps)
 	student.Handle("GET /api/students/polls", polls.StudentList())

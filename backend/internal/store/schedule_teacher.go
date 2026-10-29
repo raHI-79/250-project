@@ -159,10 +159,6 @@ func ownedByTeacher(item ScheduleItem, teacherID int64) error {
 	return nil
 }
 
-func firstDecision(item ScheduleItem) bool {
-	return item.Status == ItemAwaiting || item.Status == ItemNoResponse
-}
-
 func started(item ScheduleItem, now time.Time) bool {
 	if !item.HasTimes() {
 		return false
@@ -171,21 +167,17 @@ func started(item ScheduleItem, now time.Time) bool {
 }
 
 func (s *Store) ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
-	now time.Time, windowOpen bool) (ScheduleItem, error) {
+	now time.Time) (ScheduleItem, error) {
 	return s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
 		if err := ownedByTeacher(item, teacherID); err != nil {
 			return err
 		}
-		first := firstDecision(item)
 		switch item.Status {
 		case ItemAwaiting, ItemNoResponse, ItemTeacherAsk, ItemConfirmed, ItemDeclined, ItemRescheduled:
 		default:
 			return ErrItemState
 		}
-		if first && !windowOpen {
-			return ErrDecisionClosed
-		}
-		if !first && started(item, now) {
+		if started(item, now) {
 			return ErrItemStarted
 		}
 		status := ItemConfirmed
@@ -213,7 +205,7 @@ func (s *Store) ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, 
 }
 
 func (s *Store) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64, reason string,
-	windowOpen bool) (ScheduleItem, error) {
+	now time.Time) (ScheduleItem, error) {
 	return s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
 		if err := ownedByTeacher(item, teacherID); err != nil {
 			return err
@@ -221,15 +213,15 @@ func (s *Store) CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64
 		if item.Status == ItemCancelled {
 			return ErrItemState
 		}
-		if firstDecision(item) && !windowOpen {
-			return ErrDecisionClosed
+		if started(item, now) {
+			return ErrItemStarted
 		}
 		return cancelAndSync(ctx, tx, item, reason)
 	})
 }
 
 func (s *Store) TeacherRequestReschedule(ctx context.Context, itemID, teacherID int64, message string,
-	windowOpen bool) (ScheduleItem, error) {
+	now time.Time) (ScheduleItem, error) {
 	return s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
 		if err := ownedByTeacher(item, teacherID); err != nil {
 			return err
@@ -239,8 +231,8 @@ func (s *Store) TeacherRequestReschedule(ctx context.Context, itemID, teacherID 
 		default:
 			return ErrItemState
 		}
-		if firstDecision(item) && !windowOpen {
-			return ErrDecisionClosed
+		if started(item, now) {
+			return ErrItemStarted
 		}
 		if _, err := tx.Exec(ctx, teacherAskRescheduleSQL, item.ID, message, item.Status); err != nil {
 			return fmt.Errorf("store: could not ask for a reschedule of the item %d: %w", item.ID, err)

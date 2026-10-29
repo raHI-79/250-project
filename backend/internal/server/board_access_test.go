@@ -51,6 +51,15 @@ func (emptyNoticeStore) DeleteAdminNotice(ctx context.Context, noticeID int64) (
 	return "", store.ErrNotFound
 }
 
+func (emptyNoticeStore) DeleteAnyNotice(ctx context.Context, noticeID int64) (string, error) {
+	return "", store.ErrNotFound
+}
+
+func (emptyNoticeStore) EditNotice(ctx context.Context, noticeID int64, title, description,
+	linkURL, source string, createdBy int64) error {
+	return store.ErrNotFound
+}
+
 type emptyDriveLinkStore struct{}
 
 func (emptyDriveLinkStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {

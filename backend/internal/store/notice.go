@@ -47,6 +47,7 @@ type NoticeRow struct {
 	CreatedByName  string
 	CreatedByPhoto string
 	CreatedAt      time.Time
+	EditedAt       *time.Time
 }
 
 const (
@@ -54,7 +55,7 @@ const (
 COALESCE(n.link_url, ''), COALESCE(n.file_path, ''), COALESCE(n.file_name, ''), COALESCE(n.file_mime, ''),
 COALESCE(n.file_size, 0), COALESCE(n.created_by, 0),
 COALESCE(s.full_name, t.name, CASE WHEN n.created_by IS NULL THEN 'Deleted user' ELSE 'Administration' END),
-COALESCE(u.photo_path, ''), n.created_at`
+COALESCE(u.photo_path, ''), n.created_at, n.edited_at`
 	noticeJoins = `FROM notices n
 LEFT JOIN users u ON u.id = n.created_by
 LEFT JOIN students s ON s.user_id = u.id
@@ -65,7 +66,7 @@ LEFT JOIN teachers t ON t.user_id = u.id`
     VALUES ($1, $2, $3, NULLIF($4::text, ''), NULLIF($5::text, ''), NULLIF($6::text, ''),
     NULLIF($7::text, ''), NULLIF($8::text, ''), NULLIF($9::text, ''), NULLIF($10::bigint, 0), $11)
     RETURNING id, source, title, description, batch, section, link_url, file_path, file_name,
-    file_mime, file_size, created_by, created_at
+    file_mime, file_size, created_by, created_at, edited_at
 )
 SELECT ` + noticeColumns + `
 FROM inserted n
@@ -94,6 +95,11 @@ RETURNING COALESCE(file_path, '')`
 ` + noticeJoins + `
 WHERE n.source = 'teacher' AND n.created_by = $1
 ORDER BY n.created_at DESC, n.id DESC`
+	editNoticeSQL = `UPDATE notices
+SET title = $2, description = $3, link_url = NULLIF($4::text, ''), edited_at = now()
+WHERE id = $1 AND ($5::bigint = 0 OR (source = $6::text AND created_by = $5::bigint))
+RETURNING id`
+	deleteAnyNoticeSQL = `DELETE FROM notices WHERE id = $1 RETURNING COALESCE(file_path, '')`
 	deleteOwnNoticeSQL = `DELETE FROM notices WHERE id = $1 AND source = $2 AND created_by = $3
 RETURNING COALESCE(file_path, '')`
 	listStudentNoticesSQL = `SELECT ` + noticeColumns + `
@@ -140,6 +146,7 @@ func (s *Store) CreateNotice(ctx context.Context, notice NewNotice) (NoticeRow, 
 		&row.CreatedByName,
 		&row.CreatedByPhoto,
 		&row.CreatedAt,
+		&row.EditedAt,
 	)
 	if err != nil {
 		return NoticeRow{}, fmt.Errorf("store: could not create the notice: %w", err)
@@ -169,6 +176,32 @@ func (s *Store) ListTeacherNotices(ctx context.Context, createdBy int64) ([]Noti
 
 func (s *Store) ListStudentNotices(ctx context.Context, batch, section, source, scope string) ([]NoticeRow, error) {
 	return s.notices(ctx, listStudentNoticesSQL, batch, section, source, scope)
+}
+
+func (s *Store) EditNotice(ctx context.Context, noticeID int64, title, description, linkURL,
+	source string, createdBy int64) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, editNoticeSQL, noticeID, title, description, linkURL, createdBy, source).
+		Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not edit the notice %d: %w", noticeID, err)
+	}
+	return nil
+}
+
+func (s *Store) DeleteAnyNotice(ctx context.Context, noticeID int64) (string, error) {
+	var filePath string
+	err := s.pool.QueryRow(ctx, deleteAnyNoticeSQL, noticeID).Scan(&filePath)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: could not delete the notice %d: %w", noticeID, err)
+	}
+	return filePath, nil
 }
 
 func (s *Store) DeleteOwnNotice(ctx context.Context, noticeID int64, source string, createdBy int64) (string, error) {
@@ -220,6 +253,7 @@ func (s *Store) notices(ctx context.Context, query string, args ...any) ([]Notic
 			&row.CreatedByName,
 			&row.CreatedByPhoto,
 			&row.CreatedAt,
+			&row.EditedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a notice: %w", err)

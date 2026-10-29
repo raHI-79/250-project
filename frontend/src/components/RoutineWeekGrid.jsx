@@ -1,6 +1,6 @@
 import { Card, EmptyState } from './ui'
 import { CalendarDays } from 'lucide-react'
-import { SECTION_ALL } from '../lib/schedule'
+import { SECTION_ALL, courseLine } from '../lib/schedule'
 import { WEEKDAYS, formatTimeRange, overlaps } from '../lib/time'
 import cx from '../lib/cx'
 
@@ -72,7 +72,9 @@ export default function RoutineWeekGrid({ items, periods, section, className }) 
                     >
                       {entry ? (
                         <>
-                          <span className="truncate font-semibold">{entry.course_code}</span>
+                          <span className="line-clamp-2 font-semibold">
+                            {courseLine(entry)}
+                          </span>
                           <span className="truncate text-faint">
                             {entry.room ? entry.room : '—'}
                             {entry.type === 'lab' ? ' · Lab' : ''}

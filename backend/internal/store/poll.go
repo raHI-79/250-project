@@ -15,6 +15,8 @@ const (
 
 var (
 	ErrPollClosed      = errors.New("store: this poll is already closed")
+	ErrPollOpen        = errors.New("store: this poll is already open")
+	ErrPollHasVotes    = errors.New("store: this poll already has votes")
 	ErrAlreadyVoted    = errors.New("store: this student has already voted in this poll")
 	ErrOptionNotInPoll = errors.New("store: this option does not belong to this poll")
 	ErrTooManyChoices  = errors.New("store: this poll allows fewer choices than that")
@@ -46,6 +48,7 @@ type PollRow struct {
 	MaxChoices    int
 	CreatedByName string
 	CreatedAt     time.Time
+	EditedAt      *time.Time
 	Options       []PollOptionRow
 	TotalVoters   int
 	MyOptionIDs   []int64
@@ -62,10 +65,21 @@ RETURNING id`
 SET status = 'closed', closed_at = $3
 WHERE id = $1 AND created_by = $2 AND status = 'open'
 RETURNING id`
-	pollStatusSQL = `SELECT status FROM polls WHERE id = $1 AND created_by = $2`
-	pollColumns   = `p.id, p.question, p.scope, p.batch, p.section, p.status, p.max_choices,
+	reopenPollSQL = `UPDATE polls
+SET status = 'open', closed_at = NULL
+WHERE id = $1 AND created_by = $2 AND status = 'closed'
+RETURNING id`
+	deletePollSQL    = `DELETE FROM polls WHERE id = $1 AND created_by = $2 RETURNING id`
+	pollVoteCountSQL = `SELECT COUNT(*) FROM poll_votes WHERE poll_id = $1`
+	editPollSQL      = `UPDATE polls
+SET question = $3, max_choices = $4, edited_at = now()
+WHERE id = $1 AND created_by = $2
+RETURNING id`
+	deletePollOptionsSQL = `DELETE FROM poll_options WHERE poll_id = $1`
+	pollStatusSQL        = `SELECT status FROM polls WHERE id = $1 AND created_by = $2`
+	pollColumns          = `p.id, p.question, p.scope, p.batch, p.section, p.status, p.max_choices,
 COALESCE(s.full_name, t.name, CASE WHEN p.created_by IS NULL THEN 'Deleted user' ELSE 'Administration' END),
-p.created_at,
+p.created_at, p.edited_at,
 (SELECT COUNT(DISTINCT v.student_id) FROM poll_votes v WHERE v.poll_id = p.id),
 ARRAY(SELECT v.option_id FROM poll_votes v JOIN students vs ON vs.id = v.student_id
       WHERE v.poll_id = p.id AND vs.user_id = $1 ORDER BY v.option_id)`
@@ -159,6 +173,75 @@ func (s *Store) ClosePoll(ctx context.Context, pollID, createdBy int64, now time
 	return nil
 }
 
+func (s *Store) ReopenPoll(ctx context.Context, pollID, createdBy int64) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, reopenPollSQL, pollID, createdBy).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var status string
+		statusErr := s.pool.QueryRow(ctx, pollStatusSQL, pollID, createdBy).Scan(&status)
+		if errors.Is(statusErr, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if statusErr != nil {
+			return fmt.Errorf("store: could not read the status of the poll %d: %w", pollID, statusErr)
+		}
+		return ErrPollOpen
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not reopen the poll %d: %w", pollID, err)
+	}
+	return nil
+}
+
+func (s *Store) DeletePoll(ctx context.Context, pollID, createdBy int64) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, deletePollSQL, pollID, createdBy).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not delete the poll %d: %w", pollID, err)
+	}
+	return nil
+}
+
+func (s *Store) EditPoll(ctx context.Context, pollID, createdBy int64, question string,
+	maxChoices int, options []string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: could not start the poll edit: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var votes int
+	if err := tx.QueryRow(ctx, pollVoteCountSQL, pollID).Scan(&votes); err != nil {
+		return fmt.Errorf("store: could not count the votes of the poll %d: %w", pollID, err)
+	}
+	if votes > 0 {
+		return ErrPollHasVotes
+	}
+	var id int64
+	err = tx.QueryRow(ctx, editPollSQL, pollID, createdBy, question, maxChoices).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not edit the poll %d: %w", pollID, err)
+	}
+	if _, err := tx.Exec(ctx, deletePollOptionsSQL, pollID); err != nil {
+		return fmt.Errorf("store: could not clear the options of the poll %d: %w", pollID, err)
+	}
+	for position, text := range options {
+		var optionID int64
+		if err := tx.QueryRow(ctx, insertPollOptionSQL, pollID, text, position).Scan(&optionID); err != nil {
+			return fmt.Errorf("store: could not add a poll option: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: could not commit the poll edit: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) ListCreatorPolls(ctx context.Context, viewerUserID, createdBy int64) ([]PollRow, error) {
 	return s.polls(ctx, listCreatorPollsSQL, viewerUserID, createdBy)
 }
@@ -240,6 +323,7 @@ func (s *Store) polls(ctx context.Context, query string, args ...any) ([]PollRow
 			&poll.MaxChoices,
 			&poll.CreatedByName,
 			&poll.CreatedAt,
+			&poll.EditedAt,
 			&poll.TotalVoters,
 			&poll.MyOptionIDs,
 		)

@@ -16,11 +16,6 @@ const (
 	defaultTimezone        = "Asia/Dhaka"
 	defaultJWTTTL          = "24h"
 	defaultFrontendOrigin  = "http://localhost:5173"
-	DecisionStateBefore    = "before"
-	DecisionStateOpen      = "open"
-	DecisionStateClosed    = "closed"
-	defaultDecisionStart   = "16:00"
-	defaultDecisionEnd     = "23:00"
 	defaultDaysAhead       = 7
 	defaultReminderTimes   = "16:00,21:00"
 	defaultMorningRemind   = "07:30"
@@ -56,10 +51,6 @@ type Config struct {
 	JWTSecret        string
 	JWTTTL           time.Duration
 	FrontendOrigin   string
-	DecisionStart    string
-	DecisionEnd      string
-	DecisionFrom     int
-	DecisionTo       int
 	DaysAhead        int
 	ReminderTimes    []string
 	MorningReminder  string
@@ -145,20 +136,6 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: JWT_TTL must be a positive duration, got %q", rawTTL)
 	}
 	cfg.JWTTTL = ttl
-	cfg.DecisionStart = getEnv("DECISION_WINDOW_START", defaultDecisionStart)
-	cfg.DecisionFrom, err = clockMinutes("DECISION_WINDOW_START", cfg.DecisionStart)
-	if err != nil {
-		return nil, err
-	}
-	cfg.DecisionEnd = getEnv("DECISION_WINDOW_END", defaultDecisionEnd)
-	cfg.DecisionTo, err = clockMinutes("DECISION_WINDOW_END", cfg.DecisionEnd)
-	if err != nil {
-		return nil, err
-	}
-	if cfg.DecisionFrom >= cfg.DecisionTo {
-		return nil, fmt.Errorf("config: DECISION_WINDOW_START %q must be earlier than DECISION_WINDOW_END %q",
-			cfg.DecisionStart, cfg.DecisionEnd)
-	}
 	rawDaysAhead := getEnv("SCHEDULE_DAYS_AHEAD", strconv.Itoa(defaultDaysAhead))
 	daysAhead, err := strconv.Atoi(rawDaysAhead)
 	if err != nil {
@@ -230,33 +207,6 @@ func (c *Config) ServesStatic() bool {
 
 func (c *Config) Now() time.Time {
 	return time.Now().In(c.Location)
-}
-
-func (c *Config) DecisionOpen(now time.Time) bool {
-	minutes := now.Hour()*60 + now.Minute()
-	return minutes >= c.DecisionFrom && minutes < c.DecisionTo
-}
-
-func (c *Config) DecisionClosed(now time.Time) bool {
-	return now.Hour()*60+now.Minute() >= c.DecisionTo
-}
-
-func (c *Config) DecisionState(now time.Time) string {
-	switch {
-	case c.DecisionOpen(now):
-		return DecisionStateOpen
-	case c.DecisionClosed(now):
-		return DecisionStateClosed
-	default:
-		return DecisionStateBefore
-	}
-}
-
-func (c *Config) DecisionMinutesLeft(now time.Time) int {
-	if !c.DecisionOpen(now) {
-		return 0
-	}
-	return c.DecisionTo - (now.Hour()*60 + now.Minute())
 }
 
 func clockList(key, value string) ([]string, error) {

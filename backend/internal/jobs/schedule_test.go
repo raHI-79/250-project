@@ -101,8 +101,6 @@ func testConfig(t *testing.T) *config.Config {
 	}
 	return &config.Config{
 		Location:        loc,
-		DecisionFrom:    17 * 60,
-		DecisionTo:      23 * 60,
 		DaysAhead:       7,
 		ReminderTimes:   []string{"16:00", "21:00"},
 		MorningReminder: "07:30",

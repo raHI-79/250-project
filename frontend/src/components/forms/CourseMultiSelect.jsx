@@ -7,6 +7,7 @@ import { useDebounced } from '../../lib/hooks'
 export default function CourseMultiSelect({
   value = [],
   onChange,
+  onRemove,
   label = 'My drop courses',
   hint = 'Search the running courses of the other batches, then pick the ones you are retaking',
   error = '',
@@ -55,7 +56,11 @@ export default function CourseMultiSelect({
     setSearch('')
     setOptions([])
   }
-  const drop = (course) => onChange(value.filter((entry) => entry.id !== course.id))
+  const remove = (course) => onChange(value.filter((entry) => entry.id !== course.id))
+  const drop = async (course) => {
+    if (onRemove && !(await onRemove(course))) return
+    remove(course)
+  }
   const available = options.filter((course) => !chosen.has(course.id))
   return (
     <Field label={label} error={error || problem} hint={hint} className={className}>
@@ -67,8 +72,8 @@ export default function CourseMultiSelect({
               className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-wash py-1 pr-1 pl-3 text-xs font-medium text-ink-soft"
             >
               <span>
-                {course.code}
-                {course.title ? ` · ${course.title}` : ''}
+                {course.title || course.code}
+                {course.title ? ` · ${course.code}` : ''}
               </span>
               <button
                 type="button"
@@ -101,8 +106,10 @@ export default function CourseMultiSelect({
                   onClick={() => add(course)}
                   className="flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-wash"
                 >
-                  <span className="text-sm font-medium text-ink">{course.code}</span>
-                  <span className="text-xs text-muted">{course.title}</span>
+                  <span className="text-sm font-medium text-ink">
+                    {course.title || course.code}
+                  </span>
+                  <span className="text-xs text-muted">{course.code}</span>
                 </button>
               </li>
             ))}

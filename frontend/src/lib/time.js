@@ -87,6 +87,12 @@ export const stampLabel = (value) => {
   return `${day}, ${clock}`
 }
 
+export const editedLabel = (value) => {
+  if (!value) return ''
+  const stamp = stampLabel(value)
+  return stamp ? `Edited ${stamp}` : ''
+}
+
 export const formatDateTime = (value) => {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''

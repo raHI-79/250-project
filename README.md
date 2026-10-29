@@ -218,8 +218,8 @@ go run ./cmd/server
 | `TEST_DATABASE_URL` | none — optional | Connection string used by the database integration tests |
 | `JWT_SECRET` | none — **required** | Key that signs the login tokens, at least 32 characters |
 | `JWT_TTL` | `24h` | How long a login token stays valid, as a Go duration (`24h`, `90m`) |
-| `DECISION_WINDOW_START` | `16:00` | When a teacher may start deciding on the next day's classes |
-| `DECISION_WINDOW_END` | `23:00` | When that window closes and undecided classes become `no_response` |
+| `TEACHER_REMINDER_TIMES` | `16:00,21:00` | When teachers are reminded about tomorrow's undecided classes |
+| `TEACHER_MORNING_REMINDER` | `07:30` | When teachers are reminded about today's undecided classes |
 | `SCHEDULE_DAYS_AHEAD` | `7` | How many days of dated schedule items the job keeps ahead of today |
 | `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs and profile photos are saved, created when it is missing |
 | `MAX_UPLOAD_MB` | `10` | Largest accepted PDF in megabytes; a bigger file gets `413` |
@@ -1209,12 +1209,14 @@ to `SCHEDULE_DAYS_AHEAD`, each one `awaiting_teacher` in the routine's own room.
 The job is idempotent: a unique index on `(routine_id, item_date)` means a
 second pass creates nothing.
 
-**The teacher decides on the next day.** Between `DECISION_WINDOW_START` and
-`DECISION_WINDOW_END` the teacher confirms, cancels or asks for a reschedule of
-tomorrow's items. The first decision only lands inside that window; later
-changes to a decided item are allowed until the class starts. Anything still
-`awaiting_teacher` when the window closes becomes `no_response`: the room stays
-booked and the CR decides, and every active CR of that batch is notified.
+**The teacher decides on the next day.** The teacher confirms, cancels or asks
+for a reschedule of an item at any hour until the class starts, on
+`awaiting_teacher` and `no_response` items alike. Reminders go out at
+`TEACHER_REMINDER_TIMES` for tomorrow and at `TEACHER_MORNING_REMINDER` for
+today. After the last reminder slot anything still `awaiting_teacher` for
+tomorrow becomes `no_response`, which is only a signal to the class
+representative: the room stays booked, the CR may decide, and every active CR
+of that batch is notified.
 
 **The CR owns the final routine.** CR-created classes and exams and
 teacher-created exams need no approval at all. Nothing reaches students until

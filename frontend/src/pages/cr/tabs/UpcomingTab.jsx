@@ -5,6 +5,7 @@ import { CancelModal, LinkModal, RescheduleModal } from '../../../components/sch
 import { Alert, Button, Card, EmptyState, SkeletonCard, useConfirm, useToast } from '../../../components/ui'
 import api from '../../../lib/api'
 import {
+  courseLine,
   ACTION_ADD_TO_FINAL,
   ACTION_CANCEL,
   ACTION_DELETE,
@@ -14,7 +15,6 @@ import {
   ACTION_SET_SLOT,
   ACTION_SET_TIME,
   allows,
-  courseLine,
   isOnline,
   needsLink,
   placeOf,
@@ -22,6 +22,7 @@ import {
 } from '../../../lib/schedule'
 import { formatDate, formatTimeRange } from '../../../lib/time'
 import cx from '../../../lib/cx'
+import CourseName from '../../../components/schedule/CourseName'
 
 const byDate = (items) => {
   const days = []
@@ -150,7 +151,7 @@ export default function UpcomingTab({ upcoming, highlight }) {
                     <span className="font-medium tabular-nums text-brand-600">
                       {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                     </span>
-                    <span className="font-medium text-ink">{courseLine(item)}</span>
+                    <CourseName item={item} className="font-medium text-ink" />
                     <span className="text-muted">
                       {sectionShort(item.section)}
                       {placeOf(item) ? ` · ${placeOf(item)}` : ''}

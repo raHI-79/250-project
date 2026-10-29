@@ -19,7 +19,6 @@ import (
 const (
 	MessageItemNotFound    = "No schedule item found with this ID."
 	MessageItemState       = "This schedule item cannot be changed this way right now."
-	MessageDecisionClosed  = "The decision window is closed. The class representative decides from now on."
 	MessageItemStarted     = "This class has already started."
 	MessageNoProposal      = "This schedule item carries no proposed slot."
 	MessageNothingSelected = "Select at least one schedule item."
@@ -190,13 +189,11 @@ func scheduleError(w http.ResponseWriter, err error) bool {
 	case errors.As(err, &incomplete):
 		httpx.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
 			"%s on %s still needs a date, a time and a room or a meeting link.",
-			incomplete.Item.CourseCode, incomplete.Item.ItemDate))
+			incomplete.Item.CourseName(), incomplete.Item.ItemDate))
 	case errors.Is(err, store.ErrItemNotFound), errors.Is(err, store.ErrNotFound):
 		httpx.WriteError(w, http.StatusNotFound, MessageItemNotFound)
 	case errors.Is(err, store.ErrItemState):
 		httpx.WriteError(w, http.StatusConflict, MessageItemState)
-	case errors.Is(err, store.ErrDecisionClosed):
-		httpx.WriteError(w, http.StatusConflict, MessageDecisionClosed)
 	case errors.Is(err, store.ErrItemStarted):
 		httpx.WriteError(w, http.StatusConflict, MessageItemStarted)
 	case errors.Is(err, store.ErrNoProposal):
@@ -222,7 +219,7 @@ func itemSentence(item store.ScheduleItem) string {
 		when += " " + item.StartTime + " to " + item.EndTime
 	}
 	return fmt.Sprintf("%s for %s section %s on %s in %s.",
-		item.CourseCode, item.Batch, item.Section, when, where)
+		item.CourseName(), item.Batch, item.Section, when, where)
 }
 
 func broadcastSection(section string) string {

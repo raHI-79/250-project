@@ -23,6 +23,7 @@ import {
   SkeletonCard,
   StatusBadge,
   Textarea,
+  useConfirm,
   useToast,
 } from '../components/ui'
 import CourseMultiSelect from '../components/forms/CourseMultiSelect'
@@ -42,6 +43,13 @@ export default function ProfilePage() {
   const theme = useTheme()
   const navigate = useNavigate()
   const toast = useToast()
+  const confirm = useConfirm()
+  const confirmDropCourse = (course) =>
+    confirm({
+      title: 'Remove this drop course?',
+      message: `${course.title || course.code} disappears from your today, routine and exams.`,
+      confirmLabel: 'Remove',
+    })
   const { data, loading, error, reload } = useResource('/api/profile')
   const [sheet, setSheet] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -268,7 +276,7 @@ export default function ProfilePage() {
             {saveError}
           </Alert>
         )}
-        <CourseMultiSelect value={courses} onChange={setCourses} />
+        <CourseMultiSelect value={courses} onChange={setCourses} onRemove={confirmDropCourse} />
         <Button
           loading={saving}
           onClick={() => save({ drop_course_ids: courses.map((course) => course.id) })}

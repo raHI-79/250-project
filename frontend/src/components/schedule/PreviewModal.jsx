@@ -1,6 +1,7 @@
 import { Alert, Button, DataTable, Modal } from '../ui'
 import { formatDate, formatTimeRange } from '../../lib/time'
-import { courseLine, placeOf, sectionShort, statusLabel } from '../../lib/schedule'
+import CourseName from './CourseName'
+import { placeOf, sectionShort, statusLabel } from '../../lib/schedule'
 
 const HEADINGS = ['Date', 'Day', 'Time', 'Course', 'Section', 'Where', 'Info']
 
@@ -61,7 +62,9 @@ export default function PreviewModal({ open, days, onClose, onPublish, busy, cou
                   <td className="px-3 py-2 whitespace-nowrap tabular-nums text-brand-600">
                     {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                   </td>
-                  <td className="px-3 py-2 text-ink">{courseLine(item)}</td>
+                  <td className="px-3 py-2 text-ink">
+                    <CourseName item={item} />
+                  </td>
                   <td className="px-3 py-2 text-ink-soft">{sectionShort(item.section)}</td>
                   <td className="px-3 py-2 text-ink-soft">{placeOf(item) || '—'}</td>
                   <td className="px-3 py-2 text-muted">{infoOf(item) || '—'}</td>

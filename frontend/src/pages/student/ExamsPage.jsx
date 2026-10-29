@@ -13,7 +13,8 @@ import {
 } from '../../components/ui'
 import { useHighlight, useResource } from '../../lib/hooks'
 import paths from '../../lib/paths'
-import { courseLine, isOnline, sectionShort } from '../../lib/schedule'
+import CourseName from '../../components/schedule/CourseName'
+import { isOnline, sectionShort } from '../../lib/schedule'
 import { formatTimeRange } from '../../lib/time'
 import cx from '../../lib/cx'
 import { BADGE_EXAMS, useSectionSeen } from '../../lib/badges'
@@ -64,7 +65,7 @@ export default function ExamsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                       <span className="font-display text-lg font-bold text-ink">
-                        {courseLine(item)}
+                        <CourseName item={item} />
                       </span>
                       <StatusBadge
                         status="unavailable"

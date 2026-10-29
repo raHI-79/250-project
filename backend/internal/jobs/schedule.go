@@ -88,7 +88,7 @@ func (s *Scheduler) Generate(ctx context.Context, now time.Time) (int, error) {
 }
 
 func (s *Scheduler) CloseDecisions(ctx context.Context, now time.Time) (int, error) {
-	if !s.cfg.DecisionClosed(now) {
+	if !s.pastLastReminder(now) {
 		return 0, nil
 	}
 	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
@@ -97,10 +97,22 @@ func (s *Scheduler) CloseDecisions(ctx context.Context, now time.Time) (int, err
 		return 0, err
 	}
 	for _, item := range items {
-		body := fmt.Sprintf(noResponseSentence, item.CourseCode, item.ItemDate, item.StartTime)
+		body := fmt.Sprintf(noResponseSentence, item.CourseName(), item.ItemDate, item.StartTime)
 		s.tellCRs(ctx, item, notify.TypeRoutine, TitleNoResponse, body)
 	}
 	return len(items), nil
+}
+
+func (s *Scheduler) pastLastReminder(now time.Time) bool {
+	times := s.cfg.ReminderTimes
+	if len(times) == 0 {
+		return false
+	}
+	last, err := time.Parse(clockLayout, times[len(times)-1])
+	if err != nil {
+		return false
+	}
+	return now.Hour()*60+now.Minute() >= last.Hour()*60+last.Minute()
 }
 
 func (s *Scheduler) PromoteExams(ctx context.Context, now time.Time) (int, error) {
@@ -110,7 +122,7 @@ func (s *Scheduler) PromoteExams(ctx context.Context, now time.Time) (int, error
 		return 0, err
 	}
 	for _, item := range items {
-		body := fmt.Sprintf(examFinalSentence, item.CourseCode, item.ItemDate)
+		body := fmt.Sprintf(examFinalSentence, item.CourseName(), item.ItemDate)
 		s.tellCRs(ctx, item, notify.TypeExam, TitleExamInFinal, body)
 	}
 	return len(items), nil

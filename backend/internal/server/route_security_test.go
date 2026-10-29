@@ -154,6 +154,19 @@ func (emptyPollStore) ClosePoll(ctx context.Context, pollID, createdBy int64, no
 	return store.ErrNotFound
 }
 
+func (emptyPollStore) ReopenPoll(ctx context.Context, pollID, createdBy int64) error {
+	return store.ErrNotFound
+}
+
+func (emptyPollStore) DeletePoll(ctx context.Context, pollID, createdBy int64) error {
+	return store.ErrNotFound
+}
+
+func (emptyPollStore) EditPoll(ctx context.Context, pollID, createdBy int64, question string,
+	maxChoices int, options []string) error {
+	return store.ErrNotFound
+}
+
 func (emptyPollStore) ListCreatorPolls(ctx context.Context, viewerUserID, createdBy int64) ([]store.PollRow, error) {
 	return nil, nil
 }
@@ -285,6 +298,13 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodDelete, path: "/api/push/subscribe", allowed: panelRoles()},
 		{method: http.MethodPost, path: "/api/push/test", allowed: panelRoles()},
 		{method: http.MethodPost, path: "/api/push/client-log", allowed: panelRoles()},
+		{method: http.MethodPatch, path: "/api/admin/notices/7", allowed: adminOnly()},
+		{method: http.MethodPatch, path: "/api/teacher/notices/7", allowed: teacherOnly()},
+		{method: http.MethodPatch, path: "/api/cr/notices/7", allowed: crOnly()},
+		{method: http.MethodDelete, path: "/api/cr/notices/7", allowed: crOnly()},
+		{method: http.MethodPatch, path: "/api/cr/polls/7", allowed: crOnly()},
+		{method: http.MethodDelete, path: "/api/cr/polls/7", allowed: crOnly()},
+		{method: http.MethodPost, path: "/api/cr/polls/7/reopen", allowed: crOnly()},
 		{method: http.MethodPost, path: "/api/teacher/notices", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/students/today", allowed: studentRoles()},
 		{method: http.MethodGet, path: "/api/students/upcoming-routine", allowed: studentRoles()},

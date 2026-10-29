@@ -117,3 +117,10 @@ func (b *Badges) Seen() http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageSectionSeen})
 	}
 }
+
+func optionalStamp(at *time.Time) string {
+	if at == nil {
+		return ""
+	}
+	return at.Format(time.RFC3339)
+}

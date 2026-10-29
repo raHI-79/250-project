@@ -175,25 +175,29 @@ ahead. Every item carries a status:
 | `rescheduled` | A new slot was agreed |
 | `scheduled` | Created by the CR or by a teacher exam |
 
-### 4.3 The decision window (teachers only)
+### 4.3 Teacher decisions and reminders
 
-`DECISION_WINDOW_START` defaults to 16:00 and `DECISION_WINDOW_END` to 23:00.
-The window limits **only a teacher's first decision** — Confirm, Cancel or
-Request reschedule — on tomorrow's fixed classes.
+There is no decision window. Confirm, Cancel and Request reschedule work at any
+hour until the class starts, on `awaiting_teacher` and `no_response` items
+alike. Once a class has started its item can no longer be changed.
 
-The teacher's next-day page says:
+Reminders push and ring the bell instead:
 
-- before the window: *Opens at 4:00 PM for tomorrow's classes*
-- inside it: *Open until 11:00 PM · `<h m>` left*
-- after it: *Closed for tomorrow — undecided classes are marked No response*
+- `TEACHER_REMINDER_TIMES` defaults to `16:00,21:00`. The first slot says
+  *Tomorrow's classes need your decision · `<n>` classes*, the later ones
+  *Reminder: `<n>` classes tomorrow are still undecided*.
+- `TEACHER_MORNING_REMINDER` defaults to `07:30` and covers today's undecided
+  classes that have not started yet.
+- `reminder_log` keeps one row per teacher, slot and day, so a reminder is
+  never sent twice.
 
-Outside the window those buttons are disabled for a first decision. A later
-change to a class the teacher already confirmed stays allowed until it starts.
+After the last slot of `TEACHER_REMINDER_TIMES`, tomorrow's items still
+`awaiting_teacher` become `no_response`. That is only a signal to the class
+representative: the room stays booked and the CR may decide.
 
-The class representative is never limited. Creating a class, asking for a
+The class representative is never limited either. Creating a class, asking for a
 reschedule, setting a new slot, cancelling, adding to the final routine, editing
-a link and publishing all work at any hour, and the CR pages carry no window
-banner.
+a link and publishing all work at any hour.
 
 ### 4.4 Rooms and clashes
 

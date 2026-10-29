@@ -38,7 +38,6 @@ var (
 	ErrNoProposal       = errors.New("store: this schedule item carries no proposed slot")
 	ErrItemStarted      = errors.New("store: this class has already started")
 	ErrNothingToPublish = errors.New("store: no schedule item was selected for publishing")
-	ErrDecisionClosed   = errors.New("store: the decision window is closed")
 )
 
 type SlotConflict struct {
@@ -108,6 +107,13 @@ type ScheduleItem struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Snapshot       ItemSnapshot
+}
+
+func (i ScheduleItem) CourseName() string {
+	if i.CourseTitle != "" {
+		return i.CourseTitle
+	}
+	return i.CourseCode
 }
 
 func (i ScheduleItem) HasTimes() bool {

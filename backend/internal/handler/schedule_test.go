@@ -48,8 +48,6 @@ func TestTeacherConfirm(t *testing.T) {
 		{name: "a broken link", body: `{"mode":"online","meeting_link":"meet.example.com"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "Meeting link must be a full link that starts with http:// or https://."},
-		{name: "outside the window", body: `{"mode":"room","room":"1003"}`, storeErr: store.ErrDecisionClosed,
-			wantStatus: http.StatusConflict, wantError: MessageDecisionClosed},
 		{name: "already started", body: `{"mode":"room","room":"1003"}`, storeErr: store.ErrItemStarted,
 			wantStatus: http.StatusConflict, wantError: MessageItemStarted},
 		{name: "not this teacher", body: `{"mode":"room","room":"1003"}`, storeErr: store.ErrItemNotFound,
@@ -92,7 +90,7 @@ func TestTeacherConfirm(t *testing.T) {
 	}
 }
 
-func TestTeacherConfirmPassesTheWindow(t *testing.T) {
+func TestTeacherConfirmNeedsNoWindow(t *testing.T) {
 	silenceLog(t)
 	items := newFakeScheduleStore()
 	teacher := newTeacherHandler(t, items, &fakeNotifier{})
@@ -100,9 +98,6 @@ func TestTeacherConfirmPassesTheWindow(t *testing.T) {
 		"4", `{"mode":"room","room":"1003"}`, teacherUserID, auth.RoleTeacher)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
-	}
-	if items.windowOpen {
-		t.Error("the handler reported an open window although the test clock is outside 17:00 to 23:00")
 	}
 }
 
@@ -709,9 +704,10 @@ func TestNextDayCarriesTheWindow(t *testing.T) {
 	if payload["date"] != tomorrow {
 		t.Errorf("date = %v, want tomorrow %q", payload["date"], tomorrow)
 	}
-	if payload["window_start"] != "" && payload["window_end"] != "" {
-		if payload["decision_open"] == nil {
-			t.Error("the response carries no decision_open flag")
+	for _, gone := range []string{"window_start", "window_end", "decision_open", "decision_state",
+		"minutes_left"} {
+		if _, found := payload[gone]; found {
+			t.Errorf("the response still carries %q from the old decision window", gone)
 		}
 	}
 	if len(items.items) != 1 {

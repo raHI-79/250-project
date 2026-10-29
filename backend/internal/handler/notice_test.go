@@ -45,6 +45,11 @@ type fakeNoticeStore struct {
 	deletedID    int64
 	deletedFile  string
 	deleteErr    error
+	editedID     int64
+	editedTitle  string
+	editedSource string
+	editedOwner  int64
+	editErr      error
 	askedBatch   string
 	askedSection string
 	askedSource  string
@@ -116,6 +121,19 @@ func (f *fakeNoticeStore) ListCRNotices(ctx context.Context, createdBy int64) ([
 func (f *fakeNoticeStore) ListBatchCRNotices(ctx context.Context, batch string, otherBatches bool) ([]store.NoticeRow, error) {
 	f.askedBatch, f.askedOther = batch, otherBatches
 	return f.notices, f.err
+}
+
+func (f *fakeNoticeStore) DeleteAnyNotice(ctx context.Context, noticeID int64) (string, error) {
+	return f.DeleteAdminNotice(ctx, noticeID)
+}
+
+func (f *fakeNoticeStore) EditNotice(ctx context.Context, noticeID int64, title, description,
+	linkURL, source string, createdBy int64) error {
+	f.editedID = noticeID
+	f.editedTitle = title
+	f.editedSource = source
+	f.editedOwner = createdBy
+	return f.editErr
 }
 
 func (f *fakeNoticeStore) DeleteAdminNotice(ctx context.Context, noticeID int64) (string, error) {
@@ -197,6 +215,8 @@ func (r *recordingAlerts) NotifyUser(ctx context.Context, userID int64, kind, ti
 
 func (r *recordingAlerts) PushUser(ctx context.Context, userID int64, kind, title, body string,
 	link store.NotificationLink) error {
+	r.title, r.link = title, link
+	r.users++
 	r.pushed++
 	return nil
 }
@@ -628,4 +648,109 @@ func errorOf(t *testing.T, rec *httptest.ResponseRecorder) string {
 	}
 	text, _ := payload["error"].(string)
 	return text
+}
+
+func TestNoticeEditKeepsToTheOwner(t *testing.T) {
+	silenceLog(t)
+	body := `{"title":"Updated title","description":"Updated body"}`
+	tests := []struct {
+		name       string
+		handler    func(*Notice) http.HandlerFunc
+		userID     int64
+		role       string
+		wantSource string
+		wantOwner  int64
+	}{
+		{
+			name:       "the office may edit any notice",
+			handler:    func(n *Notice) http.HandlerFunc { return n.AdminEdit() },
+			userID:     noticeAdminID,
+			role:       auth.RoleAdmin,
+			wantSource: "",
+			wantOwner:  0,
+		},
+		{
+			name:       "a teacher only edits their own",
+			handler:    func(n *Notice) http.HandlerFunc { return n.TeacherEdit() },
+			userID:     noticeTeacherID,
+			role:       auth.RoleTeacher,
+			wantSource: store.SourceTeacher,
+			wantOwner:  noticeTeacherID,
+		},
+		{
+			name:       "a class representative only edits their own",
+			handler:    func(n *Notice) http.HandlerFunc { return n.CREdit() },
+			userID:     noticeCRID,
+			role:       auth.RoleCR,
+			wantSource: store.SourceCR,
+			wantOwner:  noticeCRID,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			notices := &fakeNoticeStore{}
+			handler := NewNotice(notices, &fakeFileStore{}, &recordingAlerts{})
+			request := jsonRequest(t, http.MethodPatch, "/api/notices/9", body, test.userID, test.role)
+			request.SetPathValue("id", "9")
+			rec := serve(test.handler(handler), request)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+			}
+			if notices.editedID != 9 || notices.editedTitle != "Updated title" {
+				t.Errorf("edited = %d %q, want notice 9 with the new title", notices.editedID,
+					notices.editedTitle)
+			}
+			if notices.editedSource != test.wantSource || notices.editedOwner != test.wantOwner {
+				t.Errorf("source = %q owner = %d, want %q and %d", notices.editedSource,
+					notices.editedOwner, test.wantSource, test.wantOwner)
+			}
+		})
+	}
+}
+
+func TestNoticeEditRefusesABlankTitle(t *testing.T) {
+	silenceLog(t)
+	notices := &fakeNoticeStore{}
+	handler := NewNotice(notices, &fakeFileStore{}, &recordingAlerts{})
+	request := jsonRequest(t, http.MethodPatch, "/api/cr/notices/9", `{"title":"  "}`,
+		noticeCRID, auth.RoleCR)
+	request.SetPathValue("id", "9")
+	rec := serve(handler.CREdit(), request)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if notices.editedID != 0 {
+		t.Error("the store was asked to edit a notice although the title was blank")
+	}
+}
+
+func TestNoticeEditReportsAMissingNotice(t *testing.T) {
+	silenceLog(t)
+	notices := &fakeNoticeStore{editErr: store.ErrNotFound}
+	handler := NewNotice(notices, &fakeFileStore{}, &recordingAlerts{})
+	request := jsonRequest(t, http.MethodPatch, "/api/cr/notices/9",
+		`{"title":"New","description":"Body"}`, noticeCRID, auth.RoleCR)
+	request.SetPathValue("id", "9")
+	rec := serve(handler.CREdit(), request)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if got := errorMessage(t, rec); got != MessageNoticeUnknown {
+		t.Errorf("error = %q, want %q", got, MessageNoticeUnknown)
+	}
+}
+
+func TestCRNoticeDeleteKeepsToTheOwner(t *testing.T) {
+	silenceLog(t)
+	notices := &fakeNoticeStore{}
+	handler := NewNotice(notices, &fakeFileStore{}, &recordingAlerts{})
+	request := jsonRequest(t, http.MethodDelete, "/api/cr/notices/4", "", noticeCRID, auth.RoleCR)
+	request.SetPathValue("id", "4")
+	rec := serve(handler.CRDelete(), request)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if notices.deletedID != 4 {
+		t.Errorf("deleted = %d, want 4", notices.deletedID)
+	}
 }

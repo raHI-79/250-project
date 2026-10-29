@@ -82,7 +82,8 @@ FROM schedule_items i
 JOIN courses c ON c.id = i.course_id
 LEFT JOIN published_items pi ON pi.item_id = i.id
 WHERE i.origin = 'teacher_exam' AND i.status <> 'cancelled'
-  AND i.batch = $1 AND (i.section = $2::text OR i.section = 'ALL')
+  AND ((i.batch = $1 AND (i.section = $2::text OR i.section = 'ALL'))
+    OR (i.batch <> $1 AND replace(c.code, ' ', '') = ANY($4::text[])))
   AND i.item_date >= $3::date
 UNION ALL
 SELECT p.item_id, to_char(p.item_date, 'YYYY-MM-DD'),
@@ -92,7 +93,8 @@ p.mode, p.room, p.meeting_link, p.syllabus, p.instructions, 'cr', p.status, TRUE
 FROM published_items p
 JOIN schedule_items i ON i.id = p.item_id
 WHERE p.kind = 'exam' AND i.origin = 'cr' AND p.status <> 'cancelled'
-  AND p.batch = $1 AND (p.section = $2::text OR p.section = 'ALL')
+  AND ((p.batch = $1 AND (p.section = $2::text OR p.section = 'ALL'))
+    OR (p.batch <> $1 AND replace(p.course_code, ' ', '') = ANY($4::text[])))
   AND p.item_date >= $3::date
 ORDER BY 2, 3`
 	listFilteredRoutinesSQL = `SELECT r.id, r.batch, r.semester, r.section, r.course_id, c.code, c.title,
@@ -162,8 +164,10 @@ func (s *Store) ListPublishedDay(ctx context.Context, batch, date string, dropCo
 	return items, nil
 }
 
-func (s *Store) ListStudentExams(ctx context.Context, batch, section string, now time.Time) ([]StudentExam, error) {
-	rows, err := s.pool.Query(ctx, listStudentExamsSQL, batch, section, now.Format(dateLayout))
+func (s *Store) ListStudentExams(ctx context.Context, batch, section string, now time.Time,
+	dropCourseCodes []string) ([]StudentExam, error) {
+	rows, err := s.pool.Query(ctx, listStudentExamsSQL, batch, section, now.Format(dateLayout),
+		dropCourseCodes)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the exams of %s: %w", batch, err)
 	}

@@ -91,8 +91,8 @@ through Brevo's HTTPS API instead.
 | `VAPID_PRIVATE_KEY` | your push private key |
 | `VAPID_SUBJECT` | `mailto:` and your address |
 | `STUDENT_EMAIL_DOMAIN` | `student.sust.edu` |
-| `DECISION_WINDOW_START` | `16:00` |
-| `DECISION_WINDOW_END` | `23:00` |
+| `TEACHER_REMINDER_TIMES` | `16:00,21:00` |
+| `TEACHER_MORNING_REMINDER` | `07:30` |
 | `SCHEDULE_DAYS_AHEAD` | `7` |
 | `MAX_UPLOAD_MB` | `10` |
 
