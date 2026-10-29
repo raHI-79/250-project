@@ -32,6 +32,7 @@ const PUBLIC_ENDPOINTS = [
   '/api/auth/verify-reset-code',
   '/api/auth/reset-password',
   '/api/push/public-key',
+  '/api/app/android-latest',
 ]
 
 const isPublicEndpoint = (path) => PUBLIC_ENDPOINTS.some((entry) => path.startsWith(entry))

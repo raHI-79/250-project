@@ -13,6 +13,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/push"
+	"github.com/raHI-79/250-project/backend/internal/release"
 	"github.com/raHI-79/250-project/backend/internal/server"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/upload"
@@ -98,25 +99,18 @@ func run() error {
 	} else {
 		log.Println("push: VAPID keys are missing, web push notifications stay off")
 	}
-	if pushWorker != nil || devices.Ready() {
-		sent, err := jobs.AnnounceRelease(startupContext, userStore, pushWorker, devices, cfg.Version,
-			cfg.FrontendOrigin)
-		if err != nil {
-			log.Printf("server: could not announce the release: %v", err)
-		} else if sent > 0 {
-			log.Printf("server: announced version %s to %d devices", cfg.Version, sent)
-		}
-	}
 	if cfg.HasAdminSeed() {
 		if err := seedAdmin(startupContext, userStore, cfg); err != nil {
 			return err
 		}
 	}
 	cancelStartup()
+	releases := release.New(cfg.ReleasesRepo, cfg.ReleasesAPI)
 	httpServer := &http.Server{
 		Addr: net.JoinHostPort("", cfg.Port),
 		Handler: server.NewRouter(server.Dependencies{
 			Config:    cfg,
+			Releases:  releases,
 			Database:  pool,
 			Tokens:    tokens,
 			Proofs:    proofs,
@@ -166,6 +160,10 @@ func run() error {
 	jobContext, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
 	go jobs.NewScheduler(cfg, userStore, alerts).Run(jobContext, jobs.Interval)
+	if pushWorker != nil || devices.Ready() {
+		watcher := jobs.NewReleaseWatcher(userStore, pushWorker, devices, releases, cfg.FrontendOrigin)
+		go watcher.Run(jobContext, jobs.ReleaseInterval)
+	}
 	if pushWorker != nil {
 		pushWorker.Run(jobContext, push.Workers)
 	}

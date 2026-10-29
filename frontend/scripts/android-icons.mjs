@@ -94,7 +94,6 @@ const run = async () => {
   for (const [folder, size] of SPLASH_LOGO) {
     await save(folder, 'splash_logo.png', await mark(size))
   }
-  await save('drawable-nodpi', 'sust_logo.png', await mark(256))
   for (const folder of STALE_SPLASH) {
     await rm(join(resDir, folder, 'splash.png'), { force: true })
   }

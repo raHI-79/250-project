@@ -47,14 +47,19 @@ export default function Sheet({
     if (drag > CLOSE_AFTER) onClose?.()
     else setDrag(0)
   }
+  const dismissible = Boolean(onClose)
   return (
     <div className="fixed inset-0 z-80 flex items-end justify-center sm:items-center sm:p-4">
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={() => onClose?.()}
-        className="animate-fade-in absolute inset-0 cursor-default bg-black/55"
-      />
+      {dismissible ? (
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => onClose()}
+          className="animate-fade-in absolute inset-0 cursor-default bg-black/55"
+        />
+      ) : (
+        <div aria-hidden="true" className="animate-fade-in absolute inset-0 bg-black/55" />
+      )}
       <section
         role="dialog"
         aria-modal="true"
@@ -67,9 +72,9 @@ export default function Sheet({
         )}
       >
         <div
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
+          onTouchStart={dismissible ? onTouchStart : undefined}
+          onTouchMove={dismissible ? onTouchMove : undefined}
+          onTouchEnd={dismissible ? onTouchEnd : undefined}
           className="flex shrink-0 cursor-grab touch-none justify-center pt-[max(0.5rem,env(safe-area-inset-top,0px))] pb-1 sm:hidden"
         >
           <span aria-hidden="true" className="h-1.5 w-11 rounded-full bg-line-strong" />
@@ -84,14 +89,16 @@ export default function Sheet({
             <h2 className="font-display text-section font-bold text-ink">{title}</h2>
             {description && <p className="mt-1 text-xs text-muted">{description}</p>}
           </div>
-          <button
-            type="button"
-            onClick={() => onClose?.()}
-            aria-label="Close"
-            className="press tap-target -mt-1.5 -mr-3 grid shrink-0 place-items-center rounded-full text-muted hover:bg-wash hover:text-ink"
-          >
-            <X size={20} />
-          </button>
+          {dismissible && (
+            <button
+              type="button"
+              onClick={() => onClose()}
+              aria-label="Close"
+              className="press tap-target -mt-1.5 -mr-3 grid shrink-0 place-items-center rounded-full text-muted hover:bg-wash hover:text-ink"
+            >
+              <X size={20} />
+            </button>
+          )}
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] text-sm text-ink-soft">
           {children}
