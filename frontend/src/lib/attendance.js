@@ -5,6 +5,8 @@ import { readJson } from './storage'
 
 const AttendanceBeacon = registerPlugin('AttendanceBeacon')
 
+const AttendanceMark = registerPlugin('AttendanceMark')
+
 export const PASS_MARK = 50
 
 export const DURATIONS = [5, 10, 15, 20, 30]
@@ -56,6 +58,26 @@ export const updateBeacon = (session) =>
   AttendanceBeacon.update({ present: session.present || 0, roster: session.roster || 0 })
 
 export const stopBeacon = () => AttendanceBeacon.stop()
+
+export const markSupported = () => isAndroidApp()
+
+export const phoneId = async () => {
+  if (!isAndroidApp()) return ''
+  const result = await AttendanceMark.deviceId()
+  return result?.device_id || ''
+}
+
+export const markStatus = () => AttendanceMark.status()
+
+export const askMark = () => AttendanceMark.ensure()
+
+export const turnMarkBluetoothOn = () => AttendanceMark.enableBluetooth()
+
+export const listenForToken = (seconds = 10) => AttendanceMark.scan({ seconds })
+
+export const readPosition = () => AttendanceMark.position()
+
+export const confirmIdentity = () => AttendanceMark.confirm()
 
 const sessionToken = () => readJson(SESSION_KEY)?.token || ''
 

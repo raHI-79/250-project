@@ -58,6 +58,7 @@ type Dependencies struct {
 	Humans    turnstile.Checker
 	Releases  handler.ReleaseLookup
 	Marks     handler.AttendanceStore
+	Presence  handler.StudentAttendanceStore
 }
 
 type RouteGroup struct {
@@ -151,6 +152,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
 	marks := handler.NewAttendance(deps.Config, deps.Marks, deps.Alarms)
 	registerAttendanceTeacherRoutes(TeacherGroup(mux, deps), marks)
+	registerAttendanceStudentRoutes(StudentGroup(mux, deps),
+		handler.NewStudentAttendance(deps.Config, deps.Presence, deps.Alarms))
 	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
 	files := deps.Files
 	if files == nil {
@@ -276,6 +279,14 @@ func registerAttendanceTeacherRoutes(group RouteGroup, marks *handler.Attendance
 	group.Handle("PATCH /api/teacher/attendance/sessions/{id}/students/{student_id}", marks.EditMark())
 	group.Handle("GET /api/teacher/attendance/classes", marks.Classes())
 	group.Handle("GET /api/teacher/attendance/export", marks.Export())
+}
+
+func registerAttendanceStudentRoutes(group RouteGroup, presence *handler.StudentAttendance) {
+	group.Handle("GET /api/students/attendance/open", presence.Open())
+	group.Handle("POST /api/students/attendance/mark", presence.Mark())
+	group.Handle("GET /api/students/attendance/mine", presence.Mine())
+	group.Handle("POST /api/students/attendance/phone", presence.RegisterPhone())
+	group.Handle("POST /api/students/attendance/phone-request", presence.RequestPhone())
 }
 
 func registerStudentRoutes(group RouteGroup, student *handler.Student) {

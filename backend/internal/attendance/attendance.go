@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	ServiceUUID       = "0000a7a7-0000-1000-8000-00805f9b34fb"
 	TokenSliceSeconds = 10
 	CodeSliceSeconds  = 20
 	TokenBytes        = 8

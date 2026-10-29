@@ -19,6 +19,8 @@ import NoticesPage from './pages/NoticesPage'
 import MaterialsPage from './pages/student/MaterialsPage'
 import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
+import StudentAttendancePage from './pages/student/StudentAttendancePage'
+import MyAttendancePage from './pages/student/MyAttendancePage'
 import TeachersPage from './pages/student/TeachersPage'
 import MessagesPage from './pages/MessagesPage'
 import CreateClassExamPage from './pages/cr/CreateClassExamPage'
@@ -105,6 +107,8 @@ export default function Router() {
           <Route path={paths.student.materials()} element={<MaterialsPage />} />
           <Route path={paths.student.students()} element={<StudentsDirectoryPage />} />
           <Route path={paths.student.polls()} element={<PollsPage />} />
+          <Route path={paths.student.attendance()} element={<StudentAttendancePage />} />
+          <Route path={paths.student.myAttendance()} element={<MyAttendancePage />} />
           <Route path={paths.student.teachers()} element={<TeachersPage />} />
           <Route path={paths.student.messages()} element={<MessagesPage />} />
         </Route>

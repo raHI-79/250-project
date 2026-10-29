@@ -22,6 +22,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ApkInstaller.class);
         registerPlugin(AttendanceBeacon.class);
+        registerPlugin(AttendanceMark.class);
         super.onCreate(savedInstanceState);
     }
 

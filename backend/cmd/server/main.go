@@ -141,6 +141,7 @@ func run() error {
 			Votes:     userStore,
 			Badges:    userStore,
 			Marks:     userStore,
+			Presence:  userStore,
 			Files:     upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
 			Mailer: mailer.New(cfg.MailProvider, mailer.Options{
 				Host:     cfg.SMTPHost,
