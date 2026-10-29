@@ -76,9 +76,15 @@ type Pusher interface {
 	Queue(userIDs []int64, payload push.Payload)
 }
 
+type Devices interface {
+	Deliver(ctx context.Context, userIDs []int64, title, body, url, tag string) int
+	Ready() bool
+}
+
 type Service struct {
 	notifications Store
 	pushes        Pusher
+	devices       Devices
 	origin        string
 }
 
@@ -89,6 +95,11 @@ func New(notifications Store) *Service {
 func (s *Service) WithPush(pushes Pusher, origin string) *Service {
 	s.pushes = pushes
 	s.origin = origin
+	return s
+}
+
+func (s *Service) WithDevices(devices Devices) *Service {
+	s.devices = devices
 	return s
 }
 
@@ -281,13 +292,15 @@ func GroupByRole(audience []store.NotificationRecipient) map[string][]int64 {
 }
 
 func (s *Service) queue(ctx context.Context, userIDs []int64, page, kind, title, body string) {
-	if s.pushes == nil || len(userIDs) == 0 {
+	if len(userIDs) == 0 || ctx.Err() != nil {
 		return
 	}
-	if ctx.Err() != nil {
-		return
+	if s.pushes != nil {
+		s.pushes.Queue(userIDs, push.Payload{Title: title, Body: body, URL: page, Tag: kind})
 	}
-	s.pushes.Queue(userIDs, push.Payload{Title: title, Body: body, URL: page, Tag: kind})
+	if s.devices != nil && s.devices.Ready() {
+		go s.devices.Deliver(context.WithoutCancel(ctx), userIDs, title, body, page, kind)
+	}
 }
 
 func (s *Service) Recent(ctx context.Context, userID int64, limit int) ([]store.Notification, error) {

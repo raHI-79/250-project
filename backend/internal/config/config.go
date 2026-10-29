@@ -15,6 +15,7 @@ const (
 	defaultAppEnv          = "development"
 	defaultVersion         = "0.0.0"
 	defaultCommit          = "unknown"
+	defaultChannelID       = "sust_cse"
 	defaultTimezone        = "Asia/Dhaka"
 	defaultJWTTTL          = "24h"
 	defaultFrontendOrigin  = "http://localhost:5173"
@@ -84,6 +85,12 @@ type Config struct {
 	VAPIDSubject       string
 	TurnstileSiteKey   string
 	TurnstileSecretKey string
+	FirebaseAccount    string
+	FCMChannelID       string
+}
+
+func (c *Config) FirebaseEnabled() bool {
+	return c.FirebaseAccount != ""
 }
 
 func (c *Config) HumanCheckEnabled() bool {
@@ -129,6 +136,8 @@ func Load() (*Config, error) {
 		VAPIDSubject:       strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
 		TurnstileSiteKey:   strings.TrimSpace(os.Getenv("TURNSTILE_SITE_KEY")),
 		TurnstileSecretKey: strings.TrimSpace(os.Getenv("TURNSTILE_SECRET_KEY")),
+		FirebaseAccount:    strings.TrimSpace(os.Getenv("FIREBASE_SERVICE_ACCOUNT")),
+		FCMChannelID:       getEnv("FCM_CHANNEL_ID", defaultChannelID),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL

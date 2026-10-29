@@ -5,11 +5,20 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/push"
 )
 
-const ReleaseTitle = "SUST CSE Portal"
+const (
+	ReleaseTitle = "SUST CSE Portal"
+	ReleaseTag   = "release"
+)
 
 type ReleaseStore interface {
 	ClaimVersionAnnouncement(ctx context.Context, version string) (bool, error)
 	ListPushTargets(ctx context.Context) ([]int64, error)
+	ListDeviceTargets(ctx context.Context) ([]int64, error)
+}
+
+type ReleaseDevices interface {
+	Deliver(ctx context.Context, userIDs []int64, title, body, url, tag string) int
+	Ready() bool
 }
 
 type ReleasePusher interface {
@@ -21,26 +30,37 @@ func ReleaseBody(version string) string {
 }
 
 func AnnounceRelease(ctx context.Context, meta ReleaseStore, pusher ReleasePusher,
-	version, origin string) (int, error) {
-	if pusher == nil || version == "" {
+	devices ReleaseDevices, version, origin string) (int, error) {
+	ready := devices != nil && devices.Ready()
+	if version == "" || (pusher == nil && !ready) {
 		return 0, nil
 	}
 	fresh, err := meta.ClaimVersionAnnouncement(ctx, version)
 	if err != nil || !fresh {
 		return 0, err
 	}
-	targets, err := meta.ListPushTargets(ctx)
-	if err != nil {
-		return 0, err
+	reached := 0
+	if pusher != nil {
+		targets, err := meta.ListPushTargets(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if len(targets) > 0 {
+			pusher.Queue(targets, push.Payload{
+				Title: ReleaseTitle,
+				Body:  ReleaseBody(version),
+				URL:   origin,
+				Tag:   ReleaseTag,
+			})
+			reached += len(targets)
+		}
 	}
-	if len(targets) == 0 {
-		return 0, nil
+	if ready {
+		targets, err := meta.ListDeviceTargets(ctx)
+		if err != nil {
+			return reached, err
+		}
+		reached += devices.Deliver(ctx, targets, ReleaseTitle, ReleaseBody(version), origin, ReleaseTag)
 	}
-	pusher.Queue(targets, push.Payload{
-		Title: ReleaseTitle,
-		Body:  ReleaseBody(version),
-		URL:   origin,
-		Tag:   "release",
-	})
-	return len(targets), nil
+	return reached, nil
 }
