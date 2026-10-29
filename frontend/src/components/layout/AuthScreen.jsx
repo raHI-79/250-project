@@ -4,6 +4,8 @@ import paths from '../../lib/paths'
 import LogoBadge from '../ui/LogoBadge'
 import { DEPARTMENT, UNIVERSITY } from '../ui/IdentityBar'
 import CampusBackdrop from './CampusBackdrop'
+import AppAuthScreen from './AppAuthScreen'
+import { isNative } from '../../lib/native'
 
 const TONES = {
   brand: {
@@ -27,6 +29,13 @@ export default function AuthScreen({
   className,
   children,
 }) {
+  if (isNative()) {
+    return (
+      <AppAuthScreen wide={wide} className={className}>
+        {children}
+      </AppAuthScreen>
+    )
+  }
   const skin = TONES[tone] || TONES.brand
   return (
     <div className="relative flex min-h-dvh flex-col">

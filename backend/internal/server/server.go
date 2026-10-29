@@ -105,7 +105,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
 	mux.HandleFunc("GET /api/auth/config", authHandler.Config())
 	throttled.Handle("POST /api/human/verify", handler.NewHuman(deps.Config, deps.Passes, humans).Verify())
-	guarded.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
+	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())
 	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{humanOnly}}.
 		Handle("POST /api/auth/register", authHandler.Register())
 	throttled.Handle("GET /api/auth/drop-course-options", authHandler.DropCourseOptions())
@@ -114,7 +114,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	guarded.Handle("POST /api/auth/verify-email", authHandler.VerifyEmail())
 	guarded.Handle("POST /api/auth/resend-verification", authHandler.ResendVerification())
 	mux.HandleFunc("GET /api/auth/invite", authHandler.Invite())
-	guarded.Handle("GET /api/auth/user-id-available", authHandler.UserIDAvailable())
+	throttled.Handle("GET /api/auth/user-id-available", authHandler.UserIDAvailable())
 	guarded.Handle("POST /api/auth/activate", authHandler.Activate())
 	guarded.Handle("POST /api/auth/login", authHandler.Login())
 	guarded.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())

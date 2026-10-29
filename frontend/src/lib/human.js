@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import api, { HUMAN_EVENT } from './api'
+import api from './api'
 import { readJson, remove, writeJson } from './storage'
+import { isNative } from './native'
 import { isStandalone } from './standalone'
 
 const PASS_KEY = 'sustcse.human'
@@ -32,31 +33,49 @@ export const verifyHuman = async (token) => {
   return data.pass
 }
 
-export const useHumanGate = () => {
-  const [config, setConfig] = useState(null)
+export const useHumanCheck = () => {
+  const [siteKey, setSiteKey] = useState('')
+  const [ready, setReady] = useState(() => isNative())
   const [passed, setPassed] = useState(() => Boolean(humanPass()))
+  const [token, setToken] = useState('')
+  const [round, setRound] = useState(0)
   useEffect(() => {
+    if (isNative()) return undefined
     let live = true
+    const settle = (key) => {
+      if (!live) return
+      setSiteKey(key)
+      setReady(true)
+    }
     api
       .get('/api/auth/config', { auth: false })
-      .then((data) => {
-        if (live) setConfig(data || {})
-      })
-      .catch(() => {
-        if (live) setConfig({})
-      })
+      .then((data) => settle(data?.human_check_enabled ? data?.turnstile_site_key || '' : ''))
+      .catch(() => settle(''))
     return () => {
       live = false
     }
   }, [])
-  const pass = useCallback(() => setPassed(true), [])
-  useEffect(() => {
-    const onLost = () => setPassed(false)
-    window.addEventListener(HUMAN_EVENT, onLost)
-    return () => window.removeEventListener(HUMAN_EVENT, onLost)
+  const reset = useCallback(() => {
+    setToken('')
+    setPassed(Boolean(humanPass()))
+    setRound((current) => current + 1)
   }, [])
-  const needed = Boolean(
-    config?.human_check_enabled && config?.turnstile_site_key && !passed,
-  )
-  return { ready: config !== null, needed, siteKey: config?.turnstile_site_key || '', pass }
+  const needed = !isNative() && Boolean(siteKey)
+  const confirm = useCallback(async () => {
+    if (!needed || humanPass()) return
+    if (!token) throw new Error('Please complete the check below.')
+    await verifyHuman(token)
+    setPassed(true)
+  }, [needed, token])
+  return {
+    ready,
+    siteKey,
+    token,
+    setToken,
+    reset,
+    round,
+    confirm,
+    needed: needed && !passed,
+    blocked: !ready || (needed && !passed && !token),
+  }
 }

@@ -88,6 +88,10 @@ func RequireHuman(cfg *config.Config, passes HumanPassIssuer) func(http.Handler)
 				next.ServeHTTP(w, r)
 				return
 			}
+			if middleware.FromAndroidApp(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			if err := passes.Check(r.Header.Get(HumanPassHeader)); err != nil {
 				httpx.WriteError(w, http.StatusForbidden, MessageHumanCheckNeeded)
 				return
