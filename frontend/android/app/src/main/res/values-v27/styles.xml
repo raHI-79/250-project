@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:statusBarColor">@color/appSurface</item>
+        <item name="android:navigationBarColor">@color/appSurface</item>
+        <item name="android:windowLightStatusBar">@bool/appLightSystemBars</item>
+        <item name="android:windowLightNavigationBar">@bool/appLightSystemBars</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:statusBarColor">@color/appSurface</item>
+        <item name="android:navigationBarColor">@color/appSurface</item>
+        <item name="android:windowLightStatusBar">@bool/appLightSystemBars</item>
+        <item name="android:windowLightNavigationBar">@bool/appLightSystemBars</item>
+    </style>
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="android:statusBarColor">@color/splashBackground</item>
+        <item name="android:navigationBarColor">@color/splashBackground</item>
+        <item name="android:windowLightStatusBar">@bool/splashLightStatusBar</item>
+        <item name="android:windowLightNavigationBar">@bool/splashLightStatusBar</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>

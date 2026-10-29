@@ -5,13 +5,13 @@ import ThemeProvider from './context/ThemeProvider'
 import ConfirmProvider from './components/ui/ConfirmProvider'
 import ToastProvider from './components/ui/ToastProvider'
 import Router from './router'
+import AppBanner from './components/layout/AppBanner'
+import AppUpdate from './components/layout/AppUpdate'
 import UpdateBanner from './components/layout/UpdateBanner'
 import { useKeyboardAwareFocus } from './lib/keyboard'
-import { useNativeShell } from './lib/shell'
 
 export default function App() {
   useKeyboardAwareFocus()
-  useNativeShell()
   return (
     <BrowserRouter>
       <ThemeProvider>
@@ -20,6 +20,8 @@ export default function App() {
             <ConfirmProvider>
               <GlassBackdrop />
               <Router />
+              <AppBanner />
+              <AppUpdate />
               <UpdateBanner />
             </ConfirmProvider>
           </ToastProvider>

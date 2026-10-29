@@ -249,10 +249,12 @@ go run ./cmd/server
 | `APPS_SCRIPT_SECRET` | none — optional | Shared secret the script checks on every request; never logged |
 | `TURNSTILE_SITE_KEY` | none — optional | Cloudflare Turnstile site key; with either key empty the human check is skipped |
 | `TURNSTILE_SECRET_KEY` | none — optional | Cloudflare Turnstile secret key, used server side only |
-| `APP_VERSION` | `0.0.0` | Version reported by `/api/health` and announced once per release |
+| `APP_VERSION` | `0.0.0` | Version reported by `/api/health` |
 | `APP_COMMIT` | `RENDER_GIT_COMMIT` or `unknown` | Short commit reported by `/api/health` |
 | `FIREBASE_SERVICE_ACCOUNT` | none — optional | The Firebase service account JSON, base64; empty turns the Android notifications off |
 | `FCM_CHANNEL_ID` | `sust_cse` | The Android notification channel the messages land in |
+| `GITHUB_RELEASES_REPO` | `raHI-79/250-project` | The repository `/download/android` and the in-app updater read releases from |
+| `GITHUB_API_URL` | `https://api.github.com` | Override the GitHub API host; only the tests set it |
 
 Never commit real values. `backend/.env` is gitignored; only
 `backend/.env.example` is tracked.
@@ -451,8 +453,10 @@ clears the dot. The target pages honour `?date`, `?item`, `?tab` and
 ### Interface design
 
 The interface is built as a phone app first: calm, card based and quick to
-read, with the department's own identity — maroon `#7A1F2B`, warm paper
-`#FAF9F6` and a muted gold used only for highlights.
+read — neutral near-white surfaces `#F7F8FA`, soft grey borders, ink-black
+text and one refined deep blue `#1D4ED8` that carries every action. A warm
+amber appears rarely, and the SUST logo is the only brand mark. Maroon is
+gone from the whole product.
 
 The tokens live in `frontend/src/index.css`. The palette is declared once as
 `--c-*` custom properties and mapped into `@theme`, so every utility resolves
@@ -461,14 +465,14 @@ colour:
 
 | Token group | Values | Used for |
 |---|---|---|
-| `brand-50` … `brand-950` | maroon, `brand-600` is `#7A1F2B` | the department colour: links, filled buttons, selected states |
-| `gold-50` … `gold-900` | `gold-500` is `#B8860B` | notes, the syllabus block, highlights |
+| `brand-50` … `brand-950` | deep blue, `brand-600` is `#1D4ED8` (6.6:1 on white) | the primary: links, filled buttons, selected states |
+| `gold-50` … `gold-900` | warm amber, `gold-500` is `#F79009` | the rare accent: notes, the syllabus block, highlights |
 | `success-*`, `warning-*`, `danger-*` | green, amber, red | the semantic states; `accent-*` still resolves to `danger-*` |
-| `ink`, `ink-soft`, `muted`, `faint` | near-black to grey | text, in that order of weight |
-| `page`, `surface`, `raised`, `wash` | `#FAF9F6`, white, the one elevated card level, the tint behind rows | the page and its panels |
-| `line`, `line-strong` | hairlines | rules and borders |
+| `ink`, `ink-soft`, `muted`, `faint` | `#101828` to grey | text, in that order of weight |
+| `page`, `surface`, `raised`, `wash` | `#F7F8FA`, white, the one elevated card level, the tint behind rows | the page and its panels |
+| `line`, `line-strong` | `#E4E7EC` hairlines | rules and borders |
 | `glass` | translucent surface | the top app bar and the bottom tab bar |
-| `night`, `maroon-*`, `sand` | fixed, never themed | the few surfaces that stay dark in both themes |
+| `night`, `deep-*`, `sand` | fixed, never themed | the few surfaces that stay dark in both themes, such as a photo overlay |
 
 #### Dark theme
 
@@ -476,8 +480,11 @@ colour:
 `prefers-color-scheme` block covers the system setting. `src/lib/theme.js`
 resolves the choice before the first paint, and `My profile → Appearance` sets
 Light, Dark or System. A filled brand surface pairs with `text-page`, so it is
-maroon with paper text in the light theme and a light brand tone with near-black
-text in the dark one.
+deep blue with near-white text in the light theme and a light blue with
+near-black text in the dark one. In the app `src/lib/shell.js` paints the
+status bar and the navigation bar with the resolved surface colour and flips
+their icons with it, so the system bars read as one surface with the app's own
+top and bottom bars.
 
 Two fonts are loaded in `frontend/index.html`: Source Serif 4 for large page
 titles and the home greeting (the `font-display` and `font-numeral` utilities),
@@ -571,21 +578,56 @@ logs once whether the VAPID keys are configured.
 Browsers only allow push on `https://`, with `http://localhost` as the single
 exception — see *Showing the site on a phone over HTTPS* below.
 
-### Installing the site on a phone or a desktop
+### Getting the app, or installing the site
 
-`frontend/public/manifest.webmanifest` gives the installed app its name
-(`SUST CSE Portal`), its short name (`SUST CSE`), the maroon theme, the paper
-background, `start_url` `/`, `display: standalone` and the generated icons.
-`index.html` links the manifest, carries a light and a dark `theme-color` and
-paints a branded splash until the first screen is ready. When the app runs
-standalone the browser-only parts of the public page are hidden and a compact
-sign-in launcher takes their place.
+On Android there is one way in: the real app. `GET /download/android` is public
+and redirects to the signed APK of the newest GitHub Release, so the link to
+share is
 
-- **Android and desktop Chrome** — open the site and choose `Install app` from
-  the address bar or the browser menu.
+```
+https://<your host>/download/android
+```
+
+Every **Download the Android app** button goes through
+`paths.downloadAndroid()` to that route, and on an Android browser one small
+bottom banner offers it once; closing or using the banner hides it for thirty
+days. Chrome no longer offers to install the website there: `index.html`
+attaches `manifest.webmanifest` only on a desktop or an iPhone and refuses
+`beforeinstallprompt` on Android, so nobody ends up with a stale web copy.
+
+`frontend/public/manifest.webmanifest` still gives the installed app its name
+(`SUST CSE Portal`), its short name (`SUST CSE`), the theme and background
+colours, `start_url` `/`, `display: standalone` and the generated icons.
+`index.html` carries a light and a dark `theme-color` and paints a branded
+splash until the first screen is ready. When the app runs standalone the
+browser-only parts of the public page are hidden and a compact sign-in launcher
+takes their place.
+
 - **iPhone** — open the site in Safari and choose `Share → Add to Home Screen`.
   Safari only delivers push to an installed site, so this step is required
   before notifications work there.
+- **Desktop Chrome** — open the site and choose `Install app` from the address
+  bar or the browser menu.
+- **Android** — use `/download/android`, not the browser's install option.
+
+### Releasing an update
+
+1. Bump `version` in `frontend/package.json` (it sets `versionName` and the
+   version the app reports), and `APP_VERSION` in `render.yaml`.
+2. Merge the change into `main`.
+3. Tag and push it:
+
+   ```powershell
+   git tag v2.1.0
+   git push origin v2.1.0
+   ```
+
+`.github/workflows/android.yml` builds and signs the APK and attaches it to the
+release as `sust-cse-portal-<version>.apk`. From there everything is automatic:
+`/download/android` points at the new file within ten minutes, the app picks the
+release up on its next start or resume and offers the update, and the server
+announces it once to every device token. Put `[required]` anywhere in the
+release notes to make the update unskippable.
 
 #### Installing as an Android app
 
@@ -610,7 +652,7 @@ npm run icons
 
 `scripts/icons.mjs` writes `icon-192.png`, `icon-512.png` (purpose `any`),
 `icon-192-maskable.png`, `icon-512-maskable.png` (the crest on a white plate
-over maroon, inside the safe area), `badge-96.png` (the monochrome notification
+over the primary blue, inside the safe area), `badge-96.png` (the monochrome notification
 badge), `apple-touch-icon.png` and `favicon.png`. The generated files are
 committed, so the script only has to run again when the logo changes.
 
@@ -622,11 +664,11 @@ with exactly these names and nothing else has to change:
 
 | File | Size | Used by |
 |---|---|---|
-| `campus/hero-monument.jpg`, `campus/hero-building.jpg`, `campus/hero-entrance.jpg` | 1920 × 1080 | the home hero slideshow and the sign-in pages |
+| `campus/hero-oldGate.jpg`, `campus/hero-building.jpg`, `campus/hero-monument.jpg`, `campus/hero-entrance.jpg` | 1920 × 1080 | the sign-in slideshow; the home hero uses `hero-building.jpg` on its own |
 | `brand/sust-logo.png` | 512 × 512 | every crest, the home hero, the ID card, and the source for `npm run icons` |
 
 There is no CSE logo; the SUST logo is the only one the app uses. When a campus
-photo is missing the hero falls back to its maroon gradient, and when the logo
+photo is missing the hero falls back to its deep gradient, and when the logo
 is missing the crest falls back to its `CSE` monogram, so the app still looks
 finished without them.
 
@@ -722,6 +764,8 @@ Every route lives under `/api`. Errors always use the same shape:
 |---|---|---|---|
 | `GET` | `/api/health` | public | `status`, `environment`, `version`, `commit`, `database` (`ok` / `unavailable`) and the current time |
 | `POST` | `/api/human/verify` | public | `{token, standalone}` checks a Turnstile token with Cloudflare and returns a signed pass; `503` when the keys are missing |
+| `GET` | `/download/android` | public, rate limited | `302` to the signed APK of the newest GitHub Release; a short HTML page when no build is published. The release lookup is cached ten minutes |
+| `GET` | `/api/app/android-latest` | public, rate limited | `{version, version_code, apk_url, notes, required}` of the newest release; `required` is true when the notes carry `[required]` |
 | `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
 | `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
 | `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students, out of `A` and `B` |

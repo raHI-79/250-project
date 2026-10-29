@@ -8,6 +8,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/release"
 	"github.com/raHI-79/250-project/backend/internal/turnstile"
 	"github.com/raHI-79/250-project/backend/internal/upload"
 	"github.com/raHI-79/250-project/backend/internal/web"
@@ -55,6 +56,7 @@ type Dependencies struct {
 	Badges    handler.BadgeStore
 	Passes    handler.HumanPassIssuer
 	Humans    turnstile.Checker
+	Releases  handler.ReleaseLookup
 }
 
 type RouteGroup struct {
@@ -103,6 +105,13 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	authenticated := AuthenticatedGroup(mux, deps)
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
+	releases := deps.Releases
+	if releases == nil {
+		releases = release.New(deps.Config.ReleasesRepo, deps.Config.ReleasesAPI)
+	}
+	apps := handler.NewAppRelease(releases, deps.Config.FrontendOrigin)
+	throttled.Handle("GET "+handler.DownloadAndroidPath, apps.Download())
+	throttled.Handle("GET "+handler.AndroidLatestPath, apps.Latest())
 	mux.HandleFunc("GET /api/auth/config", authHandler.Config())
 	throttled.Handle("POST /api/human/verify", handler.NewHuman(deps.Config, deps.Passes, humans).Verify())
 	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())

@@ -9,6 +9,7 @@ import {
   LogOut,
   Mail,
   Palette,
+  RefreshCw,
 } from 'lucide-react'
 import IdentityCard from '../components/IdentityCard'
 import {
@@ -39,6 +40,7 @@ import { THEME_CHOICES } from '../lib/theme'
 import { MAX_BIO, PHONE_MESSAGE, accountRoleLabel, isPhone, passwordError } from '../lib/account'
 import { formatDate } from '../lib/time'
 import { buildLabel } from '../lib/version'
+import { requestUpdateCheck, updatesSupported } from '../lib/update'
 
 export default function ProfilePage() {
   const { role, updateUser, logout } = useAuth()
@@ -253,6 +255,14 @@ export default function ProfilePage() {
               subtitle={buildLabel(health.data?.commit)}
               chevron={false}
             />
+            {updatesSupported() && (
+              <ListRow
+                icon={RefreshCw}
+                title="Check for updates"
+                subtitle="Install the newest version of the app"
+                onClick={requestUpdateCheck}
+              />
+            )}
             <ListRow icon={LogOut} title="Sign out" danger onClick={logout} chevron={false} />
           </Card>
         </div>

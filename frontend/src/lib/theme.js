@@ -14,7 +14,9 @@ export const THEME_CHOICES = [
   { value: THEME_SYSTEM, label: 'System' },
 ]
 
-export const THEME_COLORS = { light: '#FAF9F6', dark: '#101113' }
+export const THEME_COLORS = { light: '#F7F8FA', dark: '#0E1014' }
+
+export const CHROME_COLORS = { light: '#F7F8FA', dark: '#0E1014' }
 
 const DARK_QUERY = '(prefers-color-scheme: dark)'
 

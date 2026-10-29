@@ -49,7 +49,7 @@ export default function IdentityCard({
   const showPhoto = Boolean(photoUrl) && !broken
   return (
     <div className={cx('glass-card overflow-hidden rounded-card', className)}>
-      <div className="relative overflow-hidden bg-linear-to-br from-maroon-600 to-maroon-900 px-5 pt-5 pb-14 text-center">
+      <div className="relative overflow-hidden bg-linear-to-br from-deep-700 to-deep-950 px-5 pt-5 pb-14 text-center">
         <div className="flex items-center justify-center gap-2">
           <LogoBadge size="sm" tone="light" className="size-8 rounded-lg p-1" />
           <p className="text-2xs font-bold tracking-[0.12em] text-white/85 uppercase">

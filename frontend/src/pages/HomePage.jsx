@@ -177,7 +177,7 @@ export default function HomePage() {
               <Link
                 key={portal.title}
                 to={portal.to}
-                className="group relative isolate overflow-hidden rounded-card border border-line bg-linear-to-br from-maroon-900 via-maroon-800 to-maroon-600 p-6 sm:p-8"
+                className="group relative isolate overflow-hidden rounded-card border border-line bg-linear-to-br from-deep-900 via-deep-800 to-deep-700 p-6 sm:p-8"
               >
                 <span
                   aria-hidden="true"

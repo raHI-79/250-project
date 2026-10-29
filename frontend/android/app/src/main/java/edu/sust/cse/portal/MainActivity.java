@@ -1,6 +1,7 @@
 package edu.sust.cse.portal;
 
 import android.content.Intent;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -16,6 +17,12 @@ public class MainActivity extends BridgeActivity {
     private static final long[] DELIVER_AFTER = {400L, 1800L};
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(ApkInstaller.class);
+        super.onCreate(savedInstanceState);
+    }
 
     @Override
     protected void onNewIntent(Intent intent) {

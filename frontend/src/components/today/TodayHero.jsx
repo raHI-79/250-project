@@ -32,7 +32,7 @@ export default function TodayHero({ name, meta, now = new Date(), className }) {
       />
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-linear-to-t from-maroon-950/45 via-maroon-950/35 to-maroon-950/25"
+        className="absolute inset-0 bg-linear-to-t from-deep-950/55 via-deep-950/30 to-deep-950/15"
       />
       <div className="relative text-shadow-hero">
         <div className="flex items-center gap-2.5">

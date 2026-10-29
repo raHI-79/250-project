@@ -7,6 +7,7 @@ import {
   storeChoice,
   storedChoice,
 } from '../lib/theme'
+import { useNativeShell } from '../lib/shell'
 import { ThemeContext } from './theme'
 
 export default function ThemeProvider({ children }) {
@@ -23,6 +24,7 @@ export default function ThemeProvider({ children }) {
   useEffect(() => {
     applyTheme(resolved)
   }, [resolved])
+  useNativeShell(resolved)
   const select = useCallback((next) => {
     storeChoice(next)
     setChoice(next)

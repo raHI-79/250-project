@@ -6,8 +6,6 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -67,10 +65,6 @@ public class PortalMessagingService extends FirebaseMessagingService {
                 .setSound(sound)
                 .setVibrate(new long[] {0, 250, 150, 250})
                 .setContentIntent(opener(url));
-        Bitmap logo = BitmapFactory.decodeResource(getResources(), R.drawable.sust_logo);
-        if (logo != null) {
-            builder.setLargeIcon(logo);
-        }
         if (!TextUtils.isEmpty(body) && body.length() > BIG_TEXT_AT) {
             builder.setStyle(new NotificationCompat.BigTextStyle().bigText(body));
         }
