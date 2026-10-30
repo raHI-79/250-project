@@ -15,6 +15,7 @@ const (
 	TitleNoResponse    = "No answer from the teacher"
 	TitleExamInFinal   = "Exam added to the final routine"
 	dateLayout         = "2006-01-02"
+	cleanupMinute      = 5
 	noResponseSentence = "%s on %s at %s got no answer by the deadline. The room stays booked, so decide for your batch."
 	examFinalSentence  = "%s on %s is in the final routine. Set the time and the room, then publish."
 )
@@ -23,6 +24,7 @@ type Store interface {
 	GenerateFixedItems(ctx context.Context, from, to string) (int, error)
 	MarkNoResponse(ctx context.Context, date string) ([]store.ScheduleItem, error)
 	PromoteExamsToFinal(ctx context.Context, date string) ([]store.ScheduleItem, error)
+	ClearPastFinal(ctx context.Context, date string) (int, error)
 	ListActiveCRs(ctx context.Context, batch, section string) ([]int64, error)
 	ListUndecidedTeachers(ctx context.Context, date string) ([]store.UndecidedTeacher, error)
 	ListUndecidedTeachersFrom(ctx context.Context, date, after string) ([]store.UndecidedTeacher, error)
@@ -36,9 +38,10 @@ type Notifier interface {
 }
 
 type Scheduler struct {
-	cfg    *config.Config
-	items  Store
-	alerts Notifier
+	cfg       *config.Config
+	items     Store
+	alerts    Notifier
+	cleanedOn string
 }
 
 func NewScheduler(cfg *config.Config, items Store, alerts Notifier) *Scheduler {
@@ -70,6 +73,11 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		log.Printf("jobs: could not close the decision window: %v", err)
 	} else if closed > 0 {
 		log.Printf("jobs: %d items got no answer from their teacher", closed)
+	}
+	if cleared, err := s.ClearPastFinal(ctx, now); err != nil {
+		log.Printf("jobs: could not clear the past days of the final routines: %v", err)
+	} else if cleared > 0 {
+		log.Printf("jobs: took %d past items out of the final routines", cleared)
 	}
 	if promoted, err := s.PromoteExams(ctx, now); err != nil {
 		log.Printf("jobs: could not move the exams into the final routine: %v", err)
@@ -120,6 +128,22 @@ func (s *Scheduler) pastLastReminder(now time.Time) bool {
 		return false
 	}
 	return now.Hour()*60+now.Minute() >= last.Hour()*60+last.Minute()
+}
+
+func (s *Scheduler) ClearPastFinal(ctx context.Context, now time.Time) (int, error) {
+	today := now.Format(dateLayout)
+	if s.cleanedOn == today {
+		return 0, nil
+	}
+	if s.cleanedOn != "" && now.Hour()*60+now.Minute() < cleanupMinute {
+		return 0, nil
+	}
+	cleared, err := s.items.ClearPastFinal(ctx, today)
+	if err != nil {
+		return 0, err
+	}
+	s.cleanedOn = today
+	return cleared, nil
 }
 
 func (s *Scheduler) PromoteExams(ctx context.Context, now time.Time) (int, error) {

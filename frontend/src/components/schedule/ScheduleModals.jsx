@@ -8,7 +8,14 @@ import { formatDate, formatTimeRange, today } from '../../lib/time'
 
 const emptySlot = { mode: MODE_ROOM, room: '', meeting_link: '' }
 
-export function CancelModal({ item, onClose, onConfirm, busy }) {
+export function CancelModal({
+  item,
+  onClose,
+  onConfirm,
+  busy,
+  title = 'Cancel this class?',
+  confirmLabel = 'Cancel the class',
+}) {
   const [reason, setReason] = useState('')
   const [problem, setProblem] = useState('')
   useEffect(() => {
@@ -27,14 +34,14 @@ export function CancelModal({ item, onClose, onConfirm, busy }) {
     <Modal
       open={Boolean(item)}
       onClose={onClose}
-      title="Cancel this class?"
+      title={title}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Keep it
           </Button>
           <Button variant="danger" loading={busy} onClick={submit}>
-            Cancel the class
+            {confirmLabel}
           </Button>
         </>
       }

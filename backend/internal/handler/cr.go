@@ -36,6 +36,7 @@ const (
 	titleCRAsked          = "The class representative asked for another slot"
 	titleCRChanged        = "The class representative changed a class"
 	titleCRCancelled      = "The class representative cancelled a class"
+	titleWithdrawn        = "Class taken out of the published routine"
 	availabilityDays      = 7
 	LabelYours            = "yours"
 	LabelUnavailable      = "unavailable"
@@ -56,10 +57,13 @@ type CRStore interface {
 	CancelItemAsCR(ctx context.Context, itemID int64, batch, reason string) (store.ScheduleItem, error)
 	DeleteCRItem(ctx context.Context, itemID int64, batch string) (store.ScheduleItem, error)
 	SetItemFinal(ctx context.Context, itemID int64, batch string, inFinal bool) (store.ScheduleItem, error)
-	ListFinalItems(ctx context.Context, batch string) ([]store.ScheduleItem, error)
+	RemoveFromFinal(ctx context.Context, itemID int64, batch string) (store.FinalRemoval, error)
+	RemoveItemsFromFinal(ctx context.Context, batch string, ids []int64) ([]store.FinalRemoval, error)
+	ListFinalItems(ctx context.Context, batch, from string) ([]store.ScheduleItem, error)
 	ListItemsByIDs(ctx context.Context, batch string, ids []int64) ([]store.ScheduleItem, error)
 	PublishFinal(ctx context.Context, batch string, publishedBy int64,
 		ids []int64) (store.Publication, []store.ScheduleItem, error)
+	ListDropCourseStudents(ctx context.Context, courseID int64, batch string) ([]int64, error)
 }
 
 type CR struct {
@@ -150,6 +154,12 @@ type finalResponse struct {
 	Days                []finalDayBody `json:"days"`
 	NeedsTime           int            `json:"needs_time"`
 	ChangedSincePublish int            `json:"changed_since_publish"`
+}
+
+type removeResponse struct {
+	Removed   int    `json:"removed"`
+	Withdrawn int    `json:"withdrawn"`
+	Message   string `json:"message"`
 }
 
 type publishResponse struct {
@@ -603,14 +613,6 @@ func (c *CR) DeleteItem() http.HandlerFunc {
 }
 
 func (c *CR) AddToFinal() http.HandlerFunc {
-	return c.setFinal(true, MessageAddedToFinal)
-}
-
-func (c *CR) RemoveFromFinal() http.HandlerFunc {
-	return c.setFinal(false, MessageRemovedFromFinal)
-}
-
-func (c *CR) setFinal(inFinal bool, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		profile, ok := c.profile(w, r)
 		if !ok {
@@ -620,12 +622,85 @@ func (c *CR) setFinal(inFinal bool, message string) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		item, err := c.classes.SetItemFinal(r.Context(), itemID, profile.Batch, inFinal)
+		item, err := c.classes.SetItemFinal(r.Context(), itemID, profile.Batch, true)
 		if scheduleError(w, err) {
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: message})
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{
+			Item:    newItemBody(item),
+			Message: MessageAddedToFinal,
+		})
 	}
+}
+
+func (c *CR) RemoveFromFinal() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := c.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		removal, err := c.classes.RemoveFromFinal(r.Context(), itemID, profile.Batch)
+		if scheduleError(w, err) {
+			return
+		}
+		c.announceWithdrawal(r, removal)
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{
+			Item:    newItemBody(removal.Item),
+			Message: MessageRemovedFromFinal,
+		})
+	}
+}
+
+func (c *CR) RemoveManyFromFinal() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := c.profile(w, r)
+		if !ok {
+			return
+		}
+		var request publishRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		if len(request.ItemIDs) == 0 {
+			httpx.WriteError(w, http.StatusBadRequest, MessageIDsRequired)
+			return
+		}
+		removed, err := c.classes.RemoveItemsFromFinal(r.Context(), profile.Batch, request.ItemIDs)
+		if scheduleError(w, err) {
+			return
+		}
+		withdrawn := 0
+		for _, removal := range removed {
+			c.announceWithdrawal(r, removal)
+			if removal.Withdrawn {
+				withdrawn++
+			}
+		}
+		httpx.WriteJSON(w, http.StatusOK, removeResponse{
+			Removed:   len(removed),
+			Withdrawn: withdrawn,
+			Message:   MessageRemovedFromFinal,
+		})
+	}
+}
+
+func (c *CR) announceWithdrawal(r *http.Request, removal store.FinalRemoval) {
+	if !removal.Withdrawn {
+		return
+	}
+	item := removal.Item
+	err := c.alerts.NotifyBroadcast(r.Context(), auth.RoleStudent, item.Batch, broadcastSection(item.Section),
+		notify.TypeRoutine, titleWithdrawn, itemSentence(item),
+		notify.OnDate(notify.LinkRoutine, item.ItemDate))
+	if err != nil {
+		log.Printf("handler: could not announce a withdrawal to the students: %v", err)
+	}
+	tellDropCourseStudents(r, c.classes, c.alerts, item, titleWithdrawn)
+	c.tellTeacher(r, item, titleWithdrawn)
 }
 
 func (c *CR) Final() http.HandlerFunc {
@@ -634,7 +709,7 @@ func (c *CR) Final() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		items, err := c.classes.ListFinalItems(r.Context(), profile.Batch)
+		items, err := c.classes.ListFinalItems(r.Context(), profile.Batch, validate.DateString(c.cfg.Now()))
 		if err != nil {
 			log.Printf("handler: could not list the final routine of a class representative: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -730,6 +805,7 @@ func (c *CR) tellStudents(r *http.Request, item store.ScheduleItem, title string
 	if err != nil {
 		log.Printf("handler: could not announce a change to the students: %v", err)
 	}
+	tellDropCourseStudents(r, c.classes, c.alerts, item, title)
 }
 
 func text(value *string) string {

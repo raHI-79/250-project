@@ -38,6 +38,7 @@ var (
 	ErrNoProposal       = errors.New("store: this schedule item carries no proposed slot")
 	ErrItemStarted      = errors.New("store: this class has already started")
 	ErrNothingToPublish = errors.New("store: no schedule item was selected for publishing")
+	ErrNothingSelected  = errors.New("store: no schedule item was selected")
 )
 
 type SlotConflict struct {
@@ -275,6 +276,15 @@ VALUES ($1, $2, $3, NULLIF($4::bigint, 0), $5, $6, $7::date,
 NULLIF($8::text, '')::time, NULLIF($9::text, '')::time, $10, $11, $12, $13, $14, $15, $16,
 NULLIF($17::bigint, 0))
 RETURNING id`
+	clearPastFinalSQL = `UPDATE schedule_items
+SET in_final = FALSE, updated_at = now()
+WHERE in_final AND item_date < $1::date`
+	listDropCourseStudentsSQL = `SELECT u.id
+FROM student_drop_courses d
+JOIN students s ON s.id = d.student_id
+JOIN users u ON u.id = s.user_id
+WHERE d.course_id = $1 AND s.batch <> $2 AND u.status = 'active'
+ORDER BY u.id`
 	courseTeacherSQL = `SELECT r.teacher_id
 FROM routines r
 WHERE r.batch = $1 AND r.course_id = $2 AND r.teacher_id IS NOT NULL
@@ -502,6 +512,34 @@ func (s *Store) insertItem(ctx context.Context, item NewScheduleItem) (ScheduleI
 		return ScheduleItem{}, fmt.Errorf("store: could not commit the schedule item: %w", err)
 	}
 	return created, nil
+}
+
+func (s *Store) ClearPastFinal(ctx context.Context, date string) (int, error) {
+	tag, err := s.pool.Exec(ctx, clearPastFinalSQL, date)
+	if err != nil {
+		return 0, fmt.Errorf("store: could not clear the past days of the final routines: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+func (s *Store) ListDropCourseStudents(ctx context.Context, courseID int64, batch string) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, listDropCourseStudentsSQL, courseID, batch)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the drop course students of %d: %w", courseID, err)
+	}
+	defer rows.Close()
+	users := make([]int64, 0)
+	for rows.Next() {
+		var userID int64
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("store: could not scan a drop course student: %w", err)
+		}
+		users = append(users, userID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the drop course students: %w", err)
+	}
+	return users, nil
 }
 
 func (s *Store) TeacherOfCourse(ctx context.Context, batch, section string, courseID int64) (int64, error) {

@@ -27,19 +27,21 @@ type sentNotification struct {
 }
 
 type fakeItems struct {
-	generated  []generateCall
-	created    int
-	noResponse []store.ScheduleItem
-	exams      []store.ScheduleItem
-	crs        []int64
-	askedDates []string
-	undecided  []store.UndecidedTeacher
-	todays     []store.UndecidedTeacher
-	claimed    []string
-	taken      map[string]bool
-	low        []store.AttendanceAlert
-	warned     []string
-	err        error
+	generated   []generateCall
+	created     int
+	noResponse  []store.ScheduleItem
+	exams       []store.ScheduleItem
+	crs         []int64
+	askedDates  []string
+	undecided   []store.UndecidedTeacher
+	todays      []store.UndecidedTeacher
+	claimed     []string
+	taken       map[string]bool
+	clearedFrom []string
+	cleared     int
+	low         []store.AttendanceAlert
+	warned      []string
+	err         error
 }
 
 func (f *fakeItems) GenerateFixedItems(ctx context.Context, from, to string) (int, error) {
@@ -55,6 +57,11 @@ func (f *fakeItems) MarkNoResponse(ctx context.Context, date string) ([]store.Sc
 func (f *fakeItems) PromoteExamsToFinal(ctx context.Context, date string) ([]store.ScheduleItem, error) {
 	f.askedDates = append(f.askedDates, date)
 	return f.exams, f.err
+}
+
+func (f *fakeItems) ClearPastFinal(ctx context.Context, date string) (int, error) {
+	f.clearedFrom = append(f.clearedFrom, date)
+	return f.cleared, f.err
 }
 
 func (f *fakeItems) ListActiveCRs(ctx context.Context, batch, section string) ([]int64, error) {

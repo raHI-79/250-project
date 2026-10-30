@@ -26,6 +26,11 @@ type Publication struct {
 	PublishedAt time.Time
 }
 
+type FinalRemoval struct {
+	Item      ScheduleItem
+	Withdrawn bool
+}
+
 type IncompleteItemError struct {
 	Item ScheduleItem
 }
@@ -50,7 +55,7 @@ ORDER BY rooms.room, day, i.start_time NULLS LAST, i.id`
 WHERE i.batch = $1 AND i.item_date >= $2::date
 ORDER BY i.item_date, i.start_time NULLS LAST, i.section, i.id`
 	listFinalItemsSQL = selectItem + `
-WHERE i.batch = $1 AND (i.in_final OR pi.item_id IS NOT NULL)
+WHERE i.batch = $1 AND i.item_date >= $2::date AND (i.in_final OR pi.item_id IS NOT NULL)
 ORDER BY i.item_date, i.start_time NULLS LAST, i.section, i.id`
 	listItemsByIDsSQL = selectItem + `
 WHERE i.batch = $1 AND i.id = ANY($2::bigint[])
@@ -110,8 +115,9 @@ ON CONFLICT (item_id) DO UPDATE SET
     instructions = EXCLUDED.instructions,
     status = EXCLUDED.status,
     published_at = now()`
-	syncPublishedStatusSQL = `UPDATE published_items SET status = $2, published_at = now() WHERE item_id = $1`
-	syncPublishedLinkSQL   = `UPDATE published_items SET meeting_link = $2, published_at = now() WHERE item_id = $1`
+	withdrawPublishedItemSQL = `DELETE FROM published_items WHERE item_id = $1`
+	syncPublishedStatusSQL   = `UPDATE published_items SET status = $2, published_at = now() WHERE item_id = $1`
+	syncPublishedLinkSQL     = `UPDATE published_items SET meeting_link = $2, published_at = now() WHERE item_id = $1`
 )
 
 func (s *Store) ListRoomAvailability(ctx context.Context, from, to string) ([]RoomSlot, error) {
@@ -154,8 +160,8 @@ func (s *Store) ListBatchItems(ctx context.Context, batch, from string) ([]Sched
 	return s.items(ctx, listBatchItemsSQL, batch, from)
 }
 
-func (s *Store) ListFinalItems(ctx context.Context, batch string) ([]ScheduleItem, error) {
-	return s.items(ctx, listFinalItemsSQL, batch)
+func (s *Store) ListFinalItems(ctx context.Context, batch, from string) ([]ScheduleItem, error) {
+	return s.items(ctx, listFinalItemsSQL, batch, from)
 }
 
 func (s *Store) ListItemsByIDs(ctx context.Context, batch string, ids []int64) ([]ScheduleItem, error) {
@@ -335,18 +341,55 @@ func cancelAndSync(ctx context.Context, tx pgx.Tx, item ScheduleItem, reason str
 }
 
 func (s *Store) SetItemFinal(ctx context.Context, itemID int64, batch string, inFinal bool) (ScheduleItem, error) {
-	return s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
+	removal, err := s.changeItemFinal(ctx, itemID, batch, inFinal)
+	return removal.Item, err
+}
+
+func (s *Store) RemoveFromFinal(ctx context.Context, itemID int64, batch string) (FinalRemoval, error) {
+	return s.changeItemFinal(ctx, itemID, batch, false)
+}
+
+func (s *Store) RemoveItemsFromFinal(ctx context.Context, batch string, ids []int64) ([]FinalRemoval, error) {
+	if len(ids) == 0 {
+		return nil, ErrNothingSelected
+	}
+	removed := make([]FinalRemoval, 0, len(ids))
+	for _, itemID := range ids {
+		removal, err := s.RemoveFromFinal(ctx, itemID, batch)
+		if err != nil {
+			return nil, err
+		}
+		removed = append(removed, removal)
+	}
+	return removed, nil
+}
+
+func (s *Store) changeItemFinal(ctx context.Context, itemID int64, batch string,
+	inFinal bool) (FinalRemoval, error) {
+	withdrawn := false
+	item, err := s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
 		if err := ownedByBatch(item, batch); err != nil {
 			return err
 		}
-		if item.Status == ItemCancelled {
+		if inFinal && item.Status == ItemCancelled {
 			return ErrItemState
 		}
 		if _, err := tx.Exec(ctx, setItemFinalSQL, item.ID, inFinal, batch); err != nil {
 			return fmt.Errorf("store: could not change the final routine of the item %d: %w", item.ID, err)
 		}
+		if inFinal || !item.Published() {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, withdrawPublishedItemSQL, item.ID); err != nil {
+			return fmt.Errorf("store: could not withdraw the published copy of the item %d: %w", item.ID, err)
+		}
+		withdrawn = true
 		return nil
 	})
+	if err != nil {
+		return FinalRemoval{}, err
+	}
+	return FinalRemoval{Item: item, Withdrawn: withdrawn}, nil
 }
 
 func (s *Store) PublishFinal(ctx context.Context, batch string, publishedBy int64,

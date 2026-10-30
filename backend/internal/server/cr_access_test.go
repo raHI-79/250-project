@@ -69,7 +69,22 @@ func (emptyCRStore) SetItemFinal(ctx context.Context, itemID int64, batch string
 	return store.ScheduleItem{}, store.ErrItemNotFound
 }
 
-func (emptyCRStore) ListFinalItems(ctx context.Context, batch string) ([]store.ScheduleItem, error) {
+func (emptyCRStore) RemoveFromFinal(ctx context.Context, itemID int64,
+	batch string) (store.FinalRemoval, error) {
+	return store.FinalRemoval{}, store.ErrItemNotFound
+}
+
+func (emptyCRStore) RemoveItemsFromFinal(ctx context.Context, batch string,
+	ids []int64) ([]store.FinalRemoval, error) {
+	return nil, store.ErrItemNotFound
+}
+
+func (emptyCRStore) ListFinalItems(ctx context.Context, batch, from string) ([]store.ScheduleItem, error) {
+	return nil, nil
+}
+
+func (emptyCRStore) ListDropCourseStudents(ctx context.Context, courseID int64,
+	batch string) ([]int64, error) {
 	return nil, nil
 }
 

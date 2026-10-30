@@ -31,6 +31,16 @@ func (emptyTeacherStore) ListTeacherFinalItems(ctx context.Context, teacherID in
 	return nil, nil
 }
 
+func (emptyTeacherStore) ListTeacherItemsRange(ctx context.Context, teacherID int64,
+	from, to string) ([]store.ScheduleItem, error) {
+	return nil, nil
+}
+
+func (emptyTeacherStore) ListDropCourseStudents(ctx context.Context, courseID int64,
+	batch string) ([]int64, error) {
+	return nil, nil
+}
+
 func (emptyTeacherStore) ListTeacherExams(ctx context.Context, teacherID int64,
 	from string) ([]store.ScheduleItem, error) {
 	return nil, nil

@@ -111,10 +111,18 @@ type fakeScheduleStore struct {
 	periods     []store.Period
 	linkUser    int64
 	links       []string
+	dropUsers   []int64
+	dropCourses []int64
+	removals    []int64
+	withdrawn   map[int64]bool
 }
 
 func newFakeScheduleStore() *fakeScheduleStore {
-	return &fakeScheduleStore{item: plannedItem(), finals: make(map[int64]bool)}
+	return &fakeScheduleStore{
+		item:      plannedItem(),
+		finals:    make(map[int64]bool),
+		withdrawn: make(map[int64]bool),
+	}
 }
 
 func (f *fakeScheduleStore) GetTeacherByUser(ctx context.Context, userID int64) (store.Teacher, error) {
@@ -151,9 +159,20 @@ func (f *fakeScheduleStore) ListTeacherDayItems(ctx context.Context, teacherID i
 	return f.items, f.err
 }
 
+func (f *fakeScheduleStore) ListTeacherItemsRange(ctx context.Context, teacherID int64,
+	from, to string) ([]store.ScheduleItem, error) {
+	return f.items, f.err
+}
+
 func (f *fakeScheduleStore) ListTeacherFinalItems(ctx context.Context, teacherID int64,
 	from string) ([]store.ScheduleItem, error) {
 	return f.items, f.err
+}
+
+func (f *fakeScheduleStore) ListDropCourseStudents(ctx context.Context, courseID int64,
+	batch string) ([]int64, error) {
+	f.dropCourses = append(f.dropCourses, courseID)
+	return f.dropUsers, nil
 }
 
 func (f *fakeScheduleStore) ListTeacherExams(ctx context.Context, teacherID int64,
@@ -335,7 +354,34 @@ func (f *fakeScheduleStore) SetItemFinal(ctx context.Context, itemID int64, batc
 	return item, nil
 }
 
-func (f *fakeScheduleStore) ListFinalItems(ctx context.Context, batch string) ([]store.ScheduleItem, error) {
+func (f *fakeScheduleStore) RemoveFromFinal(ctx context.Context, itemID int64,
+	batch string) (store.FinalRemoval, error) {
+	if f.err != nil {
+		return store.FinalRemoval{}, f.err
+	}
+	f.finals[itemID] = false
+	f.removals = append(f.removals, itemID)
+	item := f.item
+	item.ID = itemID
+	item.InFinal = false
+	return store.FinalRemoval{Item: item, Withdrawn: f.withdrawn[itemID]}, nil
+}
+
+func (f *fakeScheduleStore) RemoveItemsFromFinal(ctx context.Context, batch string,
+	ids []int64) ([]store.FinalRemoval, error) {
+	removed := make([]store.FinalRemoval, 0, len(ids))
+	for _, itemID := range ids {
+		removal, err := f.RemoveFromFinal(ctx, itemID, batch)
+		if err != nil {
+			return nil, err
+		}
+		removed = append(removed, removal)
+	}
+	return removed, nil
+}
+
+func (f *fakeScheduleStore) ListFinalItems(ctx context.Context, batch,
+	from string) ([]store.ScheduleItem, error) {
 	return f.items, f.err
 }
 

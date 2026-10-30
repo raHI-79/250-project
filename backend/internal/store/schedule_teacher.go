@@ -24,9 +24,13 @@ ORDER BY r.day_of_week, r.start_time, r.batch, r.section`
 	listTeacherDayItemsSQL = selectItem + `
 WHERE i.teacher_id = $1 AND i.item_date = $2::date
 ORDER BY i.start_time NULLS LAST, i.batch, i.section, i.id`
+	listTeacherRangeSQL = selectItem + `
+WHERE i.teacher_id = $1 AND i.item_date BETWEEN $2::date AND $3::date
+ORDER BY i.item_date, i.start_time NULLS LAST, i.batch, i.section, i.id`
 	listTeacherFinalSQL = selectItem + `
 WHERE i.teacher_id = $1 AND i.item_date >= $2::date
-  AND (i.status IN ('confirmed', 'rescheduled', 'reschedule_declined') OR i.in_final OR pi.item_id IS NOT NULL)
+  AND (i.status IN ('confirmed', 'rescheduled', 'reschedule_declined')
+    OR i.origin IN ('cr', 'teacher_exam') OR i.in_final OR pi.item_id IS NOT NULL)
 ORDER BY i.item_date, i.start_time NULLS LAST, i.id`
 	listTeacherExamsSQL = selectItem + `
 WHERE i.teacher_id = $1 AND i.origin = 'teacher_exam' AND i.item_date >= $2::date
@@ -142,6 +146,11 @@ func (s *Store) ListTeacherRoutine(ctx context.Context, teacherID int64) ([]Rout
 
 func (s *Store) ListTeacherDayItems(ctx context.Context, teacherID int64, date string) ([]ScheduleItem, error) {
 	return s.items(ctx, listTeacherDayItemsSQL, teacherID, date)
+}
+
+func (s *Store) ListTeacherItemsRange(ctx context.Context, teacherID int64,
+	from, to string) ([]ScheduleItem, error) {
+	return s.items(ctx, listTeacherRangeSQL, teacherID, from, to)
 }
 
 func (s *Store) ListTeacherFinalItems(ctx context.Context, teacherID int64, from string) ([]ScheduleItem, error) {
