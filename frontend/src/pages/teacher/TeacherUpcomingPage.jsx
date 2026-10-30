@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import {
   CalendarClock,
   CalendarDays,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Link2,
   Megaphone,
@@ -36,14 +38,23 @@ import paths, { TEACHER_TAB_FINAL, TEACHER_TAB_NEXT_DAY } from '../../lib/paths'
 import {
   ORIGIN_TEACHER_EXAM,
   STATUS_CANCELLED,
-  STATUS_CR_ASK,
+  STATUS_CONFIRMED,
+  STATUS_RESCHEDULED,
+  STATUS_SCHEDULED,
   courseLine,
   isOnline,
   needsLink,
   placeOf,
   sectionShort,
+  teacherStatusLabel,
 } from '../../lib/schedule'
-import { dayHeading, formatDate, formatTimeRange, today as todayDate } from '../../lib/time'
+import {
+  dayHeading,
+  formatDate,
+  formatTimeRange,
+  today as todayDate,
+  tomorrow as tomorrowDate,
+} from '../../lib/time'
 import cx from '../../lib/cx'
 import { externalLinkProps } from '../../lib/native'
 
@@ -54,34 +65,38 @@ const TABS = [
 
 const TAB_VALUES = TABS.map((entry) => entry.value)
 
-const isExam = (item) => item.origin === ORIGIN_TEACHER_EXAM
+const SETTLED = [STATUS_CONFIRMED, STATUS_RESCHEDULED, STATUS_SCHEDULED]
+
+const isExam = (item) => item.kind === 'exam'
+
+const isOwnExam = (item) => item.origin === ORIGIN_TEACHER_EXAM
+
+const settledToday = (item) =>
+  item.status !== STATUS_CANCELLED && (SETTLED.includes(item.status) || item.published)
 
 export default function TeacherUpcomingPage() {
   const { user } = useAuth()
   const toast = useToast()
   const now = useNow(60000)
   const [tab, setTab] = useQueryTab(TAB_VALUES, TEACHER_TAB_NEXT_DAY)
-  const upcoming = useResource('/api/teacher/upcoming')
+  const tomorrow = tomorrowDate()
+  const upcoming = useResource('/api/teacher/upcoming', { from: tomorrow })
   const final = useResource('/api/teacher/upcoming/final')
   const nextHighlight = useHighlight(Boolean(upcoming.data), 'item')
   const finalHighlight = useHighlight(Boolean(final.data), 'item')
   const [confirming, setConfirming] = useState(null)
   const [cancelling, setCancelling] = useState(null)
-  const [dropping, setDropping] = useState(null)
   const [asking, setAsking] = useState(null)
   const [linking, setLinking] = useState(null)
+  const [showLater, setShowLater] = useState(false)
   const [busy, setBusy] = useState(0)
   const upcomingDays = useMemo(() => upcoming.data?.days || [], [upcoming.data])
   const finalDays = useMemo(() => final.data?.days || [], [final.data])
-  const items = useMemo(() => upcomingDays.flatMap((day) => day.items), [upcomingDays])
-  const requests = items.filter((item) => item.status === STATUS_CR_ASK)
-  const decisionDays = upcomingDays
-    .map((day) => ({
-      ...day,
-      items: day.items.filter((item) => item.status !== STATUS_CR_ASK),
-    }))
-    .filter((day) => day.items.length > 0)
-  const todayItems = finalDays.find((day) => day.date === todayDate())?.items || []
+  const tomorrowItems = upcomingDays.find((day) => day.date === tomorrow)?.items || []
+  const laterDays = upcomingDays.filter((day) => day.date > tomorrow)
+  const todayItems = (finalDays.find((day) => day.date === todayDate())?.items || []).filter(
+    settledToday,
+  )
   const reload = () => Promise.all([upcoming.reload(), final.reload()])
   const act = async (id, call, message) => {
     setBusy(id)
@@ -106,18 +121,12 @@ export default function TeacherUpcomingPage() {
     reload()
   }
   const cancelItem = async (reason) => {
-    await api.post(`/api/teacher/items/${cancelling.id}/cancel`, { reason })
-    toast.success('Class cancelled')
-    setCancelling(null)
-    reload()
-  }
-  const cancelFromFinal = async (reason) => {
-    const path = isExam(dropping)
-      ? `/api/teacher/exams/${dropping.id}/cancel`
-      : `/api/teacher/items/${dropping.id}/cancel`
+    const path = isOwnExam(cancelling)
+      ? `/api/teacher/exams/${cancelling.id}/cancel`
+      : `/api/teacher/items/${cancelling.id}/cancel`
     await api.post(path, { reason })
-    toast.success(isExam(dropping) ? 'Exam cancelled' : 'Class cancelled')
-    setDropping(null)
+    toast.success(isExam(cancelling) ? 'Exam cancelled' : 'Class cancelled')
+    setCancelling(null)
     reload()
   }
   const askMove = async (message) => {
@@ -154,6 +163,20 @@ export default function TeacherUpcomingPage() {
     onLink: setLinking,
     onDecide: decide,
   }
+  const dayList = (day) => (
+    <ul className="flex flex-col gap-3">
+      {day.items.map((item) => (
+        <li key={item.id} ref={nextHighlight.register(item.id)}>
+          <TeacherDecisionCard
+            item={item}
+            busy={busy === item.id}
+            highlighted={nextHighlight.highlighted(item.id)}
+            {...cardProps}
+          />
+        </li>
+      ))}
+    </ul>
+  )
   return (
     <PullToRefresh onRefresh={reload}>
       <TodayHero
@@ -162,12 +185,22 @@ export default function TeacherUpcomingPage() {
         now={now}
       />
       <QuickActions actions={actions} className="mt-6 grid-cols-4" />
-      {todayItems.length > 0 && (
-        <section className="mt-7">
-          <h2 className="font-display mb-3 text-section font-bold text-ink">Today</h2>
+      <section className="mt-7">
+        <h2 className="font-display mb-3 text-section font-bold text-ink">
+          {dayHeading(todayDate())}
+        </h2>
+        {final.loading ? (
+          <SkeletonCard />
+        ) : todayItems.length === 0 ? (
+          <EmptyState
+            icon={CalendarClock}
+            title="No confirmed classes today"
+            text="Classes and exams you confirmed for today show up here."
+          />
+        ) : (
           <Card hover={false} flush className="divide-y divide-line">
             {todayItems.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+              <div key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span className="w-24 shrink-0 text-xs font-semibold text-brand-600 tabular-nums">
                   {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                 </span>
@@ -188,30 +221,14 @@ export default function TeacherUpcomingPage() {
                     </Button>
                   </a>
                 )}
+                <Button size="sm" variant="danger" onClick={() => setCancelling(item)}>
+                  Cancel
+                </Button>
               </div>
             ))}
           </Card>
-        </section>
-      )}
-      {requests.length > 0 && (
-        <section className="mt-7">
-          <h2 className="font-display mb-3 text-section font-bold text-ink">
-            Reschedule requests
-          </h2>
-          <ul className="flex flex-col gap-3">
-            {requests.map((item) => (
-              <li key={item.id} ref={nextHighlight.register(item.id)}>
-                <TeacherDecisionCard
-                  item={item}
-                  busy={busy === item.id}
-                  highlighted={nextHighlight.highlighted(item.id)}
-                  {...cardProps}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+        )}
+      </section>
       <section className="mt-7">
         <h2 className="font-display mb-3 text-section font-bold text-ink">Upcoming</h2>
         <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-4" />
@@ -221,41 +238,52 @@ export default function TeacherUpcomingPage() {
               <SkeletonCard />
             ) : upcoming.error ? (
               <Alert tone="error">{upcoming.error}</Alert>
-            ) : decisionDays.length === 0 ? (
-              <EmptyState
-                icon={CalendarClock}
-                title="Nothing to decide"
-                text="Every class of the coming days is settled."
-                action={
-                  <Button
-                    as={Link}
-                    to={paths.teacher.fixedRoutine()}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    Open your weekly routine
-                  </Button>
-                }
-              />
             ) : (
               <div className="flex flex-col gap-6">
-                {decisionDays.map((day) => (
-                  <section key={day.date}>
-                    <p className="mb-2 text-sm font-semibold text-ink-soft">{dayHeading(day.date)}</p>
-                    <ul className="flex flex-col gap-3">
-                      {day.items.map((item) => (
-                        <li key={item.id} ref={nextHighlight.register(item.id)}>
-                          <TeacherDecisionCard
-                            item={item}
-                            busy={busy === item.id}
-                            highlighted={nextHighlight.highlighted(item.id)}
-                            {...cardProps}
-                          />
-                        </li>
+                <section>
+                  <p className="mb-2 text-sm font-semibold text-ink-soft">{dayHeading(tomorrow)}</p>
+                  {tomorrowItems.length === 0 ? (
+                    <EmptyState
+                      icon={CalendarClock}
+                      title="No classes tomorrow"
+                      text="Nothing of yours is on the routine for the next day."
+                      action={
+                        <Button
+                          as={Link}
+                          to={paths.teacher.fixedRoutine()}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          Open your weekly routine
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    dayList({ items: tomorrowItems })
+                  )}
+                </section>
+                {laterDays.length > 0 && (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="self-start"
+                      onClick={() => setShowLater((current) => !current)}
+                    >
+                      {showLater ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      {showLater ? 'Hide later days' : 'Show later days'}
+                    </Button>
+                    {showLater &&
+                      laterDays.map((day) => (
+                        <section key={day.date}>
+                          <p className="mb-2 text-sm font-semibold text-ink-soft">
+                            {dayHeading(day.date)}
+                          </p>
+                          {dayList(day)}
+                        </section>
                       ))}
-                    </ul>
-                  </section>
-                ))}
+                  </>
+                )}
               </div>
             )}
           </>
@@ -300,7 +328,11 @@ export default function TeacherUpcomingPage() {
                               {item.batch} {sectionShort(item.section)}
                               {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                             </span>
-                            <ItemBadges item={item} showOrigin />
+                            <ItemBadges
+                              item={item}
+                              showOrigin
+                              statusText={teacherStatusLabel(item)}
+                            />
                           </div>
                           {item.cancel_reason && (
                             <p className="mt-1 text-xs text-muted">Reason: {item.cancel_reason}</p>
@@ -320,7 +352,7 @@ export default function TeacherUpcomingPage() {
                               <Button
                                 size="sm"
                                 variant="danger"
-                                onClick={() => setDropping(item)}
+                                onClick={() => setCancelling(item)}
                               >
                                 {isExam(item) ? 'Cancel exam' : 'Cancel class'}
                               </Button>
@@ -341,13 +373,12 @@ export default function TeacherUpcomingPage() {
         onClose={() => setConfirming(null)}
         onConfirm={confirmItem}
       />
-      <CancelModal item={cancelling} onClose={() => setCancelling(null)} onConfirm={cancelItem} />
       <CancelModal
-        item={dropping}
-        title={dropping && isExam(dropping) ? 'Cancel this exam?' : 'Cancel this class?'}
-        confirmLabel={dropping && isExam(dropping) ? 'Cancel the exam' : 'Cancel the class'}
-        onClose={() => setDropping(null)}
-        onConfirm={cancelFromFinal}
+        item={cancelling}
+        title={cancelling && isExam(cancelling) ? 'Cancel this exam?' : 'Cancel this class?'}
+        confirmLabel={cancelling && isExam(cancelling) ? 'Cancel the exam' : 'Cancel the class'}
+        onClose={() => setCancelling(null)}
+        onConfirm={cancelItem}
       />
       <MessageModal item={asking} onClose={() => setAsking(null)} onConfirm={askMove} />
       <LinkModal item={linking} onClose={() => setLinking(null)} onConfirm={saveLink} />

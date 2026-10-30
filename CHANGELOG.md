@@ -4,6 +4,16 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.2.5
+
+- The teacher's upcoming routine opens on tomorrow's full routine instead of only
+  the classes that still need a decision, so a settled day is still readable. Every
+  non-cancelled class, lab and exam carries its status and only the actions that
+  status allows, and the days after tomorrow sit behind *Show later days*.
+- *Today* now lists only the confirmed, rescheduled and published items of the day,
+  each with its room or Join link and a cancel action, and an empty day says so
+  instead of showing *Nothing to decide*.
+
 ## 2.2.4
 
 - The teacher's upcoming routine is no longer only tomorrow. It lists every

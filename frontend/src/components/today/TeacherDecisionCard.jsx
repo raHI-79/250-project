@@ -3,12 +3,19 @@ import ItemBadges from '../schedule/ItemBadges'
 import { Alert, Button, Card } from '../ui'
 import cx from '../../lib/cx'
 import {
+  ACTION_ACCEPT,
+  ACTION_CANCEL,
+  ACTION_CONFIRM,
+  ACTION_DECLINE,
+  ACTION_REQUEST_RESCHEDULE,
   STATUS_CANCELLED,
   STATUS_CR_ASK,
+  allows,
   isOnline,
   needsLink,
   placeOf,
   sectionShort,
+  teacherStatusLabel,
 } from '../../lib/schedule'
 import { formatDate, formatTimeRange } from '../../lib/time'
 import CourseName from '../schedule/CourseName'
@@ -47,7 +54,7 @@ export default function TeacherDecisionCard({
         </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <ItemBadges item={item} />
+        <ItemBadges item={item} statusText={teacherStatusLabel(item)} />
       </div>
       {item.status === STATUS_CR_ASK && item.proposed && (
         <Alert tone="info" title="The class representative proposed" className="mt-3">
@@ -59,40 +66,30 @@ export default function TeacherDecisionCard({
       )}
       {item.cancel_reason && <p className="mt-2 text-xs text-muted">Reason: {item.cancel_reason}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
-        {item.status === STATUS_CR_ASK ? (
-          <>
-            <Button size="sm" loading={busy} onClick={() => onDecide(item, true)}>
-              Accept
-            </Button>
-            <Button size="sm" variant="secondary" loading={busy} onClick={() => onDecide(item, false)}>
-              Decline
-            </Button>
-          </>
-        ) : (
-          !cancelled && (
-            <>
-              <Button
-                size="sm"
-                onClick={() => onConfirm(item)}
-              >
-                Confirm
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => onAsk(item)}
-              >
-                Reschedule
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => onCancel(item)}
-              >
-                Cancel
-              </Button>
-            </>
-          )
+        {allows(item, ACTION_ACCEPT) && (
+          <Button size="sm" loading={busy} onClick={() => onDecide(item, true)}>
+            Accept
+          </Button>
+        )}
+        {allows(item, ACTION_DECLINE) && (
+          <Button size="sm" variant="secondary" loading={busy} onClick={() => onDecide(item, false)}>
+            Decline
+          </Button>
+        )}
+        {allows(item, ACTION_CONFIRM) && (
+          <Button size="sm" onClick={() => onConfirm(item)}>
+            Confirm
+          </Button>
+        )}
+        {allows(item, ACTION_REQUEST_RESCHEDULE) && (
+          <Button size="sm" variant="secondary" onClick={() => onAsk(item)}>
+            Reschedule
+          </Button>
+        )}
+        {allows(item, ACTION_CANCEL) && (
+          <Button size="sm" variant="danger" onClick={() => onCancel(item)}>
+            Cancel
+          </Button>
         )}
         {isOnline(item) && !cancelled && (
           <Button size="sm" variant="secondary" onClick={() => onLink(item)}>
