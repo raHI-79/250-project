@@ -14,7 +14,6 @@ import { PORTAL_ADMIN, loginForPortal } from '../../lib/paths'
 import {
   CODE_PATTERN,
   PHONE_MESSAGE,
-  birthDateBounds,
   isPhone,
   passwordError,
 } from '../../lib/account'
@@ -45,7 +44,6 @@ export default function ForgotPasswordPage({ portal }) {
   const page = copy[portal] || copy.student
   const byPhone = portal === PORTAL_ADMIN
   const loginPath = loginForPortal(portal)
-  const bounds = birthDateBounds()
   const human = useHumanCheck()
   const [step, setStep] = useState(1)
   const [identifier, setIdentifier] = useState('')
@@ -191,8 +189,6 @@ export default function ForgotPasswordPage({ portal }) {
                     type="date"
                     value={dateOfBirth}
                     onChange={(event) => setDateOfBirth(event.target.value)}
-                    min={bounds.min}
-                    max={bounds.max}
                     hint="The date saved on your account"
                     required
                   />

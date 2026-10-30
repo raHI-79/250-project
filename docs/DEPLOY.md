@@ -119,7 +119,6 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 | `ADMIN_EMAIL` | the office email |
 | `ADMIN_PHONE` | the office phone, 11 digits |
 | `GOOGLE_CLIENT_ID` | the Google client id |
-| `VITE_GOOGLE_CLIENT_ID` | the same client id, used while the pages are built |
 | `VAPID_PUBLIC_KEY` | your push public key |
 | `VAPID_PRIVATE_KEY` | your push private key |
 | `VAPID_SUBJECT` | `mailto:` and your address |
@@ -154,9 +153,11 @@ nothing is cached. The token is never logged.
 service is created. Create it with your best guess, then open
 **Settings → Environment**, correct the value and save — Render redeploys.
 
-`VITE_GOOGLE_CLIENT_ID` is read while the Docker image builds the pages, which
-is why it is listed separately from `GOOGLE_CLIENT_ID`. Change it and Render
-rebuilds.
+`GOOGLE_CLIENT_ID` is the **web** OAuth client id. The pages read it at runtime
+from `GET /api/auth/config`, so changing it needs no rebuild and no new APK, and
+the Android app sends the same id as its server client id. There is no
+`VITE_GOOGLE_CLIENT_ID` any more. `docs/ANDROID.md` has the two OAuth clients
+Google needs.
 
 ## 5. The first deploy
 

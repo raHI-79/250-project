@@ -18,6 +18,7 @@ const (
 type authConfigResponse struct {
 	StudentEmailDomain string `json:"student_email_domain"`
 	GoogleEnabled      bool   `json:"google_enabled"`
+	GoogleClientID     string `json:"google_client_id,omitempty"`
 	HumanCheckEnabled  bool   `json:"human_check_enabled"`
 	TurnstileSiteKey   string `json:"turnstile_site_key,omitempty"`
 }
@@ -47,6 +48,7 @@ func (a *Auth) Config() http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, authConfigResponse{
 			StudentEmailDomain: a.cfg.StudentDomain,
 			GoogleEnabled:      a.cfg.GoogleEnabled(),
+			GoogleClientID:     strings.TrimSpace(a.cfg.GoogleClientID),
 			HumanCheckEnabled:  a.cfg.HumanCheckEnabled(),
 			TurnstileSiteKey:   a.cfg.TurnstileSiteKey,
 		})

@@ -22,7 +22,6 @@ import {
   PHONE_MESSAGE,
   SECTION_PATTERN,
   appendIf,
-  birthDateBounds,
   birthDateError,
   emailDomainError,
   isPhone,
@@ -62,7 +61,6 @@ export default function RegisterPage() {
   const [emailHint, setEmailHint] = useState('')
   const [devCode, setDevCode] = useState('')
   const [seconds, setSeconds] = useCountdown(0)
-  const bounds = birthDateBounds()
   const set = (key) => (event) => {
     const { value } = event.target
     setForm((current) => ({ ...current, [key]: value }))
@@ -281,8 +279,7 @@ export default function RegisterPage() {
                         value={form.dateOfBirth}
                         onChange={set('dateOfBirth')}
                         error={errors.dateOfBirth}
-                        min={bounds.min}
-                        max={bounds.max}
+                        hint="Between 15 and 60 years ago"
                         required
                       />
                     </div>

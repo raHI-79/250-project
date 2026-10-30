@@ -11,7 +11,7 @@ import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
 import { useDebounced } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
-import { USER_ID_RULES, birthDateBounds, passwordError, userIdError } from '../../lib/account'
+import { USER_ID_RULES, passwordError, userIdError } from '../../lib/account'
 
 const STEPS = ['Confirm who you are', 'Choose your User ID']
 
@@ -44,7 +44,6 @@ function Availability({ checking, result }) {
 export default function ActivatePage() {
   const [params] = useSearchParams()
   const token = params.get('token') || ''
-  const bounds = birthDateBounds()
   const human = useHumanCheck()
   const [invite, setInvite] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -252,8 +251,6 @@ export default function ActivatePage() {
                     type="date"
                     value={dateOfBirth}
                     onChange={(event) => setDateOfBirth(event.target.value)}
-                    min={bounds.min}
-                    max={bounds.max}
                     required
                   />
                 </>

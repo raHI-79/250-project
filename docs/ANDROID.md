@@ -177,6 +177,76 @@ a cell comment, the present count, the total and the percentage, with below
 the teacher teaches into one workbook and adds a Summary sheet. In the app the
 file is saved to **Documents**; on the website the browser downloads it.
 
+## Google sign-in
+
+The registration screen offers **Continue with Google** to prove the student
+owns their `@student.sust.edu` address. It needs **two** OAuth clients in one
+Google Cloud project, and the server only ever checks the **web** client id.
+
+### The web client
+
+**Google Cloud Console → APIs & Services → Credentials → Create credentials →
+OAuth client ID → Web application.**
+
+- **Authorised JavaScript origins** — one entry per address the pages are served
+  from, scheme and host only, no path and no trailing slash:
+  - `https://sustclassexamcoordinationsystem.onrender.com`
+  - `http://localhost:5173` for `npm run dev`
+- **Authorised redirect URIs** — none. Google Identity Services posts the token
+  back to the page, it does not redirect.
+
+Put that client id in the Render environment as `GOOGLE_CLIENT_ID`. The pages
+read it at runtime from `GET /api/auth/config`, so it is **not** baked into the
+build any more and changing it needs no new APK. `VITE_GOOGLE_CLIENT_ID` is no
+longer used.
+
+### The Android client
+
+Google refuses its web sign-in inside a WebView, so the app uses native Google
+sign-in through `@capgo/capacitor-social-login` and hands the resulting ID token
+to the same `POST /api/auth/google/verify-email`. The token's audience is the
+**web** client id, which is why the plugin is initialised with it as the server
+client id. The Android client itself holds no id the app ever sends; it exists
+so Google trusts this package and this signature.
+
+1. Read the fingerprint. Push a tag so `android.yml` runs and open the
+   **Print the signing certificate fingerprints** step. It prints exactly two
+   lines, both public values:
+
+   ```
+   SHA1: AB:CD:...:EF
+   SHA256: 11:22:...:FF
+   ```
+
+   The keystore and its passwords never leave the runner and are never printed.
+   Locally the same two lines come from
+   `keytool -list -v -keystore <your.keystore> -alias <your alias>`.
+
+2. **Create credentials → OAuth client ID → Android** and fill in:
+
+   | Field | Value |
+   |---|---|
+   | Package name | `edu.sust.cse.portal` |
+   | SHA-1 certificate fingerprint | the `SHA1` line from step 1 |
+
+3. Create a **second** Android client the same way with the SHA-1 of your debug
+   keystore (`~/.android/debug.keystore`, alias `androiddebugkey`, password
+   `android`) if you want Google sign-in to work in a debug build too.
+
+Both Android clients and the web client must sit in the **same** Google Cloud
+project, and that project needs an **OAuth consent screen** with the `email` and
+`profile` scopes. Nothing else has to be enabled.
+
+### When it refuses
+
+- *Google refused this address* — the address in the browser is not in the web
+  client's authorised origins. Add it exactly, without a path.
+- *Your browser blocked the Google window* — allow popups for the site.
+- In the app, a failure that mentions `10:` or `DEVELOPER_ERROR` means the
+  package name or the SHA-1 of the Android client does not match the APK that is
+  running. Re-read the fingerprint from the workflow log for the build you
+  installed.
+
 ## Who the app is for
 
 Students, class representatives and teachers. Inside the app the only sign-in
