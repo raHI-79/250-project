@@ -51,10 +51,11 @@ type RegistrationResult struct {
 
 type LoginUser struct {
 	AuthUser
-	PasswordHash string
-	Name         string
-	Batch        string
-	Section      string
+	PasswordHash    string
+	Name            string
+	Batch           string
+	Section         string
+	RejectionReason string
 }
 
 type ResetTarget struct {
@@ -97,7 +98,8 @@ u.password_hash,
 COALESCE(s.is_cr, FALSE),
 COALESCE(s.full_name, t.name, ''),
 COALESCE(s.batch, ''),
-COALESCE(s.section, '')
+COALESCE(s.section, ''),
+COALESCE(u.rejection_reason, '')
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
@@ -280,6 +282,7 @@ func (s *Store) FindLoginUser(ctx context.Context, identifier string) (LoginUser
 		&user.Name,
 		&user.Batch,
 		&user.Section,
+		&user.RejectionReason,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return LoginUser{}, ErrNotFound
