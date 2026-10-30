@@ -21,6 +21,10 @@ func (f fakeReleaseLookup) Latest(context.Context) (release.Details, error) {
 	return f.details, f.err
 }
 
+func (f fakeReleaseLookup) ReleasesPage() string {
+	return "https://github.com/raHI-79/250-project/releases/latest"
+}
+
 func newReleaseRouter(t *testing.T, lookup handler.ReleaseLookup) http.Handler {
 	t.Helper()
 	deps, _ := newAccessRouter(t)

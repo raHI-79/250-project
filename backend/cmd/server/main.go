@@ -105,7 +105,10 @@ func run() error {
 		}
 	}
 	cancelStartup()
-	releases := release.New(cfg.ReleasesRepo, cfg.ReleasesAPI)
+	releases := release.New(cfg.ReleasesRepo, cfg.ReleasesAPI).WithToken(cfg.ReleasesToken)
+	if cfg.ReleasesToken == "" {
+		log.Println("release: GITHUB_TOKEN is missing, the release lookup stays anonymous")
+	}
 	httpServer := &http.Server{
 		Addr: net.JoinHostPort("", cfg.Port),
 		Handler: server.NewRouter(server.Dependencies{

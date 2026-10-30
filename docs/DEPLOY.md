@@ -134,6 +134,21 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 | `TURNSTILE_SECRET_KEY` | the Cloudflare Turnstile secret key |
 | `APP_VERSION` | `2.0.0` |
 | `FIREBASE_SERVICE_ACCOUNT` | the Firebase service account JSON, base64 |
+| `GITHUB_RELEASES_REPO` | `raHI-79/250-project` |
+| `GITHUB_TOKEN` | *secret*, optional: a fine-grained token with read-only **Contents** on this one repository |
+
+`GITHUB_TOKEN` is optional but worth setting. The app asks
+`/api/app/android-latest` for the newest release, and the server reads that from
+the GitHub API. Without a token GitHub allows only 60 requests an hour **per IP**,
+and a free Render instance shares its outbound address with other services, so
+the lookup can be rate limited for reasons that have nothing to do with this
+portal. With a token the limit is 5000 an hour for the account. Create it under
+**GitHub → Settings → Developer settings → Fine-grained tokens**, give it access
+to this repository only, set **Contents** to *Read-only*, and nothing else — the
+server never writes to GitHub. Releases are public, so the lookup still works
+without it: it keeps the last good answer for six hours and answers `503` with
+*Update service is busy, try again later.* only when GitHub is unreachable and
+nothing is cached. The token is never logged.
 
 `FRONTEND_ORIGIN` is a chicken and egg: Render shows the address only after the
 service is created. Create it with your best guess, then open

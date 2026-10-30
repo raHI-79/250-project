@@ -15,6 +15,8 @@ import {
 } from '../../lib/update'
 import { APP_VERSION } from '../../lib/version'
 
+const BUSY_NOTE = 'Could not reach the update service. Please try again.'
+
 const ALLOW_NOTE =
   'Android asks once for permission. Turn on "Allow from this source" on the screen that opens, come back and tap Update again.'
 
@@ -38,8 +40,8 @@ export default function AppUpdate() {
           return
         }
         if (announce) toast.success(`You are on the latest version, ${APP_VERSION}`)
-      } catch {
-        if (announce) toast.error('Could not reach the update service. Please try again.')
+      } catch (reason) {
+        if (announce) toast.info(reason?.status === 503 ? reason.message : BUSY_NOTE)
       } finally {
         busy.current = false
       }
