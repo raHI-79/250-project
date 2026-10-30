@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -32,6 +33,8 @@ const (
 	ActionReschedule      = "request_reschedule"
 	ActionAddToFinal      = "add_to_final"
 	ActionRemoveFromFinal = "remove_from_final"
+
+	startedLayout = "2006-01-02 15:04"
 )
 
 type proposedBody struct {
@@ -77,6 +80,17 @@ type itemBody struct {
 
 type itemsResponse struct {
 	Items []itemBody `json:"items"`
+}
+
+type dayBody struct {
+	Date    string     `json:"date"`
+	Weekday string     `json:"weekday"`
+	Items   []itemBody `json:"items"`
+}
+
+type finalItemsResponse struct {
+	Items []itemBody `json:"items"`
+	Days  []dayBody  `json:"days"`
 }
 
 type itemResponse struct {
@@ -137,8 +151,71 @@ func newItemBodies(items []store.ScheduleItem) []itemBody {
 	return bodies
 }
 
+func groupItemDays(items []store.ScheduleItem, cfg *config.Config) []dayBody {
+	days := make([]dayBody, 0)
+	index := make(map[string]int)
+	for _, item := range items {
+		position, seen := index[item.ItemDate]
+		if !seen {
+			position = len(days)
+			index[item.ItemDate] = position
+			weekday := ""
+			if parsed, err := time.ParseInLocation(validate.DateLayout, item.ItemDate, cfg.Location); err == nil {
+				weekday = validate.DayName(int(parsed.Weekday()))
+			}
+			days = append(days, dayBody{Date: item.ItemDate, Weekday: weekday, Items: make([]itemBody, 0)})
+		}
+		days[position].Items = append(days[position].Items, newItemBody(item))
+	}
+	return days
+}
+
+func itemStarted(item store.ScheduleItem, now time.Time) bool {
+	if !item.HasTimes() {
+		return false
+	}
+	return item.ItemDate+" "+item.StartTime < now.Format(startedLayout)
+}
+
+func undecidedItem(item store.ScheduleItem) bool {
+	switch item.Status {
+	case store.ItemAwaiting, store.ItemNoResponse, store.ItemCRAsk:
+		return true
+	}
+	return false
+}
+
+func decidableItem(item store.ScheduleItem) bool {
+	if item.Origin != store.OriginFixed {
+		return false
+	}
+	switch item.Status {
+	case store.ItemAwaiting, store.ItemNoResponse, store.ItemConfirmed, store.ItemDeclined,
+		store.ItemTeacherAsk, store.ItemCRAsk, store.ItemRescheduled:
+		return true
+	}
+	return false
+}
+
+func decidableItems(items []store.ScheduleItem, now time.Time, today string) []store.ScheduleItem {
+	kept := make([]store.ScheduleItem, 0, len(items))
+	for _, item := range items {
+		if !decidableItem(item) {
+			continue
+		}
+		if item.ItemDate <= today && (!undecidedItem(item) || itemStarted(item, now)) {
+			continue
+		}
+		kept = append(kept, item)
+	}
+	return kept
+}
+
 func crActions(item store.ScheduleItem) []string {
 	if item.Status == store.ItemCancelled {
+		if item.InFinal {
+			return []string{ActionRemoveFromFinal}
+		}
 		return []string{}
 	}
 	actions := make([]string, 0, 5)
@@ -235,6 +312,26 @@ type linkRequest struct {
 
 type Notifier interface {
 	NotifyUser(ctx context.Context, userID int64, kind, title, body string, link store.NotificationLink) error
+}
+
+type DropCourseStore interface {
+	ListDropCourseStudents(ctx context.Context, courseID int64, batch string) ([]int64, error)
+}
+
+func tellDropCourseStudents(r *http.Request, students DropCourseStore, alerts Notifier,
+	item store.ScheduleItem, title string) {
+	users, err := students.ListDropCourseStudents(r.Context(), item.CourseID, item.Batch)
+	if err != nil {
+		log.Printf("handler: could not list the drop course students of %d: %v", item.CourseID, err)
+		return
+	}
+	link := notify.OnDate(notify.LinkRoutine, item.ItemDate)
+	for _, userID := range users {
+		if err := alerts.NotifyUser(r.Context(), userID, notify.TypeRoutine, title,
+			itemSentence(item), link); err != nil {
+			log.Printf("handler: could not notify the drop course student %d: %v", userID, err)
+		}
+	}
 }
 
 type BroadcastNotifier interface {

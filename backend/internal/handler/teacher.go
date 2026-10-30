@@ -28,6 +28,7 @@ const (
 	MessageExamCancelled   = "Exam cancelled."
 	MessageExamDeleted     = "Exam deleted."
 	MessagePastDate        = "Date must be today or later."
+	MessageRangeOrder      = "to must be the same day as from or later."
 
 	titleTeacherConfirmed = "Class confirmed by the teacher"
 	titleTeacherCancelled = "Class cancelled by the teacher"
@@ -45,6 +46,7 @@ type TeacherStore interface {
 	GetTeacherByUser(ctx context.Context, userID int64) (store.Teacher, error)
 	ListTeacherRoutine(ctx context.Context, teacherID int64) ([]store.RoutineRow, error)
 	ListTeacherDayItems(ctx context.Context, teacherID int64, date string) ([]store.ScheduleItem, error)
+	ListTeacherItemsRange(ctx context.Context, teacherID int64, from, to string) ([]store.ScheduleItem, error)
 	ListTeacherFinalItems(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
 	ListTeacherExams(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
 	ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
@@ -60,6 +62,7 @@ type TeacherStore interface {
 	CancelTeacherExam(ctx context.Context, itemID, teacherID int64, reason string) (store.ScheduleItem, error)
 	DeleteTeacherExam(ctx context.Context, itemID, teacherID int64) (store.ScheduleItem, error)
 	ListActiveCRs(ctx context.Context, batch, section string) ([]int64, error)
+	ListDropCourseStudents(ctx context.Context, courseID int64, batch string) ([]int64, error)
 }
 
 type Teacher struct {
@@ -76,6 +79,12 @@ type nextDayResponse struct {
 	Date    string     `json:"date"`
 	Weekday string     `json:"weekday"`
 	Items   []itemBody `json:"items"`
+}
+
+type rangeResponse struct {
+	From string    `json:"from"`
+	To   string    `json:"to"`
+	Days []dayBody `json:"days"`
 }
 
 type confirmRequest struct {
@@ -169,6 +178,57 @@ func (t *Teacher) NextDay() http.HandlerFunc {
 	}
 }
 
+func (t *Teacher) Upcoming() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		now := t.cfg.Now()
+		from, to, ok := t.upcomingRange(w, r, now)
+		if !ok {
+			return
+		}
+		items, err := t.teachers.ListTeacherItemsRange(r.Context(), teacher.ID, from, to)
+		if err != nil {
+			log.Printf("handler: could not list the upcoming days of a teacher: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, rangeResponse{
+			From: from,
+			To:   to,
+			Days: groupItemDays(decidableItems(items, now, validate.DateString(now)), t.cfg),
+		})
+	}
+}
+
+func (t *Teacher) upcomingRange(w http.ResponseWriter, r *http.Request, now time.Time) (string, string, bool) {
+	from := validate.DateString(now)
+	to := validate.DateString(now.AddDate(0, 0, t.cfg.DaysAhead))
+	if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
+		parsed, err := validate.Date("from", raw, t.cfg.Location)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return "", "", false
+		}
+		from = validate.DateString(parsed)
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("to")); raw != "" {
+		parsed, err := validate.Date("to", raw, t.cfg.Location)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return "", "", false
+		}
+		to = validate.DateString(parsed)
+	}
+	if to < from {
+		httpx.WriteError(w, http.StatusBadRequest, MessageRangeOrder)
+		return "", "", false
+	}
+	return from, to, true
+}
+
 func (t *Teacher) FinalRoutine() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		teacher, ok := t.profile(w, r)
@@ -182,7 +242,10 @@ func (t *Teacher) FinalRoutine() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, itemsResponse{Items: newItemBodies(items)})
+		httpx.WriteJSON(w, http.StatusOK, finalItemsResponse{
+			Items: newItemBodies(items),
+			Days:  groupItemDays(items, t.cfg),
+		})
 	}
 }
 
@@ -544,4 +607,5 @@ func (t *Teacher) tellStudents(r *http.Request, item store.ScheduleItem, title s
 	if err != nil {
 		log.Printf("handler: could not announce a change to the students: %v", err)
 	}
+	tellDropCourseStudents(r, t.teachers, t.alerts, item, title)
 }

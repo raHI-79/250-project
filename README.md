@@ -867,9 +867,11 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/cr/final` | CR | The final routine grouped by date with `needs_time` and `changed_since_publish` |
 | `GET` | `/api/cr/final/preview` | CR | The same shape for the `ids` the CR is about to publish |
 | `POST` | `/api/cr/final/publish` | CR | `{item_ids}` writes the snapshots students read and notifies the batch |
+| `POST` | `/api/cr/final/remove` | CR | `{item_ids}` takes several items out of the final routine and withdraws the published ones |
 | `GET` | `/api/teacher/fixed-routine` | teacher | This teacher's weekly fixed routine |
-| `GET` | `/api/teacher/upcoming/next-day` | teacher | Tomorrow's items with `decision_open` and the window bounds |
-| `GET` | `/api/teacher/upcoming/final` | teacher | This teacher's decided, final and published items from today, with their origin |
+| `GET` | `/api/teacher/upcoming` | teacher | Every undecided or decidable item from `from` to `to`, grouped by date; the default range is today through `SCHEDULE_DAYS_AHEAD` |
+| `GET` | `/api/teacher/upcoming/next-day` | teacher | Tomorrow's items, the older single-day shape |
+| `GET` | `/api/teacher/upcoming/final` | teacher | This teacher's decided, final and published items from today, grouped by date, with their origin |
 | `POST` | `/api/teacher/items/{id}/confirm` | teacher | `{mode, room?, meeting_link?}`; the first decision only inside the window |
 | `POST` | `/api/teacher/items/{id}/cancel` | teacher | `{reason?}` cancels the class and frees the room |
 | `POST` | `/api/teacher/items/{id}/request-reschedule` | teacher | `{message}` asks the CR for another slot |
@@ -1401,9 +1403,10 @@ to `SCHEDULE_DAYS_AHEAD`, each one `awaiting_teacher` in the routine's own room.
 The job is idempotent: a unique index on `(routine_id, item_date)` means a
 second pass creates nothing.
 
-**The teacher decides on the next day.** The teacher confirms, cancels or asks
-for a reschedule of an item at any hour until the class starts, on
-`awaiting_teacher` and `no_response` items alike. Reminders go out at
+**The teacher decides on any upcoming day.** The teacher confirms, cancels or
+asks for a reschedule of an item at any hour until the class starts, on
+`awaiting_teacher` and `no_response` items alike, for every day from today
+through `SCHEDULE_DAYS_AHEAD`. Reminders go out at
 `TEACHER_REMINDER_TIMES` for tomorrow and at `TEACHER_MORNING_REMINDER` for
 today. After the last reminder slot anything still `awaiting_teacher` for
 tomorrow becomes `no_response`, which is only a signal to the class
@@ -1413,7 +1416,16 @@ of that batch is notified.
 **The CR owns the final routine.** CR-created classes and exams and
 teacher-created exams need no approval at all. Nothing reaches students until
 the CR adds items to the final routine and presses publish. A cancellation of
-an item that is already published reaches the students at once.
+an item that is already published reaches the students at once. The CR can take
+any item back out of the final routine, alone or several at once, which
+withdraws the published copy and tells the batch; only the items the CR made can
+also be deleted for good, while an exam of a teacher belongs to its teacher.
+
+**Final routines only look forward.** Both final routines show today and the
+days ahead. A job at five past midnight in `APP_TIMEZONE`, and once on startup,
+clears `in_final` for every item dated before today. The rows stay for
+attendance, history and reports, and published past days are still readable in
+the history views.
 
 These are the statuses an item moves through:
 
@@ -1488,11 +1500,14 @@ which the item's teacher or the batch CR may call.
 
 A teacher only ever sees and changes items whose `teacher_id` is their own
 `teachers.id`; anything else answers `404`.
-`GET /api/teacher/upcoming/next-day` carries `decision_open`, `window_start` and
-`window_end` beside tomorrow's items, each with the CR's message and proposed
-slot when there is one. Confirming takes `mode` with a `room` or a
-`meeting_link`. Every teacher action notifies the CRs of that batch, and an
-action on a published item also notifies the students.
+`GET /api/teacher/upcoming` carries the days from today through the generated
+horizon, each with the items that still need a decision or can still be changed,
+with the CR's message and proposed slot when there is one. Today only carries
+the undecided classes that have not started yet. `/api/teacher/upcoming/next-day`
+still answers tomorrow alone for older app builds. Confirming takes `mode` with a
+`room` or a `meeting_link`. Every teacher action notifies the CRs of that batch,
+and an action on a published item also notifies the students of the batch and the
+students who took the course as a drop course.
 
 A teacher exam needs only `{course_id, batch, section?, item_date, syllabus,
 instructions}`. It is `scheduled` at once, students read its date, syllabus and

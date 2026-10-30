@@ -257,6 +257,7 @@ func StudentGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 
 func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
 	group.Handle("GET /api/teacher/fixed-routine", teacher.FixedRoutine())
+	group.Handle("GET /api/teacher/upcoming", teacher.Upcoming())
 	group.Handle("GET /api/teacher/upcoming/next-day", teacher.NextDay())
 	group.Handle("GET /api/teacher/upcoming/final", teacher.FinalRoutine())
 	group.Handle("POST /api/teacher/items/{id}/confirm", teacher.Confirm())
@@ -326,6 +327,7 @@ func registerCRRoutes(group RouteGroup, cr *handler.CR) {
 	group.Handle("DELETE /api/cr/items/{id}/final", cr.RemoveFromFinal())
 	group.Handle("GET /api/cr/final", cr.Final())
 	group.Handle("GET /api/cr/final/preview", cr.FinalPreview())
+	group.Handle("POST /api/cr/final/remove", cr.RemoveManyFromFinal())
 	group.Handle("POST /api/cr/final/publish", cr.Publish())
 }
 
