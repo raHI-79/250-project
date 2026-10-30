@@ -98,6 +98,8 @@ public class AttendanceBeacon extends Plugin {
         String endpoint = call.getString("endpoint", "");
         String bearer = call.getString("bearer", "");
         long sessionId = call.getLong("session_id", 0L);
+        int present = call.getInt("present", 0);
+        int roster = call.getInt("roster", 0);
         if (sessionId <= 0 || TextUtils.isEmpty(tokenKey)) {
             call.reject("The session is missing its key");
             return;
@@ -107,8 +109,8 @@ public class AttendanceBeacon extends Plugin {
         intent.putExtra(AttendanceService.EXTRA_SESSION, sessionId);
         intent.putExtra(AttendanceService.EXTRA_KEY, tokenKey);
         intent.putExtra(AttendanceService.EXTRA_COURSE, call.getString("course", ""));
-        intent.putExtra(AttendanceService.EXTRA_PRESENT, call.getInt("present", 0));
-        intent.putExtra(AttendanceService.EXTRA_ROSTER, call.getInt("roster", 0));
+        intent.putExtra(AttendanceService.EXTRA_PRESENT, present);
+        intent.putExtra(AttendanceService.EXTRA_ROSTER, roster);
         intent.putExtra(AttendanceService.EXTRA_ENDPOINT, endpoint);
         intent.putExtra(AttendanceService.EXTRA_BEARER, bearer);
         try {
@@ -126,10 +128,12 @@ public class AttendanceBeacon extends Plugin {
 
     @PluginMethod
     public void update(PluginCall call) {
+        int present = call.getInt("present", 0);
+        int roster = call.getInt("roster", 0);
         Intent intent = new Intent(getContext(), AttendanceService.class);
         intent.setAction(AttendanceService.ACTION_UPDATE);
-        intent.putExtra(AttendanceService.EXTRA_PRESENT, call.getInt("present", 0));
-        intent.putExtra(AttendanceService.EXTRA_ROSTER, call.getInt("roster", 0));
+        intent.putExtra(AttendanceService.EXTRA_PRESENT, present);
+        intent.putExtra(AttendanceService.EXTRA_ROSTER, roster);
         try {
             getContext().startService(intent);
         } catch (Exception failure) {

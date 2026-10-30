@@ -10,4 +10,5 @@
     <string name="attendance_notification_title">Attendance open</string>
     <string name="attendance_confirm_title">Confirm it is you</string>
     <string name="attendance_confirm_subtitle">Use your fingerprint, face or screen lock to be marked present.</string>
+    <string name="attendance_confirm_cancel">Cancel</string>
 </resources>
