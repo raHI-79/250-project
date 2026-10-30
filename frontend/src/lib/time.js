@@ -124,6 +124,18 @@ export const tomorrow = () => {
 
 export const today = () => isoDate(new Date())
 
+export const dayHeading = (value) => {
+  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return ''
+  const weekday = date.toLocaleDateString('en-GB', { weekday: 'short' })
+  const month = date.toLocaleDateString('en-GB', { month: 'short' })
+  const label = `${weekday} ${date.getDate()} ${month}`
+  const stamp = isoDate(date)
+  if (stamp === today()) return `Today · ${label}`
+  if (stamp === tomorrow()) return `Tomorrow · ${label}`
+  return label
+}
+
 export const shiftDate = (value, days) => {
   const date = new Date(`${value}T00:00:00`)
   if (Number.isNaN(date.getTime())) return value

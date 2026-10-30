@@ -4,6 +4,27 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.2.4
+
+- The teacher's upcoming routine is no longer only tomorrow. It lists every
+  undecided or decidable class from today through the generated horizon, grouped
+  under a header per day, and Confirm, Cancel and Request reschedule work on any
+  of those days. `GET /api/teacher/upcoming?from=&to=` answers the days;
+  `/api/teacher/upcoming/next-day` still answers the single day for older apps.
+- The teacher's final routine is grouped by day from today onward and carries the
+  teacher's confirmed, rescheduled, in-final and published items, the items the
+  class representative made for their courses and their own exams. A class or an
+  exam can be cancelled from there with an optional reason, which releases the
+  room, cancels the published copy and tells the class representative, the batch
+  and the students who took the course as a drop course.
+- The class representative can remove any item from the final routine, one at a
+  time or several at once, and a published item is withdrawn from the batch
+  routine when it goes. Items the class representative made can also be deleted
+  for good; an exam of a teacher can only be removed, never deleted.
+- Both final routines show today and the days ahead only. A job at five past
+  midnight, and once on startup, takes the past days out of the final routines
+  while keeping the rows for attendance, history and reports.
+
 ## 2.2.3
 
 - The app finds an update again. `/api/app/android-latest` was answered with

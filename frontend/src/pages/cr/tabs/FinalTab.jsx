@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Eye, ListChecks, Send } from 'lucide-react'
+import { Eye, ListChecks, Send, Trash2 } from 'lucide-react'
 import ItemBadges from '../../../components/schedule/ItemBadges'
 import PreviewModal from '../../../components/schedule/PreviewModal'
 import SlotFields from '../../../components/schedule/SlotFields'
@@ -17,7 +17,11 @@ import {
 import api from '../../../lib/api'
 import { usePeriods } from '../../../lib/hooks'
 import {
+  ACTION_DELETE,
+  ACTION_REMOVE_FROM_FINAL,
   MODE_ROOM,
+  STATUS_CANCELLED,
+  allows,
   courseLine,
   ORIGIN_TEACHER_EXAM,
   periodRangeError,
@@ -25,7 +29,7 @@ import {
   sectionShort,
   slotError,
 } from '../../../lib/schedule'
-import { formatDate, formatTimeRange } from '../../../lib/time'
+import { dayHeading, formatDate, formatTimeRange } from '../../../lib/time'
 import cx from '../../../lib/cx'
 import CourseName from '../../../components/schedule/CourseName'
 
@@ -39,6 +43,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
   const [busy, setBusy] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const days = useMemo(() => final.data?.days || [], [final.data])
   const items = useMemo(() => days.flatMap((day) => day.items), [days])
   useEffect(() => {
@@ -90,7 +95,51 @@ export default function FinalTab({ final, highlight, onPublished }) {
     setBusy(item.id)
     try {
       await api.delete(`/api/cr/items/${item.id}/final`)
-      toast.success('Removed from the final routine')
+      toast.success(
+        item.published
+          ? 'Removed from the final routine and taken off the published routine'
+          : 'Removed from the final routine',
+      )
+      final.reload()
+    } catch (failure) {
+      toast.error(failure.message)
+    } finally {
+      setBusy(0)
+    }
+  }
+  const removePicked = async () => {
+    const published = items.filter((item) => picked.includes(item.id) && item.published).length
+    const ok = await confirm({
+      title: `Remove ${picked.length} item${picked.length === 1 ? '' : 's'} from the final routine?`,
+      message: published
+        ? `${published} of them are published, so your batch loses them straight away.`
+        : 'They stay in the upcoming routine, so you can add them again.',
+      confirmLabel: 'Remove',
+    })
+    if (!ok) return
+    setRemoving(true)
+    try {
+      const result = await api.post('/api/cr/final/remove', { item_ids: picked })
+      toast.success(`Removed ${result?.removed || picked.length} items`)
+      setPicked([])
+      final.reload()
+    } catch (failure) {
+      toast.error(failure.message)
+    } finally {
+      setRemoving(false)
+    }
+  }
+  const deleteItem = async (item) => {
+    const ok = await confirm({
+      title: 'Delete this item?',
+      message: `${courseLine(item)} on ${formatDate(item.item_date)} disappears for everybody.`,
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
+    setBusy(item.id)
+    try {
+      await api.delete(`/api/cr/items/${item.id}`)
+      toast.success('Deleted')
       final.reload()
     } catch (failure) {
       toast.error(failure.message)
@@ -155,6 +204,15 @@ export default function FinalTab({ final, highlight, onPublished }) {
             <Eye size={15} />
             Preview
           </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={picked.length === 0}
+            loading={removing}
+            onClick={removePicked}
+          >
+            Remove picked
+          </Button>
           <Button size="sm" disabled={picked.length === 0} loading={publishing} onClick={publish}>
             <Send size={15} />
             Publish All
@@ -164,9 +222,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
       <div className="flex flex-col gap-4">
         {days.map((day) => (
           <Card key={day.date} hover={false} className="animate-fade-in-up">
-            <p className="font-display text-lg font-bold text-ink">
-              {formatDate(day.date)} · {day.weekday}
-            </p>
+            <p className="font-display text-lg font-bold text-ink">{dayHeading(day.date)}</p>
             <ul className="mt-2 flex flex-col gap-3">
               {day.items.map((item) => (
                 <li
@@ -237,17 +293,32 @@ export default function FinalTab({ final, highlight, onPublished }) {
                         </div>
                       ) : (
                         <div className="mt-2.5 flex flex-wrap gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            loading={busy === item.id}
-                            onClick={() => removeFromFinal(item)}
-                          >
-                            Remove from final
-                          </Button>
+                          {item.status !== STATUS_CANCELLED && (
+                            <Button size="sm" variant="secondary" onClick={() => openEdit(item)}>
+                              Edit
+                            </Button>
+                          )}
+                          {allows(item, ACTION_REMOVE_FROM_FINAL) && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              loading={busy === item.id}
+                              onClick={() => removeFromFinal(item)}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                          {allows(item, ACTION_DELETE) && (
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              loading={busy === item.id}
+                              onClick={() => deleteItem(item)}
+                            >
+                              <Trash2 size={14} />
+                              Delete
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>
