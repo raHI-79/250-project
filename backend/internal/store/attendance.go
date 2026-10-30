@@ -255,6 +255,12 @@ JOIN attendance_sessions a ON a.id = r.session_id
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
   AND a.started_at >= $5 AND a.started_at < $6
 GROUP BY r.student_id`
+	batchClassRatesSQL = `SELECT r.student_id, COUNT(*), COUNT(*) FILTER (WHERE r.status = 'present')
+FROM attendance_records r
+JOIN attendance_sessions a ON a.id = r.session_id
+WHERE a.course_id = $1 AND a.batch = $2 AND a.section = $3
+  AND a.started_at >= $4 AND a.started_at < $5
+GROUP BY r.student_id`
 	exportRowsSQL = `SELECT s.id, s.full_name, s.reg_no, a.id, a.started_at,
 r.status, COALESCE(r.note, '')
 FROM attendance_sessions a
@@ -681,6 +687,27 @@ func (s *Store) ClassRates(ctx context.Context, teacherID, courseID int64, batch
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("store: could not read the class rates: %w", err)
+	}
+	return rates, nil
+}
+
+func (s *Store) BatchClassRates(ctx context.Context, courseID int64, batch, section string,
+	from, to time.Time) ([]StudentRate, error) {
+	rows, err := s.pool.Query(ctx, batchClassRatesSQL, courseID, batch, section, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not count the attendance of a batch class: %w", err)
+	}
+	defer rows.Close()
+	rates := make([]StudentRate, 0)
+	for rows.Next() {
+		var rate StudentRate
+		if err := rows.Scan(&rate.StudentID, &rate.Held, &rate.Present); err != nil {
+			return nil, fmt.Errorf("store: could not scan a batch class rate: %w", err)
+		}
+		rates = append(rates, rate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the batch class rates: %w", err)
 	}
 	return rates, nil
 }

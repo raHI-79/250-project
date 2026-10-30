@@ -482,7 +482,138 @@ of the app until the visitor holds a valid pass.
 - The site key comes from `GET /api/auth/config`. **With either key missing the
   gate is skipped entirely** and every one of those endpoints works as before.
 
-## 12. Interface
+## 12. Class attendance
+
+Attendance is taken by Bluetooth from the Android app and is built so that one
+student cannot mark another. Teachers create the session; students only mark
+themselves, with one tap, from the phone they registered. There are no QR codes
+and no selfies.
+
+### 12.1 The session
+
+A teacher starts attendance for one course, batch and section of the running
+semester, prefilled from today's class. Section `ALL` covers both sections. The
+session stays open for a duration the teacher picks between **5 and 30 minutes**
+and can be extended by the same amount or closed early. Starting one sends every
+roster student a push, `Attendance open · <course title>`, that opens the mark
+screen.
+
+Each session draws its own random `token_key`, which never reaches a student.
+
+### 12.2 The Bluetooth presence token
+
+While the session is open the teacher's app advertises a Bluetooth Low Energy
+packet on a fixed service UUID carrying an 8-byte token:
+
+```
+token = HMAC(token_key, "<session id>:<unix seconds / 10>")[:8]
+```
+
+The server accepts the **current or the previous** 10-second slice, so a token
+heard a moment ago still works and one from a minute ago does not. The
+advertisement is low power, which reaches roughly 10 to 20 metres — about one
+classroom.
+
+When a phone has no Bluetooth, or hears nothing within ten seconds, a 4-digit
+code derived the same way over **20-second** slices is shown on the teacher's
+screen and on the website for a projector, and the student types it. The
+location rules are unchanged.
+
+### 12.3 The location rules
+
+The teacher's phone sends its GPS position when the session starts and every 15
+seconds while it is open, from a foreground service, so a locked screen does not
+stop it. A mark is accepted only when all of these hold:
+
+- the student is within **30 metres** of the teacher's latest position, by
+  great-circle distance;
+- the student's accuracy is **50 metres or better**, otherwise *Weak GPS signal
+  — move near a window and try again*;
+- the position is not from a mock provider, checked natively with
+  `Location.isMock()` or `isFromMockProvider()`;
+- the teacher's own position is **less than 60 seconds** old.
+
+The distance and the accuracy of every accepted mark are stored, so a session can
+be audited afterwards.
+
+### 12.4 One phone, one student
+
+One phone marks one student per session and a student marks once per session,
+both enforced by unique indexes rather than by the app. Marks are only taken
+while the session is open.
+
+The roster is the active students of the batch and section — `ALL` meaning both —
+plus every student who added that course as a drop course. On close, every roster
+student without a record becomes **absent** with method `system`.
+
+### 12.5 The registered phone
+
+The first Android phone a student or class representative signs in with becomes
+their attendance phone, identified by `Settings.Secure.ANDROID_ID`, which Android
+scopes to the app. Every other feature works on any device and on the website;
+only attendance is refused elsewhere, with *This is not your registered phone.
+Request to use this phone.*
+
+From a new phone the student sends a request with a reason. It reaches every
+teacher who teaches that student's batch in the running semester, as a push and a
+bell notification reading *<name> (<reg no>) wants to use a new phone*, and any
+one of them can approve or refuse it from **Phone requests** in the teacher app
+and on the website. An approval rebinds the phone, tells the student who approved
+it, and is written to the activity log. Office admins do not approve these; they
+only see the history.
+
+At most **two approved changes per student per semester** need no note. Beyond
+that the teacher has to add a note to approve.
+
+### 12.6 Marking and editing
+
+The mark screen asks once for Bluetooth, nearby devices and precise location,
+offers to turn Bluetooth on, enables one big **I'm present** button only when a
+valid token is heard, and then asks for the phone's own biometric or screen-lock
+confirmation before sending `{token or code, lat, lng, accuracy, is_mock,
+device_id}`. Success and every refusal say exactly what happened.
+
+Students cannot mark from the website, which explains to use the Android app.
+Students on an iPhone are marked by hand by their teacher. Every manual change
+keeps a note, who made it and when.
+
+A hundred or more students marking at once is normal: the teacher's phone only
+broadcasts, and the server handles each mark on its own.
+
+### 12.7 Percentages and the warning
+
+The percentage of a student in a course is `present / sessions held for that
+student`. When it falls below **50 %**, after at least three sessions, the student
+gets one push and bell notification, *Your attendance in <course title> is <n> %
+— below 50 %*, and then at most once a week while it stays below. It links to
+that course's attendance.
+
+### 12.8 What each role sees
+
+- **Students** — the Attendance tab, a Home quick action and the push open the
+  mark screen. **My attendance** lists each course with its percentage, red below
+  50 %, and every session date with Present or Absent, the time, the teacher's
+  name and any note, filtered by course and month, in the app and on the website.
+- **Teachers** — start, extend and close a session; the live count, the latest
+  marks and **Show code**; the session detail with every student's status, time,
+  distance and method, each settable to Present or Absent with a note; the
+  history; **Phone requests**; and the Excel export. The course list shows each
+  course's average attendance and the students below 50 %.
+- **The office** — a read-only phone change history and an attendance overview
+  per batch and course with the same Excel export across every batch.
+
+### 12.9 The Excel export
+
+Generated on the server with `excelize`. One sheet per course-batch-section
+carries the student name, the registration number, one column per session date
+with `P` or `A` and the note as a cell comment, the present count, the total and
+the percentage, with below 50 % highlighted red and the header frozen.
+**Download all my classes** puts every course-batch-section the teacher teaches
+into one workbook and adds a Summary sheet with the course, batch, section,
+number of sessions, average percentage and how many students are below 50 %. A
+date range filter defaults to the running semester.
+
+## 13. Interface
 
 - A frosted glass look on the department's own colours: maroon `#7A1F2B`, paper
   `#FAF9F6` and a muted gold for highlights. A soft background of blurred maroon
@@ -507,7 +638,7 @@ of the app until the visitor holds a valid pass.
   fallback. `npm run icons` generates the app icons, the maskable icons, the
   monochrome badge, the apple-touch icon and the favicon from it.
 
-## 13. Demo data
+## 14. Demo data
 
 `go run ./cmd/seed -demo` loads a demonstration department: batches CSE-21 to
 CSE-24 with sections A and B, each on its own running semester with an older one

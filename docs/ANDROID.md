@@ -84,6 +84,99 @@ the announced version, so the same release never goes out twice.
 `My profile → About` names the installed version and offers **Check for
 updates** for anyone who does not want to wait.
 
+## How attendance works in the app
+
+Attendance is the one feature that only works inside this app, and only on the
+phone a student registered. Everything else keeps working on any device and on
+the website.
+
+### What the teacher's phone does
+
+While a session is open the app runs `AttendanceService`, a foreground service
+with the ongoing notification `Attendance open · <course> · <present>/<roster>`
+in its own low-importance **Attendance** channel. The service does two things at
+once:
+
+- it advertises a Bluetooth Low Energy packet on the fixed 16-bit service UUID
+  `0xA7A7` carrying an 8-byte token, `HMAC(token_key, "<session id>:<10 second
+  slice>")` truncated to eight bytes, re-advertised on every slice boundary at
+  `ADVERTISE_MODE_LOW_POWER` and `ADVERTISE_TX_POWER_LOW`, which reaches about
+  10 to 20 metres;
+- it asks `LocationManager` for a GPS fix every 15 seconds and posts it to
+  `POST /api/teacher/attendance/sessions/{id}/location` itself, with the
+  teacher's bearer token, so a locked screen or a backgrounded app does not
+  stop the position from refreshing.
+
+The session key never reaches a student. The teacher's app needs it to rotate
+the token without the network, and the same key produces the 4-digit code the
+screen shows for a projector.
+
+### What the student's phone does
+
+The mark screen scans for that service UUID for ten seconds, reads the 8-byte
+service data, and only then enables the big **I am present** button. Tapping it
+asks for the phone's own fingerprint, face or screen lock through
+`BiometricPrompt` with `BIOMETRIC_WEAK | DEVICE_CREDENTIAL`, takes one GPS fix,
+and sends `{token, lat, lng, accuracy_m, is_mock, device_id}`. If nothing is
+heard in ten seconds the screen offers **Enter the code on the board** instead;
+the location rules are the same either way.
+
+### The permissions it asks for
+
+| Permission | Who needs it | Why |
+|---|---|---|
+| `ACCESS_FINE_LOCATION` | teachers and students | The 30 metre rule. Coarse location is not accurate enough, and on Android 11 and older a BLE scan needs it too |
+| `BLUETOOTH_ADVERTISE` | teachers | Broadcasting the token. Android 12 and newer |
+| `BLUETOOTH_SCAN` | students | Hearing the token, declared `neverForLocation`. Android 12 and newer |
+| `BLUETOOTH_CONNECT` | both | Reading the adapter state. Android 12 and newer |
+| `BLUETOOTH`, `BLUETOOTH_ADMIN` | both | The same thing on Android 11 and older, so both are capped at `maxSdkVersion="30"` |
+| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` | teachers | The service that keeps advertising and sending the position |
+| `USE_BIOMETRIC` | students | The fingerprint, face or screen-lock check before a mark |
+
+Each side asks once, from the screen that needs it, and the screen explains what
+is missing instead of failing silently. If Bluetooth is off the app asks Android
+to turn it on with `ACTION_REQUEST_ENABLE`. `android.hardware.bluetooth_le` is
+declared `required="false"`, so a phone without BLE still installs the app and
+simply uses the code on the board.
+
+### A note on GPS accuracy
+
+A phone reports accuracy as a radius in metres, and indoors that radius grows:
+near a window it is often 10 to 20 metres, deep inside a concrete building it
+can pass 50 metres or the fix can be minutes old. A mark is refused above 50
+metres with **Weak GPS signal — move near a window and try again**, so a class
+in an inner room should expect students near the windows to mark first. The
+teacher's own position has to be under a minute old for any mark to be accepted,
+which is why the service refreshes it every 15 seconds. A position from a mock
+provider is refused outright: `Location.isMock()` on Android 12 and newer,
+`isFromMockProvider()` below that.
+
+### The registered phone
+
+The first Android phone a student signs in with becomes their attendance phone,
+keyed on `Settings.Secure.ANDROID_ID`, which Android scopes to this app and this
+phone. From any other phone the student sees **This is not your registered
+phone. Request to use this phone.** with a reason field. The request reaches
+every teacher who teaches that student's batch in the running semester as a push
+and a bell notification, and any one of them can approve or refuse it from
+**Phone requests** in the app or on the website. An approval rebinds the phone,
+tells the student who approved it, and is written to the activity log. Two
+approved changes per student per semester need no note; beyond that the teacher
+has to add one. The office never approves these, it only reads the history.
+
+Students on an iPhone cannot mark attendance at all; their teacher marks them by
+hand from the session detail, which keeps the note and who set it.
+
+### The Excel export
+
+The teacher downloads a workbook from the session history or from **My
+classes**. One sheet per course-batch-section carries the student name, the
+registration number, one column per session date with `P` or `A` and the note as
+a cell comment, the present count, the total and the percentage, with below
+50 % in red and the header frozen. **Download all my classes** puts every class
+the teacher teaches into one workbook and adds a Summary sheet. In the app the
+file is saved to **Documents**; on the website the browser downloads it.
+
 ## Who the app is for
 
 Students, class representatives and teachers. Inside the app the only sign-in
@@ -154,8 +247,8 @@ keep working. The server logs which of the two it is at startup.
 3. Tag it and push the tag:
 
    ```powershell
-   git tag v2.1.0
-   git push origin v2.1.0
+   git tag v2.2.0
+   git push origin v2.2.0
    ```
 
 `.github/workflows/android.yml` builds and signs the APK and attaches it to the

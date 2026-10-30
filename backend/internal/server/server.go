@@ -59,6 +59,7 @@ type Dependencies struct {
 	Releases  handler.ReleaseLookup
 	Marks     handler.AttendanceStore
 	Presence  handler.StudentAttendanceStore
+	Phones    handler.PhoneStore
 }
 
 type RouteGroup struct {
@@ -154,6 +155,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerAttendanceTeacherRoutes(TeacherGroup(mux, deps), marks)
 	registerAttendanceStudentRoutes(StudentGroup(mux, deps),
 		handler.NewStudentAttendance(deps.Config, deps.Presence, deps.Alarms))
+	registerPhoneRoutes(mux, deps, handler.NewPhones(deps.Config, deps.Phones, deps.Alarms))
 	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
 	files := deps.Files
 	if files == nil {
@@ -279,6 +281,17 @@ func registerAttendanceTeacherRoutes(group RouteGroup, marks *handler.Attendance
 	group.Handle("PATCH /api/teacher/attendance/sessions/{id}/students/{student_id}", marks.EditMark())
 	group.Handle("GET /api/teacher/attendance/classes", marks.Classes())
 	group.Handle("GET /api/teacher/attendance/export", marks.Export())
+}
+
+func registerPhoneRoutes(mux *http.ServeMux, deps Dependencies, phones *handler.Phones) {
+	teacher := TeacherGroup(mux, deps)
+	teacher.Handle("GET /api/teacher/phone-requests", phones.TeacherList())
+	teacher.Handle("POST /api/teacher/phone-requests/{id}/approve", phones.Decide(true))
+	teacher.Handle("POST /api/teacher/phone-requests/{id}/reject", phones.Decide(false))
+	admin := AdminGroup(mux, deps)
+	admin.Handle("GET /api/admin/phone-changes", phones.AdminHistory())
+	admin.Handle("GET /api/admin/attendance", phones.AdminOverview())
+	admin.Handle("GET /api/admin/attendance/export", phones.AdminExport())
 }
 
 func registerAttendanceStudentRoutes(group RouteGroup, presence *handler.StudentAttendance) {

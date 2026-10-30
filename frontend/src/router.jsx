@@ -32,6 +32,7 @@ import TeacherUpcomingPage from './pages/teacher/TeacherUpcomingPage'
 import TeacherCreateExamPage from './pages/teacher/TeacherCreateExamPage'
 import TeacherNoticesPage from './pages/teacher/TeacherNoticesPage'
 import TeacherAttendancePage from './pages/teacher/TeacherAttendancePage'
+import TeacherPhoneRequestsPage from './pages/teacher/TeacherPhoneRequestsPage'
 import OverviewPage from './pages/admin/OverviewPage'
 import RegistrationsPage from './pages/admin/RegistrationsPage'
 import AdminStudentsPage from './pages/admin/AdminStudentsPage'
@@ -42,6 +43,8 @@ import ClassPeriodsPage from './pages/admin/ClassPeriodsPage'
 import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
 import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
 import ActivityLogPage from './pages/admin/ActivityLogPage'
+import AdminAttendancePage from './pages/admin/AdminAttendancePage'
+import AdminPhoneChangesPage from './pages/admin/AdminPhoneChangesPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { useAuth } from './context/auth'
 import { isNative } from './lib/native'
@@ -136,6 +139,7 @@ export default function Router() {
           <Route path={paths.teacher.createExam()} element={<TeacherCreateExamPage />} />
           <Route path={paths.teacher.notices()} element={<TeacherNoticesPage />} />
           <Route path={paths.teacher.attendance()} element={<TeacherAttendancePage />} />
+          <Route path={paths.teacher.phoneRequests()} element={<TeacherPhoneRequestsPage />} />
           <Route path={paths.teacher.messages()} element={<MessagesPage />} />
         </Route>
       </Route>
@@ -153,6 +157,8 @@ export default function Router() {
           <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />
           <Route path={paths.admin.messages()} element={<MessagesPage />} />
           <Route path={paths.admin.activity()} element={<ActivityLogPage />} />
+          <Route path={paths.admin.attendance()} element={<AdminAttendancePage />} />
+          <Route path={paths.admin.phoneChanges()} element={<AdminPhoneChangesPage />} />
         </Route>
       </Route>
       )}
