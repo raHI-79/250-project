@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/raHI-79/250-project/backend/internal/httpx"
-	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/release"
 )
 
@@ -17,10 +16,13 @@ const (
 	AndroidLatestPath    = "/api/app/android-latest"
 	downloadCacheControl = "public, max-age=600"
 	noStore              = "no-store"
+
+	MessageUpdateBusy = "Update service is busy, try again later."
 )
 
 type ReleaseLookup interface {
 	Latest(ctx context.Context) (release.Details, error)
+	ReleasesPage() string
 }
 
 type androidLatestResponse struct {
@@ -76,10 +78,15 @@ func NewAppRelease(releases ReleaseLookup, home string) *AppRelease {
 func (a *AppRelease) Download() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		details, err := a.releases.Latest(r.Context())
-		if err != nil || details.APKURL == "" {
-			if err != nil && !errors.Is(err, release.ErrNoAsset) {
+		if err != nil && !errors.Is(err, release.ErrNoAsset) {
+			if !errors.Is(err, release.ErrUnavailable) {
 				log.Printf("handler: could not find the newest APK: %v", err)
 			}
+			w.Header().Set("Cache-Control", noStore)
+			http.Redirect(w, r, a.releases.ReleasesPage(), http.StatusFound)
+			return
+		}
+		if details.APKURL == "" {
 			a.writeFallback(w)
 			return
 		}
@@ -92,8 +99,11 @@ func (a *AppRelease) Latest() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		details, err := a.releases.Latest(r.Context())
 		if err != nil && !errors.Is(err, release.ErrNoAsset) {
-			log.Printf("handler: could not read the newest release: %v", err)
-			httpx.WriteError(w, http.StatusBadGateway, middleware.MessageServerError)
+			if !errors.Is(err, release.ErrUnavailable) {
+				log.Printf("handler: could not read the newest release: %v", err)
+			}
+			w.Header().Set("Cache-Control", noStore)
+			httpx.WriteError(w, http.StatusServiceUnavailable, MessageUpdateBusy)
 			return
 		}
 		w.Header().Set("Cache-Control", downloadCacheControl)

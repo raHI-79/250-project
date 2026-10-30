@@ -90,6 +90,7 @@ type Config struct {
 	FCMChannelID       string
 	ReleasesRepo       string
 	ReleasesAPI        string
+	ReleasesToken      string
 }
 
 func (c *Config) FirebaseEnabled() bool {
@@ -145,6 +146,7 @@ func Load() (*Config, error) {
 		FCMChannelID:       getEnv("FCM_CHANNEL_ID", defaultChannelID),
 		ReleasesRepo:       strings.Trim(getEnv("GITHUB_RELEASES_REPO", defaultReleasesRepo), "/"),
 		ReleasesAPI:        strings.TrimRight(strings.TrimSpace(os.Getenv("GITHUB_API_URL")), "/"),
+		ReleasesToken:      strings.TrimSpace(os.Getenv("GITHUB_TOKEN")),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, ErrMissingDatabaseURL

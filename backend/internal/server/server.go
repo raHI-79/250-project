@@ -110,7 +110,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/health", handler.Health(deps.Config, deps.Database))
 	releases := deps.Releases
 	if releases == nil {
-		releases = release.New(deps.Config.ReleasesRepo, deps.Config.ReleasesAPI)
+		releases = release.New(deps.Config.ReleasesRepo, deps.Config.ReleasesAPI).
+			WithToken(deps.Config.ReleasesToken)
 	}
 	apps := handler.NewAppRelease(releases, deps.Config.FrontendOrigin)
 	throttled.Handle("GET "+handler.DownloadAndroidPath, apps.Download())

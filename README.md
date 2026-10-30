@@ -784,8 +784,8 @@ Every route lives under `/api`. Errors always use the same shape:
 |---|---|---|---|
 | `GET` | `/api/health` | public | `status`, `environment`, `version`, `commit`, `database` (`ok` / `unavailable`) and the current time |
 | `POST` | `/api/human/verify` | public | `{token, standalone}` checks a Turnstile token with Cloudflare and returns a signed pass; `503` when the keys are missing |
-| `GET` | `/download/android` | public, rate limited | `302` to the signed APK of the newest GitHub Release; a short HTML page when no build is published. The release lookup is cached ten minutes |
-| `GET` | `/api/app/android-latest` | public, rate limited | `{version, version_code, apk_url, notes, required}` of the newest release; `required` is true when the notes carry `[required]` |
+| `GET` | `/download/android` | public, rate limited | `302` to the signed APK of the newest GitHub Release that carries one; a short HTML page when no build is published, and a `302` to the repository releases page when GitHub itself cannot be read |
+| `GET` | `/api/app/android-latest` | public, rate limited | `{version, version_code, apk_url, notes, required}` of the newest release that carries an APK; `required` is true when the notes carry `[required]`. Every field is empty while no build is published, and `503` `{"error":"Update service is busy, try again later."}` when GitHub is unreachable and nothing is cached |
 | `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
 | `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
 | `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students, out of `A` and `B` |
@@ -957,6 +957,31 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/uploads/{name}` | public | Serves one older uploaded PDF inline; only the generated file names resolve, anything else is `404` |
 | `GET` | `/uploads/files/{name}` | public | Serves one attachment with its real type and `nosniff`; images and PDFs inline, everything else as a download |
 | `GET` | `/uploads/photos/{name}` | public | Serves one profile photo inline with `nosniff`; only the generated names resolve |
+
+### The release lookup
+
+Both `/download/android` and `/api/app/android-latest` read the GitHub releases
+of `GITHUB_RELEASES_REPO` through one shared lookup in
+`backend/internal/release`, which is built to keep working when GitHub does not.
+
+- It asks for a page of releases, not `releases/latest`, and picks the newest
+  release that is neither a draft nor a prerelease **and** carries an asset named
+  `sust-cse-portal-<version>.apk`. A release published without the APK attached,
+  as `v2.2.0` was, is skipped rather than reported as the newest build.
+- `GITHUB_TOKEN` is optional. Without it GitHub allows 60 requests an hour per
+  IP address, which a free Render instance shares with other services; with a
+  read-only token the account gets 5000. A `User-Agent` always goes out, and the
+  token is never written to the log.
+- A good answer is cached ten minutes. When GitHub answers `403`, `429` or `5xx`,
+  times out or sends something that is not JSON, the last good answer is served
+  for up to **six hours**, and a failed attempt is not retried for a minute so a
+  rate limit is not made worse.
+- Only when GitHub cannot be read and nothing is cached does the API answer
+  `503` with *Update service is busy, try again later.*, which the app shows as
+  a calm notice; `/download/android` sends the browser to the releases page
+  instead. Neither one ever answers `500`.
+- Each failure is logged with the GitHub status, the rate-limit state and
+  GitHub's own message, and says whether a cached release was served.
 
 ### Attendance
 

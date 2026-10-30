@@ -24,11 +24,11 @@ func fakeReleases(t *testing.T, tag, notes, assetName string) *release.Lookup {
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
 			"tag_name": tag,
 			"body":     notes,
 			"assets":   assets,
-		})
+		}})
 	}))
 	t.Cleanup(server.Close)
 	return release.New("", server.URL)
@@ -37,7 +37,11 @@ func fakeReleases(t *testing.T, tag, notes, assetName string) *release.Lookup {
 type brokenReleases struct{}
 
 func (brokenReleases) Latest(context.Context) (release.Details, error) {
-	return release.Details{}, context.DeadlineExceeded
+	return release.Details{}, release.ErrUnavailable
+}
+
+func (brokenReleases) ReleasesPage() string {
+	return "https://github.com/raHI-79/250-project/releases/latest"
 }
 
 func appCall(t *testing.T, handlerFunc http.HandlerFunc, path string) *httptest.ResponseRecorder {
@@ -106,15 +110,33 @@ func TestAndroidLatestStaysEmptyWithoutAnAsset(t *testing.T) {
 	if payload["apk_url"] != "" {
 		t.Errorf("apk_url = %#v, want empty", payload["apk_url"])
 	}
-	if payload["version"] != "2.1.0" {
-		t.Errorf("version = %#v, want 2.1.0", payload["version"])
+	if payload["version"] != "" {
+		t.Errorf("version = %#v, want empty without a published APK", payload["version"])
 	}
 }
 
-func TestAndroidLatestReportsAnUnreachableGitHub(t *testing.T) {
+func TestAndroidLatestAsksForPatienceWhenGitHubIsBusy(t *testing.T) {
 	apps := NewAppRelease(brokenReleases{}, "https://portal.test")
 	rec := appCall(t, apps.Latest(), AndroidLatestPath)
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want 502 (body = %q)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if got := decodeBody(t, rec)["error"]; got != MessageUpdateBusy {
+		t.Errorf("error = %#v, want %q", got, MessageUpdateBusy)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != noStore {
+		t.Errorf("Cache-Control = %q, want %q", got, noStore)
+	}
+}
+
+func TestDownloadAndroidFallsBackToTheReleasesPage(t *testing.T) {
+	apps := NewAppRelease(brokenReleases{}, "https://portal.test")
+	rec := appCall(t, apps.Download(), DownloadAndroidPath)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302 (body = %q)", rec.Code, rec.Body.String())
+	}
+	want := "https://github.com/raHI-79/250-project/releases/latest"
+	if got := rec.Header().Get("Location"); got != want {
+		t.Errorf("Location = %q, want %q", got, want)
 	}
 }
