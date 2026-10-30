@@ -17,6 +17,12 @@ export const CONTACT_CHIPS = [
 export const contactChips = (viewerRole) =>
   viewerRole === 'student' ? CONTACT_CHIPS.filter((chip) => chip.value !== 'student') : CONTACT_CHIPS
 
+export const matchesRole = (conversation, role) => {
+  if (!role) return true
+  if (conversation.kind === 'group') return false
+  return (conversation.other_role || '') === role
+}
+
 export const shortRoleLabel = (role) => {
   if (role === 'admin') return 'Admin'
   if (role === 'teacher') return 'Teacher'

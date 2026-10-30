@@ -8,7 +8,7 @@ import AuthHeading from '../../components/layout/AuthHeading'
 import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
 import { useHumanCheck } from '../../lib/human'
-import { HERO_IMAGES } from '../../lib/campus'
+import { HERO_BUILDING } from '../../lib/campus'
 import { useCountdown } from '../../lib/hooks'
 import { PORTAL_ADMIN, loginForPortal } from '../../lib/paths'
 import {
@@ -146,7 +146,7 @@ export default function ForgotPasswordPage({ portal }) {
   }
   return (
     <AuthScreen
-      images={HERO_IMAGES}
+      images={HERO_BUILDING}
       className="max-w-md"
       note="Lost your password? The account is checked before a code is sent."
     >

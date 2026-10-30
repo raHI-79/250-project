@@ -8,13 +8,11 @@ import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
 import HumanCheck from '../../components/forms/HumanCheck'
 import { useAuth } from '../../context/auth'
-import { HERO_IMAGES } from '../../lib/campus'
+import { HERO_BUILDING } from '../../lib/campus'
 import { useHumanCheck } from '../../lib/human'
 import { isNative } from '../../lib/native'
 import { askPushPermission } from '../../lib/push'
 import { PORTAL_TEACHER, homeFor, paths } from '../../lib/paths'
-
-const SLIDE_AFTER = 6000
 
 const VERIFY_EMAIL = 'Please verify your email first.'
 
@@ -73,7 +71,7 @@ export default function LoginPage({ portal }) {
     }
   }
   return (
-    <AuthScreen images={HERO_IMAGES} rotateAfter={SLIDE_AFTER} note={page.note}>
+    <AuthScreen images={HERO_BUILDING} note={page.note}>
       <div>
         <AuthHeading
           eyebrow={page.eyebrow}

@@ -99,6 +99,7 @@ type conversationItem struct {
 	Kind          string `json:"kind"`
 	Title         string `json:"title"`
 	OtherUserID   int64  `json:"other_user_id,omitempty"`
+	OtherRole     string `json:"other_role,omitempty"`
 	AvatarURL     string `json:"photo_url"`
 	CreatedBy     int64  `json:"created_by"`
 	CanPost       bool   `json:"can_post"`
@@ -246,6 +247,7 @@ func (c *Conversations) List() http.HandlerFunc {
 			}
 			if row.Kind == store.ConversationDirect {
 				item.OtherUserID = row.OtherUserID
+				item.OtherRole = row.OtherRole
 				item.AvatarURL = row.OtherPhotoPath
 			}
 			if row.LastMessageAt != nil {

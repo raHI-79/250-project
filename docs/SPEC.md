@@ -366,7 +366,18 @@ question, the options and the limit while the poll has **no votes** and answers
 time, and `POST /api/cr/polls/{id}/close` and `/reopen` flip its status. An
 edited poll carries `edited_at` and the pages show *Edited* with the time.
 
-## 11. Notifications
+## 11. Registration decisions and notifications
+
+### 11.0 Approval and rejection emails
+
+Approving a student registration emails them a welcome with the registration
+number to sign in with, the website and the Android download link. Rejecting
+needs a reason of at least 5 characters, offered as quick picks or typed; the
+reason is emailed with what to do next, kept on the account and shown on the
+sign-in screen. Both mails are sent in the background and a failure is logged
+without changing the decision.
+
+
 
 ### 11.1 In-app
 
@@ -502,6 +513,14 @@ Each session draws its own random `token_key`, which never reaches a student.
 
 ### 12.2 The Bluetooth presence token
 
+The teacher's own app is the only client that receives the session's
+`token_key`, and only from `POST` start and `GET` of that teacher's own open
+session. It never appears in a list, in a closed session or in anything a
+student can read. A shared test vector — a fixed key, session id and slice
+against the expected eight bytes — is checked by a Go test and a JavaScript
+test, so the server, the client and the native plugin cannot drift apart.
+
+
 While the session is open the teacher's app advertises a Bluetooth Low Energy
 packet on a fixed service UUID carrying an 8-byte token:
 
@@ -520,6 +539,15 @@ screen and on the website for a projector, and the student types it. The
 location rules are unchanged.
 
 ### 12.3 The location rules
+
+Location is asked for and reported on its own, never behind Bluetooth. The
+session screen requests precise location when it is missing, offers the app
+settings screen once Android stops asking, checks that the device location
+switch is on and offers the location settings screen when it is not, and shows
+the real state: *Allowed*, *Off*, *Denied* or *Sending · accuracy N m*. When
+Bluetooth cannot broadcast the screen names the reason and points at the
+4-digit code, which never depended on Bluetooth.
+
 
 The teacher's phone sends its GPS position when the session starts and every 15
 seconds while it is open, from a foreground service, so a locked screen does not

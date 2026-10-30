@@ -54,6 +54,7 @@ type ConversationRow struct {
 	OtherUserID    int64
 	OtherName      string
 	OtherPhotoPath string
+	OtherRole      string
 	LastSenderName string
 	LastBody       string
 	LastFileName   string
@@ -197,6 +198,7 @@ RETURNING id, kind, COALESCE(title, ''), COALESCE(created_by, 0), created_at, la
 	renameGroupSQL       = `UPDATE conversations SET title = $2 WHERE id = $1 AND kind = 'group' RETURNING id`
 	listConversationsSQL = `SELECT ` + conversationColumns + `,
 COALESCE(other.user_id, 0), COALESCE(other.name, ''), COALESCE(other.photo_path, ''),
+COALESCE(other.role, ''),
 COALESCE(last.sender_name, ''), COALESCE(last.body, ''), COALESCE(last.file_name, ''),
 (SELECT COUNT(*) FROM messages m2
  WHERE m2.conversation_id = c.id AND COALESCE(m2.sender_id, 0) <> $1
@@ -209,7 +211,8 @@ JOIN conversation_members mine ON mine.conversation_id = c.id AND mine.user_id =
 LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
 LEFT JOIN conversation_clears cleared ON cleared.conversation_id = c.id AND cleared.user_id = $1
 LEFT JOIN LATERAL (
-    SELECT cm.user_id, ` + personName + ` AS name, COALESCE(u.photo_path, '') AS photo_path
+    SELECT cm.user_id, ` + personName + ` AS name, COALESCE(u.photo_path, '') AS photo_path,
+           CASE WHEN u.role = 'student' AND COALESCE(s.is_cr, FALSE) THEN 'cr' ELSE u.role END AS role
     FROM conversation_members cm
     JOIN users u ON u.id = cm.user_id
     LEFT JOIN students s ON s.user_id = u.id
@@ -645,6 +648,7 @@ func (s *Store) ListConversations(ctx context.Context, viewer MessageViewer, lim
 			&row.OtherUserID,
 			&row.OtherName,
 			&row.OtherPhotoPath,
+			&row.OtherRole,
 			&row.LastSenderName,
 			&row.LastBody,
 			&row.LastFileName,

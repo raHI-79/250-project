@@ -11,7 +11,7 @@ import AuthHeading from '../../components/layout/AuthHeading'
 import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
 import { useHumanCheck } from '../../lib/human'
-import { HERO_IMAGES } from '../../lib/campus'
+import { HERO_BUILDING } from '../../lib/campus'
 import { useAuthConfig, useCountdown } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
 import { BLOOD_GROUPS } from '../../lib/options'
@@ -215,7 +215,7 @@ export default function RegisterPage() {
   }
   return (
     <AuthScreen
-      images={HERO_IMAGES}
+      images={HERO_BUILDING}
       wide
       note="Students register with their registration number and verify their university email."
     >

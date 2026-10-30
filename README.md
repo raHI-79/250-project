@@ -787,7 +787,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/download/android` | public, rate limited | `302` to the signed APK of the newest GitHub Release that carries one; a short HTML page when no build is published, and a `302` to the repository releases page when GitHub itself cannot be read |
 | `GET` | `/api/app/android-latest` | public, rate limited | `{version, version_code, apk_url, notes, required}` of the newest release that carries an APK; `required` is true when the notes carry `[required]`. Every field is empty while no build is published, and `503` `{"error":"Update service is busy, try again later."}` when GitHub is unreachable and nothing is cached |
 | `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
-| `GET` | `/api/auth/config` | public | `student_email_domain` and `google_enabled` |
+| `GET` | `/api/auth/config` | public | `student_email_domain`, `google_enabled`, `google_client_id` (the public web OAuth client id the pages and the app sign in with), `human_check_enabled` and `turnstile_site_key` |
 | `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students, out of `A` and `B` |
 | `GET` | `/api/push/public-key` | public | `enabled` and the VAPID `public_key` when web push is set up |
 | `POST` | `/api/auth/register` | public | `multipart/form-data` student registration with a required photo; `201` on success |
@@ -812,8 +812,9 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/profile/password` | any signed-in role | `{current_password, new_password, confirm_password}`; logs every session out |
 | `GET` | `/api/people/{user_id}` | any signed-in role | Public card of an active student, CR or teacher; `404` otherwise |
 | `GET` | `/api/admin/registrations` | admin | Pending student registrations, oldest first |
-| `POST` | `/api/admin/registrations/{id}/approve` | admin | Turns a pending account into `active`; `404` unknown, `409` already decided |
-| `POST` | `/api/admin/registrations/{id}/reject` | admin | Turns a pending account into `rejected`; `404` unknown, `409` already decided |
+| `POST` | `/api/admin/registrations/{id}/approve` | admin | Turns a pending account into `active` and emails the student a welcome; `404` unknown, `409` already decided |
+| `POST` | `/api/admin/registrations/{id}/reject` | admin | `{reason}` of at least 5 characters turns a pending account into `rejected`, keeps the reason on the account and emails it; `400` without a reason, `404` unknown, `409` already decided |
+| `GET` | `/api/admin/rejection-reasons` | admin | The quick-pick reasons and the length limits the reject dialog offers |
 | `GET` | `/api/admin/students` | admin | `{items, total}` with `search`, `batch`, `section`, `status`, `limit`, `offset` |
 | `POST` | `/api/admin/students/{id}/remove` | admin | Sets `removed` and invalidates the tokens; `409` if already removed |
 | `POST` | `/api/admin/crs/promote` | admin | `{user_id}` makes an active student a CR; `404` unknown, `409` already a CR |
@@ -936,7 +937,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/teacher/attendance/options` | teacher | Today's classes to prefill from, every class of the running semester, and the open session if there is one |
 | `POST` | `/api/teacher/attendance/sessions` | teacher | `{course_id, batch, section, schedule_item_id?, minutes}` opens attendance for 5 to 30 minutes and pushes every roster student; returns the session with its `token_key` and the current code. Starting again while one is open returns the running one |
 | `GET` | `/api/teacher/attendance/sessions` | teacher | This teacher's sessions in `from`/`to`, newest first, each with its present count and roster size |
-| `GET` | `/api/teacher/attendance/sessions/{id}` | teacher | One of this teacher's own sessions with every roster student, their status, time, distance, accuracy, method and note; `403` for another teacher's session |
+| `GET` | `/api/teacher/attendance/sessions/{id}` | teacher | One of this teacher's own sessions with every roster student, their status, time, distance, accuracy, method and note, plus the `token_key` and the current `code` while it is open; `403` for another teacher's session |
 | `POST` | `/api/teacher/attendance/sessions/{id}/location` | teacher | `{lat, lng, accuracy_m}`; the app's foreground service posts this every 15 seconds. `409` once the session is closed |
 | `POST` | `/api/teacher/attendance/sessions/{id}/extend` | teacher | `{minutes}` between 5 and 30 |
 | `POST` | `/api/teacher/attendance/sessions/{id}/close` | teacher | Closes it and marks every roster student without a record absent with method `system`; `409` if already closed |
@@ -982,6 +983,23 @@ of `GITHUB_RELEASES_REPO` through one shared lookup in
   instead. Neither one ever answers `500`.
 - Each failure is logged with the GitHub status, the rate-limit state and
   GitHub's own message, and says whether a cached release was served.
+
+### Registration decisions
+
+Approving a registration emails the address the student registered with,
+subject **Welcome to SUST CSE Portal**: their first name, that the account is
+approved, the registration number to sign in with, the website and
+`/download/android`.
+
+Rejecting needs a reason. The sheet offers four quick picks and a text field
+that insists on at least 5 characters and at most 300, the reason is stored on
+the account, and the email **Your SUST CSE Portal registration was not
+approved** carries it with what to do next. A rejected student reads the same
+reason on the sign-in screen instead of only being pointed at the office.
+
+Both mails go out on a background goroutine with their own 30 second timeout
+through the configured mailer, so a mailer that is slow, missing or broken is
+logged and never blocks the decision or changes its answer.
 
 ### Attendance
 
