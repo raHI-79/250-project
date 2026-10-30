@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/attendance"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
@@ -273,7 +274,8 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 			return
 		}
 		if binding.DeviceID != deviceID {
-			httpx.WriteError(w, http.StatusForbidden, attendance.MessageWrongPhone)
+			refuse(w, profile.StudentID, request.SessionID, http.StatusForbidden,
+				attendance.MessageWrongPhone, "another phone")
 			return
 		}
 		session, err := s.students.AttendanceSession(r.Context(), request.SessionID)
@@ -288,7 +290,8 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 		}
 		now := s.cfg.Now()
 		if session.Status != attendance.StatusOpen || !session.EndsAt.After(now) {
-			httpx.WriteError(w, http.StatusConflict, attendance.MessageSessionClosed)
+			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+				attendance.MessageSessionClosed, "the session is closed")
 			return
 		}
 		listed, err := s.students.OnRoster(r.Context(), session.ID, profile.StudentID)
@@ -298,24 +301,28 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 			return
 		}
 		if !listed {
-			httpx.WriteError(w, http.StatusForbidden, attendance.MessageNotOnRoster)
+			refuse(w, profile.StudentID, session.ID, http.StatusForbidden,
+				attendance.MessageNotOnRoster, "not on the roster")
 			return
 		}
 		method := attendance.MethodApp
 		switch {
 		case strings.TrimSpace(request.Token) != "":
 			if !attendance.TokenMatches(session.TokenKey, session.ID, now, request.Token) {
-				httpx.WriteError(w, http.StatusForbidden, attendance.MessageWrongToken)
+				refuse(w, profile.StudentID, session.ID, http.StatusForbidden,
+					attendance.MessageWrongToken, "a token from no current slice")
 				return
 			}
 		case strings.TrimSpace(request.Code) != "":
 			if !attendance.CodeMatches(session.TokenKey, session.ID, now, request.Code) {
-				httpx.WriteError(w, http.StatusForbidden, attendance.MessageWrongToken)
+				refuse(w, profile.StudentID, session.ID, http.StatusForbidden,
+					attendance.MessageWrongToken, "a code from no current slice")
 				return
 			}
 			method = attendance.MethodCode
 		default:
-			httpx.WriteError(w, http.StatusBadRequest, MessageMarkNeedsProof)
+			refuse(w, profile.StudentID, session.ID, http.StatusBadRequest,
+				MessageMarkNeedsProof, "neither a token nor a code")
 			return
 		}
 		distance, refusal := attendance.CheckPosition(
@@ -334,7 +341,9 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 			now,
 		)
 		if refusal != "" {
-			httpx.WriteError(w, http.StatusForbidden, refusal)
+			refuse(w, profile.StudentID, session.ID, http.StatusForbidden, refusal,
+				fmt.Sprintf("position %.0f m away, accuracy %.0f m, mock %t",
+					distance, request.AccuracyM, request.IsMock))
 			return
 		}
 		err = s.students.MarkAttendance(r.Context(), store.MarkInput{
@@ -349,13 +358,16 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 		})
 		switch {
 		case errors.Is(err, store.ErrAlreadyMarked):
-			httpx.WriteError(w, http.StatusConflict, attendance.MessageAlreadyMarked)
+			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+				attendance.MessageAlreadyMarked, "already marked")
 			return
 		case errors.Is(err, store.ErrDeviceUsed):
-			httpx.WriteError(w, http.StatusConflict, attendance.MessagePhoneUsed)
+			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+				attendance.MessagePhoneUsed, "this phone already marked somebody")
 			return
 		case errors.Is(err, store.ErrAttendanceClosed):
-			httpx.WriteError(w, http.StatusConflict, attendance.MessageSessionClosed)
+			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+				attendance.MessageSessionClosed, "the session closed meanwhile")
 			return
 		case err != nil:
 			log.Printf("handler: could not save an attendance mark: %v", err)
@@ -520,6 +532,11 @@ func (s *StudentAttendance) RequestPhone() http.HandlerFunc {
 			Phone   phoneBody `json:"phone"`
 		}{Message: MessagePhoneRequested, Phone: s.phone(r.Context(), profile, deviceID)})
 	}
+}
+
+func refuse(w http.ResponseWriter, studentID, sessionID int64, status int, message, why string) {
+	log.Printf("handler: attendance %d refused the student %d: %s", sessionID, studentID, why)
+	httpx.WriteError(w, status, message)
 }
 
 func (s *StudentAttendance) tellTeachers(ctx context.Context, profile store.StudentProfile,

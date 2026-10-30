@@ -2,6 +2,7 @@ import { registerPlugin } from '@capacitor/core'
 import { SESSION_KEY } from './api'
 import { API_BASE, isAndroidApp } from './native'
 import { readJson } from './storage'
+import { SERVICE_UUID } from './attendanceToken'
 
 const AttendanceBeacon = registerPlugin('AttendanceBeacon')
 
@@ -43,9 +44,11 @@ export const askBeacon = () => AttendanceBeacon.ensure()
 
 export const turnBluetoothOn = () => AttendanceBeacon.enableBluetooth()
 
+export const ATTENDANCE_SERVICE_UUID = SERVICE_UUID
+
 export const startBeacon = (session) =>
   AttendanceBeacon.start({
-    session_id: session.id,
+    session_id: String(session.id),
     token_key: session.token_key || '',
     course: `${session.course_code} · ${session.batch} ${session.section}`,
     present: session.present || 0,
@@ -58,6 +61,49 @@ export const updateBeacon = (session) =>
   AttendanceBeacon.update({ present: session.present || 0, roster: session.roster || 0 })
 
 export const stopBeacon = () => AttendanceBeacon.stop()
+
+export const askBeaconLocation = () => AttendanceBeacon.ensureLocation()
+
+export const openAppSettings = () => AttendanceBeacon.openSettings()
+
+export const openLocationSettings = () => AttendanceBeacon.openLocationSettings()
+
+export const POSITION_FRESH_MS = 60000
+
+export const positionState = (session, status, now) => {
+  if (!status) return { label: 'Waiting', tone: 'idle' }
+  if (!status.place) {
+    return status.asked
+      ? { label: 'Denied', tone: 'bad', fix: 'settings' }
+      : { label: 'Not allowed yet', tone: 'bad', fix: 'ask' }
+  }
+  if (!status.location_on) return { label: 'Off', tone: 'bad', fix: 'location' }
+  if (!session?.location_updated_at) return { label: 'Allowed · waiting for GPS', tone: 'idle' }
+  const age = now.getTime() - new Date(session.location_updated_at).getTime()
+  if (age > POSITION_FRESH_MS) return { label: 'Out of date', tone: 'warn' }
+  const accuracy = Number(session.accuracy_m) || 0
+  return {
+    label: accuracy > 0 ? `Sending · accuracy ${accuracy} m` : 'Sending',
+    tone: 'good',
+  }
+}
+
+export const bluetoothState = (status) => {
+  if (!status) return { label: 'Waiting', tone: 'idle' }
+  if (!status.supported) {
+    return { label: 'Not supported', tone: 'bad', reason: status.error || '' }
+  }
+  if (!status.bluetooth_on) {
+    return { label: 'Off', tone: 'bad', fix: 'bluetooth', reason: 'Bluetooth is off.' }
+  }
+  if (!status.nearby) {
+    return status.asked
+      ? { label: 'Denied', tone: 'bad', fix: 'settings', reason: 'Nearby devices is not allowed.' }
+      : { label: 'Not allowed yet', tone: 'bad', fix: 'ask' }
+  }
+  if (status.advertising) return { label: 'Broadcasting', tone: 'good' }
+  return { label: 'Not broadcasting', tone: 'warn', reason: status.error || '' }
+}
 
 export const markSupported = () => isAndroidApp()
 

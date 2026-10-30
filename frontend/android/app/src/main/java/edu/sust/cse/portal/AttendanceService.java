@@ -69,6 +69,11 @@ public class AttendanceService extends Service {
 
     private static final long LOCATION_INTERVAL = 15000L;
 
+    private static final String[] PROVIDERS = {
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER
+    };
+
     private static final long ROTATE_MILLIS = AttendanceTokens.TOKEN_SLICE_SECONDS * 1000L;
 
     private static final int CONNECT_TIMEOUT = 8000;
@@ -77,10 +82,49 @@ public class AttendanceService extends Service {
 
     private final ExecutorService uploads = Executors.newSingleThreadExecutor();
 
+    private static volatile boolean advertisingNow;
+
+    private static volatile String lastFailure = "";
+
+    public static boolean broadcasting() {
+        return advertisingNow;
+    }
+
+    public static String failure() {
+        return lastFailure;
+    }
+
+    private static String advertiseReason(int errorCode) {
+        switch (errorCode) {
+            case AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE:
+                return "The Bluetooth packet is too large for this phone";
+            case AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS:
+                return "This phone is already broadcasting too much over Bluetooth";
+            case AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR:
+                return "Bluetooth hit an internal error, turn it off and on again";
+            case AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED:
+                return "This phone cannot broadcast over Bluetooth, use the code on the board";
+            default:
+                return "Bluetooth refused to broadcast, code " + errorCode;
+        }
+    }
+
     private final AdvertiseCallback callback = new AdvertiseCallback() {
+        @Override
+        public void onStartSuccess(AdvertiseSettings settings) {
+            advertisingNow = true;
+            lastFailure = "";
+        }
+
         @Override
         public void onStartFailure(int errorCode) {
             Log.w(TAG, "the advertisement did not start, code " + errorCode);
+            if (errorCode == AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED) {
+                advertisingNow = true;
+                return;
+            }
+            advertisingNow = false;
+            lastFailure = advertiseReason(errorCode);
         }
     };
 
@@ -274,19 +318,28 @@ public class AttendanceService extends Service {
     private void startAdvertising() {
         BluetoothManager manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         BluetoothAdapter adapter = manager == null ? null : manager.getAdapter();
-        if (adapter == null || !adapter.isEnabled()) {
+        if (adapter == null) {
+            lastFailure = "This phone has no Bluetooth, use the code on the board";
+            return;
+        }
+        if (!adapter.isEnabled()) {
+            lastFailure = "Bluetooth is off";
             return;
         }
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            lastFailure = "This phone has no Bluetooth Low Energy, use the code on the board";
             return;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !allowed(Manifest.permission.BLUETOOTH_ADVERTISE)) {
+            lastFailure = "Nearby devices is not allowed";
             return;
         }
         advertiser = adapter.getBluetoothLeAdvertiser();
         if (advertiser == null) {
+            lastFailure = "This phone cannot broadcast over Bluetooth, use the code on the board";
             return;
         }
+        lastFailure = "";
         handler.removeCallbacks(rotate);
         advertise();
         long delay = ROTATE_MILLIS - System.currentTimeMillis() % ROTATE_MILLIS;
@@ -320,6 +373,8 @@ public class AttendanceService extends Service {
             advertising = true;
         } catch (Exception failure) {
             Log.w(TAG, "the advertisement could not be refreshed", failure);
+            advertisingNow = false;
+            lastFailure = "Bluetooth stopped broadcasting, turn it off and on again";
         }
     }
 
@@ -333,10 +388,12 @@ public class AttendanceService extends Service {
             Log.w(TAG, "the advertisement could not be stopped", failure);
         }
         advertising = false;
+        advertisingNow = false;
     }
 
     private void startLocations() {
         if (!allowed(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            Log.w(TAG, "precise location is not allowed, this session has no position");
             return;
         }
         locations = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
@@ -344,15 +401,32 @@ public class AttendanceService extends Service {
             return;
         }
         try {
-            locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, LOCATION_INTERVAL, 0f,
-                    listener, Looper.getMainLooper());
-            Location last = locations.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if (last != null) {
-                send(last);
+            for (String provider : PROVIDERS) {
+                if (locations.isProviderEnabled(provider)) {
+                    locations.requestLocationUpdates(provider, LOCATION_INTERVAL, 0f,
+                            listener, Looper.getMainLooper());
+                }
             }
+            send(freshest());
         } catch (Exception failure) {
             Log.w(TAG, "the position updates could not start", failure);
         }
+    }
+
+    private Location freshest() {
+        Location best = null;
+        for (String provider : PROVIDERS) {
+            Location found = null;
+            try {
+                found = locations.getLastKnownLocation(provider);
+            } catch (Exception failure) {
+                Log.w(TAG, "a last position could not be read", failure);
+            }
+            if (found != null && (best == null || found.getTime() > best.getTime())) {
+                best = found;
+            }
+        }
+        return best;
     }
 
     private void stopLocations() {

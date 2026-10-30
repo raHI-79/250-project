@@ -359,3 +359,26 @@ func TestNewKeyIsFreshEveryTime(t *testing.T) {
 		seen[key] = true
 	}
 }
+
+func TestSharedTokenVector(t *testing.T) {
+	const (
+		vectorKey     = "sust-cse-attendance-test-key"
+		vectorSession = int64(4221)
+		vectorSlice   = int64(176200000)
+		vectorToken   = "d937b886187a23ae"
+		vectorCode    = "7590"
+	)
+	if got := Token(vectorKey, vectorSession, vectorSlice); got != vectorToken {
+		t.Errorf("Token() = %q, want %q", got, vectorToken)
+	}
+	if got := Code(vectorKey, vectorSession, vectorSlice); got != vectorCode {
+		t.Errorf("Code() = %q, want %q", got, vectorCode)
+	}
+	at := time.Unix(vectorSlice*TokenSliceSeconds, 0).UTC()
+	if got := CurrentToken(vectorKey, vectorSession, at); got != vectorToken {
+		t.Errorf("CurrentToken() = %q, want %q", got, vectorToken)
+	}
+	if !TokenMatches(vectorKey, vectorSession, at, vectorToken) {
+		t.Error("TokenMatches() refused the shared vector")
+	}
+}

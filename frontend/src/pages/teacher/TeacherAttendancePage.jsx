@@ -26,12 +26,15 @@ import {
   TEACHER_TAB_CLASSES,
   TEACHER_TAB_HISTORY,
   TEACHER_TAB_TAKE,
+  askBeacon,
+  askBeaconLocation,
+  beaconStatus,
   beaconSupported,
   belowPass,
   classKey,
   downloadWorkbook,
-  askBeacon,
-  beaconStatus,
+  openAppSettings,
+  openLocationSettings,
   sectionLabel,
   startBeacon,
   stopBeacon,
@@ -46,6 +49,17 @@ const TABS = [
 ]
 
 const OFF_BROWSER = 'The website shows the code for a projector. Bluetooth needs the Android app.'
+
+const WEB_STATUS = {
+  supported: false,
+  bluetooth_on: false,
+  nearby: false,
+  place: false,
+  location_on: false,
+  advertising: false,
+  asked: true,
+  error: OFF_BROWSER,
+}
 
 function StartPanel({ options, minutes, setMinutes, picked, setPicked, busy, onStart }) {
   const today = options?.today || []
@@ -224,8 +238,9 @@ export default function TeacherAttendancePage() {
   const [open, setOpen] = useState(null)
   const [marks, setMarks] = useState([])
   const [detailID, setDetailID] = useState(0)
-  const [beacon, setBeacon] = useState({ running: false, reason: '', fixable: false })
+  const [status, setStatus] = useState(null)
   const broadcasting = useRef(0)
+  const asked = useRef(false)
   const options = useResource('/api/teacher/attendance/options')
   const history = useResource('/api/teacher/attendance/sessions')
   const classes = useResource('/api/teacher/attendance/classes')
@@ -251,50 +266,69 @@ export default function TeacherAttendancePage() {
     }
   }, [open?.id])
   usePolling(open?.id ? refreshOpen : null, 5000)
-  const broadcast = useCallback(async (session) => {
+  const readStatus = useCallback(async () => {
     if (!beaconSupported()) {
-      setBeacon({ running: false, reason: OFF_BROWSER, fixable: false })
-      return
+      setStatus(WEB_STATUS)
+      return WEB_STATUS
     }
     try {
-      const asked = await askBeacon()
-      if (!asked?.supported) {
-        setBeacon({ running: false, reason: 'This phone cannot broadcast Bluetooth.', fixable: false })
-        return
-      }
-      if (!asked?.bluetooth_on) {
-        setBeacon({ running: false, reason: 'Bluetooth is off.', fixable: true })
-        return
-      }
-      if (!asked?.nearby || !asked?.place) {
-        setBeacon({
-          running: false,
-          reason: 'Allow nearby devices and precise location to broadcast.',
-          fixable: false,
-        })
-        return
-      }
-      await startBeacon(session)
-      broadcasting.current = session.id
-      setBeacon({ running: true, reason: '', fixable: false })
-    } catch (failure) {
-      setBeacon({ running: false, reason: failure.message || 'Bluetooth did not start.', fixable: false })
+      const fresh = await beaconStatus()
+      const seen = { ...fresh, asked: asked.current }
+      setStatus(seen)
+      return seen
+    } catch {
+      return null
     }
   }, [])
-  const fixBluetooth = async () => {
+  usePolling(beaconSupported() && open?.id ? readStatus : null, 4000)
+  const prepare = useCallback(
+    async (session) => {
+      if (!beaconSupported()) {
+        setStatus(WEB_STATUS)
+        return
+      }
+      try {
+        const place = await askBeaconLocation()
+        asked.current = true
+        setStatus({ ...place, asked: true })
+      } catch {
+        asked.current = true
+      }
+      try {
+        const nearby = await askBeacon()
+        asked.current = true
+        if (nearby?.supported && nearby?.bluetooth_on && nearby?.nearby && session?.token_key) {
+          await startBeacon(session)
+          broadcasting.current = session.id
+        }
+      } catch (failure) {
+        toast.error(failure.message)
+      }
+      readStatus()
+    },
+    [readStatus, toast],
+  )
+  const fix = async (what) => {
     try {
-      await turnBluetoothOn()
-      const status = await beaconStatus()
-      if (status?.bluetooth_on && open) await broadcast(open)
+      if (what === 'ask') await prepare(open)
+      else if (what === 'bluetooth') await turnBluetoothOn()
+      else if (what === 'settings') await openAppSettings()
+      else if (what === 'location') await openLocationSettings()
+      await readStatus()
+      if (what === 'bluetooth' && open?.token_key) await prepare(open)
     } catch (failure) {
       toast.error(failure.message)
     }
   }
   useEffect(() => {
-    if (!open?.id || !open.token_key) return
+    if (!open?.id) return
+    if (!open.token_key) {
+      toast.error('This session did not come with its Bluetooth key. Close it and start again.')
+      return
+    }
     if (broadcasting.current === open.id) return
-    broadcast(open)
-  }, [open, broadcast])
+    prepare(open)
+  }, [open, prepare, toast])
   useEffect(
     () => () => {
       if (broadcasting.current && beaconSupported()) stopBeacon().catch(() => null)
@@ -344,7 +378,7 @@ export default function TeacherAttendancePage() {
       await api.post(`/api/teacher/attendance/sessions/${open.id}/close`)
       if (beaconSupported()) await stopBeacon().catch(() => null)
       broadcasting.current = 0
-      setBeacon({ running: false, reason: '', fixable: false })
+      setStatus(null)
       setOpen(null)
       setMarks([])
       toast.success('Attendance closed. Everyone missing is marked absent.')
@@ -404,11 +438,11 @@ export default function TeacherAttendancePage() {
               session={open}
               marks={marks}
               now={now}
-              beacon={beacon}
+              status={status}
               busy={busy}
               onExtend={extend}
               onClose={close}
-              onFixBluetooth={fixBluetooth}
+              onFix={fix}
             />
           ) : options.loading ? (
             <SkeletonCard />

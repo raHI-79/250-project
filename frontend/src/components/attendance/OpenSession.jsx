@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Bluetooth, Clock, MapPin, Users } from 'lucide-react'
-import { Alert, Button, Card, Segmented, StatusBadge } from '../ui'
+import { Alert, Button, Card, StatusBadge } from '../ui'
 import cx from '../../lib/cx'
 import { formatClock } from '../../lib/time'
-import { DURATIONS, sectionLabel } from '../../lib/attendance'
+import { DURATIONS, bluetoothState, positionState, sectionLabel } from '../../lib/attendance'
 
 const minutesLeft = (endsAt, now) => {
   const end = new Date(endsAt).getTime()
@@ -11,15 +11,52 @@ const minutesLeft = (endsAt, now) => {
   return Math.max(0, Math.round((end - now.getTime()) / 60000))
 }
 
+const TONES = {
+  good: 'text-success-700',
+  warn: 'text-warning-700',
+  bad: 'text-danger-600',
+  idle: 'text-muted',
+}
+
+const FIX_LABELS = {
+  ask: 'Allow it',
+  settings: 'Open app settings',
+  location: 'Open location settings',
+  bluetooth: 'Turn Bluetooth on',
+}
+
+function StateTile({ icon: Icon, label, state, onFix }) {
+  return (
+    <div className="rounded-tile bg-wash px-4 py-3">
+      <p className="label-caps">{label}</p>
+      <p
+        className={cx(
+          'mt-1 flex items-center gap-2 text-sm font-semibold',
+          TONES[state.tone] || TONES.idle,
+        )}
+      >
+        <Icon size={16} className="shrink-0" />
+        <span className="wrap-long">{state.label}</span>
+      </p>
+      {state.reason && <p className="mt-1 text-xs text-muted">{state.reason}</p>}
+      {state.fix && (
+        <Button variant="ghost" size="sm" className="mt-1 -ml-2" onClick={() => onFix(state.fix)}>
+          {FIX_LABELS[state.fix]}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export default function OpenSession({
   session,
   marks,
   now,
-  beacon,
+  status,
   busy,
   onExtend,
   onClose,
-  onFixBluetooth,
+  onFix,
 }) {
   const [extra, setExtra] = useState(10)
   const [showCode, setShowCode] = useState(false)
@@ -37,9 +74,8 @@ export default function OpenSession({
   useEffect(() => {
     if (session.status !== 'open') setShowCode(false)
   }, [session.status])
-  const stale =
-    !session.location_updated_at ||
-    now.getTime() - new Date(session.location_updated_at).getTime() > 60000
+  const bluetooth = bluetoothState(status)
+  const position = positionState(session, status, now)
   return (
     <Card hover={false} rule className="animate-fade-in-up">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -63,44 +99,13 @@ export default function OpenSession({
             <span className="text-section text-muted">/{roster}</span>
           </p>
         </div>
-        <div className="rounded-tile bg-wash px-4 py-3">
-          <p className="label-caps">Bluetooth</p>
-          <p
-            className={cx(
-              'mt-1 flex items-center gap-2 text-sm font-semibold',
-              beacon.running ? 'text-success-700' : 'text-muted',
-            )}
-          >
-            <Bluetooth size={16} />
-            {beacon.running ? 'Broadcasting' : beacon.reason || 'Off'}
-          </p>
-        </div>
-        <div className="rounded-tile bg-wash px-4 py-3">
-          <p className="label-caps">Position</p>
-          <p
-            className={cx(
-              'mt-1 flex items-center gap-2 text-sm font-semibold',
-              stale ? 'text-warning-700' : 'text-success-700',
-            )}
-          >
-            <MapPin size={16} />
-            {session.has_location ? (stale ? 'Out of date' : 'Fresh') : 'Waiting'}
-          </p>
-        </div>
+        <StateTile icon={Bluetooth} label="Bluetooth" state={bluetooth} onFix={onFix} />
+        <StateTile icon={MapPin} label="Position" state={position} onFix={onFix} />
       </div>
-      {!beacon.running && beacon.reason && (
+      {bluetooth.tone !== 'good' && (
         <Alert tone="warning" className="mt-4">
-          {beacon.reason}
-          {beacon.fixable && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2"
-              onClick={onFixBluetooth}
-            >
-              Turn Bluetooth on
-            </Button>
-          )}
+          Students near you can still be marked with the 4-digit code. Tap Show code and read it out
+          or put it on the board.
         </Alert>
       )}
       {showCode ? (
@@ -114,25 +119,52 @@ export default function OpenSession({
           </p>
         </div>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" onClick={() => setShowCode((open) => !open)}>
+      <div className="mt-4 flex flex-col gap-3">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="self-start"
+          onClick={() => setShowCode((open) => !open)}
+        >
           {showCode ? 'Hide code' : 'Show code'}
         </Button>
-        <div className="flex items-center gap-2">
-          <Segmented
-            label="Extra minutes"
-            options={DURATIONS.map((value) => ({ value, label: `${value}m` }))}
-            value={extra}
-            onChange={setExtra}
-            className="w-56"
-          />
+        <div>
+          <p className="label-caps">Keep it open longer</p>
+          <div
+            role="radiogroup"
+            aria-label="Extra minutes"
+            className="no-scrollbar -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+          >
+            {DURATIONS.map((value) => {
+              const active = value === extra
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setExtra(value)}
+                  className={cx(
+                    'press min-h-10 shrink-0 rounded-full border px-4 text-sm whitespace-nowrap',
+                    active
+                      ? 'border-brand-600 bg-brand-600 font-semibold text-page'
+                      : 'glass-chip font-medium text-muted hover:border-brand-300 hover:text-ink',
+                  )}
+                >
+                  {value}m
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" loading={busy === 'extend'} onClick={() => onExtend(extra)}>
-            Extend
+            Extend {extra}m
+          </Button>
+          <Button variant="danger" size="sm" loading={busy === 'close'} onClick={onClose}>
+            Close attendance
           </Button>
         </div>
-        <Button variant="danger" size="sm" loading={busy === 'close'} onClick={onClose}>
-          Close attendance
-        </Button>
       </div>
       <div className="mt-5">
         <p className="label-caps flex items-center gap-1.5">

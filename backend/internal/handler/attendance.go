@@ -88,6 +88,7 @@ type sessionBody struct {
 	TokenKey    string `json:"token_key,omitempty"`
 	HasLocation bool   `json:"has_location"`
 	LocationAt  string `json:"location_updated_at,omitempty"`
+	AccuracyM   int    `json:"accuracy_m,omitempty"`
 }
 
 type markBody struct {
@@ -154,6 +155,9 @@ func newSessionBody(session store.AttendanceSession, now time.Time, forTeacher b
 		body.CodeSeconds = attendance.CodeSliceSeconds -
 			int(now.Unix()%int64(attendance.CodeSliceSeconds))
 		body.TokenKey = session.TokenKey
+		if session.HasLocation {
+			body.AccuracyM = int(math.Round(session.TeacherAccuracy))
+		}
 	}
 	return body
 }
