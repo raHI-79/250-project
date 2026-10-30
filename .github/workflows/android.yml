@@ -66,7 +66,12 @@ jobs:
       - name: Read the version
         id: version
         working-directory: frontend
-        run: echo "name=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          name=$(node -p "require('./package.json').version")
+          code=$(node -p "const p=require('./package.json').version.replace(/^v/,'').split('-')[0].split('.').map(Number);(p[0]||0)*10000+(p[1]||0)*100+(p[2]||0)")
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Building $name with versionCode $code"
 
       - name: Install the dependencies
         working-directory: frontend
@@ -137,7 +142,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace \
             -PappVersionName=${{ steps.version.outputs.name }} \
-            -PappVersionCode=${{ github.run_number }}
+            -PappVersionCode=${{ steps.version.outputs.code }}
 
       - name: Name the APK
         id: apk

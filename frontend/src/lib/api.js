@@ -73,7 +73,7 @@ const parseBody = async (response) => {
   }
 }
 
-const request = async (method, path, { body, query, signal, auth = true } = {}) => {
+const request = async (method, path, { body, query, signal, auth = true, cache } = {}) => {
   const headers = {}
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData
   let payload
@@ -95,7 +95,7 @@ const request = async (method, path, { body, query, signal, auth = true } = {}) 
   const url = apiURL(withQuery(path, query))
   let response
   try {
-    response = await fetch(url, { method, headers, body: payload, signal })
+    response = await fetch(url, { method, headers, body: payload, signal, cache })
   } catch (error) {
     if (error?.name === 'AbortError') throw error
     throw new ApiError(0, 'Cannot reach the server. Please check your connection.')

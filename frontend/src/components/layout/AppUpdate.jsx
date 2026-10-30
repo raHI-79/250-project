@@ -6,6 +6,7 @@ import {
   downloadUpdate,
   fetchLatest,
   guidedOnce,
+  installedVersion,
   isNewer,
   markGuided,
   openInstallSettings,
@@ -17,6 +18,8 @@ import { APP_VERSION } from '../../lib/version'
 
 const BUSY_NOTE = 'Could not reach the update service. Please try again.'
 
+const OPEN_EVENT = 'sustcse:open'
+
 const ALLOW_NOTE =
   'Android asks once for permission. Turn on "Allow from this source" on the screen that opens, come back and tap Update again.'
 
@@ -27,19 +30,24 @@ export default function AppUpdate() {
   const [percent, setPercent] = useState(0)
   const [failure, setFailure] = useState('')
   const [guide, setGuide] = useState(false)
+  const [installed, setInstalled] = useState(APP_VERSION)
   const busy = useRef(false)
   const check = useCallback(
     async (announce) => {
       if (!updatesSupported() || busy.current) return
       busy.current = true
       try {
+        const mine = await installedVersion()
+        setInstalled(mine)
         const details = await fetchLatest()
-        if (details?.apk_url && isNewer(details.version)) {
+        if (details?.apk_url && isNewer(details.version, mine)) {
           setLatest(details)
           setFailure('')
           return
         }
-        if (announce) toast.success(`You are on the latest version, ${APP_VERSION}`)
+        if (announce) {
+          toast.success(`Installed ${mine} · Latest ${details?.version || mine}`)
+        }
       } catch (reason) {
         if (announce) toast.info(reason?.status === 503 ? reason.message : BUSY_NOTE)
       } finally {
@@ -56,7 +64,11 @@ export default function AppUpdate() {
     const onRequest = () => {
       if (live) check(true)
     }
+    const onOpened = () => {
+      if (live) check(true)
+    }
     window.addEventListener(CHECK_EVENT, onRequest)
+    window.addEventListener(OPEN_EVENT, onOpened)
     import('@capacitor/app').then(({ App }) => {
       if (!live) return
       App.addListener('appStateChange', ({ isActive }) => {
@@ -69,6 +81,7 @@ export default function AppUpdate() {
     return () => {
       live = false
       window.removeEventListener(CHECK_EVENT, onRequest)
+      window.removeEventListener(OPEN_EVENT, onOpened)
       if (listener) listener.remove()
     }
   }, [check])
@@ -108,7 +121,7 @@ export default function AppUpdate() {
       open
       onClose={required ? undefined : close}
       title={`Update available · ${latest.version}`}
-      description={`You are on ${APP_VERSION}`}
+      description={`Installed ${installed} · Latest ${latest.version}`}
       footer={
         <>
           {!required && (

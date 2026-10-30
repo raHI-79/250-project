@@ -15,7 +15,19 @@ const GUIDED_KEY = 'sustcse.installguide'
 
 export const isNewer = (latest, installed = APP_VERSION) => newerThan(latest, installed)
 
-export const fetchLatest = () => api.get(LATEST_PATH, { auth: false })
+export const installedVersion = async () => {
+  if (!isAndroidApp()) return APP_VERSION
+  try {
+    const { App } = await import('@capacitor/app')
+    const info = await App.getInfo()
+    return String(info?.version || '').trim() || APP_VERSION
+  } catch {
+    return APP_VERSION
+  }
+}
+
+export const fetchLatest = () =>
+  api.get(LATEST_PATH, { auth: false, cache: 'no-store', query: { at: Date.now() } })
 
 export const requestUpdateCheck = () => window.dispatchEvent(new Event(CHECK_EVENT))
 
