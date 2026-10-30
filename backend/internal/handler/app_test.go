@@ -140,3 +140,23 @@ func TestDownloadAndroidFallsBackToTheReleasesPage(t *testing.T) {
 		t.Errorf("Location = %q, want %q", got, want)
 	}
 }
+
+func TestAndroidLatestIsNeverCached(t *testing.T) {
+	apps := NewAppRelease(
+		fakeReleases(t, "v2.2.3", "Fixes the update check", "sust-cse-portal-2.2.3.apk"),
+		"https://portal.test")
+	rec := appCall(t, apps.Latest(), AndroidLatestPath)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != noStore {
+		t.Errorf("Cache-Control = %q, want %q so a phone never reads a stale release", got, noStore)
+	}
+	payload := decodeBody(t, rec)
+	if payload["version"] != "2.2.3" {
+		t.Errorf("version = %#v, want 2.2.3", payload["version"])
+	}
+	if payload["version_code"] != float64(release.VersionCode("2.2.3")) {
+		t.Errorf("version_code = %#v, want %d", payload["version_code"], release.VersionCode("2.2.3"))
+	}
+}

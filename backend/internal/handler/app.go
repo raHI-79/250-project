@@ -106,7 +106,7 @@ func (a *AppRelease) Latest() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusServiceUnavailable, MessageUpdateBusy)
 			return
 		}
-		w.Header().Set("Cache-Control", downloadCacheControl)
+		w.Header().Set("Cache-Control", noStore)
 		httpx.WriteJSON(w, http.StatusOK, androidLatestResponse{
 			Version:     details.Version,
 			VersionCode: details.VersionCode,

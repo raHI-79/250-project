@@ -4,6 +4,20 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.2.3
+
+- The app finds an update again. `/api/app/android-latest` was answered with
+  `Cache-Control: public, max-age=600`, so a phone that had asked while 2.2.1 was
+  the newest release kept reading that same answer out of the WebView cache and
+  compared 2.2.1 against itself. The endpoint now answers `no-store`, the app
+  fetches it with `cache: "no-store"` and a cache-busting query, and it checks
+  again on start, on resume and when the update notification is tapped.
+- The installed version is read from the APK with `App.getInfo().version` instead
+  of a constant baked in at build time, and the up-to-date message names both
+  numbers: *Installed 2.2.3 · Latest 2.2.3*.
+- The APK versionCode is now major times ten thousand plus minor times a hundred
+  plus patch, the same number the server reports, instead of the CI run number.
+
 ## 2.2.2
 
 Everything here came back from real phones.

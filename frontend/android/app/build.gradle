@@ -1,5 +1,20 @@
 apply plugin: 'com.android.application'
 
+def versionNameOf = { ->
+    project.hasProperty('appVersionName') ? appVersionName.toString() : "2.2.3"
+}
+
+def versionCodeOf = { ->
+    if (project.hasProperty('appVersionCode')) {
+        return appVersionCode.toInteger()
+    }
+    def parts = versionNameOf().replaceAll(/^v/, '').split('-')[0].split('\\.')
+    def piece = { int index ->
+        index < parts.length ? (parts[index].isInteger() ? parts[index].toInteger() : 0) : 0
+    }
+    return piece(0) * 10000 + piece(1) * 100 + piece(2)
+}
+
 android {
     namespace "edu.sust.cse.portal"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +22,8 @@ android {
         applicationId "edu.sust.cse.portal"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode project.hasProperty('appVersionCode') ? appVersionCode.toInteger() : 1
-        versionName project.hasProperty('appVersionName') ? appVersionName : "2.2.2"
+        versionCode versionCodeOf()
+        versionName versionNameOf()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

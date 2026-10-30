@@ -10,14 +10,14 @@ services:
       ignoredPaths:
         - docs/**
     dockerBuildArgs:
-      APP_VERSION: 2.2.2
+      APP_VERSION: 2.2.3
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: APP_ENV
         value: production
       - key: APP_VERSION
-        value: 2.2.2
+        value: 2.2.3
       - key: APP_TIMEZONE
         value: Asia/Dhaka
       - key: GITHUB_RELEASES_REPO
