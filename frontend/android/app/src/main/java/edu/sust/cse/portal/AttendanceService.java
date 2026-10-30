@@ -28,6 +28,7 @@ import android.os.ParcelUuid;
 import android.text.TextUtils;
 import android.util.Log;
 
+import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
@@ -130,6 +131,8 @@ public class AttendanceService extends Service {
 
     private boolean advertising;
 
+    private boolean started;
+
     @Override
     public IBinder onBind(Intent intent) {
         return null;
@@ -143,6 +146,10 @@ public class AttendanceService extends Service {
             return START_NOT_STICKY;
         }
         if (ACTION_UPDATE.equals(action)) {
+            if (!started) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
             present = intent.getIntExtra(EXTRA_PRESENT, present);
             roster = intent.getIntExtra(EXTRA_ROSTER, roster);
             notifyOngoing();
@@ -159,7 +166,10 @@ public class AttendanceService extends Service {
             stopEverything();
             return START_NOT_STICKY;
         }
-        startForegroundNotice();
+        if (!startForegroundNotice()) {
+            stopEverything();
+            return START_NOT_STICKY;
+        }
         startAdvertising();
         startLocations();
         return START_STICKY;
@@ -178,22 +188,44 @@ public class AttendanceService extends Service {
         stopAdvertising();
         stopLocations();
         handler.removeCallbacks(rotate);
+        started = false;
         stopForeground(true);
         stopSelf();
     }
 
-    private void startForegroundNotice() {
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private int serviceTypes() {
+        int types = 0;
+        if (allowed(Manifest.permission.ACCESS_FINE_LOCATION)
+                || allowed(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                || allowed(Manifest.permission.BLUETOOTH_ADVERTISE)) {
+            types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+        }
+        return types;
+    }
+
+    private boolean startForegroundNotice() {
         createChannel();
-        int type = 0;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                    | ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                int types = serviceTypes();
+                if (types == 0) {
+                    Log.w(TAG, "no permission left for the attendance service to run in the foreground");
+                    return false;
+                }
+                startForeground(NOTIFICATION_ID, notification(), types);
+            } else {
+                startForeground(NOTIFICATION_ID, notification());
+            }
+        } catch (Exception failure) {
+            Log.w(TAG, "the attendance service could not go to the foreground", failure);
+            return false;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification(), type);
-        } else {
-            startForeground(NOTIFICATION_ID, notification());
-        }
+        started = true;
+        return true;
     }
 
     private void notifyOngoing() {

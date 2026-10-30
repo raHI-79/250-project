@@ -72,6 +72,14 @@ public class AttendanceMark extends Plugin {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
+    private final AtomicBoolean scanning = new AtomicBoolean(false);
+
+    private volatile String lastToken = "";
+
+    private volatile long lastTokenAt;
+
+    private volatile String lastError = "";
+
     @PluginMethod
     public void deviceId(PluginCall call) {
         String id = Settings.Secure.getString(getContext().getContentResolver(),
@@ -134,20 +142,20 @@ public class AttendanceMark extends Plugin {
     public void scan(final PluginCall call) {
         BluetoothAdapter adapter = adapter();
         if (adapter == null || !adapter.isEnabled()) {
-            call.resolve(heard(""));
+            call.resolve(refused("Bluetooth is off"));
             return;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !granted(Manifest.permission.BLUETOOTH_SCAN)) {
-            call.resolve(heard(""));
+            call.resolve(refused("Nearby devices is not allowed"));
             return;
         }
         if (!granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
-            call.resolve(heard(""));
+            call.resolve(refused("Precise location is not allowed"));
             return;
         }
         final BluetoothLeScanner scanner = adapter.getBluetoothLeScanner();
         if (scanner == null) {
-            call.resolve(heard(""));
+            call.resolve(refused("This phone cannot scan for Bluetooth"));
             return;
         }
         final ParcelUuid uuid = ParcelUuid.fromString(AttendanceTokens.SERVICE_UUID);
@@ -175,7 +183,7 @@ public class AttendanceMark extends Plugin {
             public void onScanFailed(int errorCode) {
                 Log.w(TAG, "the scan did not start, code " + errorCode);
                 if (done.compareAndSet(false, true)) {
-                    call.resolve(heard(""));
+                    call.resolve(refused("Bluetooth refused the scan, code " + errorCode));
                 }
             }
         };
@@ -185,10 +193,13 @@ public class AttendanceMark extends Plugin {
                 .build();
         List<ScanFilter> filters = Collections.singletonList(
                 new ScanFilter.Builder().setServiceUuid(uuid).build());
+        lastError = "";
+        scanning.set(true);
         try {
             scanner.startScan(filters, settings, callback);
         } catch (Exception failure) {
-            call.resolve(heard(""));
+            Log.w(TAG, "the scan could not start", failure);
+            call.resolve(refused("Bluetooth could not start the scan"));
             return;
         }
         long seconds = call.getLong("seconds", 0L);
@@ -202,6 +213,14 @@ public class AttendanceMark extends Plugin {
                 }
             }
         }, window);
+    }
+
+    private int authenticators() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return BiometricManager.Authenticators.BIOMETRIC_WEAK
+                    | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+        }
+        return BiometricManager.Authenticators.BIOMETRIC_WEAK;
     }
 
     @PluginMethod
@@ -277,8 +296,7 @@ public class AttendanceMark extends Plugin {
             return;
         }
         BiometricManager manager = BiometricManager.from(getContext());
-        int allowed = BiometricManager.Authenticators.BIOMETRIC_WEAK
-                | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+        final int allowed = authenticators();
         if (manager.canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
             JSObject result = new JSObject();
             result.put("confirmed", false);
@@ -309,12 +327,15 @@ public class AttendanceMark extends Plugin {
                                 call.resolve(answer);
                             }
                         });
-                BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
+                BiometricPrompt.PromptInfo.Builder builder = new BiometricPrompt.PromptInfo.Builder()
                         .setTitle(getContext().getString(R.string.attendance_confirm_title))
                         .setSubtitle(getContext().getString(R.string.attendance_confirm_subtitle))
-                        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK
-                                | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-                        .build();
+                        .setAllowedAuthenticators(allowed);
+                if ((allowed & BiometricManager.Authenticators.DEVICE_CREDENTIAL) == 0) {
+                    builder.setNegativeButtonText(
+                            getContext().getString(R.string.attendance_confirm_cancel));
+                }
+                BiometricPrompt.PromptInfo info = builder.build();
                 try {
                     prompt.authenticate(info);
                 } catch (Exception failure) {
@@ -343,10 +364,46 @@ public class AttendanceMark extends Plugin {
         }
     }
 
-    private JSObject heard(String token) {
+    private JSObject snapshot() {
+        BluetoothAdapter adapter = adapter();
+        boolean feature = getContext().getPackageManager()
+                .hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
         JSObject result = new JSObject();
-        result.put("token", TextUtils.isEmpty(token) ? "" : token);
+        result.put("supported", adapter != null && feature);
+        result.put("bluetooth_on", adapter != null && adapter.isEnabled());
+        result.put("nearby", Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                || granted(Manifest.permission.BLUETOOTH_SCAN));
+        result.put("place", granted(Manifest.permission.ACCESS_FINE_LOCATION));
+        result.put("scanning", scanning.get());
+        result.put("token", lastToken);
+        result.put("token_age_ms", lastTokenAt == 0L
+                ? 0L
+                : System.currentTimeMillis() - lastTokenAt);
+        result.put("error", lastError);
         return result;
+    }
+
+    private JSObject heard(String token) {
+        scanning.set(false);
+        JSObject result = new JSObject();
+        if (TextUtils.isEmpty(token)) {
+            result.put("token", "");
+            result.put("age_ms", 0L);
+            result.put("error", lastError);
+            return result;
+        }
+        lastToken = token;
+        lastTokenAt = System.currentTimeMillis();
+        lastError = "";
+        result.put("token", token);
+        result.put("age_ms", 0L);
+        result.put("error", "");
+        return result;
+    }
+
+    private JSObject refused(String reason) {
+        lastError = reason == null ? "" : reason;
+        return heard("");
     }
 
     private JSObject placed(Location location) {
