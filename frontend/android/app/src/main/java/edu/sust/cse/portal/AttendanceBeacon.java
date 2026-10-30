@@ -6,7 +6,10 @@ import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
 import android.text.TextUtils;
 
 import androidx.core.content.ContextCompat;
@@ -97,7 +100,7 @@ public class AttendanceBeacon extends Plugin {
         String tokenKey = call.getString("token_key", "");
         String endpoint = call.getString("endpoint", "");
         String bearer = call.getString("bearer", "");
-        long sessionId = call.getLong("session_id", 0L);
+        long sessionId = sessionOf(call.getString("session_id", ""));
         int present = call.getInt("present", 0);
         int roster = call.getInt("roster", 0);
         if (sessionId <= 0 || TextUtils.isEmpty(tokenKey)) {
@@ -156,6 +159,61 @@ public class AttendanceBeacon extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod
+    public void ensureLocation(PluginCall call) {
+        if (granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            call.resolve(snapshot());
+            return;
+        }
+        requestPermissionForAliases(new String[] { PLACE }, call, ASKED);
+    }
+
+    @PluginMethod
+    public void openSettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getContext().getPackageName()));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        open(call, intent, "This phone has no app settings screen");
+    }
+
+    @PluginMethod
+    public void openLocationSettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        open(call, intent, "This phone has no location settings screen");
+    }
+
+    private void open(PluginCall call, Intent intent, String complaint) {
+        try {
+            getContext().startActivity(intent);
+        } catch (Exception failure) {
+            call.reject(complaint);
+            return;
+        }
+        call.resolve(snapshot());
+    }
+
+    private static long sessionOf(String value) {
+        try {
+            return Long.parseLong(value.trim());
+        } catch (Exception failure) {
+            return 0L;
+        }
+    }
+
+    private boolean locationOn() {
+        LocationManager locations = (LocationManager) getContext()
+                .getSystemService(Context.LOCATION_SERVICE);
+        if (locations == null) {
+            return false;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return locations.isLocationEnabled();
+        }
+        return locations.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                || locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+    }
+
     private JSObject snapshot() {
         BluetoothAdapter adapter = adapter();
         boolean advertiser = adapter != null
@@ -167,6 +225,9 @@ public class AttendanceBeacon extends Plugin {
         result.put("nearby", Build.VERSION.SDK_INT < Build.VERSION_CODES.S
                 || granted(Manifest.permission.BLUETOOTH_ADVERTISE));
         result.put("place", granted(Manifest.permission.ACCESS_FINE_LOCATION));
+        result.put("location_on", locationOn());
+        result.put("advertising", AttendanceService.broadcasting());
+        result.put("error", AttendanceService.failure());
         return result;
     }
 

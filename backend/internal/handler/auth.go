@@ -234,7 +234,7 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 				httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 				return
 			}
-		} else if message, blocked := statusMessage(user.Status); blocked {
+		} else if message, blocked := loginBlock(user); blocked {
 			httpx.WriteError(w, http.StatusForbidden, message)
 			return
 		}
@@ -276,6 +276,14 @@ func portalMessage(portal, dbRole string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func loginBlock(user store.LoginUser) (string, bool) {
+	message, blocked := statusMessage(user.Status)
+	if blocked && user.Status == store.StatusRejected && user.RejectionReason != "" {
+		return MessageRejectedAccount + " Reason: " + user.RejectionReason, true
+	}
+	return message, blocked
 }
 
 func statusMessage(status string) (string, bool) {

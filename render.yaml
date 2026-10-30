@@ -10,14 +10,14 @@ services:
       ignoredPaths:
         - docs/**
     dockerBuildArgs:
-      APP_VERSION: 2.2.1
+      APP_VERSION: 2.2.2
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: APP_ENV
         value: production
       - key: APP_VERSION
-        value: 2.2.1
+        value: 2.2.2
       - key: APP_TIMEZONE
         value: Asia/Dhaka
       - key: GITHUB_RELEASES_REPO
@@ -61,8 +61,6 @@ services:
       - key: MAIL_FROM
         sync: false
       - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: VITE_GOOGLE_CLIENT_ID
         sync: false
       - key: VAPID_PUBLIC_KEY
         sync: false

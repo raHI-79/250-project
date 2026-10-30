@@ -70,7 +70,26 @@ type sentMail struct {
 type fakeMailer struct {
 	configured bool
 	err        error
+	guard      sync.Mutex
 	sent       []sentMail
+	notify     chan sentMail
+}
+
+func (f *fakeMailer) delivered() []sentMail {
+	f.guard.Lock()
+	defer f.guard.Unlock()
+	return append([]sentMail(nil), f.sent...)
+}
+
+func (f *fakeMailer) waitForMail(t *testing.T) sentMail {
+	t.Helper()
+	select {
+	case mail := <-f.notify:
+		return mail
+	case <-time.After(2 * time.Second):
+		t.Fatal("no email was sent within two seconds")
+		return sentMail{}
+	}
 }
 
 func (f *fakeMailer) Configured() bool {
@@ -84,7 +103,16 @@ func (f *fakeMailer) Send(ctx context.Context, to, subject, body string) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.sent = append(f.sent, sentMail{to: to, subject: subject, body: body})
+	mail := sentMail{to: to, subject: subject, body: body}
+	f.guard.Lock()
+	f.sent = append(f.sent, mail)
+	f.guard.Unlock()
+	if f.notify != nil {
+		select {
+		case f.notify <- mail:
+		default:
+		}
+	}
 	return nil
 }
 

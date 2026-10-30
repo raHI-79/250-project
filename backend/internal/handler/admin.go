@@ -55,6 +55,8 @@ const (
 type AdminStore interface {
 	ListPendingRegistrations(ctx context.Context) ([]store.PendingRegistration, error)
 	SetRegistrationStatus(ctx context.Context, userID int64, status string) error
+	DecideRegistration(ctx context.Context, userID int64, status,
+		reason string) (store.DecidedRegistration, error)
 	ListStudents(ctx context.Context, filter store.StudentFilter) ([]store.StudentRow, int, error)
 	RemoveStudent(ctx context.Context, userID int64) error
 	PromoteCR(ctx context.Context, userID int64) (store.PromotedCR, error)
@@ -191,35 +193,6 @@ func (a *Admin) Registrations() http.HandlerFunc {
 			})
 		}
 		httpx.WriteJSON(w, http.StatusOK, registrationsResponse{Items: items})
-	}
-}
-
-func (a *Admin) ApproveRegistration() http.HandlerFunc {
-	return a.decideRegistration(store.StatusActive, MessageRegistrationApproved)
-}
-
-func (a *Admin) RejectRegistration() http.HandlerFunc {
-	return a.decideRegistration(store.StatusRejected, MessageRegistrationRejected)
-}
-
-func (a *Admin) decideRegistration(status, message string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := pathID(w, r)
-		if !ok {
-			return
-		}
-		err := a.people.SetRegistrationStatus(r.Context(), userID, status)
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			httpx.WriteError(w, http.StatusNotFound, MessageStudentNotFound)
-		case errors.Is(err, store.ErrNotPending):
-			httpx.WriteError(w, http.StatusConflict, MessageRegistrationNotPending)
-		case err != nil:
-			log.Printf("handler: could not decide a registration: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-		default:
-			httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: message})
-		}
 	}
 }
 

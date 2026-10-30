@@ -444,6 +444,7 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("GET /api/admin/registrations", admin.Registrations())
 	group.Handle("POST /api/admin/registrations/{id}/approve", admin.ApproveRegistration())
 	group.Handle("POST /api/admin/registrations/{id}/reject", admin.RejectRegistration())
+	group.Handle("GET /api/admin/rejection-reasons", admin.RejectionReasons())
 	group.Handle("GET /api/admin/students", admin.Students())
 	group.Handle("POST /api/admin/students/{id}/remove", admin.RemoveStudent())
 	group.Handle("POST /api/admin/crs/promote", admin.PromoteCR())

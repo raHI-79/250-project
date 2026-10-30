@@ -25,6 +25,7 @@ type fakeAdminStore struct {
 	err                 error
 	nextID              int64
 	statuses            map[int64]string
+	reasons             map[int64]string
 	removed             []int64
 	demoted             []int64
 	deactivatedCRs      []int64
@@ -64,6 +65,29 @@ func (f *fakeAdminStore) SetRegistrationStatus(ctx context.Context, userID int64
 	}
 	f.statuses[userID] = status
 	return nil
+}
+
+func (f *fakeAdminStore) DecideRegistration(ctx context.Context, userID int64,
+	status, reason string) (store.DecidedRegistration, error) {
+	if f.err != nil {
+		return store.DecidedRegistration{}, f.err
+	}
+	if f.statuses == nil {
+		f.statuses = make(map[int64]string)
+	}
+	if f.reasons == nil {
+		f.reasons = make(map[int64]string)
+	}
+	f.statuses[userID] = status
+	f.reasons[userID] = reason
+	return store.DecidedRegistration{
+		UserID:   userID,
+		FullName: "Pending Student",
+		RegNo:    "2023331099",
+		Email:    "2023331099@student.sust.edu",
+		Status:   status,
+		Reason:   reason,
+	}, nil
 }
 
 func (f *fakeAdminStore) ListStudents(ctx context.Context, filter store.StudentFilter) ([]store.StudentRow, int, error) {
@@ -349,9 +373,11 @@ func TestAdminRegistrationDecisions(t *testing.T) {
 		wantMessage string
 		wantError   string
 		wantStored  string
+		body        string
 	}{
 		{name: "approve", approve: true, id: "7", wantStatus: http.StatusOK, wantMessage: MessageRegistrationApproved, wantStored: store.StatusActive},
-		{name: "reject", id: "7", wantStatus: http.StatusOK, wantMessage: MessageRegistrationRejected, wantStored: store.StatusRejected},
+		{name: "reject", id: "7", body: `{"reason":"Not a CSE student"}`, wantStatus: http.StatusOK, wantMessage: MessageRegistrationRejected, wantStored: store.StatusRejected},
+		{name: "reject without a reason", id: "7", wantStatus: http.StatusBadRequest, wantError: MessageReasonRequired},
 		{name: "not a number", approve: true, id: "abc", wantStatus: http.StatusBadRequest, wantError: MessageInvalidID},
 		{name: "zero id", approve: true, id: "0", wantStatus: http.StatusBadRequest, wantError: MessageInvalidID},
 		{name: "unknown student", approve: true, id: "7", storeErr: store.ErrNotFound, wantStatus: http.StatusNotFound, wantError: MessageStudentNotFound},
@@ -368,7 +394,7 @@ func TestAdminRegistrationDecisions(t *testing.T) {
 				handlerFunc = admin.ApproveRegistration()
 				path = "/api/admin/registrations/" + test.id + "/approve"
 			}
-			rec := adminCall(t, handlerFunc, http.MethodPost, path, test.id, "")
+			rec := adminCall(t, handlerFunc, http.MethodPost, path, test.id, test.body)
 			if rec.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
 			}

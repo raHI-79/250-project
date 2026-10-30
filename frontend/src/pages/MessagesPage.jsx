@@ -206,6 +206,7 @@ export default function MessagesPage() {
             activeId={activeId}
             onSelect={select}
             search={search}
+            roleFilter={roleFilter}
             loading={listLoading}
             header={
               <ContactSearch

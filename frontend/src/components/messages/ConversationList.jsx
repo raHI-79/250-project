@@ -2,23 +2,38 @@ import { MessageSquare, Users } from 'lucide-react'
 import { Avatar, CountBadge, EmptyState, SkeletonRows } from '../ui'
 import cx from '../../lib/cx'
 import { relativeTime } from '../../lib/time'
+import { matchesRole } from '../../lib/messages'
 
-export default function ConversationList({ items, activeId, onSelect, search, loading, header }) {
+export default function ConversationList({
+  items,
+  activeId,
+  onSelect,
+  search,
+  roleFilter,
+  loading,
+  header,
+}) {
   const text = search.trim().toLowerCase()
-  const shown = text
-    ? items.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(text))
-    : items
+  const shown = items
+    .filter((item) => matchesRole(item, roleFilter))
+    .filter((item) =>
+      text ? `${item.title} ${item.preview}`.toLowerCase().includes(text) : true,
+    )
   return (
     <div className="glass-card flex h-full min-h-0 flex-col overflow-hidden rounded-card">
-      {header}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
+        {header}
         {loading ? (
           <SkeletonRows rows={6} className="border-0" />
         ) : shown.length === 0 ? (
           <EmptyState
             icon={MessageSquare}
             title="No conversations"
-            text="Search for a person above to start one."
+            text={
+              roleFilter
+                ? 'No conversation with somebody of this role yet. Search for a person above to start one.'
+                : 'Search for a person above to start one.'
+            }
             className="m-3 border-0 py-8"
           />
         ) : (

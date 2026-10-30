@@ -58,8 +58,13 @@ func TestAuthConfig(t *testing.T) {
 			if payload["google_enabled"] != test.wantGoogle {
 				t.Errorf("google_enabled = %v, want %v", payload["google_enabled"], test.wantGoogle)
 			}
-			if strings.Contains(rec.Body.String(), test.clientID) && test.clientID != "" {
-				t.Error("the public config leaks the Google client id")
+			wantID := strings.TrimSpace(test.clientID)
+			if test.wantGoogle {
+				if payload["google_client_id"] != wantID {
+					t.Errorf("google_client_id = %v, want %q", payload["google_client_id"], wantID)
+				}
+			} else if _, ok := payload["google_client_id"]; ok {
+				t.Error("the public config carries a client id while Google is off")
 			}
 		})
 	}

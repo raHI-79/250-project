@@ -8,13 +8,12 @@ import AuthHeading from '../../components/layout/AuthHeading'
 import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
 import { useHumanCheck } from '../../lib/human'
-import { HERO_IMAGES } from '../../lib/campus'
+import { HERO_BUILDING } from '../../lib/campus'
 import { useCountdown } from '../../lib/hooks'
 import { PORTAL_ADMIN, loginForPortal } from '../../lib/paths'
 import {
   CODE_PATTERN,
   PHONE_MESSAGE,
-  birthDateBounds,
   isPhone,
   passwordError,
 } from '../../lib/account'
@@ -45,7 +44,6 @@ export default function ForgotPasswordPage({ portal }) {
   const page = copy[portal] || copy.student
   const byPhone = portal === PORTAL_ADMIN
   const loginPath = loginForPortal(portal)
-  const bounds = birthDateBounds()
   const human = useHumanCheck()
   const [step, setStep] = useState(1)
   const [identifier, setIdentifier] = useState('')
@@ -148,7 +146,7 @@ export default function ForgotPasswordPage({ portal }) {
   }
   return (
     <AuthScreen
-      images={HERO_IMAGES}
+      images={HERO_BUILDING}
       className="max-w-md"
       note="Lost your password? The account is checked before a code is sent."
     >
@@ -191,8 +189,6 @@ export default function ForgotPasswordPage({ portal }) {
                     type="date"
                     value={dateOfBirth}
                     onChange={(event) => setDateOfBirth(event.target.value)}
-                    min={bounds.min}
-                    max={bounds.max}
                     hint="The date saved on your account"
                     required
                   />

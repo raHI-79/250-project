@@ -160,6 +160,7 @@ export const useAuthConfig = () => {
   return {
     studentEmailDomain: config?.student_email_domain || '',
     googleEnabled: Boolean(config?.google_enabled),
+    googleClientId: config?.google_client_id || '',
     loaded: Boolean(config),
   }
 }

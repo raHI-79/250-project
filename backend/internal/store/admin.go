@@ -333,15 +333,49 @@ func (s *Store) dropCoursesByStudent(ctx context.Context, studentIDs []int64) (m
 }
 
 func (s *Store) SetRegistrationStatus(ctx context.Context, userID int64, status string) error {
+	_, err := s.DecideRegistration(ctx, userID, status, "")
+	return err
+}
+
+type DecidedRegistration struct {
+	UserID   int64
+	FullName string
+	RegNo    string
+	Email    string
+	Status   string
+	Reason   string
+}
+
+const decideRegistrationSQL = `UPDATE users
+SET status = $2, rejection_reason = $3, token_version = token_version + 1, updated_at = now()
+WHERE id = $1 AND status = 'pending' AND role = 'student'
+RETURNING id`
+
+const decidedStudentSQL = `SELECT COALESCE(s.full_name, ''), COALESCE(s.reg_no, ''),
+COALESCE(s.email, ''), u.status, COALESCE(u.rejection_reason, '')
+FROM users u
+LEFT JOIN students s ON s.user_id = u.id
+WHERE u.id = $1`
+
+func (s *Store) DecideRegistration(ctx context.Context, userID int64,
+	status, reason string) (DecidedRegistration, error) {
 	var id int64
-	err := s.pool.QueryRow(ctx, setRegistrationStatusSQL, userID, status).Scan(&id)
+	err := s.pool.QueryRow(ctx, decideRegistrationSQL, userID, status, reason).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return s.pendingConflict(ctx, userID)
+		return DecidedRegistration{}, s.pendingConflict(ctx, userID)
 	}
 	if err != nil {
-		return fmt.Errorf("store: could not set the status of the registration %d: %w", userID, err)
+		return DecidedRegistration{}, fmt.Errorf(
+			"store: could not set the status of the registration %d: %w", userID, err)
 	}
-	return nil
+	decided := DecidedRegistration{UserID: userID}
+	err = s.pool.QueryRow(ctx, decidedStudentSQL, userID).Scan(
+		&decided.FullName, &decided.RegNo, &decided.Email, &decided.Status, &decided.Reason)
+	if err != nil {
+		return DecidedRegistration{UserID: userID, Status: status, Reason: reason},
+			fmt.Errorf("store: could not read the decided registration %d: %w", userID, err)
+	}
+	return decided, nil
 }
 
 func (s *Store) pendingConflict(ctx context.Context, userID int64) error {

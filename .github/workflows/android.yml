@@ -111,6 +111,21 @@ jobs:
             exit 1
           fi
 
+      - name: Print the signing certificate fingerprints
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          keytool -list -v \
+            -keystore "$RUNNER_TEMP/signing.keystore" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null \
+            | grep -E "^[[:space:]]+(SHA1|SHA256):" \
+            | sed -E "s/^[[:space:]]+//" \
+            | tee "$RUNNER_TEMP/fingerprints.txt"
+          echo "Register these in the Google Cloud Console Android OAuth client"
+          echo "for package edu.sust.cse.portal. See docs/ANDROID.md."
+
       - name: Assemble the release APK
         working-directory: frontend/android
         env:

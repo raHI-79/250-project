@@ -22,7 +22,7 @@ export default function ContactSearch({
   })
   const people = contacts.data?.items || []
   return (
-    <div className="border-b border-line p-3">
+    <div className="sticky top-0 z-20 shrink-0 border-b border-line bg-surface/95 p-3 backdrop-blur-sm">
       <Input
         type="search"
         value={search}
@@ -30,27 +30,36 @@ export default function ContactSearch({
         placeholder="Search people and conversations"
         aria-label="Search people and conversations"
       />
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {chips.map((chip) => (
-          <button
-            key={chip.value || 'all'}
-            type="button"
-            onClick={() => onRoleFilterChange(chip.value)}
-            className={cx(
-              'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
-              roleFilter === chip.value
-                ? 'border-brand-600 bg-brand-600 text-page'
-                : 'border-line-strong bg-surface text-brand-600 hover:bg-wash',
-            )}
-          >
-            {chip.label}
-          </button>
-        ))}
+      <div
+        role="tablist"
+        aria-label="Filter by role"
+        className="no-scrollbar -mx-3 mt-2 flex items-center gap-1.5 overflow-x-auto px-3"
+      >
+        {chips.map((chip) => {
+          const active = roleFilter === chip.value
+          return (
+            <button
+              key={chip.value || 'all'}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onRoleFilterChange(chip.value)}
+              className={cx(
+                'press min-h-9 shrink-0 rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition-colors',
+                active
+                  ? 'border-brand-600 bg-brand-600 text-page shadow-[var(--shadow-glass)]'
+                  : 'border-line-strong bg-surface font-medium text-muted hover:border-brand-300 hover:text-ink',
+              )}
+            >
+              {chip.label}
+            </button>
+          )
+        })}
         {text && (
           <button
             type="button"
             onClick={() => onSearchChange('')}
-            className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-muted hover:bg-wash"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs text-muted hover:bg-wash"
           >
             <X size={12} />
             Clear

@@ -236,6 +236,7 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodGet, path: "/api/admin/registrations", allowed: adminOnly()},
 		{method: http.MethodPost, path: "/api/admin/registrations/1/approve", allowed: adminOnly()},
 		{method: http.MethodPost, path: "/api/admin/registrations/1/reject", allowed: adminOnly()},
+		{method: http.MethodGet, path: "/api/admin/rejection-reasons", allowed: adminOnly()},
 		{method: http.MethodGet, path: "/api/admin/students", allowed: adminOnly()},
 		{method: http.MethodPost, path: "/api/admin/students/1/remove", allowed: adminOnly()},
 		{method: http.MethodPost, path: "/api/admin/crs/promote", allowed: adminOnly()},

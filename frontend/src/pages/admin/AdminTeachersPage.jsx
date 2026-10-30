@@ -29,7 +29,6 @@ import { BLOOD_GROUPS, PEOPLE_STATUS_TABS, canRestore } from '../../lib/options'
 import {
   PHONE_MESSAGE,
   appendIf,
-  birthDateBounds,
   birthDateError,
   emailDomainError,
   isPhone,
@@ -71,7 +70,6 @@ const accountOf = (item) => ({
 export default function AdminTeachersPage() {
   const toast = useToast()
   const confirm = useConfirm()
-  const bounds = birthDateBounds()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -240,8 +238,6 @@ export default function AdminTeachersPage() {
           type="date"
           value={form.date_of_birth}
           onChange={set('date_of_birth')}
-          min={bounds.min}
-          max={bounds.max}
           hint="The teacher confirms this when activating the account"
           required
         />

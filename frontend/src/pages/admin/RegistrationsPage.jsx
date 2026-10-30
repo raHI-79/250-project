@@ -6,9 +6,11 @@ import {
   Button,
   DataTable,
   EmptyState,
+  Field,
   PageHeader,
+  Sheet,
   SkeletonTable,
-  useConfirm,
+  Textarea,
   useToast,
 } from '../../components/ui'
 import api from '../../lib/api'
@@ -28,33 +30,102 @@ const HEADINGS = [
   '',
 ]
 
+function RejectSheet({ item, reasons, min, busy, onClose, onReject }) {
+  const [reason, setReason] = useState('')
+  const trimmed = reason.trim()
+  const short = trimmed.length > 0 && trimmed.length < min
+  return (
+    <Sheet
+      open={Boolean(item)}
+      onClose={onClose}
+      title="Reject this registration?"
+      description={item ? `${item.full_name} (${item.reg_no}) will not be able to sign in.` : ''}
+      footer={
+        <div className="flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={onClose}>
+            Keep it pending
+          </Button>
+          <Button
+            variant="danger"
+            className="flex-1"
+            loading={busy}
+            disabled={trimmed.length < min}
+            onClick={() => onReject(trimmed)}
+          >
+            Reject and email
+          </Button>
+        </div>
+      }
+    >
+      <p className="text-sm text-muted">
+        The student is emailed this reason, so write it the way you want them to read it.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {reasons.map((quick) => (
+          <button
+            key={quick}
+            type="button"
+            onClick={() => setReason(quick)}
+            className="press glass-chip min-h-10 rounded-full border px-3 text-sm font-medium text-muted hover:border-brand-300 hover:text-ink"
+          >
+            {quick}
+          </button>
+        ))}
+      </div>
+      <Field
+        label="Reason"
+        htmlFor="reject-reason"
+        className="mt-4"
+        error={short ? `Write at least ${min} characters.` : ''}
+        required
+      >
+        <Textarea
+          id="reject-reason"
+          rows={3}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Registration number does not match"
+        />
+      </Field>
+    </Sheet>
+  )
+}
+
 export default function RegistrationsPage() {
   const toast = useToast()
-  const confirm = useConfirm()
   const { data, loading, error, reload } = useResource('/api/admin/registrations')
+  const picks = useResource('/api/admin/rejection-reasons')
   const [busy, setBusy] = useState(0)
   const [decided, setDecided] = useState([])
+  const [rejecting, setRejecting] = useState(null)
   const items = (data?.items || []).filter((item) => !decided.includes(item.id))
-  const decide = async (item, action) => {
-    if (action === 'reject') {
-      const ok = await confirm({
-        title: 'Reject this registration?',
-        message: `${item.full_name} (${item.reg_no}) will not be able to log in.`,
-        confirmLabel: 'Reject',
-      })
-      if (!ok) return
-    }
+  const send = async (item, action, reason) => {
     setBusy(item.id)
     try {
-      await api.post(`/api/admin/registrations/${item.id}/${action}`)
-      toast.success(action === 'approve' ? 'Registration approved' : 'Registration rejected')
+      await api.post(
+        `/api/admin/registrations/${item.id}/${action}`,
+        action === 'reject' ? { reason } : undefined,
+      )
+      toast.success(
+        action === 'approve'
+          ? 'Registration approved. The student was emailed a welcome.'
+          : 'Registration rejected. The student was emailed the reason.',
+      )
       setDecided((current) => [...current, item.id])
+      setRejecting(null)
       reload()
     } catch (failure) {
       toast.error(failure.message)
     } finally {
       setBusy(0)
     }
+  }
+  const decide = (item, action) => {
+    if (action === 'reject') {
+      setRejecting(item)
+      return
+    }
+    send(item, action)
   }
   return (
     <>
@@ -63,6 +134,14 @@ export default function RegistrationsPage() {
         subtitle="Student accounts waiting for your approval, oldest first"
       />
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
+      <RejectSheet
+        item={rejecting}
+        reasons={picks.data?.items || []}
+        min={picks.data?.min || 5}
+        busy={busy === rejecting?.id}
+        onClose={() => setRejecting(null)}
+        onReject={(reason) => send(rejecting, 'reject', reason)}
+      />
       {loading ? (
         <SkeletonTable columns={10} />
       ) : items.length === 0 ? (

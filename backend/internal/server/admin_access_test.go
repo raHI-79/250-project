@@ -73,6 +73,11 @@ func (emptyAdminStore) SetRegistrationStatus(ctx context.Context, userID int64, 
 	return store.ErrNotFound
 }
 
+func (emptyAdminStore) DecideRegistration(ctx context.Context, userID int64,
+	status, reason string) (store.DecidedRegistration, error) {
+	return store.DecidedRegistration{}, store.ErrNotFound
+}
+
 func (emptyAdminStore) ListStudents(ctx context.Context, filter store.StudentFilter) ([]store.StudentRow, int, error) {
 	return nil, 0, nil
 }

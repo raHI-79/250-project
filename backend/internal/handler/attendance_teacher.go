@@ -191,6 +191,9 @@ func (a *Attendance) Start() http.HandlerFunc {
 			return
 		}
 		if session.TokenKey == key {
+			log.Printf("handler: attendance %d opened by teacher %d for %s %s-%s until %s",
+				session.ID, teacher.ID, session.CourseCode, session.Batch, session.Section,
+				session.EndsAt.Format(time.TimeOnly))
 			a.announce(r.Context(), session)
 		}
 		httpx.WriteJSON(w, http.StatusCreated, newSessionBody(session, now, true))
@@ -255,6 +258,8 @@ func (a *Attendance) Location() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		log.Printf("handler: attendance %d has a position from teacher %d, accuracy %.0f m",
+			session.ID, teacher.ID, request.AccuracyM)
 		httpx.WriteJSON(w, http.StatusOK, newSessionBody(fresh, a.cfg.Now(), true))
 	}
 }

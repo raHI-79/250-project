@@ -4,6 +4,68 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.2.2
+
+Everything here came back from real phones.
+
+### Attendance
+
+- The teacher's own session now reaches the app with its Bluetooth key.
+  Capacitor reads a JSON number back as an `Integer`, never a `Long`, so
+  `session_id` silently became `0` and the plugin refused its own session with
+  *The session is missing its key*. The id travels as a string now, and a shared
+  test vector pins the eight token bytes in Go and in JavaScript.
+- Location no longer waits on Bluetooth. The session screen asks for precise
+  location on its own and shows the truth — Allowed, Off, Denied, or Sending with
+  the accuracy the server saw — with a button to the app or location settings.
+  The foreground service listens on GPS and network and sends the first fix at
+  once.
+- When Bluetooth cannot broadcast the screen says exactly why and points at the
+  4-digit code, which never depended on Bluetooth.
+- The duration chips scroll in their own row above Extend and Close, so nothing
+  overlaps at 360 px.
+- The server logs every session start, every teacher position and the reason
+  behind every refused mark.
+
+### Registration and sign-in
+
+- Every date-of-birth picker opens on today instead of fifteen years ago, with
+  nothing preselected. The age rule still applies.
+- The Google client id comes from `GET /api/auth/config` at runtime, so changing
+  it needs no rebuild. `VITE_GOOGLE_CLIENT_ID` is gone.
+- Google sign-in works inside the Android app through native sign-in, since
+  Google refuses its web flow in a WebView. The release workflow prints the
+  signing certificate fingerprints for the Android OAuth client.
+- A refused origin, a blocked popup and a cancelled dialog each get their own
+  message.
+
+### Approvals
+
+- Approving a registration emails *Welcome to SUST CSE Portal* with the sign-in
+  instructions and the app link.
+- Rejecting asks for a reason, at least five characters, with quick picks. The
+  reason is emailed, kept on the account and shown on the sign-in screen.
+
+### Messaging, sheets and photos
+
+- The message search bar and the role chips stay at the top of the list, and the
+  chips now filter the existing conversations as well as the people search.
+- Sheets open at the height their content needs up to 92 % of the screen, scroll
+  inside, keep Save and Cancel visible and move a focused input clear of the
+  keyboard.
+- The public home page shows the campus slideshow again; the sign-in, register,
+  password and activation screens show one still photo of the IICT building. The
+  app keeps no photos on its sign-in screens.
+
+## 2.2.1
+
+- The release lookup survives GitHub errors. It reads a page of releases and
+  picks the newest one that is neither a draft nor a prerelease and actually
+  carries an APK, sends an optional `GITHUB_TOKEN` and a `User-Agent`, keeps the
+  last good answer for six hours, and answers `503` *Update service is busy, try
+  again later.* instead of `500` when GitHub cannot be read. The download link
+  falls back to the repository releases page.
+
 ## 2.2.0
 
 ### Class attendance by Bluetooth
