@@ -6,11 +6,14 @@ Representatives (CRs), teachers and the department administration. Students see
 their upcoming routine and exams, CRs request classes and exams that teachers
 approve, teachers manage their daily schedule and messages, and the
 administration manages users, courses and the fixed weekly routine from a
-hidden admin panel. Built as a course project for **CSE 250**.
+hidden admin panel. Class attendance is taken by Bluetooth from the Android app,
+so a student can only be marked present inside the room, on their own
+registered phone. Built as a course project for **CSE 250**.
 
 The full requirements live in [docs/SPEC.md](docs/SPEC.md). The build order is
 tracked in [docs/ROADMAP.md](docs/ROADMAP.md). To put the portal online for
-free, follow [docs/DEPLOY.md](docs/DEPLOY.md).
+free, follow [docs/DEPLOY.md](docs/DEPLOY.md). Every released version is listed
+in [CHANGELOG.md](CHANGELOG.md).
 
 ## Team
 
@@ -28,6 +31,8 @@ free, follow [docs/DEPLOY.md](docs/DEPLOY.md).
 | Authentication | bcrypt password hashing + JWT (HS256) via `golang-jwt/jwt/v5` |
 | Frontend | React 19 + Vite 7 + React Router + Tailwind CSS v4 |
 | File uploads | PDFs in `backend/uploads/` and profile photos in `backend/uploads/photos/` (`UPLOAD_DIR`), path saved in the database |
+| Android app | Capacitor 6, package `edu.sust.cse.portal`, with its own Bluetooth, location and biometric plugins |
+| Spreadsheets | `.xlsx` attendance workbooks built on the server with `xuri/excelize` |
 
 ## Folder structure
 
@@ -37,6 +42,7 @@ free, follow [docs/DEPLOY.md](docs/DEPLOY.md).
 │   ├── cmd/seed/             go run ./cmd/seed -demo — the demo department
 │   ├── cmd/server/           main.go — program entry point
 │   ├── internal/
+│   │   ├── attendance/       presence tokens, the distance rules, the workbook
 │   │   ├── auth/             bcrypt hashing, JWT issuing and parsing, roles
 │   │   ├── config/           reads backend/.env and environment variables
 │   │   ├── db/               pgxpool connection + embedded SQL migrations
@@ -61,7 +67,9 @@ free, follow [docs/DEPLOY.md](docs/DEPLOY.md).
 │       └── pages/            one file per screen
 ├── Dockerfile                one image: the built pages and the Go server
 ├── render.yaml               the Render blueprint for the free web service
+├── CHANGELOG.md              every released version
 ├── docs/
+│   ├── ANDROID.md            the Capacitor app, notifications and attendance
 │   ├── DEPLOY.md             putting the portal online for free
 │   ├── SPEC.md               the final specification of the product
 │   └── ROADMAP.md            the development steps and their status
@@ -618,8 +626,8 @@ takes their place.
 3. Tag and push it:
 
    ```powershell
-   git tag v2.1.0
-   git push origin v2.1.0
+   git tag v2.2.0
+   git push origin v2.2.0
    ```
 
 `.github/workflows/android.yml` builds and signs the APK and attaches it to the
@@ -737,11 +745,23 @@ they refuse to run unless the database name ends with `_test`, and they drop and
 recreate the `public` schema before each test — so never point them at
 `sust_coord`.
 
-The frontend has its own two checks:
+The attendance rules are table-driven and need no database at all:
+`backend/internal/attendance` covers the Bluetooth token and the fallback code
+over the current, previous and expired slices and a wrong key, the great-circle
+distance, the accuracy and mock-provider refusals, a stale teacher position, the
+percentage, the once-then-weekly warning, the semester change limit and the
+contents of the Excel workbook. The phone bindings, the change requests, the
+roster, one-phone-one-student, the absentees written on close and the manual
+edits are covered against a real database in `backend/internal/store`, and
+`backend/internal/server` checks the permissions of every attendance route and
+that a student cannot mark from the website.
+
+The frontend has its own three checks:
 
 ```powershell
 cd frontend
 npm run lint
+npm test
 npm run build
 ```
 
@@ -913,9 +933,61 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/push/client-log` | student, CR, teacher | `{stage, name, message}` records why a device could not subscribe; rate limited per IP |
 | `POST` | `/api/push/fcm` | student, CR, teacher | `{token, platform, device_id}` stores the Android device token of the app |
 | `DELETE` | `/api/push/fcm` | student, CR, teacher | `{token}` forgets that device, used on sign-out |
+| `GET` | `/api/teacher/attendance/options` | teacher | Today's classes to prefill from, every class of the running semester, and the open session if there is one |
+| `POST` | `/api/teacher/attendance/sessions` | teacher | `{course_id, batch, section, schedule_item_id?, minutes}` opens attendance for 5 to 30 minutes and pushes every roster student; returns the session with its `token_key` and the current code. Starting again while one is open returns the running one |
+| `GET` | `/api/teacher/attendance/sessions` | teacher | This teacher's sessions in `from`/`to`, newest first, each with its present count and roster size |
+| `GET` | `/api/teacher/attendance/sessions/{id}` | teacher | One of this teacher's own sessions with every roster student, their status, time, distance, accuracy, method and note; `403` for another teacher's session |
+| `POST` | `/api/teacher/attendance/sessions/{id}/location` | teacher | `{lat, lng, accuracy_m}`; the app's foreground service posts this every 15 seconds. `409` once the session is closed |
+| `POST` | `/api/teacher/attendance/sessions/{id}/extend` | teacher | `{minutes}` between 5 and 30 |
+| `POST` | `/api/teacher/attendance/sessions/{id}/close` | teacher | Closes it and marks every roster student without a record absent with method `system`; `409` if already closed |
+| `PATCH` | `/api/teacher/attendance/sessions/{id}/students/{student_id}` | teacher | `{status, note}` sets Present or Absent by hand, audited with who and when |
+| `GET` | `/api/teacher/attendance/classes` | teacher | Each course-batch-section with its session count, average attendance and how many students are below 50 % |
+| `GET` | `/api/teacher/attendance/export` | teacher | An `.xlsx` workbook; `course_id`, `batch` and `section` narrow it to one class, no filter gives every class plus a Summary sheet. `404` when the range is empty |
+| `GET` | `/api/teacher/phone-requests` | teacher | Pending phone requests of the students in the batches this teacher teaches this semester |
+| `POST` | `/api/teacher/phone-requests/{id}/approve` | teacher | `{note}` rebinds the phone and tells the student; `400` when the note is missing beyond two changes a semester, `403` for another batch's student, `409` once another teacher answered |
+| `POST` | `/api/teacher/phone-requests/{id}/reject` | teacher | `{note}` refuses it and tells the student |
+| `GET` | `/api/students/attendance/open` | student, CR | `?device_id=` answers the open session of their courses, the state of their registered phone, the service UUID to scan for, and on the website the message to use the app |
+| `POST` | `/api/students/attendance/mark` | student, CR, app only | `{session_id, token or code, lat, lng, accuracy_m, is_mock, device_id}`; `403` from the website, from another phone, on a wrong token, on a mock position, on a weak signal, beyond 30 metres or with a stale teacher position, `409` when already marked or the phone already marked somebody |
+| `GET` | `/api/students/attendance/mine` | student, CR | Every course with its held, present and percentage, and every class with its status, method, time and note |
+| `POST` | `/api/students/attendance/phone` | student, CR, app only | `{device_id}` registers this phone when the student has none yet |
+| `POST` | `/api/students/attendance/phone-request` | student, CR, app only | `{device_id, reason}` asks the batch's teachers for a new phone; `409` when one is pending, when it is already the registered phone, or when another account holds it |
+| `GET` | `/api/admin/phone-changes` | admin | Read-only history of every phone request and its answer |
+| `GET` | `/api/admin/attendance` | admin | Every course of every batch, or of one `batch`, with its sessions, average and count below 50 % |
+| `GET` | `/api/admin/attendance/export` | admin | The same `.xlsx` workbook for one batch or for every batch, with a Summary sheet |
 | `GET` | `/uploads/{name}` | public | Serves one older uploaded PDF inline; only the generated file names resolve, anything else is `404` |
 | `GET` | `/uploads/files/{name}` | public | Serves one attachment with its real type and `nosniff`; images and PDFs inline, everything else as a download |
 | `GET` | `/uploads/photos/{name}` | public | Serves one profile photo inline with `nosniff`; only the generated names resolve |
+
+### Attendance
+
+Attendance is the one feature tied to a single device. A teacher opens a session
+for one class of the running semester for 5 to 30 minutes; while it is open the
+teacher's Android app advertises a Bluetooth Low Energy token that changes every
+10 seconds and keeps posting the teacher's GPS position every 15 seconds, both
+from a foreground service, so a locked screen does not stop attendance.
+
+A student's mark is accepted only when the phone heard the current or previous
+token, sits within **30 metres** of the teacher's latest position with an
+accuracy of **50 metres or better**, reports a position that is not from a mock
+provider, passes the phone's own fingerprint, face or screen-lock check, and is
+the phone that student registered. The teacher's position has to be under a
+minute old. A phone with no Bluetooth, or that hears nothing within ten seconds,
+types the rotating 4-digit code the teacher shows instead; the location rules do
+not change.
+
+The database does the rest of the work: a unique index per session and student,
+and another per session and device for the `app` and `code` methods, so one
+phone marks one student and a student marks once, however many requests arrive
+at the same moment. Closing the session turns every roster student without a
+record into an absence.
+
+The pure rules - the token and code slices, the great-circle distance, the
+accuracy and freshness limits, the percentage and the warning cadence - live in
+`backend/internal/attendance` with no database behind them, which is also where
+the `.xlsx` workbook is built. See
+[docs/ANDROID.md](docs/ANDROID.md#how-attendance-works-in-the-app) for the
+permissions and the GPS accuracy note, and chapter 12 of
+[docs/SPEC.md](docs/SPEC.md) for the full rules.
 
 ### Attachments
 

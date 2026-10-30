@@ -1,6 +1,7 @@
 import {
   CalendarClock,
   ClipboardList,
+  CheckCircle2,
   FolderOpen,
   Library,
   MessageCircle,
@@ -88,6 +89,11 @@ export default function TodayPage() {
     .filter(Boolean)
     .join(' · ')
   const actions = [
+    {
+      label: 'Attendance',
+      icon: CheckCircle2,
+      to: paths.student.attendance(),
+    },
     {
       label: 'Routine',
       icon: CalendarClock,

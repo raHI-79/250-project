@@ -27,6 +27,8 @@ type Store interface {
 	ListUndecidedTeachers(ctx context.Context, date string) ([]store.UndecidedTeacher, error)
 	ListUndecidedTeachersFrom(ctx context.Context, date, after string) ([]store.UndecidedTeacher, error)
 	ClaimReminder(ctx context.Context, userID int64, slot, date string) (bool, error)
+	ListLowAttendance(ctx context.Context, minSessions int, threshold float64) ([]store.AttendanceAlert, error)
+	ClaimAttendanceAlert(ctx context.Context, studentID, courseID int64, before time.Time) (bool, error)
 }
 
 type Notifier interface {
@@ -78,6 +80,11 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		log.Printf("jobs: could not remind the teachers: %v", err)
 	} else if reminded > 0 {
 		log.Printf("jobs: reminded %d teachers about undecided classes", reminded)
+	}
+	if warned, err := s.WarnLowAttendance(ctx); err != nil {
+		log.Printf("jobs: could not warn the students about low attendance: %v", err)
+	} else if warned > 0 {
+		log.Printf("jobs: warned %d students about attendance below 50 %%", warned)
 	}
 }
 

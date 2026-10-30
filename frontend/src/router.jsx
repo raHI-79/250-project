@@ -19,6 +19,8 @@ import NoticesPage from './pages/NoticesPage'
 import MaterialsPage from './pages/student/MaterialsPage'
 import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
+import StudentAttendancePage from './pages/student/StudentAttendancePage'
+import MyAttendancePage from './pages/student/MyAttendancePage'
 import TeachersPage from './pages/student/TeachersPage'
 import MessagesPage from './pages/MessagesPage'
 import CreateClassExamPage from './pages/cr/CreateClassExamPage'
@@ -29,6 +31,8 @@ import TeacherFixedRoutinePage from './pages/teacher/TeacherFixedRoutinePage'
 import TeacherUpcomingPage from './pages/teacher/TeacherUpcomingPage'
 import TeacherCreateExamPage from './pages/teacher/TeacherCreateExamPage'
 import TeacherNoticesPage from './pages/teacher/TeacherNoticesPage'
+import TeacherAttendancePage from './pages/teacher/TeacherAttendancePage'
+import TeacherPhoneRequestsPage from './pages/teacher/TeacherPhoneRequestsPage'
 import OverviewPage from './pages/admin/OverviewPage'
 import RegistrationsPage from './pages/admin/RegistrationsPage'
 import AdminStudentsPage from './pages/admin/AdminStudentsPage'
@@ -39,6 +43,8 @@ import ClassPeriodsPage from './pages/admin/ClassPeriodsPage'
 import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
 import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
 import ActivityLogPage from './pages/admin/ActivityLogPage'
+import AdminAttendancePage from './pages/admin/AdminAttendancePage'
+import AdminPhoneChangesPage from './pages/admin/AdminPhoneChangesPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { useAuth } from './context/auth'
 import { isNative } from './lib/native'
@@ -104,6 +110,8 @@ export default function Router() {
           <Route path={paths.student.materials()} element={<MaterialsPage />} />
           <Route path={paths.student.students()} element={<StudentsDirectoryPage />} />
           <Route path={paths.student.polls()} element={<PollsPage />} />
+          <Route path={paths.student.attendance()} element={<StudentAttendancePage />} />
+          <Route path={paths.student.myAttendance()} element={<MyAttendancePage />} />
           <Route path={paths.student.teachers()} element={<TeachersPage />} />
           <Route path={paths.student.messages()} element={<MessagesPage />} />
         </Route>
@@ -130,6 +138,8 @@ export default function Router() {
           <Route path={paths.teacher.upcoming()} element={<TeacherUpcomingPage />} />
           <Route path={paths.teacher.createExam()} element={<TeacherCreateExamPage />} />
           <Route path={paths.teacher.notices()} element={<TeacherNoticesPage />} />
+          <Route path={paths.teacher.attendance()} element={<TeacherAttendancePage />} />
+          <Route path={paths.teacher.phoneRequests()} element={<TeacherPhoneRequestsPage />} />
           <Route path={paths.teacher.messages()} element={<MessagesPage />} />
         </Route>
       </Route>
@@ -147,6 +157,8 @@ export default function Router() {
           <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />
           <Route path={paths.admin.messages()} element={<MessagesPage />} />
           <Route path={paths.admin.activity()} element={<ActivityLogPage />} />
+          <Route path={paths.admin.attendance()} element={<AdminAttendancePage />} />
+          <Route path={paths.admin.phoneChanges()} element={<AdminPhoneChangesPage />} />
         </Route>
       </Route>
       )}

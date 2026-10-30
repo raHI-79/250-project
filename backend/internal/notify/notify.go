@@ -21,6 +21,7 @@ const (
 	TypeMessage  = "message"
 	TypeRoutine  = "routine"
 	TypeExam     = "exam"
+	TypeAttend   = "attendance"
 	DefaultLimit = 30
 	MaxLimit     = 100
 
@@ -34,6 +35,10 @@ const (
 	LinkMessage        = "message"
 	LinkPoll           = "poll"
 	LinkCRRole         = "cr_role"
+	LinkAttendMark     = "attendance_mark"
+	LinkAttendMine     = "attendance_mine"
+	LinkAttendTeacher  = "attendance_teacher"
+	LinkPhoneRequests  = "phone_requests"
 )
 
 var (
@@ -60,6 +65,10 @@ var linkPages = map[string]string{
 	LinkMessage:        "/student/messages",
 	LinkPoll:           "/student/polls",
 	LinkCRRole:         "/profile",
+	LinkAttendMark:     "/student/attendance",
+	LinkAttendMine:     "/student/my-attendance",
+	LinkAttendTeacher:  "/teacher/attendance",
+	LinkPhoneRequests:  "/teacher/phone-requests",
 }
 
 type Store interface {
@@ -164,9 +173,17 @@ func linkQuery(link store.NotificationLink) url.Values {
 		if link.Ref > 0 {
 			query.Set("c", strconv.FormatInt(link.Ref, 10))
 		}
-	case LinkExam, LinkNotice, LinkPoll:
+	case LinkExam, LinkNotice, LinkPoll, LinkAttendTeacher, LinkPhoneRequests:
 		if link.Ref > 0 {
 			query.Set("highlight", strconv.FormatInt(link.Ref, 10))
+		}
+	case LinkAttendMark:
+		if link.Ref > 0 {
+			query.Set("session", strconv.FormatInt(link.Ref, 10))
+		}
+	case LinkAttendMine:
+		if link.Ref > 0 {
+			query.Set("course", strconv.FormatInt(link.Ref, 10))
 		}
 	case LinkRoutine:
 		if link.Date != "" {
