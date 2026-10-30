@@ -869,7 +869,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/cr/final/publish` | CR | `{item_ids}` writes the snapshots students read and notifies the batch |
 | `POST` | `/api/cr/final/remove` | CR | `{item_ids}` takes several items out of the final routine and withdraws the published ones |
 | `GET` | `/api/teacher/fixed-routine` | teacher | This teacher's weekly fixed routine |
-| `GET` | `/api/teacher/upcoming` | teacher | Every undecided or decidable item from `from` to `to`, grouped by date; the default range is today through `SCHEDULE_DAYS_AHEAD` |
+| `GET` | `/api/teacher/upcoming` | teacher | Every item that is not cancelled from `from` to `to`, grouped by date with `status` and `allowed_actions`; the default range is today through `SCHEDULE_DAYS_AHEAD` |
 | `GET` | `/api/teacher/upcoming/next-day` | teacher | Tomorrow's items, the older single-day shape |
 | `GET` | `/api/teacher/upcoming/final` | teacher | This teacher's decided, final and published items from today, grouped by date, with their origin |
 | `POST` | `/api/teacher/items/{id}/confirm` | teacher | `{mode, room?, meeting_link?}`; the first decision only inside the window |
@@ -1500,11 +1500,12 @@ which the item's teacher or the batch CR may call.
 
 A teacher only ever sees and changes items whose `teacher_id` is their own
 `teachers.id`; anything else answers `404`.
-`GET /api/teacher/upcoming` carries the days from today through the generated
-horizon, each with the items that still need a decision or can still be changed,
-with the CR's message and proposed slot when there is one. Today only carries
-the undecided classes that have not started yet. `/api/teacher/upcoming/next-day`
-still answers tomorrow alone for older app builds. Confirming takes `mode` with a
+`GET /api/teacher/upcoming` carries the days from `from` through `to`, each with
+every item of that day that is not cancelled, its status, the actions that status
+allows and the CR's message and proposed slot when there is one. The app asks for
+tomorrow onward, shows tomorrow's full routine and keeps the later days behind a
+button. `/api/teacher/upcoming/next-day` still answers tomorrow alone for older
+app builds. Confirming takes `mode` with a
 `room` or a `meeting_link`. Every teacher action notifies the CRs of that batch,
 and an action on a published item also notifies the students of the batch and the
 students who took the course as a drop course.

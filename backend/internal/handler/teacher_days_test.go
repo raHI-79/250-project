@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
-	"time"
 )
 
 type dayPayload struct {
@@ -50,12 +49,26 @@ func responseDays(t *testing.T, rec *httptest.ResponseRecorder) []dayPayload {
 	return payload.Days
 }
 
-func TestTeacherUpcomingGroupsEveryDayOfTheHorizon(t *testing.T) {
+func actionsOf(t *testing.T, item map[string]any) []string {
+	t.Helper()
+	raw, ok := item["allowed_actions"].([]any)
+	if !ok {
+		return nil
+	}
+	actions := make([]string, 0, len(raw))
+	for _, entry := range raw {
+		actions = append(actions, entry.(string))
+	}
+	return actions
+}
+
+func TestTeacherUpcomingCarriesEveryLiveItemOfTheHorizon(t *testing.T) {
 	silenceLog(t)
 	cfg := daysConfig(t, 7)
 	items := newFakeScheduleStore()
 	exam := itemOn(dayAfter(cfg, 3), store.ItemScheduled, 9)
 	exam.Origin = store.OriginTeacherExam
+	exam.Kind = store.KindExam
 	items.items = []store.ScheduleItem{
 		itemOn(dayAfter(cfg, 1), store.ItemAwaiting, 5),
 		itemOn(dayAfter(cfg, 1), store.ItemConfirmed, 6),
@@ -74,39 +87,104 @@ func TestTeacherUpcomingGroupsEveryDayOfTheHorizon(t *testing.T) {
 		t.Errorf("range = %v to %v, want today through the horizon", payload["from"], payload["to"])
 	}
 	days := responseDays(t, rec)
-	if len(days) != 2 {
-		t.Fatalf("days = %d, want tomorrow and the fourth day (body = %q)", len(days), rec.Body.String())
+	if len(days) != 3 {
+		t.Fatalf("days = %d, want tomorrow, the exam day and the fourth day (body = %q)",
+			len(days), rec.Body.String())
 	}
 	if days[0].Date != dayAfter(cfg, 1) || len(days[0].Items) != 2 {
-		t.Errorf("the first day = %q with %d items, want tomorrow with two",
+		t.Errorf("the first day = %q with %d items, want tomorrow with the undecided and the confirmed class",
 			days[0].Date, len(days[0].Items))
 	}
 	if days[0].Weekday == "" {
 		t.Error("a day carries no weekday name")
 	}
-	if days[1].Date != dayAfter(cfg, 4) || len(days[1].Items) != 1 {
-		t.Errorf("the second day = %q with %d items, want the fourth day with one",
-			days[1].Date, len(days[1].Items))
+	for _, day := range days {
+		for _, item := range day.Items {
+			if item["status"] == store.ItemCancelled {
+				t.Errorf("a cancelled item is still listed on %s", day.Date)
+			}
+		}
+	}
+	if got := actionsOf(t, days[0].Items[0]); len(got) != 3 {
+		t.Errorf("the undecided class allows %v, want confirm, cancel and a reschedule request", got)
+	}
+	if got := actionsOf(t, days[0].Items[1]); len(got) != 2 || got[0] != ActionCancel {
+		t.Errorf("the confirmed class allows %v, want cancel and a reschedule request", got)
+	}
+	exams := days[len(days)-1]
+	if exams.Date != dayAfter(cfg, 3) {
+		t.Fatalf("the last day = %q, want the exam day", exams.Date)
+	}
+	if got := actionsOf(t, exams.Items[0]); len(got) != 1 || got[0] != ActionCancel {
+		t.Errorf("the exam allows %v, want cancel alone", got)
 	}
 }
 
-func TestTeacherUpcomingKeepsTodayUndecidedAndNotStarted(t *testing.T) {
-	cfg := daysConfig(t, 7)
-	now := time.Date(2026, 11, 1, 10, 0, 0, 0, cfg.Location)
-	today := validate.DateString(now)
-	started := itemOn(today, store.ItemAwaiting, 1)
-	started.StartTime, started.EndTime = "08:00", "09:30"
-	open := itemOn(today, store.ItemAwaiting, 2)
-	open.StartTime, open.EndTime = "14:00", "15:30"
-	decided := itemOn(today, store.ItemConfirmed, 3)
-	decided.StartTime, decided.EndTime = "16:00", "17:30"
-	tomorrow := itemOn(validate.DateString(now.AddDate(0, 0, 1)), store.ItemConfirmed, 4)
-	kept := decidableItems([]store.ScheduleItem{started, open, decided, tomorrow}, now, today)
-	if len(kept) != 2 {
-		t.Fatalf("kept = %d items, want the open class of today and tomorrow", len(kept))
+func TestTeacherActionsPerStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		item store.ScheduleItem
+		want []string
+	}{
+		{
+			name: "an undecided class",
+			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemAwaiting},
+			want: []string{ActionConfirm, ActionCancel, ActionReschedule},
+		},
+		{
+			name: "a class without an answer",
+			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemNoResponse},
+			want: []string{ActionConfirm, ActionCancel, ActionReschedule},
+		},
+		{
+			name: "a confirmed class",
+			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemConfirmed},
+			want: []string{ActionCancel, ActionReschedule},
+		},
+		{
+			name: "a rescheduled class",
+			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "lab", Status: store.ItemRescheduled},
+			want: []string{ActionCancel, ActionReschedule},
+		},
+		{
+			name: "a proposal of the class representative",
+			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemCRAsk},
+			want: []string{ActionAccept, ActionDecline},
+		},
+		{
+			name: "a slot the teacher asked to move",
+			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemTeacherAsk},
+			want: []string{ActionConfirm, ActionCancel},
+		},
+		{
+			name: "an exam",
+			item: store.ScheduleItem{Origin: store.OriginTeacherExam, Kind: store.KindExam,
+				Status: store.ItemScheduled},
+			want: []string{ActionCancel},
+		},
+		{
+			name: "a class of the class representative",
+			item: store.ScheduleItem{Origin: store.OriginCR, Kind: "class", Status: store.ItemScheduled},
+			want: []string{ActionCancel},
+		},
+		{
+			name: "a cancelled class",
+			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemCancelled},
+			want: []string{},
+		},
 	}
-	if kept[0].ID != 2 || kept[1].ID != 4 {
-		t.Errorf("kept = %d and %d, want 2 and 4", kept[0].ID, kept[1].ID)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := teacherActions(test.item)
+			if len(got) != len(test.want) {
+				t.Fatalf("actions = %v, want %v", got, test.want)
+			}
+			for index, action := range test.want {
+				if got[index] != action {
+					t.Errorf("actions = %v, want %v", got, test.want)
+				}
+			}
+		})
 	}
 }
 

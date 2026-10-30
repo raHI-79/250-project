@@ -198,7 +198,7 @@ func (t *Teacher) Upcoming() http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, rangeResponse{
 			From: from,
 			To:   to,
-			Days: groupItemDays(decidableItems(items, now, validate.DateString(now)), t.cfg),
+			Days: groupItemDays(liveItems(items), t.cfg, teacherActions),
 		})
 	}
 }
@@ -244,7 +244,7 @@ func (t *Teacher) FinalRoutine() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, finalItemsResponse{
 			Items: newItemBodies(items),
-			Days:  groupItemDays(items, t.cfg),
+			Days:  groupItemDays(items, t.cfg, teacherActions),
 		})
 	}
 }

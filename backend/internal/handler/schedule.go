@@ -26,6 +26,9 @@ const (
 	MessageLinkChanged     = "Meeting link updated."
 
 	ActionCancel          = "cancel"
+	ActionConfirm         = "confirm"
+	ActionAccept          = "accept_reschedule"
+	ActionDecline         = "decline_reschedule"
 	ActionDelete          = "delete"
 	ActionEdit            = "edit"
 	ActionSetSlot         = "set_slot"
@@ -33,8 +36,6 @@ const (
 	ActionReschedule      = "request_reschedule"
 	ActionAddToFinal      = "add_to_final"
 	ActionRemoveFromFinal = "remove_from_final"
-
-	startedLayout = "2006-01-02 15:04"
 )
 
 type proposedBody struct {
@@ -151,7 +152,8 @@ func newItemBodies(items []store.ScheduleItem) []itemBody {
 	return bodies
 }
 
-func groupItemDays(items []store.ScheduleItem, cfg *config.Config) []dayBody {
+func groupItemDays(items []store.ScheduleItem, cfg *config.Config,
+	actions func(store.ScheduleItem) []string) []dayBody {
 	days := make([]dayBody, 0)
 	index := make(map[string]int)
 	for _, item := range items {
@@ -165,50 +167,45 @@ func groupItemDays(items []store.ScheduleItem, cfg *config.Config) []dayBody {
 			}
 			days = append(days, dayBody{Date: item.ItemDate, Weekday: weekday, Items: make([]itemBody, 0)})
 		}
-		days[position].Items = append(days[position].Items, newItemBody(item))
+		body := newItemBody(item)
+		if actions != nil {
+			body.AllowedActions = actions(item)
+		}
+		days[position].Items = append(days[position].Items, body)
 	}
 	return days
 }
 
-func itemStarted(item store.ScheduleItem, now time.Time) bool {
-	if !item.HasTimes() {
-		return false
-	}
-	return item.ItemDate+" "+item.StartTime < now.Format(startedLayout)
-}
-
-func undecidedItem(item store.ScheduleItem) bool {
-	switch item.Status {
-	case store.ItemAwaiting, store.ItemNoResponse, store.ItemCRAsk:
-		return true
-	}
-	return false
-}
-
-func decidableItem(item store.ScheduleItem) bool {
-	if item.Origin != store.OriginFixed {
-		return false
-	}
-	switch item.Status {
-	case store.ItemAwaiting, store.ItemNoResponse, store.ItemConfirmed, store.ItemDeclined,
-		store.ItemTeacherAsk, store.ItemCRAsk, store.ItemRescheduled:
-		return true
-	}
-	return false
-}
-
-func decidableItems(items []store.ScheduleItem, now time.Time, today string) []store.ScheduleItem {
+func liveItems(items []store.ScheduleItem) []store.ScheduleItem {
 	kept := make([]store.ScheduleItem, 0, len(items))
 	for _, item := range items {
-		if !decidableItem(item) {
-			continue
-		}
-		if item.ItemDate <= today && (!undecidedItem(item) || itemStarted(item, now)) {
+		if item.Status == store.ItemCancelled {
 			continue
 		}
 		kept = append(kept, item)
 	}
 	return kept
+}
+
+func teacherActions(item store.ScheduleItem) []string {
+	if item.Status == store.ItemCancelled {
+		return []string{}
+	}
+	if item.Status == store.ItemCRAsk {
+		return []string{ActionAccept, ActionDecline}
+	}
+	if item.Kind == store.KindExam || item.Origin != store.OriginFixed {
+		return []string{ActionCancel}
+	}
+	switch item.Status {
+	case store.ItemAwaiting, store.ItemNoResponse:
+		return []string{ActionConfirm, ActionCancel, ActionReschedule}
+	case store.ItemTeacherAsk:
+		return []string{ActionConfirm, ActionCancel}
+	case store.ItemConfirmed, store.ItemRescheduled, store.ItemDeclined:
+		return []string{ActionCancel, ActionReschedule}
+	}
+	return []string{ActionCancel}
 }
 
 func crActions(item store.ScheduleItem) []string {

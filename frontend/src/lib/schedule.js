@@ -56,6 +56,13 @@ export const statusLabel = (status) => STATUS_LABELS[status] || status
 
 export const statusTone = (status) => STATUS_TONES[status] || 'unavailable'
 
+export const teacherStatusLabel = (item) => {
+  if (!item) return ''
+  if (item.status === STATUS_AWAITING) return 'Undecided'
+  if (item.kind === 'exam' && item.status === STATUS_SCHEDULED) return 'Scheduled exam'
+  return statusLabel(item.status)
+}
+
 export const KIND_LABELS = { class: 'Class', lab: 'Lab', exam: 'Exam' }
 
 export const kindLabel = (kind) => KIND_LABELS[kind] || kind
@@ -77,6 +84,12 @@ export const ACTION_REQUEST_RESCHEDULE = 'request_reschedule'
 export const ACTION_SET_SLOT = 'set_slot'
 
 export const ACTION_SET_TIME = 'set_time'
+
+export const ACTION_CONFIRM = 'confirm'
+
+export const ACTION_ACCEPT = 'accept_reschedule'
+
+export const ACTION_DECLINE = 'decline_reschedule'
 
 export const ACTION_EDIT = 'edit'
 
