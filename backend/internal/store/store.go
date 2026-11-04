@@ -13,6 +13,7 @@ const (
 	RoleStudent      = "student"
 	RoleTeacher      = "teacher"
 	RoleAdmin        = "admin"
+	RoleSuperAdmin   = "super_admin"
 	StatusActive     = "active"
 	StatusPending    = "pending"
 	StatusRejected   = "rejected"
@@ -37,6 +38,7 @@ type AuthUser struct {
 	Status       string
 	TokenVersion int
 	IsCR         bool
+	OfficeAccess bool
 	PhotoPath    string
 }
 
@@ -53,6 +55,7 @@ func New(pool *pgxpool.Pool) *Store {
 }
 
 const getAuthUserSQL = `SELECT u.id, COALESCE(u.identifier, ''), u.role, u.status, u.token_version, COALESCE(s.is_cr, FALSE),
+u.office_access,
 COALESCE(u.photo_path, '')
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
@@ -67,6 +70,7 @@ func (s *Store) GetAuthUser(ctx context.Context, userID int64) (AuthUser, error)
 		&user.Status,
 		&user.TokenVersion,
 		&user.IsCR,
+		&user.OfficeAccess,
 		&user.PhotoPath,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -88,8 +92,28 @@ SET contact_email = COALESCE(NULLIF(contact_email, ''), NULLIF($2, '')),
     contact_phone = COALESCE(NULLIF(contact_phone, ''), NULLIF($3, '')),
     updated_at = now()
 WHERE identifier = $1
-  AND role = 'admin'
+  AND role IN ('admin', 'super_admin')
   AND (COALESCE(contact_email, '') = '' OR COALESCE(contact_phone, '') = '')`
+
+const promoteSuperAdminSQL = `UPDATE users
+SET role = 'super_admin', updated_at = now()
+WHERE lower(identifier) = lower($1) AND role = 'admin'
+RETURNING id`
+
+func (s *Store) EnsureSuperAdmin(ctx context.Context, identifier string) (bool, error) {
+	if identifier == "" {
+		return false, ErrEmptyIdentifier
+	}
+	var id int64
+	err := s.pool.QueryRow(ctx, promoteSuperAdminSQL, identifier).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("store: could not promote the super admin: %w", err)
+	}
+	return true, nil
+}
 
 func (s *Store) EnsureAdmin(ctx context.Context, identifier, passwordHash, contactEmail, contactPhone string) (bool, error) {
 	if identifier == "" {

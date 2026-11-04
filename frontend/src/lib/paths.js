@@ -35,6 +35,11 @@ export const paths = {
   teacherActivate: () => build('teacher', 'activate'),
   adminLogin: () => build('office-portal'),
   adminForgotPassword: () => build('office-portal', 'forgot-password'),
+  adminInvite: (token) =>
+    token
+      ? `${build('office-portal', 'accept-invite')}?token=${encodeURIComponent(token)}`
+      : build('office-portal', 'accept-invite'),
+  controlLogin: () => build('control-room'),
   student: {
     home: () => build('student'),
     today: (params) => query(build('student', 'today'), params),
@@ -84,6 +89,14 @@ export const paths = {
     attendance: (params) => query(build('office-portal', 'attendance'), params),
     phoneChanges: () => build('office-portal', 'phone-changes'),
   },
+  control: {
+    home: () => build('control-room'),
+    admins: () => build('control-room', 'admins'),
+    activity: (params) => query(build('control-room', 'activity'), params),
+    monitor: (adminId) => build('control-room', 'activity', String(adminId)),
+    monitorPattern: () => routePattern('control-room', 'activity', ':adminId'),
+    office: () => build('office-portal', 'overview'),
+  },
 }
 
 export const PORTAL_STUDENT = 'student'
@@ -92,7 +105,12 @@ export const PORTAL_TEACHER = 'teacher'
 
 export const PORTAL_ADMIN = 'admin'
 
+export const PORTAL_CONTROL = 'control'
+
+export const ROLE_SUPER_ADMIN = 'super_admin'
+
 export const portalFor = (role) => {
+  if (role === ROLE_SUPER_ADMIN) return PORTAL_CONTROL
   if (role === 'admin') return PORTAL_ADMIN
   if (role === 'teacher') return PORTAL_TEACHER
   return PORTAL_STUDENT
@@ -100,31 +118,34 @@ export const portalFor = (role) => {
 
 export const loginFor = (role) => {
   const portal = portalFor(role)
+  if (portal === PORTAL_CONTROL) return paths.controlLogin()
   if (portal === PORTAL_ADMIN) return paths.adminLogin()
   if (portal === PORTAL_TEACHER) return paths.teacherLogin()
   return paths.studentLogin()
 }
 
 export const loginForPortal = (portal) => {
+  if (portal === PORTAL_CONTROL) return paths.controlLogin()
   if (portal === PORTAL_ADMIN) return paths.adminLogin()
   if (portal === PORTAL_TEACHER) return paths.teacherLogin()
   return paths.studentLogin()
 }
 
 export const forgotPasswordForPortal = (portal) => {
+  if (portal === PORTAL_CONTROL) return paths.adminForgotPassword()
   if (portal === PORTAL_ADMIN) return paths.adminForgotPassword()
   if (portal === PORTAL_TEACHER) return paths.teacherForgotPassword()
   return paths.studentForgotPassword()
 }
 
 export const messagesFor = (role, params) => {
-  if (role === 'admin') return paths.admin.messages(params)
+  if (role === 'admin' || role === ROLE_SUPER_ADMIN) return paths.admin.messages(params)
   if (role === 'teacher') return paths.teacher.messages(params)
   return paths.student.messages(params)
 }
 
 export const noticesFor = (role, params) => {
-  if (role === 'admin') return paths.admin.notices(params)
+  if (role === 'admin' || role === ROLE_SUPER_ADMIN) return paths.admin.notices(params)
   if (role === 'teacher') return paths.teacher.notices(params)
   return paths.student.notices(params)
 }
@@ -187,6 +208,7 @@ export const notificationTarget = (link, role) => {
 }
 
 export const homeFor = (role) => {
+  if (role === ROLE_SUPER_ADMIN) return paths.control.home()
   if (role === 'admin') return paths.admin.home()
   if (role === 'teacher') return paths.teacher.home()
   if (role === 'cr' || role === 'student') return paths.student.today()

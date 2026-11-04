@@ -1,9 +1,13 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import AdminLayout from './components/layout/AdminLayout'
+import ControlLayout from './components/layout/ControlLayout'
 import RequireRole, { RequireAuth } from './components/RequireRole'
 import LoginPage from './pages/auth/LoginPage'
 import AdminLoginPage from './pages/auth/AdminLoginPage'
+import AdminInvitePage from './pages/auth/AdminInvitePage'
+import ControlLoginPage from './pages/control/ControlLoginPage'
+import ControlAdminsPage from './pages/control/ControlAdminsPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ActivatePage from './pages/auth/ActivatePage'
@@ -49,9 +53,24 @@ import NotFoundPage from './pages/NotFoundPage'
 import { useAuth } from './context/auth'
 import { isNative } from './lib/native'
 import { useNativeBackButton } from './lib/shell'
-import { PORTAL_ADMIN, PORTAL_STUDENT, PORTAL_TEACHER, homeFor, paths } from './lib/paths'
+import {
+  PORTAL_ADMIN,
+  PORTAL_STUDENT,
+  PORTAL_TEACHER,
+  ROLE_SUPER_ADMIN,
+  homeFor,
+  paths,
+} from './lib/paths'
 
 const STUDENT_ROLES = ['student', 'cr']
+
+const OFFICE_ROLES = ['admin', ROLE_SUPER_ADMIN]
+
+function ControlGate() {
+  const { isAuthenticated, role } = useAuth()
+  if (!isAuthenticated || role !== ROLE_SUPER_ADMIN) return <ControlLoginPage />
+  return <ControlLayout />
+}
 
 function Root() {
   const { isAuthenticated, role } = useAuth()
@@ -85,9 +104,19 @@ export default function Router() {
             path={paths.adminForgotPassword()}
             element={<ForgotPasswordPage portal={PORTAL_ADMIN} />}
           />
+          <Route path={paths.adminInvite()} element={<AdminInvitePage />} />
         </>
       ) : (
-        <Route path={`${paths.adminLogin()}/*`} element={<Navigate to={paths.root()} replace />} />
+        <>
+          <Route
+            path={`${paths.adminLogin()}/*`}
+            element={<Navigate to={paths.root()} replace />}
+          />
+          <Route
+            path={`${paths.controlLogin()}/*`}
+            element={<Navigate to={paths.root()} replace />}
+          />
+        </>
       )}
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
@@ -144,7 +173,13 @@ export default function Router() {
         </Route>
       </Route>
       {office && (
-      <Route element={<RequireRole roles="admin" />}>
+      <Route path={paths.control.home()} element={<ControlGate />}>
+        <Route index element={<Navigate to={paths.control.admins()} replace />} />
+        <Route path="admins" element={<ControlAdminsPage />} />
+      </Route>
+      )}
+      {office && (
+      <Route element={<RequireRole roles={OFFICE_ROLES} />}>
         <Route element={<AdminLayout />}>
           <Route path={paths.admin.overview()} element={<OverviewPage />} />
           <Route path={paths.admin.registrations()} element={<RegistrationsPage />} />

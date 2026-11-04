@@ -146,6 +146,9 @@ func run() error {
 			Marks:     userStore,
 			Presence:  userStore,
 			Phones:    userStore,
+			Office:    userStore,
+			Invites:   userStore,
+			Events:    userStore,
 			Files:     upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
 			Mailer: mailer.New(cfg.MailProvider, mailer.Options{
 				Host:     cfg.SMTPHost,
@@ -206,6 +209,19 @@ func seedAdmin(ctx context.Context, userStore *store.Store, cfg *config.Config) 
 	}
 	if _, err := userStore.EnsureAdmin(ctx, cfg.AdminIdentifier, hash, cfg.AdminEmail, cfg.AdminPhone); err != nil {
 		return err
+	}
+	chief := cfg.SuperAdminIdentifier()
+	if chief != cfg.AdminIdentifier {
+		if _, err := userStore.EnsureAdmin(ctx, chief, hash, cfg.AdminEmail, cfg.AdminPhone); err != nil {
+			return err
+		}
+	}
+	promoted, err := userStore.EnsureSuperAdmin(ctx, chief)
+	if err != nil {
+		return err
+	}
+	if promoted {
+		log.Println("auth: the seeded office account is now the super admin")
 	}
 	log.Println("auth: admin account ready")
 	return nil

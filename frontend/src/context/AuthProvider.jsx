@@ -48,6 +48,19 @@ export default function AuthProvider({ children }) {
     },
     [persist],
   )
+  const controlLogin = useCallback(
+    async (identifier, password) => {
+      const data = await api.post(
+        '/api/auth/control-room/login',
+        { identifier, password },
+        { auth: false },
+      )
+      const next = { token: data.token, user: { ...data.user, role: 'super_admin' } }
+      persist(next)
+      return next.user
+    },
+    [persist],
+  )
   const updateUser = useCallback(
     (changes) => {
       setSession((current) => {
@@ -73,10 +86,11 @@ export default function AuthProvider({ children }) {
       isAuthenticated: Boolean(session.token && session.user),
       login,
       adminLogin,
+      controlLogin,
       updateUser,
       logout,
     }),
-    [session, login, adminLogin, updateUser, logout],
+    [session, login, adminLogin, controlLogin, updateUser, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

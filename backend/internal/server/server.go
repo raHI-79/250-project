@@ -60,6 +60,9 @@ type Dependencies struct {
 	Marks     handler.AttendanceStore
 	Presence  handler.StudentAttendanceStore
 	Phones    handler.PhoneStore
+	Office    handler.OfficeStore
+	Invites   handler.OfficeInvites
+	Events    handler.EventSink
 }
 
 type RouteGroup struct {
@@ -90,7 +93,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	if google == nil && deps.Config.GoogleEnabled() {
 		google = googleauth.New()
 	}
-	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail, proofs, google, photos)
+	events := handler.NewRecorder(deps.Config, deps.Events)
+	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail, proofs, google, photos).
+		WithOffice(deps.Invites, events)
 	rateLimit := deps.RateLimit
 	if rateLimit <= 0 {
 		rateLimit = middleware.DefaultRateLimit
@@ -131,6 +136,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	guarded.Handle("POST /api/auth/activate", authHandler.Activate())
 	guarded.Handle("POST /api/auth/login", authHandler.Login())
 	guarded.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
+	guarded.Handle("POST /api/auth/control-room/login", authHandler.ControlLogin())
+	mux.HandleFunc("GET /api/auth/admin-invite", authHandler.AdminInvite())
+	guarded.Handle("POST /api/auth/admin-invite/accept", authHandler.AcceptAdminInvite())
 	guarded.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
 	guarded.Handle("POST /api/auth/verify-reset-code", authHandler.VerifyResetCode())
 	guarded.Handle("POST /api/auth/reset-password", authHandler.ResetPassword())
@@ -144,6 +152,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	periods := handler.NewPeriods(deps.Periods)
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerPeriodRoutes(AdminGroup(mux, deps), periods)
+	registerSuperAdminRoutes(SuperAdminGroup(mux, deps),
+		handler.NewSuperAdmin(deps.Config, deps.Office, mail, events))
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	authenticated.Handle("GET /api/lookups/periods", periods.List())
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
@@ -200,9 +210,33 @@ func AdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
 			middleware.VerifyToken(deps.Tokens, deps.Users),
-			middleware.RequireRole(auth.RoleAdmin),
+			middleware.RequireRole(auth.RoleAdmin, auth.RoleSuperAdmin),
+			middleware.ReadOnly(auth.RoleSuperAdmin),
 		},
 	}
+}
+
+func SuperAdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			middleware.RequireRole(auth.RoleSuperAdmin),
+		},
+	}
+}
+
+func registerSuperAdminRoutes(group RouteGroup, chief *handler.SuperAdmin) {
+	group.Handle("GET /api/super-admin/admins", chief.Admins())
+	group.Handle("POST /api/super-admin/admins/invite", chief.Invite())
+	group.Handle("POST /api/super-admin/admins/{id}/resend-invite", chief.ResendInvite())
+	group.Handle("DELETE /api/super-admin/admins/{id}/invite", chief.CancelInvite())
+	group.Handle("POST /api/super-admin/admins/{id}/suspend", chief.Suspend())
+	group.Handle("POST /api/super-admin/admins/{id}/restore", chief.Restore())
+	group.Handle("DELETE /api/super-admin/admins/{id}", chief.Remove())
+	group.Handle("GET /api/super-admin/teachers", chief.Teachers())
+	group.Handle("POST /api/super-admin/teachers/{id}/office-access", chief.SetOfficeAccess(true))
+	group.Handle("DELETE /api/super-admin/teachers/{id}/office-access", chief.SetOfficeAccess(false))
 }
 
 func NotificationGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {

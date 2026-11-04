@@ -46,6 +46,9 @@ const (
 	ResetEmailSubject          = "Password reset code"
 	PortalStudent              = "student"
 	PortalTeacher              = "teacher"
+	loginPublic                = "public"
+	loginOffice                = "office"
+	loginControl               = "control"
 	resetTokenBytes            = 32
 	resetCodeDigits            = 6
 	resetCodeLifetime          = 10 * time.Minute
@@ -80,6 +83,12 @@ type AuthStore interface {
 	ListSections(ctx context.Context, batch string) ([]string, error)
 }
 
+type OfficeInvites interface {
+	FindAdminInvite(ctx context.Context, inviteHash string) (store.AdminInvite, error)
+	ActivateAdmin(ctx context.Context, userID int64, chosenID, passwordHash string) error
+	TouchSignIn(ctx context.Context, userID int64) error
+}
+
 type TokenIssuer interface {
 	IssueToken(userID int64, effectiveRole string, tokenVersion int) (string, error)
 }
@@ -103,6 +112,14 @@ type Auth struct {
 	proofs ProofIssuer
 	google googleauth.Validator
 	photos PhotoStore
+	office OfficeInvites
+	events *Recorder
+}
+
+func (a *Auth) WithOffice(office OfficeInvites, events *Recorder) *Auth {
+	a.office = office
+	a.events = events
+	return a
 }
 
 func NewAuth(cfg *config.Config, users AuthStore, tokens TokenIssuer, mail mailer.Sender,
@@ -171,16 +188,21 @@ type resetPasswordRequest struct {
 }
 
 func (a *Auth) Login() http.HandlerFunc {
-	return a.login(false)
+	return a.login(loginPublic)
 }
 
 func (a *Auth) AdminLogin() http.HandlerFunc {
-	return a.login(true)
+	return a.login(loginOffice)
 }
 
-func (a *Auth) login(adminOnly bool) http.HandlerFunc {
+func (a *Auth) ControlLogin() http.HandlerFunc {
+	return a.login(loginControl)
+}
+
+func (a *Auth) login(mode string) http.HandlerFunc {
+	officeOnly := mode != loginPublic
 	return func(w http.ResponseWriter, r *http.Request) {
-		if adminOnly && middleware.FromAndroidApp(r) {
+		if officeOnly && middleware.FromAndroidApp(r) {
 			httpx.WriteError(w, http.StatusForbidden, middleware.MessageAppForbidden)
 			return
 		}
@@ -204,6 +226,7 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 		}
 		user, err := a.users.FindLoginUser(r.Context(), identifier)
 		if errors.Is(err, store.ErrNotFound) {
+			a.failedSignIn(r, 0, "", identifier)
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return
 		}
@@ -212,8 +235,8 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		isAdmin := user.Role == auth.RoleAdmin || user.Role == auth.RoleSuperAdmin
-		if isAdmin != adminOnly {
+		if !allowedEntrance(mode, user) {
+			a.failedSignIn(r, user.ID, user.Role, identifier)
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return
 		}
@@ -221,15 +244,16 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusUnauthorized, message)
 			return
 		}
-		if !adminOnly && user.Status == store.StatusInvited {
+		if !officeOnly && user.Status == store.StatusInvited {
 			httpx.WriteError(w, http.StatusForbidden, MessageInvitedAccount)
 			return
 		}
 		if auth.CheckPassword(user.PasswordHash, request.Password) != nil {
+			a.failedSignIn(r, user.ID, user.Role, identifier)
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return
 		}
-		if adminOnly {
+		if officeOnly {
 			if !user.IsActive() {
 				httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 				return
@@ -239,6 +263,9 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			return
 		}
 		role := auth.EffectiveRole(user.Role, user.IsCR)
+		if mode == loginOffice {
+			role = auth.RoleAdmin
+		}
 		token, err := a.tokens.IssueToken(user.ID, role, user.TokenVersion)
 		if err != nil {
 			log.Printf("handler: could not issue a token: %v", err)
@@ -260,8 +287,38 @@ func (a *Auth) login(adminOnly bool) http.HandlerFunc {
 			body.User.Batch = user.Batch
 			body.User.Section = user.Section
 		}
+		a.signedIn(r, user.ID, role, user.Identifier)
 		httpx.WriteJSON(w, http.StatusOK, body)
 	}
+}
+
+func allowedEntrance(mode string, user store.LoginUser) bool {
+	switch mode {
+	case loginControl:
+		return user.Role == auth.RoleSuperAdmin
+	case loginOffice:
+		if user.Role == auth.RoleAdmin {
+			return true
+		}
+		return user.Role == auth.RoleTeacher && user.OfficeAccess
+	default:
+		return !auth.IsOfficeRole(user.Role)
+	}
+}
+
+func (a *Auth) signedIn(r *http.Request, userID int64, role, label string) {
+	if a.office != nil {
+		if err := a.office.TouchSignIn(r.Context(), userID); err != nil {
+			log.Printf("handler: could not record a sign-in: %v", err)
+		}
+	}
+	a.events.RecordAs(r, userID, role, label, store.ActionSignIn, "session", idText(userID),
+		label+" signed in")
+}
+
+func (a *Auth) failedSignIn(r *http.Request, userID int64, role, identifier string) {
+	a.events.RecordAs(r, userID, role, identifier, store.ActionSignInFailed, "session", idText(userID),
+		"Failed sign-in for "+identifier)
 }
 
 func portalMessage(portal, dbRole string) (string, bool) {
@@ -321,6 +378,8 @@ func (a *Auth) Logout() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		a.events.Record(r, store.ActionSignOut, "session", idText(current.ID),
+			current.Identifier+" signed out")
 		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageLoggedOut})
 	}
 }

@@ -20,6 +20,8 @@ const PUBLIC_ENDPOINTS = [
   '/api/auth/config',
   '/api/auth/login',
   '/api/auth/admin/login',
+  '/api/auth/control-room/login',
+  '/api/auth/admin-invite',
   '/api/auth/register',
   '/api/auth/verify-email',
   '/api/auth/resend-verification',
