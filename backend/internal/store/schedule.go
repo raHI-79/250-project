@@ -553,3 +553,73 @@ func (s *Store) TeacherOfCourse(ctx context.Context, batch, section string, cour
 	}
 	return teacherID, nil
 }
+
+type CourseTeacher struct {
+	ID   int64
+	Name string
+}
+
+const (
+	listCourseTeachersSQL = `SELECT DISTINCT r.teacher_id, COALESCE(t.name, 'Deleted user')
+FROM routines r
+JOIN teachers t ON t.id = r.teacher_id
+JOIN users u ON u.id = t.user_id
+JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+WHERE r.batch = $1 AND r.course_id = $2 AND r.teacher_id IS NOT NULL AND u.status = 'active'
+  AND (r.section = $3::text OR r.section = 'ALL' OR $3::text = 'ALL')
+ORDER BY 2`
+	listBatchItemsOnDateSQL = selectItem + `
+WHERE i.batch = $1 AND i.item_date = $2::date
+ORDER BY i.start_time NULLS LAST, i.section, i.id`
+	listFinalItemsOnDateSQL = selectItem + `
+WHERE i.batch = $1 AND i.item_date = $2::date
+  AND (i.in_final OR pi.item_id IS NOT NULL OR i.item_date < $3::date)
+ORDER BY i.start_time NULLS LAST, i.section, i.id`
+	listTeacherExamsOnDateSQL = selectItem + `
+WHERE i.teacher_id = $1 AND i.origin = 'teacher_exam' AND i.item_date = $2::date
+ORDER BY i.start_time NULLS LAST, i.id`
+	generatedHorizonSQL = `SELECT COALESCE(to_char(MAX(item_date), 'YYYY-MM-DD'), '')
+FROM schedule_items
+WHERE origin = 'fixed'`
+)
+
+func (s *Store) ListCourseTeachers(ctx context.Context, batch, section string,
+	courseID int64) ([]CourseTeacher, error) {
+	rows, err := s.pool.Query(ctx, listCourseTeachersSQL, batch, courseID, section)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the teachers of the course %d: %w", courseID, err)
+	}
+	defer rows.Close()
+	teachers := make([]CourseTeacher, 0)
+	for rows.Next() {
+		var teacher CourseTeacher
+		if err := rows.Scan(&teacher.ID, &teacher.Name); err != nil {
+			return nil, fmt.Errorf("store: could not scan a course teacher: %w", err)
+		}
+		teachers = append(teachers, teacher)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the course teachers: %w", err)
+	}
+	return teachers, nil
+}
+
+func (s *Store) ListBatchItemsOnDate(ctx context.Context, batch, date string) ([]ScheduleItem, error) {
+	return s.items(ctx, listBatchItemsOnDateSQL, batch, date)
+}
+
+func (s *Store) ListFinalItemsOnDate(ctx context.Context, batch, date, today string) ([]ScheduleItem, error) {
+	return s.items(ctx, listFinalItemsOnDateSQL, batch, date, today)
+}
+
+func (s *Store) ListTeacherExamsOnDate(ctx context.Context, teacherID int64, date string) ([]ScheduleItem, error) {
+	return s.items(ctx, listTeacherExamsOnDateSQL, teacherID, date)
+}
+
+func (s *Store) GeneratedHorizon(ctx context.Context) (string, error) {
+	var horizon string
+	if err := s.pool.QueryRow(ctx, generatedHorizonSQL).Scan(&horizon); err != nil {
+		return "", fmt.Errorf("store: could not read the generated horizon: %w", err)
+	}
+	return horizon, nil
+}

@@ -31,6 +31,8 @@ type StudentStore interface {
 	ListPublishedDay(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error)
 	ListStudentExams(ctx context.Context, batch, section string, now time.Time,
 		dropCourseCodes []string) ([]store.StudentExam, error)
+	ListStudentExamsOnDate(ctx context.Context, batch, section, date string,
+		dropCourseCodes []string) ([]store.StudentExam, error)
 	ListFilteredRoutines(ctx context.Context, filter store.RoutineFilter) ([]store.RoutineRow, error)
 	RunningSemester(ctx context.Context, batch string) (string, error)
 	SearchOtherBatchDropCourses(ctx context.Context, batch, search string) ([]store.Course, error)

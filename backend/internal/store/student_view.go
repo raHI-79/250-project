@@ -97,6 +97,20 @@ WHERE p.kind = 'exam' AND i.origin = 'cr' AND p.status <> 'cancelled'
     OR (p.batch <> $1 AND replace(p.course_code, ' ', '') = ANY($4::text[])))
   AND p.item_date >= $3::date
 ORDER BY 2, 3`
+	listStudentExamsOnDateSQL = `SELECT i.id, to_char(i.item_date, 'YYYY-MM-DD'),
+COALESCE(to_char(pi.start_time, 'HH24:MI'), ''), COALESCE(to_char(pi.end_time, 'HH24:MI'), ''),
+c.code, c.title, i.batch, i.section,
+COALESCE(pi.mode, ''), COALESCE(pi.room, ''), COALESCE(pi.meeting_link, ''),
+i.syllabus, i.instructions, i.origin, i.status, (pi.item_id IS NOT NULL)
+FROM schedule_items i
+JOIN courses c ON c.id = i.course_id
+LEFT JOIN published_items pi ON pi.item_id = i.id
+WHERE i.kind = 'exam'
+  AND ((i.batch = $1 AND (i.section = $2::text OR i.section = 'ALL'))
+    OR (i.batch <> $1 AND replace(c.code, ' ', '') = ANY($4::text[])))
+  AND i.item_date = $3::date
+  AND (i.origin = 'teacher_exam' OR pi.item_id IS NOT NULL)
+ORDER BY pi.start_time NULLS LAST, i.id`
 	listFilteredRoutinesSQL = `SELECT r.id, r.batch, r.semester, r.section, r.course_id, c.code, c.title,
 COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
@@ -166,8 +180,13 @@ func (s *Store) ListPublishedDay(ctx context.Context, batch, date string, dropCo
 
 func (s *Store) ListStudentExams(ctx context.Context, batch, section string, now time.Time,
 	dropCourseCodes []string) ([]StudentExam, error) {
-	rows, err := s.pool.Query(ctx, listStudentExamsSQL, batch, section, now.Format(dateLayout),
+	return s.studentExams(ctx, listStudentExamsSQL, batch, section, now.Format(dateLayout),
 		dropCourseCodes)
+}
+
+func (s *Store) studentExams(ctx context.Context, query, batch, section, date string,
+	dropCourseCodes []string) ([]StudentExam, error) {
+	rows, err := s.pool.Query(ctx, query, batch, section, date, dropCourseCodes)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not list the exams of %s: %w", batch, err)
 	}
@@ -202,6 +221,11 @@ func (s *Store) ListStudentExams(ctx context.Context, batch, section string, now
 		return nil, fmt.Errorf("store: could not read the exams: %w", err)
 	}
 	return exams, nil
+}
+
+func (s *Store) ListStudentExamsOnDate(ctx context.Context, batch, section, date string,
+	dropCourseCodes []string) ([]StudentExam, error) {
+	return s.studentExams(ctx, listStudentExamsOnDateSQL, batch, section, date, dropCourseCodes)
 }
 
 func (s *Store) ListFilteredRoutines(ctx context.Context, filter RoutineFilter) ([]RoutineRow, error) {

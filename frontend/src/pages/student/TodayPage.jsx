@@ -70,7 +70,9 @@ export default function TodayPage() {
   const summary = useResource('/api/students/today')
   const routine = useResource('/api/students/upcoming-routine')
   const chats = useResource('/api/messages/conversations')
-  const crItems = useResource(role === 'cr' ? '/api/cr/upcoming' : null)
+  const crItems = useResource(role === 'cr' ? '/api/cr/upcoming' : null, {
+    date: todayDate(),
+  })
   const crFinal = useResource(role === 'cr' ? '/api/cr/final' : null)
   const data = summary.data
   const groups = routine.data?.groups || []

@@ -1,4 +1,4 @@
-import { Link2, Video } from 'lucide-react'
+import { Link2, Pencil, Video } from 'lucide-react'
 import ItemBadges from '../schedule/ItemBadges'
 import { Alert, Button, Card } from '../ui'
 import cx from '../../lib/cx'
@@ -11,7 +11,8 @@ import {
   STATUS_CANCELLED,
   STATUS_CR_ASK,
   allows,
-  isOnline,
+  canEditItem,
+  canEditLink,
   needsLink,
   placeOf,
   sectionShort,
@@ -24,9 +25,11 @@ export default function TeacherDecisionCard({
   item,
   busy,
   highlighted,
+  readOnly = false,
   onConfirm,
   onCancel,
   onAsk,
+  onEdit,
   onLink,
   onDecide,
 }) {
@@ -54,7 +57,7 @@ export default function TeacherDecisionCard({
         </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <ItemBadges item={item} statusText={teacherStatusLabel(item)} />
+        <ItemBadges item={item} statusText={item.final_status || teacherStatusLabel(item)} />
       </div>
       {item.status === STATUS_CR_ASK && item.proposed && (
         <Alert tone="info" title="The class representative proposed" className="mt-3">
@@ -65,6 +68,7 @@ export default function TeacherDecisionCard({
         </Alert>
       )}
       {item.cancel_reason && <p className="mt-2 text-xs text-muted">Reason: {item.cancel_reason}</p>}
+      {readOnly ? null : (
       <div className="mt-4 flex flex-wrap gap-2">
         {allows(item, ACTION_ACCEPT) && (
           <Button size="sm" loading={busy} onClick={() => onDecide(item, true)}>
@@ -91,13 +95,20 @@ export default function TeacherDecisionCard({
             Cancel
           </Button>
         )}
-        {isOnline(item) && !cancelled && (
+        {onEdit && canEditItem(item) && (
+          <Button size="sm" variant="secondary" onClick={() => onEdit(item)}>
+            <Pencil size={14} />
+            Edit
+          </Button>
+        )}
+        {canEditLink(item) && !cancelled && (
           <Button size="sm" variant="secondary" onClick={() => onLink(item)}>
             {needsLink(item) ? <Link2 size={14} /> : <Video size={14} />}
-            {needsLink(item) ? 'Add link' : 'Edit link'}
+            {needsLink(item) ? 'Add meeting link' : 'Change link'}
           </Button>
         )}
       </div>
+      )}
     </Card>
   )
 }

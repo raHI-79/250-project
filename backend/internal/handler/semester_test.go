@@ -287,3 +287,8 @@ func TestStudentCoursesTakesABatch(t *testing.T) {
 		t.Errorf("status = %d, want 400 for a bad batch", badRec.Code)
 	}
 }
+
+func (f *fakeCourseStore) ListStudentExamsOnDate(ctx context.Context, batch, section, date string,
+	dropCourseCodes []string) ([]store.StudentExam, error) {
+	return nil, nil
+}

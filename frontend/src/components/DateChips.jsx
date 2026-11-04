@@ -48,9 +48,20 @@ export default function DateChips({ value, onChange, label = 'Pick a day', min, 
         type="date"
         value={value}
         min={min}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          if (event.target.value) onChange(event.target.value)
+        }}
         className="mt-4 max-w-xs"
       />
+      {value !== start && (
+        <button
+          type="button"
+          onClick={() => onChange(start)}
+          className="mt-3 text-sm font-semibold text-brand-600 hover:underline"
+        >
+          Back to today
+        </button>
+      )}
     </div>
   )
 }

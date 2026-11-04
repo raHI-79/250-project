@@ -319,3 +319,26 @@ func TestStudentRoutesAllowStudentsAndCRs(t *testing.T) {
 		}
 	}
 }
+
+func (emptyStudentStore) ListStudentExamsOnDate(ctx context.Context, batch, section, date string,
+	dropCourseCodes []string) ([]store.StudentExam, error) {
+	return nil, nil
+}
+
+func (emptyTeacherStore) ListTeacherExamsOnDate(ctx context.Context, teacherID int64,
+	date string) ([]store.ScheduleItem, error) {
+	return nil, nil
+}
+
+func (emptyTeacherStore) UpdateTeacherItem(ctx context.Context, itemID, teacherID int64,
+	patch store.ItemPatch, now time.Time) (store.ScheduleItem, error) {
+	return store.ScheduleItem{}, store.ErrItemNotFound
+}
+
+func (emptyTeacherStore) GeneratedHorizon(ctx context.Context) (string, error) {
+	return "", nil
+}
+
+func (emptyTeacherStore) ListPeriods(ctx context.Context) ([]store.Period, error) {
+	return nil, nil
+}

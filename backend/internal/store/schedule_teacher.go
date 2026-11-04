@@ -374,3 +374,85 @@ func teacherExam(item ScheduleItem, teacherID int64) error {
 	}
 	return nil
 }
+
+const (
+	patchTeacherItemSQL = `UPDATE schedule_items
+SET item_date = COALESCE($2::date, item_date),
+    start_time = COALESCE($3::time, start_time),
+    end_time = COALESCE($4::time, end_time),
+    mode = COALESCE($5, mode),
+    room = COALESCE($6, room),
+    meeting_link = COALESCE($7, meeting_link),
+    updated_at = now()
+WHERE id = $1`
+	syncPublishedSlotSQL = `UPDATE published_items
+SET item_date = $2::date,
+    start_time = NULLIF($3::text, '')::time,
+    end_time = NULLIF($4::text, '')::time,
+    mode = $5,
+    room = $6,
+    meeting_link = $7,
+    published_at = now()
+WHERE item_id = $1`
+)
+
+func (s *Store) UpdateTeacherItem(ctx context.Context, itemID, teacherID int64, patch ItemPatch,
+	now time.Time) (ScheduleItem, error) {
+	return s.withItem(ctx, itemID, func(ctx context.Context, tx pgx.Tx, item ScheduleItem) error {
+		if err := ownedByTeacher(item, teacherID); err != nil {
+			return err
+		}
+		if item.Status == ItemCancelled {
+			return ErrItemState
+		}
+		if started(item, now) {
+			return ErrItemStarted
+		}
+		merged := item
+		if patch.ItemDate != nil {
+			merged.ItemDate = *patch.ItemDate
+		}
+		if patch.StartTime != nil {
+			merged.StartTime = *patch.StartTime
+		}
+		if patch.EndTime != nil {
+			merged.EndTime = *patch.EndTime
+		}
+		if patch.Mode != nil {
+			merged.Mode = *patch.Mode
+		}
+		if patch.Room != nil {
+			merged.Room = *patch.Room
+		}
+		if patch.MeetingLink != nil {
+			merged.MeetingLink = *patch.MeetingLink
+		}
+		err := checkSlot(ctx, tx, slotRequest{
+			ExcludeID: item.ID,
+			Batch:     merged.Batch,
+			Section:   merged.Section,
+			ItemDate:  merged.ItemDate,
+			StartTime: merged.StartTime,
+			EndTime:   merged.EndTime,
+			Mode:      merged.Mode,
+			Room:      merged.Room,
+		})
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, patchTeacherItemSQL, item.ID, patch.ItemDate, patch.StartTime,
+			patch.EndTime, patch.Mode, patch.Room, patch.MeetingLink)
+		if err != nil {
+			return fmt.Errorf("store: could not update the schedule item %d: %w", item.ID, err)
+		}
+		if !item.Published() {
+			return nil
+		}
+		_, err = tx.Exec(ctx, syncPublishedSlotSQL, item.ID, merged.ItemDate, merged.StartTime,
+			merged.EndTime, merged.Mode, merged.Room, merged.MeetingLink)
+		if err != nil {
+			return fmt.Errorf("store: could not update the published copy of the item %d: %w", item.ID, err)
+		}
+		return nil
+	})
+}

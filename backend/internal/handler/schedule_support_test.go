@@ -90,31 +90,36 @@ func plannedItem() store.ScheduleItem {
 }
 
 type fakeScheduleStore struct {
-	item        store.ScheduleItem
-	items       []store.ScheduleItem
-	routines    []store.RoutineRow
-	slots       []store.RoomSlot
-	courseSlots []store.CourseSlotRow
-	publication store.Publication
-	changed     []store.ScheduleItem
-	crs         []int64
-	teacherID   int64
-	err         error
-	confirmed   []string
-	cancelled   []string
-	patches     []store.ItemPatch
-	proposals   []store.Proposal
-	created     []store.NewScheduleItem
-	finals      map[int64]bool
-	publishIDs  []int64
-	deleted     []int64
-	periods     []store.Period
-	linkUser    int64
-	links       []string
-	dropUsers   []int64
-	dropCourses []int64
-	removals    []int64
-	withdrawn   map[int64]bool
+	item           store.ScheduleItem
+	items          []store.ScheduleItem
+	routines       []store.RoutineRow
+	slots          []store.RoomSlot
+	courseSlots    []store.CourseSlotRow
+	publication    store.Publication
+	changed        []store.ScheduleItem
+	crs            []int64
+	teacherID      int64
+	err            error
+	confirmed      []string
+	cancelled      []string
+	patches        []store.ItemPatch
+	proposals      []store.Proposal
+	created        []store.NewScheduleItem
+	finals         map[int64]bool
+	publishIDs     []int64
+	deleted        []int64
+	periods        []store.Period
+	linkUser       int64
+	links          []string
+	dropUsers      []int64
+	dropCourses    []int64
+	removals       []int64
+	withdrawn      map[int64]bool
+	courseTeachers []store.CourseTeacher
+	teacherListErr error
+	askedDates     []string
+	patch          store.ItemPatch
+	horizon        string
 }
 
 func newFakeScheduleStore() *fakeScheduleStore {
@@ -427,4 +432,40 @@ func scheduleCall(t *testing.T, handlerFunc http.HandlerFunc, method, target, id
 		request.SetPathValue("id", id)
 	}
 	return serve(handlerFunc, withCurrentUser(request, userID, role))
+}
+
+func (f *fakeScheduleStore) ListCourseTeachers(ctx context.Context, batch, section string,
+	courseID int64) ([]store.CourseTeacher, error) {
+	return f.courseTeachers, f.teacherListErr
+}
+
+func (f *fakeScheduleStore) ListBatchItemsOnDate(ctx context.Context, batch,
+	date string) ([]store.ScheduleItem, error) {
+	f.askedDates = append(f.askedDates, date)
+	return f.items, f.err
+}
+
+func (f *fakeScheduleStore) ListFinalItemsOnDate(ctx context.Context, batch, date,
+	today string) ([]store.ScheduleItem, error) {
+	f.askedDates = append(f.askedDates, date)
+	return f.items, f.err
+}
+
+func (f *fakeScheduleStore) ListTeacherExamsOnDate(ctx context.Context, teacherID int64,
+	date string) ([]store.ScheduleItem, error) {
+	f.askedDates = append(f.askedDates, date)
+	return f.items, f.err
+}
+
+func (f *fakeScheduleStore) UpdateTeacherItem(ctx context.Context, itemID, teacherID int64,
+	patch store.ItemPatch, now time.Time) (store.ScheduleItem, error) {
+	f.patch = patch
+	if f.err != nil {
+		return store.ScheduleItem{}, f.err
+	}
+	return f.item, nil
+}
+
+func (f *fakeScheduleStore) GeneratedHorizon(ctx context.Context) (string, error) {
+	return f.horizon, nil
 }

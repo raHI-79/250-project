@@ -153,6 +153,9 @@ func (s *Store) ListRoomAvailability(ctx context.Context, from, to string) ([]Ro
 func (s *Store) CreateCRItem(ctx context.Context, item NewScheduleItem) (ScheduleItem, error) {
 	item.Origin = OriginCR
 	item.Status = ItemScheduled
+	if item.Kind != KindExam && item.TeacherID > 0 {
+		item.Status = ItemAwaiting
+	}
 	return s.insertItem(ctx, item)
 }
 

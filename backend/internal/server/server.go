@@ -260,6 +260,7 @@ func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
 	group.Handle("GET /api/teacher/upcoming", teacher.Upcoming())
 	group.Handle("GET /api/teacher/upcoming/next-day", teacher.NextDay())
 	group.Handle("GET /api/teacher/upcoming/final", teacher.FinalRoutine())
+	group.Handle("PATCH /api/teacher/items/{id}", teacher.UpdateItem())
 	group.Handle("POST /api/teacher/items/{id}/confirm", teacher.Confirm())
 	group.Handle("POST /api/teacher/items/{id}/cancel", teacher.Cancel())
 	group.Handle("POST /api/teacher/items/{id}/request-reschedule", teacher.RequestReschedule())
@@ -316,6 +317,7 @@ func registerStudentRoutes(group RouteGroup, student *handler.Student) {
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {
 	group.Handle("GET /api/cr/routine", cr.Routine())
 	group.Handle("GET /api/cr/courses", cr.Courses())
+	group.Handle("GET /api/cr/course-teachers", cr.CourseTeachers())
 	group.Handle("GET /api/cr/room-availability", cr.RoomAvailability())
 	group.Handle("GET /api/cr/upcoming", cr.Upcoming())
 	group.Handle("POST /api/cr/items", cr.CreateItem())
