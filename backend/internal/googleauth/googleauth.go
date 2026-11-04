@@ -3,6 +3,7 @@ package googleauth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"google.golang.org/api/idtoken"
 	"strings"
 )
@@ -10,6 +11,8 @@ import (
 var (
 	ErrNotConfigured = errors.New("googleauth: GOOGLE_CLIENT_ID is not set, so no credential can be checked")
 	ErrInvalidToken  = errors.New("googleauth: the Google credential is not valid")
+	ErrWrongAudience = errors.New("googleauth: the Google credential was issued for another client id")
+	ErrExpiredToken  = errors.New("googleauth: the Google credential has expired")
 )
 
 type Identity struct {
@@ -34,13 +37,25 @@ func (IDTokens) Validate(ctx context.Context, credential, audience string) (Iden
 	}
 	payload, err := idtoken.Validate(ctx, credential, audience)
 	if err != nil {
-		return Identity{}, ErrInvalidToken
+		return Identity{}, classify(err)
 	}
 	return Identity{
 		Email:         strings.ToLower(claimText(payload.Claims, "email")),
 		EmailVerified: claimBool(payload.Claims, "email_verified"),
 		HostedDomain:  strings.ToLower(claimText(payload.Claims, "hd")),
 	}, nil
+}
+
+func classify(err error) error {
+	reason := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(reason, "audience"):
+		return fmt.Errorf("%w: %v", ErrWrongAudience, err)
+	case strings.Contains(reason, "expired"):
+		return fmt.Errorf("%w: %v", ErrExpiredToken, err)
+	default:
+		return fmt.Errorf("%w: %v", ErrInvalidToken, err)
+	}
 }
 
 func claimText(claims map[string]any, name string) string {

@@ -55,7 +55,7 @@ function MarkRow({ mark, open, onOpen, onSave, busy }) {
       </button>
       {open && (
         <div className="flex flex-col gap-3 px-1 pb-4">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant={status === 'present' ? 'primary' : 'secondary'}
               size="sm"

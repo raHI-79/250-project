@@ -427,10 +427,12 @@
   html {
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
+    overflow-x: clip;
   }
   body {
     margin: 0;
     overflow-x: clip;
+    overflow-wrap: break-word;
     background-color: var(--color-page);
     color: var(--color-ink);
     font-family: var(--font-sans);
@@ -443,6 +445,21 @@
   h2,
   h3 {
     text-wrap: balance;
+  }
+  img,
+  svg,
+  video,
+  canvas,
+  iframe {
+    max-width: 100%;
+  }
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+  }
+  pre {
+    overflow-x: auto;
   }
   :focus-visible {
     outline: 2px solid var(--color-brand-600);
@@ -584,6 +601,14 @@
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  button:not([data-compact]),
+  [role="button"]:not([data-compact]),
+  select {
+    min-height: 2.75rem;
   }
 }
 

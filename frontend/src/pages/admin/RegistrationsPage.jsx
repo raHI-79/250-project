@@ -41,7 +41,7 @@ function RejectSheet({ item, reasons, min, busy, onClose, onReject }) {
       title="Reject this registration?"
       description={item ? `${item.full_name} (${item.reg_no}) will not be able to sign in.` : ''}
       footer={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" className="flex-1" onClick={onClose}>
             Keep it pending
           </Button>

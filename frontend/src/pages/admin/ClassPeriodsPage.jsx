@@ -176,7 +176,7 @@ export default function ClassPeriodsPage() {
                         value={draft.end_time}
                         onChange={setDraftField('end_time')}
                       />
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button size="sm" loading={busy === item.id} onClick={() => saveEdit(item)}>
                           Save
                         </Button>
