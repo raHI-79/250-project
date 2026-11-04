@@ -1,6 +1,6 @@
 import cx from '../../lib/cx'
 
-export default function CardHeader({ title, meta, className, children }) {
+export default function CardHeader({ title, subtitle, meta, className, children }) {
   return (
     <div
       className={cx(
@@ -8,7 +8,10 @@ export default function CardHeader({ title, meta, className, children }) {
         className,
       )}
     >
-      <h2 className="font-display text-section font-bold text-ink">{title}</h2>
+      <div className="min-w-0">
+        <h2 className="font-display wrap-long text-section font-bold text-ink">{title}</h2>
+        {subtitle && <p className="mt-0.5 wrap-long text-xs text-muted">{subtitle}</p>}
+      </div>
       {meta}
       {children}
     </div>

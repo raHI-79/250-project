@@ -12,10 +12,10 @@ export default function Card({
   return (
     <div
       className={cx(
-        'glass-card rounded-card',
+        'surface-card',
         !flush && 'p-4 sm:p-5',
         rule && 'border-t-[3px] border-t-brand-600',
-        raised && 'shadow-[var(--shadow-glass-lift)]',
+        raised && 'shadow-[var(--shadow-lift)]',
         hover && 'card-hover',
         className,
       )}

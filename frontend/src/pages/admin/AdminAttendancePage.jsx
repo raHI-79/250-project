@@ -128,8 +128,8 @@ export default function AdminAttendancePage() {
             <Download size={16} /> Excel
           </Button>
         }
+        tabs={<StatusTabs tabs={TABS} value={tab} onChange={setTab} tone="header" />}
       />
-      <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
       {tab !== OFFICE_TAB_PHONES && (
         <Card hover={false} className="mb-5">
           <Field label="Batch" htmlFor="attendance-batch" className="max-w-xs">
@@ -170,10 +170,10 @@ export default function AdminAttendancePage() {
                 {rows.map((session) => (
                   <li key={session.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-ink">
+                      <span className="block wrap-long text-sm font-semibold text-ink">
                         {session.course_code} · {session.course_title}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-muted">
+                      <span className="mt-0.5 block wrap-long text-xs text-muted">
                         {session.batch} · {sectionLabel(session.section)} ·{' '}
                         {formatDate(session.started_at)} · {formatClock(session.started_at)} ·{' '}
                         {session.method === 'roll_call' ? 'Roll call' : 'Bluetooth'}

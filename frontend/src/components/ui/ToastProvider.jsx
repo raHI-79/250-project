@@ -8,9 +8,9 @@ const MAX_TOASTS = 3
 const DISMISS_AFTER = 4000
 
 const tones = {
-  success: { icon: CheckCircle2, className: 'text-success-700' },
-  error: { icon: XCircle, className: 'text-danger-700' },
-  info: { icon: Info, className: 'text-brand-700' },
+  success: { icon: CheckCircle2, className: 'text-success-600' },
+  error: { icon: XCircle, className: 'text-danger-600' },
+  info: { icon: Info, className: 'text-brand-600' },
 }
 
 export default function ToastProvider({ children }) {
@@ -58,7 +58,7 @@ export default function ToastProvider({ children }) {
               key={toast.id}
               role="status"
               className={cx(
-                'glass-sheet animate-fade-in-up pointer-events-auto flex items-start gap-3 rounded-card px-4 py-3 text-sm',
+                'animate-fade-in-up pointer-events-auto flex items-start gap-3 rounded-card border border-line bg-surface px-4 py-3 text-sm shadow-[var(--shadow-lift)]',
                 config.className,
               )}
             >

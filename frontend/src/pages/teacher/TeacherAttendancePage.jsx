@@ -201,10 +201,10 @@ function HistoryList({ sessions, loading, onOpen }) {
               className="press flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-wash"
             >
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-ink">
+                <span className="block wrap-long text-sm font-semibold text-ink">
                   {session.course_code} · {session.course_title}
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-muted">
+                <span className="mt-0.5 block wrap-long text-xs text-muted">
                   {session.batch} · {sectionLabel(session.section)} ·{' '}
                   {formatDate(session.started_at)} · {formatClock(session.started_at)}
                 </span>
@@ -237,10 +237,10 @@ function ClassList({ classes, loading, onExport, onDelete, busy }) {
         {classes.map((entry) => (
           <li key={classKey(entry)} className="flex items-center gap-3 px-4 py-3">
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold text-ink">
+              <span className="block wrap-long text-sm font-semibold text-ink">
                 {entry.course_code} · {entry.course_title}
               </span>
-              <span className="mt-0.5 block truncate text-xs text-muted">
+              <span className="mt-0.5 block wrap-long text-xs text-muted">
                 {entry.batch} · {sectionLabel(entry.section)} · {entry.sessions} session
                 {entry.sessions === 1 ? '' : 's'} · {entry.below_fifty} below 50 %
               </span>
@@ -505,8 +505,8 @@ export default function TeacherAttendancePage() {
             <Download size={16} /> Download all my classes
           </Button>
         }
+        tabs={<StatusTabs tabs={TABS} value={tab} onChange={setTab} tone="header" />}
       />
-      <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
       {options.error && (
         <Alert tone="error" className="mb-5">
           {options.error}

@@ -22,7 +22,7 @@ export default function ContactSearch({
   })
   const people = contacts.data?.items || []
   return (
-    <div className="sticky top-0 z-20 shrink-0 border-b border-line bg-surface/95 p-3 backdrop-blur-sm">
+    <div className="sticky top-0 z-20 shrink-0 border-b border-line bg-surface p-3">
       <Input
         type="search"
         value={search}
@@ -87,11 +87,11 @@ export default function ContactSearch({
                   >
                     <Avatar src={contact.photo_url} name={contact.name} size="sm" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-ink">
+                      <span className="block wrap-long text-sm font-medium text-ink">
                         {contact.name}
                       </span>
                       {contactDetail(contact) && (
-                        <span className="block truncate text-xs text-muted">
+                        <span className="block wrap-long text-xs text-muted">
                           {contactDetail(contact)}
                         </span>
                       )}

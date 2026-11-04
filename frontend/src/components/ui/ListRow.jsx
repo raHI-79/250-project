@@ -53,13 +53,13 @@ export default function ListRow({
       <span className="min-w-0 flex-1">
         <span
           className={cx(
-            'block truncate text-sm font-semibold',
+            'block wrap-long text-sm font-semibold',
             danger ? 'text-danger-600' : 'text-ink',
           )}
         >
           {title}
         </span>
-        {subtitle && <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>}
+        {subtitle && <span className="mt-0.5 block wrap-long text-xs text-muted">{subtitle}</span>}
       </span>
       {value && <span className="shrink-0 text-xs font-medium text-muted">{value}</span>}
       {trailing}

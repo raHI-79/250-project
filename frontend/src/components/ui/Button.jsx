@@ -4,11 +4,11 @@ import cx from '../../lib/cx'
 
 const variants = {
   primary:
-    'bg-linear-to-b from-brand-500 to-brand-700 text-page shadow-[var(--shadow-glass)] hover:from-brand-600 hover:to-brand-800 disabled:from-brand-300 disabled:to-brand-300 disabled:shadow-none',
+    'bg-brand-600 text-page shadow-[var(--shadow-card)] hover:bg-brand-800 disabled:bg-brand-200 disabled:text-brand-700 disabled:shadow-none',
   secondary:
-    'glass-chip text-ink hover:bg-brand-50 hover:text-brand-700 disabled:text-faint',
+    'border border-line-strong bg-surface text-ink hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:text-faint',
   danger:
-    'bg-linear-to-b from-danger-500 to-danger-700 text-page shadow-[var(--shadow-glass)] hover:from-danger-600 hover:to-danger-700 disabled:from-danger-300 disabled:to-danger-300',
+    'bg-danger-600 text-page shadow-[var(--shadow-card)] hover:bg-danger-700 disabled:bg-danger-200 disabled:text-danger-700 disabled:shadow-none',
   ghost: 'bg-transparent text-brand-600 hover:bg-brand-50 disabled:text-faint',
   ink: 'bg-ink text-page hover:bg-ink-soft disabled:bg-faint',
   light: 'bg-surface text-brand-600 hover:bg-brand-50 disabled:text-faint',
@@ -16,7 +16,7 @@ const variants = {
 }
 
 const sizes = {
-  sm: 'h-10 px-3.5 text-sm',
+  sm: 'h-11 px-3.5 text-sm',
   md: 'h-12 px-5 text-sm',
   lg: 'h-13 px-6 text-base',
 }
@@ -60,7 +60,7 @@ export default function Button({
       aria-busy={loading || undefined}
       onPointerDown={start}
       className={cx(
-        'press relative inline-flex items-center justify-center overflow-hidden rounded-xl font-semibold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:active:scale-100',
+        'press relative inline-flex items-center justify-center overflow-hidden rounded-input font-bold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:active:scale-100',
         variants[variant] || variants.primary,
         sizes[size] || sizes.md,
         className,

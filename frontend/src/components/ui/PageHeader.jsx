@@ -2,7 +2,15 @@ import { useEffect, useRef } from 'react'
 import cx from '../../lib/cx'
 import { useChrome } from '../../context/chrome'
 
-export default function PageHeader({ eyebrow, title, subtitle, actions, className }) {
+export default function PageHeader({
+  eyebrow,
+  title,
+  subtitle,
+  actions,
+  tabs,
+  date,
+  className,
+}) {
   const chrome = useChrome()
   const anchor = useRef(null)
   const setTitle = chrome?.setTitle
@@ -16,10 +24,9 @@ export default function PageHeader({ eyebrow, title, subtitle, actions, classNam
     if (!setCollapsed) return undefined
     const node = anchor.current
     if (!node || typeof IntersectionObserver === 'undefined') return undefined
-    const observer = new IntersectionObserver(
-      ([entry]) => setCollapsed(!entry.isIntersecting),
-      { threshold: 0 },
-    )
+    const observer = new IntersectionObserver(([entry]) => setCollapsed(!entry.isIntersecting), {
+      threshold: 0,
+    })
     observer.observe(node)
     return () => {
       observer.disconnect()
@@ -27,20 +34,30 @@ export default function PageHeader({ eyebrow, title, subtitle, actions, classNam
     }
   }, [setCollapsed])
   return (
-    <div
-      className={cx('mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}
-    >
-      <div className="min-w-0">
-        {eyebrow && <p className="label-caps">{eyebrow}</p>}
-        <h1
-          ref={anchor}
-          className="font-display mt-1 text-title leading-tight font-bold text-ink sm:text-title-lg"
-        >
-          {title}
-        </h1>
-        {subtitle && <p className="mt-2 max-w-3xl text-sm text-muted">{subtitle}</p>}
+    <div className={cx('mb-5', className)}>
+      <div className="-mx-4 -mt-5 rounded-b-sheet bg-header px-4 pt-5 pb-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0 flex-1">
+            {eyebrow && (
+              <p className="text-2xs font-extrabold tracking-[0.12em] text-white/75 uppercase">
+                {eyebrow}
+              </p>
+            )}
+            <h1
+              ref={anchor}
+              className="font-display mt-1 wrap-long text-title leading-tight text-white sm:text-title-lg"
+            >
+              {title}
+            </h1>
+            {subtitle && (
+              <p className="mt-2 max-w-3xl wrap-long text-sm text-white/80">{subtitle}</p>
+            )}
+          </div>
+          {date && <div className="shrink-0 pt-1">{date}</div>}
+        </div>
+        {tabs && <div className="mt-4">{tabs}</div>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="mt-4 flex flex-wrap gap-2 sm:justify-end">{actions}</div>}
     </div>
   )
 }

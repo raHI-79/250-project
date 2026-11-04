@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
+import DateButton from '../../components/DateButton'
 import DateChips from '../../components/DateChips'
 import PublishedLine from '../../components/schedule/PublishedLine'
 import { Link } from 'react-router-dom'
-import { Alert, Button, Card, EmptyState, PageHeader, SkeletonCard } from '../../components/ui'
+import { Alert, Button, EmptyState, PageHeader, SkeletonCard } from '../../components/ui'
 import { useResource } from '../../lib/hooks'
 import paths from '../../lib/paths'
 import { today } from '../../lib/time'
@@ -34,8 +35,10 @@ export default function UpcomingRoutinePage() {
   return (
     <>
       <PageHeader
-        eyebrow="Published routine" title="Upcoming routine"
+        eyebrow="Published routine"
+        title="Upcoming routine"
         subtitle="The routine your class representative published, one day at a time"
+        date={<DateButton value={picked} onChange={choose} label="Pick a day" />}
       />
       <DateChips value={picked} onChange={choose} label="Another day" />
       {error && (
@@ -63,9 +66,9 @@ export default function UpcomingRoutinePage() {
             />
           ) : (
             groups.map((group) => (
-              <Card key={group.key} hover={false} className="animate-fade-in-up">
-                <p className="text-sm font-semibold text-ink-soft">{group.section_label}:</p>
-                <ul className="mt-2 flex flex-col">
+              <section key={group.key} className="animate-fade-in-up">
+                <p className="label-caps mb-3">{group.section_label}</p>
+                <ul className="flex flex-col">
                   {group.items.map((item, index) => (
                     <PublishedLine
                       key={`${item.start_time}-${item.course_code}-${index}`}
@@ -74,7 +77,7 @@ export default function UpcomingRoutinePage() {
                     />
                   ))}
                 </ul>
-              </Card>
+              </section>
             ))
           )}
         </div>

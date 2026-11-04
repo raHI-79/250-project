@@ -4,6 +4,55 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.4.0
+
+- **Nothing is cut off any more.** The desktop sidebar is its own fixed 18 rem
+  column with wrapping labels, so a page that overflows sideways can no longer
+  shift it off-screen or clip its labels, and it stays in place on the teacher
+  *Upcoming* and *Final routine* pages. Every dialog and sheet is capped at
+  90 dvh, keeps its title bar and its action buttons visible and scrolls its
+  body inside, centred on desktop and a bottom sheet on a phone. The sticky top
+  bar is opaque, no backdrop blur is left in the build, and the *N students
+  still unmarked* notice sits in the page above the *Finish* button.
+- **Phones scroll again, everywhere.** The page scroller is the viewport: the
+  x-axis clip moved off `html` onto `body` and the shell is a min-height column
+  with one scrolling main area instead of a fixed-height box. Dialogs take the
+  page scroll lock from a shared counter (`src/lib/scrollLock.js`, with unit
+  tests), so a confirm opened over a sheet can no longer leave the page locked
+  when the two close in the same render. Pull to refresh is fully passive,
+  reads that shared lock and ignores a sideways or upward gesture, and
+  `touch-action: none` is left only on the sheet drag handle.
+- **The roll call can be read aloud.** Each row carries a large roll number
+  (the last three digits of the registration number), the full name over two
+  lines when it needs them and the full registration number, sorted by
+  registration number, with 44 px *P* and *A* buttons that drop under the name
+  below 380 px. The note textarea and *Save note* button are gone: a note icon
+  opens a one-line input, and a saved note shows as one muted line you tap to
+  edit. The attendance session detail uses the same row. Names, registration
+  numbers, course titles and room numbers wrap instead of ending in an
+  ellipsis.
+- **Ocean Blue.** One token layer carries primary #0A6FAF with #075A8F pressed
+  and the #E6F1FC tint under #16599E text, page #F4F7FA, white cards at 16 px
+  with the 0 2px 8px and 0 6px 20px shadows, #E8EDF2 borders, inputs on
+  #F8FAFC inside #DCE3EA at 14 px, text #1B2533 / #5B6675 / #6B7684, and the
+  success, warning, danger and purple tints; dark mode keeps the structure on
+  page #0E1620, card #16212D and primary #3A9AD9. Nunito at 400, 600, 700 and
+  800 replaces Inter and Source Serif 4. Buttons, inputs, chips, segmented
+  controls, tags, sheets, dialogs, toasts, empty states, the tab bar and the
+  sidebar all read from the shared tokens.
+- **New screens on the same data.** Each main page opens with a solid primary
+  header: white title, its tabs as a white pill on translucent white and a
+  white round date button where the page reads a date. Home is a blue header
+  with the avatar, name and registration number, a white stats card overlapping
+  it (classes today, attendance, semester), a 4x2 grid of white tiles with
+  coloured line icons on soft tints, the latest notices as cards with a tinted
+  tag and a bookmark, and today's classes as horizontal pastel cards. The
+  routine is a timeline with the time on top, the dot and line on the left and
+  the card on the right, statuses are tinted tags, and the bottom tab bar
+  carries a 3 px primary indicator above the active tab with its labels kept.
+  The Android status bar matches the header. No feature, permission, API call
+  or page structure changed.
+
 ## 2.3.0
 
 - **Continue with Google works in the app again.** `MainActivity` now forwards

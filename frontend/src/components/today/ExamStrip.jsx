@@ -17,9 +17,9 @@ export default function ExamStrip({ exams, to }) {
           <div className="min-w-0 flex-1">
             <p className="line-clamp-2 text-sm font-semibold text-ink">{courseLine(exam)}</p>
             {courseCode(exam) && (
-              <p className="mt-0.5 truncate text-2xs font-medium text-muted">{courseCode(exam)}</p>
+              <p className="mt-0.5 wrap-long text-2xs font-medium text-muted">{courseCode(exam)}</p>
             )}
-            <p className="mt-1.5 truncate text-2xs text-faint tabular-nums">
+            <p className="mt-1.5 wrap-long text-2xs text-faint tabular-nums">
               {[formatTimeRange(exam.start_time, exam.end_time), placeOf(exam)]
                 .filter(Boolean)
                 .join(' · ')}

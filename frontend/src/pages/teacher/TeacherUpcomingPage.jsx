@@ -175,10 +175,30 @@ export default function TeacherUpcomingPage() {
       accept ? 'The new slot is in place' : 'The original slot stays',
     )
   const actions = [
-    { label: 'Create exam', icon: ClipboardList, to: paths.teacher.createExam() },
-    { label: 'Post notice', icon: Megaphone, to: paths.teacher.notices() },
-    { label: 'Messages', icon: MessageCircle, to: paths.teacher.messages() },
-    { label: 'Weekly routine', icon: CalendarDays, to: paths.teacher.fixedRoutine() },
+    {
+      label: 'Create exam',
+      icon: ClipboardList,
+      to: paths.teacher.createExam(),
+      tone: 'bg-tint-orange text-tint-orange-ink',
+    },
+    {
+      label: 'Post notice',
+      icon: Megaphone,
+      to: paths.teacher.notices(),
+      tone: 'bg-tint-red text-tint-red-ink',
+    },
+    {
+      label: 'Messages',
+      icon: MessageCircle,
+      to: paths.teacher.messages(),
+      tone: 'bg-tint-purple text-tint-purple-ink',
+    },
+    {
+      label: 'Weekly routine',
+      icon: CalendarDays,
+      to: paths.teacher.fixedRoutine(),
+      tone: 'bg-tint-blue text-tint-blue-ink',
+    },
   ]
   const cardProps = {
     onConfirm: setConfirming,
@@ -207,6 +227,8 @@ export default function TeacherUpcomingPage() {
     <PullToRefresh onRefresh={reload}>
       <TodayHero
         name={user?.name || user?.identifier}
+        regNo={user?.identifier}
+        photo={user?.photo_url}
         meta={user?.designation || 'Teacher'}
         now={now}
       />
@@ -231,10 +253,10 @@ export default function TeacherUpcomingPage() {
                   {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink">
+                  <span className="block wrap-long text-sm font-semibold text-ink">
                     {courseLine(item)}
                   </span>
-                  <span className="block truncate text-xs text-muted">
+                  <span className="block wrap-long text-xs text-muted">
                     {item.batch} {sectionShort(item.section)}
                     {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                   </span>

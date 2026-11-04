@@ -199,7 +199,7 @@ export default function MessagesPage() {
           {listError}
         </Alert>
       )}
-      <div className="flex h-[calc(100dvh-11rem)] min-h-[26rem] gap-4 lg:h-[72dvh]">
+      <div className="flex h-[68dvh] min-h-[24rem] gap-4 lg:h-[72dvh]">
         <div className={cx('w-full md:w-80 md:shrink-0', activeId && 'hidden md:block')}>
           <ConversationList
             items={items}
@@ -254,7 +254,7 @@ export default function MessagesPage() {
                   <Avatar src={active.photo_url} name={active.title} />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{active.title}</p>
+                  <p className="wrap-long text-sm font-semibold text-ink">{active.title}</p>
                   <p className="text-xs text-muted">{conversationDetail(active)}</p>
                 </div>
                 {active.kind === 'group' && (

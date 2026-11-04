@@ -57,7 +57,7 @@ export default function ConversationList({
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-ink">
+                      <span className="wrap-long text-sm font-semibold text-ink">
                         {item.title}
                       </span>
                       <span className="ml-auto shrink-0 text-xs whitespace-nowrap text-faint">

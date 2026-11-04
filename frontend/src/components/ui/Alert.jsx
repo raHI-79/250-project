@@ -4,22 +4,22 @@ import cx from '../../lib/cx'
 const tones = {
   success: {
     icon: CheckCircle2,
-    className: 'border-success-100 bg-success-50 text-success-700',
+    className: 'border-success-100 bg-success-50 text-success-600',
     iconClass: 'text-success-600',
   },
   error: {
     icon: XCircle,
-    className: 'border-danger-100 bg-danger-50 text-danger-700',
+    className: 'border-danger-100 bg-danger-50 text-danger-600',
     iconClass: 'text-danger-600',
   },
   info: {
     icon: Info,
-    className: 'border-brand-100 bg-brand-50 text-ink-soft',
+    className: 'border-brand-100 bg-brand-50 text-brand-700',
     iconClass: 'text-brand-600',
   },
   warning: {
     icon: AlertTriangle,
-    className: 'border-warning-100 bg-warning-50 text-warning-700',
+    className: 'border-warning-100 bg-warning-50 text-warning-600',
     iconClass: 'text-warning-600',
   },
 }

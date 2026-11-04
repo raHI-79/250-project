@@ -185,7 +185,7 @@ export default function OpenSession({
                 key={mark.student_id}
                 className="flex items-center justify-between gap-3 rounded-tile bg-wash px-3 py-2 text-sm"
               >
-                <span className="min-w-0 truncate font-medium text-ink">
+                <span className="min-w-0 wrap-long font-medium text-ink">
                   {mark.full_name}
                   <span className="ml-2 text-xs text-muted">{mark.reg_no}</span>
                 </span>

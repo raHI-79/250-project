@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ClipboardList, Video } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import DateBlock from '../../components/DateBlock'
+import DateButton from '../../components/DateButton'
 import DayPicker from '../../components/schedule/DayPicker'
 import {
   Alert,
@@ -37,6 +38,7 @@ export default function ExamsPage() {
         eyebrow="Examinations"
         title="Exams"
         subtitle="Every exam ahead with its syllabus; the time and the room arrive with the published routine"
+        date={<DateButton value={day} onChange={setDay} />}
       />
       <DayPicker
         value={day}

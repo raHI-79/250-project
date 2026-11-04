@@ -35,8 +35,8 @@ function CourseCard({ course, active, onPick }) {
           : 'border-line-strong bg-surface hover:bg-wash',
       )}
     >
-      <p className="truncate text-sm font-semibold text-ink">{course.course_code}</p>
-      <p className="mt-0.5 truncate text-xs text-muted">{course.course_title}</p>
+      <p className="wrap-long text-sm font-semibold text-ink">{course.course_code}</p>
+      <p className="mt-0.5 wrap-long text-xs text-muted">{course.course_title}</p>
       <p
         className={cx(
           'font-display mt-2 text-title font-bold',
@@ -167,10 +167,10 @@ export default function MyAttendance() {
                         {present ? <Check size={17} /> : <X size={17} />}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-ink">
+                        <span className="block wrap-long text-sm font-semibold text-ink">
                           {entry.course_code} · {formatDate(entry.date)}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-muted">
+                        <span className="mt-0.5 block wrap-long text-xs text-muted">
                           {entry.teacher_name} · {methodLabel(entry.method)}
                           {entry.marked_at ? ` · ${formatClock(entry.marked_at)}` : ''}
                         </span>

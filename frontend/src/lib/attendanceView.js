@@ -37,6 +37,17 @@ export const sheetTitle = (entry) =>
 export const deleteSheetQuestion = (entry) =>
   `Are you sure you want to delete the attendance sheet for ${sheetTitle(entry)}? This cannot be undone.`
 
+export const rollNumber = (regNo) => {
+  const digits = String(regNo || '').replace(/\D/g, '')
+  if (!digits) return ''
+  return digits.slice(-3).padStart(3, '0')
+}
+
+export const byRegNo = (one, two) =>
+  String(one.reg_no || '').localeCompare(String(two.reg_no || ''), 'en', { numeric: true })
+
+export const sortedRoster = (marks) => [...(marks || [])].sort(byRegNo)
+
 export const sectionLabel = (section) => (section === 'ALL' ? 'A and B' : `Section ${section}`)
 
 export const classLabel = (entry) =>
