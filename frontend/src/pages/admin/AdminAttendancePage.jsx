@@ -128,8 +128,8 @@ export default function AdminAttendancePage() {
             <Download size={16} /> Excel
           </Button>
         }
+        tabs={<StatusTabs tabs={TABS} value={tab} onChange={setTab} tone="header" />}
       />
-      <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
       {tab !== OFFICE_TAB_PHONES && (
         <Card hover={false} className="mb-5">
           <Field label="Batch" htmlFor="attendance-batch" className="max-w-xs">

@@ -48,8 +48,8 @@ export default function NoticesPage() {
         eyebrow="Notice board"
         title="Notices"
         subtitle="Everything the department, your teachers and the class representatives posted"
+        tabs={<StatusTabs tabs={TABS} value={source} onChange={setSource} tone="header" />}
       />
-      <StatusTabs tabs={TABS} value={source} onChange={setSource} className="mb-5" />
       {source === 'cr' && (
         <StatusTabs tabs={SCOPES} value={scope} onChange={setScope} className="mb-5" />
       )}

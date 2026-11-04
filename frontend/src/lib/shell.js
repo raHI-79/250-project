@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isNative } from './native'
-import { CHROME_COLORS, THEME_DARK } from './theme'
+import { CHROME_COLORS } from './theme'
 
 const HOME_PATHS = ['/', '/student/today', '/teacher/upcoming-routine', '/student/login']
 
@@ -11,9 +11,7 @@ export const applyNativeChrome = async (resolved) => {
   const bar = CHROME_COLORS[resolved] || CHROME_COLORS.light
   await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => null)
   await StatusBar.setBackgroundColor({ color: bar }).catch(() => null)
-  await StatusBar.setStyle({
-    style: resolved === THEME_DARK ? Style.Dark : Style.Light,
-  }).catch(() => null)
+  await StatusBar.setStyle({ style: Style.Dark }).catch(() => null)
 }
 
 export const useNativeShell = (resolved) => {

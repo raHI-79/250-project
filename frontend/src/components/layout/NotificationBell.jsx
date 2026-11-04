@@ -89,7 +89,7 @@ export default function NotificationBell() {
         onClick={() => setOpen((current) => !current)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="press tap-target relative grid place-items-center rounded-full text-ink-soft hover:bg-wash"
+        className="press tap-target relative grid place-items-center rounded-full text-white hover:bg-white/15"
       >
         <Bell size={19} />
         {unread > 0 && (

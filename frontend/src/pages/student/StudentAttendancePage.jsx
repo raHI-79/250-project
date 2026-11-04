@@ -356,8 +356,8 @@ export default function StudentAttendancePage() {
         eyebrow="Your classes"
         title="Attendance"
         subtitle="One tap from your own phone, inside the classroom, while the teacher keeps it open."
+        tabs={<StatusTabs tabs={TABS} value={tab} onChange={setTab} tone="header" />}
       />
-      <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
       {error && (
         <Alert tone="error" className="mb-5">
           {error}

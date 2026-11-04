@@ -10,22 +10,15 @@ import {
   Vote,
 } from 'lucide-react'
 import CRPanel from '../../components/today/CRPanel'
-import DayTimeline from '../../components/today/DayTimeline'
 import ExamStrip from '../../components/today/ExamStrip'
+import HomeStats from '../../components/today/HomeStats'
 import MessagePreview from '../../components/today/MessagePreview'
 import NextUpCard from '../../components/today/NextUpCard'
 import NoticeCarousel from '../../components/today/NoticeCarousel'
 import QuickActions from '../../components/today/QuickActions'
+import TodayClasses from '../../components/today/TodayClasses'
 import TodayHero from '../../components/today/TodayHero'
-import {
-  Alert,
-  Card,
-  EmptyState,
-  PullToRefresh,
-  Skeleton,
-  SkeletonCard,
-  SkeletonRows,
-} from '../../components/ui'
+import { Alert, EmptyState, PullToRefresh, SkeletonCard, SkeletonRows } from '../../components/ui'
 import { useAuth } from '../../context/auth'
 import { useNow, useResource } from '../../lib/hooks'
 import {
@@ -38,6 +31,7 @@ import {
   useSectionBadges,
 } from '../../lib/badges'
 import { paths } from '../../lib/paths'
+import { percentOf } from '../../lib/attendance'
 import { STATUS_CANCELLED } from '../../lib/schedule'
 import { today as todayDate } from '../../lib/time'
 
@@ -70,6 +64,7 @@ export default function TodayPage() {
   const summary = useResource('/api/students/today')
   const routine = useResource('/api/students/upcoming-routine')
   const chats = useResource('/api/messages/conversations')
+  const attendance = useResource('/api/students/attendance/mine')
   const crItems = useResource(role === 'cr' ? '/api/cr/upcoming' : null, {
     date: todayDate(),
   })
@@ -87,67 +82,89 @@ export default function TodayPage() {
   const unreadChats = (chats.data?.items || [])
     .filter((conversation) => conversation.unread_count > 0)
     .slice(0, MESSAGE_PREVIEW)
-  const meta = [data?.semester_label, data?.week ? `Week ${data.week}` : '']
-    .filter(Boolean)
-    .join(' · ')
+  const meta = data?.week ? `Week ${data.week}` : ''
+  const myCourses = attendance.data?.courses || []
+  const held = myCourses.reduce((total, entry) => total + (Number(entry.held) || 0), 0)
+  const attended = myCourses.reduce((total, entry) => total + (Number(entry.present) || 0), 0)
+  const overall = held > 0 ? percentOf(attended, held) : null
   const actions = [
-    {
-      label: 'Attendance',
-      icon: CheckCircle2,
-      to: paths.student.attendance(),
-    },
     {
       label: 'Routine',
       icon: CalendarClock,
       to: paths.student.upcomingRoutine(),
+      tone: 'bg-tint-blue text-tint-blue-ink',
       count: badges[BADGE_ROUTINE],
     },
     {
       label: 'Exams',
       icon: ClipboardList,
       to: paths.student.exams(),
+      tone: 'bg-tint-orange text-tint-orange-ink',
       count: badges[BADGE_EXAMS] || data?.upcoming_exams,
     },
     {
       label: 'Courses',
       icon: Library,
       to: paths.student.courses(),
+      tone: 'bg-tint-brown text-tint-brown-ink',
       count: badges[BADGE_COURSES],
     },
     {
       label: 'Notices',
       icon: Megaphone,
       to: paths.student.notices(),
+      tone: 'bg-tint-red text-tint-red-ink',
       count: badges[BADGE_NOTICES],
     },
     {
-      label: 'Messages',
-      icon: MessageCircle,
-      to: paths.student.messages(),
-      count: data?.unread_messages,
+      label: 'Attendance',
+      icon: CheckCircle2,
+      to: paths.student.attendance(),
+      tone: 'bg-tint-green text-tint-green-ink',
     },
     {
       label: 'Polls',
       icon: Vote,
       to: paths.student.polls(),
+      tone: 'bg-tint-purple text-tint-purple-ink',
       count: badges[BADGE_POLLS] || data?.open_polls,
     },
-    { label: 'Directory', icon: Users, to: paths.student.students() },
+    {
+      label: 'Directory',
+      icon: Users,
+      to: paths.student.students(),
+      tone: 'bg-tint-teal text-tint-teal-ink',
+    },
     {
       label: 'Materials',
       icon: FolderOpen,
       to: paths.student.materials(),
+      tone: 'bg-tint-yellow text-tint-yellow-ink',
       count: badges[BADGE_MATERIALS],
     },
   ]
   const refresh = () =>
-    Promise.all([summary.reload(), routine.reload(), chats.reload(), crItems.reload(), crFinal.reload()])
+    Promise.all([
+      summary.reload(),
+      routine.reload(),
+      chats.reload(),
+      attendance.reload(),
+      crItems.reload(),
+      crFinal.reload(),
+    ])
   return (
     <PullToRefresh onRefresh={refresh}>
       <TodayHero
         name={user?.name || user?.identifier}
+        regNo={user?.identifier}
+        photo={user?.photo_url}
         meta={meta || (user?.batch ? `${user.batch} · Section ${user.section}` : '')}
         now={now}
+      />
+      <HomeStats
+        classesToday={data?.classes_today}
+        attendance={overall}
+        semester={data?.semester_label}
       />
       {summary.error && (
         <Alert tone="error" className="mt-5">
@@ -157,28 +174,21 @@ export default function TodayPage() {
       <div className="mt-5">
         {routine.loading ? <SkeletonCard /> : <NextUpCard item={nextUp} />}
       </div>
-      <QuickActions actions={actions} className="mt-7" />
+      <QuickActions actions={actions} className="mt-6" />
       <Section title="Today">
-        <Card hover={false}>
-          {routine.error ? (
-            <Alert tone="error">{routine.error}</Alert>
-          ) : routine.loading ? (
-            <div className="flex flex-col gap-3">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-4 w-3/5" />
-            </div>
-          ) : sorted.length === 0 ? (
-            <EmptyState
-              icon={CalendarClock}
-              title="Nothing scheduled"
-              text="No class or exam is planned for today."
-              className="border-0 py-6"
-            />
-          ) : (
-            <DayTimeline items={sorted} />
-          )}
-        </Card>
+        {routine.error ? (
+          <Alert tone="error">{routine.error}</Alert>
+        ) : routine.loading ? (
+          <SkeletonCard />
+        ) : sorted.length === 0 ? (
+          <EmptyState
+            icon={CalendarClock}
+            title="Nothing scheduled"
+            text="No class or exam is planned for today."
+          />
+        ) : (
+          <TodayClasses items={sorted} />
+        )}
       </Section>
       {role === 'cr' && (
         <Section title="Your class">

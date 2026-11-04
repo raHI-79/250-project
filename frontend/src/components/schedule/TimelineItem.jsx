@@ -3,26 +3,21 @@ import { formatClock } from '../../lib/time'
 
 export default function TimelineItem({ start, end, tone = 'brand', className, children }) {
   return (
-    <li
-      className={cx(
-        'grid grid-cols-[3.75rem_0.75rem_1fr] gap-x-2.5 border-b border-dashed border-line py-3 last:border-b-0 sm:grid-cols-[4.75rem_0.875rem_1fr] sm:gap-x-3',
-        className,
-      )}
-    >
-      <span className="font-numeral pt-0.5 text-right text-xs leading-tight">
-        <span className="block font-semibold text-ink">{formatClock(start)}</span>
-        {end && <span className="block text-faint">{formatClock(end)}</span>}
-      </span>
-      <span aria-hidden="true" className="relative flex justify-center pt-1.5">
+    <li className={cx('grid grid-cols-[1.125rem_1fr] gap-x-3 pb-4 last:pb-0', className)}>
+      <span aria-hidden="true" className="row-span-2 flex flex-col items-center">
         <span
           className={cx(
-            'size-2.5 shrink-0 rounded-full border-[3px] bg-surface',
+            'mt-1 size-3 shrink-0 rounded-full border-[3px] bg-surface',
             tone === 'muted' ? 'border-line-strong' : 'border-brand-600',
           )}
         />
-        <span className="absolute top-5 bottom-[-0.75rem] w-px bg-line" />
+        <span className="mt-1 w-px flex-1 bg-line" />
       </span>
-      <div className="min-w-0">{children}</div>
+      <span className="text-xs leading-tight font-extrabold text-ink tabular-nums">
+        {formatClock(start)}
+        {end && <span className="font-semibold text-muted"> – {formatClock(end)}</span>}
+      </span>
+      <div className="surface-card mt-2 min-w-0 p-3.5">{children}</div>
     </li>
   )
 }

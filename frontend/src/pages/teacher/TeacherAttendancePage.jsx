@@ -505,8 +505,8 @@ export default function TeacherAttendancePage() {
             <Download size={16} /> Download all my classes
           </Button>
         }
+        tabs={<StatusTabs tabs={TABS} value={tab} onChange={setTab} tone="header" />}
       />
-      <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
       {options.error && (
         <Alert tone="error" className="mb-5">
           {options.error}
