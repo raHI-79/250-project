@@ -38,8 +38,11 @@ const (
 	Absent        = "absent"
 	MethodApp     = "app"
 	MethodCode    = "code"
+	MethodWeb     = "web"
 	MethodManual  = "manual"
 	MethodSystem  = "system"
+	TakeBluetooth = "bluetooth"
+	TakeRollCall  = "roll_call"
 	SectionAll    = "ALL"
 	RequestOpen   = "pending"
 	RequestTaken  = "approved"
@@ -60,7 +63,14 @@ const (
 	MessageNotOnRoster   = "This class is not on your routine."
 	MessageWebsiteOnly   = "Attendance is marked from the Android app. Open the app and tap I'm present."
 	MessageBadDuration   = "Attendance stays open between 5 and 30 minutes."
+	MessageWebNeedsCode  = "Enter the 4-digit code the teacher shows and allow the browser to share your position."
+	MessageRollCallOnly  = "This class is taken by roll call, so the teacher marks the roster."
+	MessageBadTakeMethod = "Attendance is taken either by Bluetooth or by roll call."
 )
+
+func ValidTakeMethod(method string) bool {
+	return method == TakeBluetooth || method == TakeRollCall
+}
 
 func NewKey() (string, error) {
 	raw := make([]byte, keyBytes)

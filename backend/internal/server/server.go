@@ -281,7 +281,11 @@ func registerAttendanceTeacherRoutes(group RouteGroup, marks *handler.Attendance
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/location", marks.Location())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/extend", marks.Extend())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/close", marks.Close())
+	group.Handle("POST /api/teacher/attendance/sessions/{id}/mark-all", marks.MarkAll())
+	group.Handle("DELETE /api/teacher/attendance/sessions/{id}", marks.DeleteSession())
+	group.Handle("DELETE /api/teacher/attendance/sheet", marks.DeleteSheet())
 	group.Handle("PATCH /api/teacher/attendance/sessions/{id}/students/{student_id}", marks.EditMark())
+	group.Handle("PATCH /api/teacher/attendance/sessions/{id}/students/{student_id}/note", marks.SaveNote())
 	group.Handle("GET /api/teacher/attendance/classes", marks.Classes())
 	group.Handle("GET /api/teacher/attendance/export", marks.Export())
 }
@@ -295,6 +299,10 @@ func registerPhoneRoutes(mux *http.ServeMux, deps Dependencies, phones *handler.
 	admin.Handle("GET /api/admin/phone-changes", phones.AdminHistory())
 	admin.Handle("GET /api/admin/attendance", phones.AdminOverview())
 	admin.Handle("GET /api/admin/attendance/export", phones.AdminExport())
+	admin.Handle("GET /api/admin/attendance/sessions", phones.AdminSessions())
+	admin.Handle("GET /api/admin/attendance/sessions/{id}", phones.AdminSession())
+	admin.Handle("DELETE /api/admin/attendance/sessions/{id}", phones.AdminDeleteSession())
+	admin.Handle("DELETE /api/admin/attendance/sheet", phones.AdminDeleteSheet())
 }
 
 func registerAttendanceStudentRoutes(group RouteGroup, presence *handler.StudentAttendance) {

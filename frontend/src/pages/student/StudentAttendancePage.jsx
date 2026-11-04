@@ -9,17 +9,23 @@ import {
   Input,
   PageHeader,
   SkeletonCard,
+  StatusTabs,
   Textarea,
   useToast,
 } from '../../components/ui'
+import MyAttendance from '../../components/attendance/MyAttendance'
 import api from '../../lib/api'
 import cx from '../../lib/cx'
-import { useResource } from '../../lib/hooks'
+import { useQueryTab, useResource } from '../../lib/hooks'
 import { formatClock } from '../../lib/time'
 import { isAndroidApp } from '../../lib/native'
 import { paths } from '../../lib/paths'
 import {
+  STUDENT_TAB_MARK,
+  STUDENT_TAB_MINE,
+  STUDENT_TAB_PHONE,
   askMark,
+  browserPosition,
   confirmIdentity,
   listenForToken,
   markStatus,
@@ -29,8 +35,16 @@ import {
   turnMarkBluetoothOn,
 } from '../../lib/attendance'
 
-const WEB_MESSAGE =
-  'Attendance is marked from the Android app. Open the app and tap I am present.'
+const TABS = [
+  { value: STUDENT_TAB_MARK, label: 'Mark attendance' },
+  { value: STUDENT_TAB_MINE, label: 'My attendance' },
+  { value: STUDENT_TAB_PHONE, label: 'My phone' },
+]
+
+const TAB_VALUES = TABS.map((entry) => entry.value)
+
+const WEB_PHONE_MESSAGE =
+  'The registered phone belongs to the Android app. On the website you mark yourself with the code the teacher shows.'
 
 const STEP_IDLE = 'idle'
 
@@ -102,6 +116,7 @@ function PhonePanel({ phone, busy, onRegister, onRequest }) {
 
 export default function StudentAttendancePage() {
   const toast = useToast()
+  const [tab, setTab] = useQueryTab(TAB_VALUES, STUDENT_TAB_MARK)
   const [device, setDevice] = useState('')
   const [step, setStep] = useState(STEP_IDLE)
   const [token, setToken] = useState('')
@@ -170,6 +185,30 @@ export default function StudentAttendancePage() {
       toast.error(failure.message)
     }
   }
+  const markOnWeb = async () => {
+    setBusy('mark')
+    try {
+      const place = await browserPosition()
+      if (!place?.found) {
+        toast.error('Your browser did not share a position. Allow location and try again.')
+        return
+      }
+      await api.post('/api/students/attendance/mark', {
+        session_id: session.id,
+        code: code.trim(),
+        lat: place.lat,
+        lng: place.lng,
+        accuracy_m: place.accuracy_m,
+      })
+      setDone(true)
+      toast.success('You are marked present.')
+      reload()
+    } catch (failure) {
+      toast.error(failure.message)
+    } finally {
+      setBusy('')
+    }
+  }
   const mark = async (useCode) => {
     setBusy('mark')
     try {
@@ -229,23 +268,88 @@ export default function StudentAttendancePage() {
       setBusy('')
     }
   }
-  if (!app) {
-    return (
-      <>
-        <PageHeader eyebrow="Your classes" title="Attendance" />
-        <EmptyState
-          icon={Smartphone}
-          title="Use the Android app"
-          text={WEB_MESSAGE}
-          action={
-            <Button as="a" href={paths.downloadAndroid()} variant="secondary">
-              Get the app
-            </Button>
-          }
-        />
-      </>
-    )
-  }
+  const codeField = (
+    <div className="rounded-card border border-line bg-wash p-4">
+      <p className="label-caps flex items-center gap-1.5">
+        <KeyRound size={13} /> Enter the code on the board
+      </p>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <Field label="Code" htmlFor="attendance-code" className="min-w-32 flex-1">
+          <Input
+            id="attendance-code"
+            inputMode="numeric"
+            maxLength={4}
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 4))}
+            placeholder="0000"
+          />
+        </Field>
+        <Button
+          loading={busy === 'mark'}
+          disabled={code.trim().length !== 4}
+          onClick={() => (app ? mark(true) : markOnWeb())}
+        >
+          Mark me
+        </Button>
+      </div>
+      {!app && (
+        <p className="mt-2 text-xs text-muted">
+          The browser asks for your position. You have to be within 30 m of the teacher.
+        </p>
+      )}
+    </div>
+  )
+  const sessionCard = (children) => (
+    <Card hover={false} rule>
+      <p className="label-caps">Open now</p>
+      <p className="font-display mt-1 text-section font-bold text-ink">
+        {session.course_code} · {session.course_title}
+      </p>
+      <p className="mt-1 text-xs text-muted">
+        {session.teacher_name} · {session.batch} · {sectionLabel(session.section)} · closes{' '}
+        {formatClock(session.ends_at)}
+      </p>
+      {children}
+    </Card>
+  )
+  const nothingOpen = (
+    <EmptyState
+      icon={CheckCircle2}
+      title="No attendance is open"
+      text="When a teacher opens attendance for one of your courses, this screen lets you mark yourself present."
+    />
+  )
+  const markTab = !app ? (
+    <div className="flex flex-col gap-5">
+      {loading ? (
+        <SkeletonCard />
+      ) : !session ? (
+        nothingOpen
+      ) : (
+        sessionCard(
+          session.present || done ? (
+            <Alert tone="success" className="mt-4" title="You are marked present">
+              Nothing else to do for this class.
+            </Alert>
+          ) : (
+            <div className="mt-4 flex flex-col gap-3">{codeField}</div>
+          ),
+        )
+      )}
+      <Alert tone="info" title="On a phone the app is quicker">
+        The app hears the class over Bluetooth, so you do not have to type the code.
+        <Button
+          as="a"
+          href={paths.downloadAndroid()}
+          variant="secondary"
+          size="sm"
+          className="mt-2"
+        >
+          Get the app
+        </Button>
+      </Alert>
+    </div>
+  ) : null
   return (
     <>
       <PageHeader
@@ -253,11 +357,21 @@ export default function StudentAttendancePage() {
         title="Attendance"
         subtitle="One tap from your own phone, inside the classroom, while the teacher keeps it open."
       />
+      <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
       {error && (
         <Alert tone="error" className="mb-5">
           {error}
         </Alert>
       )}
+      {tab === STUDENT_TAB_MINE && <MyAttendance />}
+      {tab === STUDENT_TAB_PHONE &&
+        (app ? (
+          <PhonePanel phone={phone} busy={busy} onRegister={register} onRequest={request} />
+        ) : (
+          <EmptyState icon={Smartphone} title="Only in the app" text={WEB_PHONE_MESSAGE} />
+        ))}
+      {tab === STUDENT_TAB_MARK && !app && markTab}
+      {tab === STUDENT_TAB_MARK && app && (
       <div className="flex flex-col gap-5">
         <PhonePanel phone={phone} busy={busy} onRegister={register} onRequest={request} />
         {loading ? (
@@ -318,32 +432,7 @@ export default function StudentAttendancePage() {
                   <CheckCircle2 size={18} /> I am present
                 </Button>
                 {step === STEP_CODE || step === STEP_IDLE ? (
-                  <div className="rounded-card border border-line bg-wash p-4">
-                    <p className="label-caps flex items-center gap-1.5">
-                      <KeyRound size={13} /> Enter the code on the board
-                    </p>
-                    <div className="mt-2 flex items-end gap-2">
-                      <Field label="Code" htmlFor="attendance-code" className="flex-1">
-                        <Input
-                          id="attendance-code"
-                          inputMode="numeric"
-                          maxLength={4}
-                          value={code}
-                          onChange={(event) =>
-                            setCode(event.target.value.replace(/\D/g, '').slice(0, 4))
-                          }
-                          placeholder="0000"
-                        />
-                      </Field>
-                      <Button
-                        loading={busy === 'mark'}
-                        disabled={code.trim().length !== 4}
-                        onClick={() => mark(true)}
-                      >
-                        Mark me
-                      </Button>
-                    </div>
-                  </div>
+                  codeField
                 ) : (
                   <Button variant="ghost" size="sm" onClick={() => setStep(STEP_CODE)}>
                     Enter the code on the board
@@ -357,6 +446,7 @@ export default function StudentAttendancePage() {
           </Card>
         )}
       </div>
+      )}
     </>
   )
 }

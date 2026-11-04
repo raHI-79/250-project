@@ -120,19 +120,15 @@ func serveJSON(t *testing.T, router http.Handler, method, path, body, token stri
 	return rec
 }
 
-func TestStudentsCannotMarkAttendanceFromTheWebsite(t *testing.T) {
-	deps, router, presence := newAttendanceRouter(t)
+func TestThePhoneRoutesStayInTheApp(t *testing.T) {
+	deps, router, _ := newAttendanceRouter(t)
 	tokens := accessTokens(t, deps)
-	body := `{"session_id":1,"token":"0011223344556677","lat":24.9,"lng":91.8,` +
-		`"accuracy_m":10,"is_mock":false,"device_id":"phone-one"}`
 	routes := []struct {
 		name   string
 		method string
 		path   string
 		body   string
 	}{
-		{name: "the mark itself", method: http.MethodPost,
-			path: "/api/students/attendance/mark", body: body},
 		{name: "registering a phone", method: http.MethodPost,
 			path: "/api/students/attendance/phone", body: `{"device_id":"phone-one"}`},
 		{name: "asking for a new phone", method: http.MethodPost,
@@ -152,12 +148,31 @@ func TestStudentsCannotMarkAttendanceFromTheWebsite(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestTheWebsiteNeedsTheCodeToMark(t *testing.T) {
+	deps, router, presence := newAttendanceRouter(t)
+	tokens := accessTokens(t, deps)
+	body := `{"session_id":1,"token":"0011223344556677","lat":24.9,"lng":91.8,` +
+		`"accuracy_m":10,"is_mock":false}`
+	for _, role := range []string{auth.RoleStudent, auth.RoleCR} {
+		t.Run(role, func(t *testing.T) {
+			rec := serveJSON(t, router, http.MethodPost, "/api/students/attendance/mark", body,
+				tokens[role], false)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (body = %q)", rec.Code, rec.Body.String())
+			}
+			if got := errorField(t, rec); got != attendance.MessageWebNeedsCode {
+				t.Errorf("error = %q, want %q", got, attendance.MessageWebNeedsCode)
+			}
+		})
+	}
 	if presence.marks != 0 {
-		t.Errorf("the website saved %d marks, want none", presence.marks)
+		t.Errorf("a mark without a code saved %d rows, want none", presence.marks)
 	}
 }
 
-func TestTheWebsiteExplainsWhereAttendanceIsMarked(t *testing.T) {
+func TestTheWebsiteAsksForTheCodeOnTheOpenSession(t *testing.T) {
 	deps, router, _ := newAttendanceRouter(t)
 	tokens := accessTokens(t, deps)
 	rec := serveJSON(t, router, http.MethodGet, "/api/students/attendance/open", "",
@@ -165,8 +180,8 @@ func TestTheWebsiteExplainsWhereAttendanceIsMarked(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 	}
-	if got := rec.Body.String(); !strings.Contains(got, attendance.MessageWebsiteOnly) {
-		t.Errorf("body = %q, want it to explain that the app marks attendance", got)
+	if got := rec.Body.String(); !strings.Contains(got, `"needs_code":true`) {
+		t.Errorf("body = %q, want the website to be told to ask for the code", got)
 	}
 }
 

@@ -20,6 +20,39 @@ export const TEACHER_TAB_HISTORY = 'history'
 
 export const TEACHER_TAB_CLASSES = 'classes'
 
+export const TEACHER_TAB_PHONES = 'phones'
+
+export const STUDENT_TAB_MARK = 'mark'
+
+export const STUDENT_TAB_MINE = 'mine'
+
+export const STUDENT_TAB_PHONE = 'phone'
+
+export const OFFICE_TAB_HISTORY = 'history'
+
+export const OFFICE_TAB_SHEETS = 'sheets'
+
+export const OFFICE_TAB_PHONES = 'phones'
+
+export const TAKE_BLUETOOTH = 'bluetooth'
+
+export const TAKE_ROLL_CALL = 'roll_call'
+
+export const methodLabel = (method) => {
+  if (method === 'app') return 'Bluetooth'
+  if (method === 'code') return 'Code'
+  if (method === 'web') return 'Web'
+  if (method === 'manual') return 'By teacher'
+  if (method === 'system') return 'Not marked'
+  return ''
+}
+
+export const sheetTitle = (entry) =>
+  `${entry.course_code}${entry.course_title ? ` ${entry.course_title}` : ''} · ${entry.batch} ${entry.section}`
+
+export const deleteSheetQuestion = (entry) =>
+  `Are you sure you want to delete the attendance sheet for ${sheetTitle(entry)}? This cannot be undone.`
+
 export const sectionLabel = (section) => (section === 'ALL' ? 'A and B' : `Section ${section}`)
 
 export const classLabel = (entry) =>
@@ -179,3 +212,23 @@ export const downloadWorkbook = async (path, filters, fallback = 'attendance.xls
   window.setTimeout(() => URL.revokeObjectURL(link.href), 2000)
   return { path: '', name }
 }
+
+export const browserPosition = () =>
+  new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ found: false })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          found: true,
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy_m: position.coords.accuracy,
+        })
+      },
+      () => resolve({ found: false }),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    )
+  })

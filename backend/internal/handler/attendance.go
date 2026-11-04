@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/attendance"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
@@ -31,6 +32,15 @@ const (
 	MessageWrongMarkStatus   = "A student is either present or absent."
 	MessageDeviceIDRequired  = "The app did not send the phone id. Update the app and try again."
 	MessageAttendanceAndroid = attendance.MessageWebsiteOnly
+	MessageMarkAllDone       = "Everybody on the roster is present."
+	MessageNoteSaved         = "The note is saved."
+	MessageSheetDeleted      = "The attendance sheet is deleted."
+	MessageSessionDeleted    = "The attendance session is deleted."
+	MessageSheetFields       = "Name the course, the batch and the section of the sheet."
+	MessageMarkMissing       = "Mark this student present or absent first, then add the note."
+
+	auditSessionDeleted = "attendance_session_deleted"
+	auditSheetDeleted   = "attendance_sheet_deleted"
 
 	titleAttendanceOpen = "Attendance open · "
 	bodyAttendanceOpen  = "Tap to mark yourself present from your registered phone."
@@ -49,6 +59,10 @@ type AttendanceStore interface {
 	CloseAttendanceSession(ctx context.Context, sessionID, teacherID int64) (store.AttendanceSession, error)
 	ListTeacherAttendance(ctx context.Context, teacherID int64, from, to time.Time) ([]store.AttendanceSession, error)
 	ListSessionRecords(ctx context.Context, sessionID int64) ([]store.AttendanceRecord, error)
+	UpdateAttendanceNote(ctx context.Context, sessionID, studentID, editorUserID int64, note string) error
+	MarkAllPresent(ctx context.Context, sessionID, editorUserID int64) (int, error)
+	DeleteAttendanceSession(ctx context.Context, sessionID int64) error
+	DeleteAttendanceSheet(ctx context.Context, courseID int64, batch, section string) (int, error)
 	ListRoster(ctx context.Context, sessionID int64) ([]store.RosterStudent, error)
 	EditAttendanceRecord(ctx context.Context, sessionID, studentID, editorUserID int64,
 		status, note string) error
@@ -81,6 +95,7 @@ type sessionBody struct {
 	StartedAt   string `json:"started_at"`
 	EndsAt      string `json:"ends_at"`
 	Status      string `json:"status"`
+	Method      string `json:"method"`
 	Present     int    `json:"present"`
 	Roster      int    `json:"roster"`
 	Code        string `json:"code,omitempty"`
@@ -97,6 +112,7 @@ type markBody struct {
 	FullName  string `json:"full_name"`
 	RegNo     string `json:"reg_no"`
 	Section   string `json:"section"`
+	PhotoURL  string `json:"photo_url,omitempty"`
 	Status    string `json:"status"`
 	Method    string `json:"method"`
 	DistanceM int    `json:"distance_m,omitempty"`
@@ -143,6 +159,7 @@ func newSessionBody(session store.AttendanceSession, now time.Time, forTeacher b
 		StartedAt:   timestamp(session.StartedAt),
 		EndsAt:      timestamp(session.EndsAt),
 		Status:      session.Status,
+		Method:      session.Method,
 		Present:     session.Present,
 		Roster:      session.Roster,
 		HasLocation: session.HasLocation,
@@ -150,7 +167,8 @@ func newSessionBody(session store.AttendanceSession, now time.Time, forTeacher b
 	if !session.LocationAt.IsZero() {
 		body.LocationAt = timestamp(session.LocationAt)
 	}
-	if forTeacher && session.Status == attendance.StatusOpen {
+	if forTeacher && session.Status == attendance.StatusOpen &&
+		session.Method != attendance.TakeRollCall {
 		body.Code = attendance.CurrentCode(session.TokenKey, session.ID, now)
 		body.CodeSeconds = attendance.CodeSliceSeconds -
 			int(now.Unix()%int64(attendance.CodeSliceSeconds))
@@ -169,6 +187,7 @@ func newMarkBody(record store.AttendanceRecord) markBody {
 		FullName:  record.FullName,
 		RegNo:     record.RegNo,
 		Section:   record.Section,
+		PhotoURL:  record.PhotoPath,
 		Status:    record.Status,
 		Method:    record.Method,
 		Note:      record.Note,
@@ -269,6 +288,14 @@ func (a *Attendance) teaches(ctx context.Context, teacherID, courseID int64,
 		}
 	}
 	return false, nil
+}
+
+func sheetSummary(code, title, batch, section string) string {
+	name := strings.TrimSpace(code)
+	if title != "" {
+		name = strings.TrimSpace(code + " " + title)
+	}
+	return fmt.Sprintf("%s · %s %s", name, batch, section)
 }
 
 func (a *Attendance) announce(ctx context.Context, session store.AttendanceSession) {

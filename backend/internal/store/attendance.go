@@ -30,6 +30,7 @@ type AttendanceSession struct {
 	HasLocation     bool
 	TokenKey        string
 	ClosedAt        time.Time
+	Method          string
 	Present         int
 	Roster          int
 }
@@ -42,6 +43,7 @@ type NewAttendanceSession struct {
 	TeacherID      int64
 	EndsAt         time.Time
 	TokenKey       string
+	Method         string
 }
 
 type RosterStudent struct {
@@ -60,6 +62,7 @@ type AttendanceRecord struct {
 	FullName    string
 	RegNo       string
 	Section     string
+	PhotoPath   string
 	Status      string
 	Method      string
 	DeviceID    string
@@ -131,13 +134,13 @@ type AttendanceAlert struct {
 const sessionColumns = `a.id, a.course_id, c.code, c.title, a.batch, a.section,
 COALESCE(a.schedule_item_id, 0), a.teacher_id, COALESCE(t.user_id, 0), COALESCE(t.name, ''),
 a.started_at, a.ends_at, a.status, a.teacher_lat, a.teacher_lng, a.teacher_accuracy_m,
-a.location_updated_at, a.token_key, a.closed_at,
+a.location_updated_at, a.token_key, a.closed_at, a.method,
 (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'present')`
 
 const (
 	openSessionSQL = `INSERT INTO attendance_sessions
-(course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key)
-VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7)
+(course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key, method)
+VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7, $8)
 RETURNING id`
 	runningSessionSQL = `SELECT a.id FROM attendance_sessions a
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
@@ -153,12 +156,19 @@ JOIN courses c ON c.id = a.course_id
 LEFT JOIN teachers t ON t.id = a.teacher_id
 WHERE a.teacher_id = $1 AND a.started_at >= $2 AND a.started_at < $3
 ORDER BY a.started_at DESC`
+	batchSessionsSQL = `SELECT ` + sessionColumns + `
+FROM attendance_sessions a
+JOIN courses c ON c.id = a.course_id
+LEFT JOIN teachers t ON t.id = a.teacher_id
+WHERE ($1::text = '' OR a.batch = $1::text) AND a.started_at >= $2 AND a.started_at < $3
+ORDER BY a.started_at DESC
+LIMIT 300`
 	openForStudentSQL = `SELECT ` + sessionColumns + `
 FROM attendance_sessions a
 JOIN courses c ON c.id = a.course_id
 LEFT JOIN teachers t ON t.id = a.teacher_id
 JOIN students s ON s.id = $1
-WHERE a.status = 'open' AND a.ends_at > now()
+WHERE a.status = 'open' AND a.ends_at > now() AND a.method = 'bluetooth'
   AND ((a.batch = s.batch AND (a.section = 'ALL' OR a.section = s.section))
        OR EXISTS (SELECT 1 FROM student_drop_courses d
                   WHERE d.student_id = s.id AND d.course_id = a.course_id))
@@ -206,6 +216,7 @@ FROM attendance_sessions a
 WHERE a.id = $1 AND a.status = 'open' AND a.ends_at > now()
 RETURNING id`
 	sessionRecordsSQL = `SELECT a.id, s.id, s.user_id, s.full_name, s.reg_no, s.section,
+COALESCE(u.photo_path, ''),
 COALESCE(r.status, ''), COALESCE(r.method, ''), COALESCE(r.device_id, ''),
 r.distance_m, r.accuracy_m, r.marked_at, COALESCE(r.note, ''),
 COALESCE(e.name, es.full_name, ''), r.edited_at
@@ -302,6 +313,87 @@ WHERE attendance_alerts.last_sent_at <= $3
 RETURNING student_id`
 )
 
+const (
+	SessionBluetooth = "bluetooth"
+	SessionRollCall  = "roll_call"
+)
+
+const (
+	noteOnlySQL = `UPDATE attendance_records
+SET note = $3, edited_by = $4, edited_at = now()
+WHERE session_id = $1 AND student_id = $2
+RETURNING id`
+	markAllPresentSQL = `INSERT INTO attendance_records (session_id, student_id, status, method, edited_by, edited_at)
+SELECT $1, s.id, 'present', 'manual', $2, now()
+FROM attendance_sessions a
+JOIN students s ON (s.batch = a.batch AND (a.section = 'ALL' OR s.section = a.section))
+  OR s.id IN (SELECT d.student_id FROM student_drop_courses d WHERE d.course_id = a.course_id)
+JOIN users u ON u.id = s.user_id AND u.status = 'active'
+WHERE a.id = $1
+ON CONFLICT (session_id, student_id) DO NOTHING`
+	deleteSessionSQL = `DELETE FROM attendance_sessions WHERE id = $1 RETURNING id`
+	deleteSheetSQL   = `DELETE FROM attendance_sessions
+WHERE course_id = $1 AND batch = $2 AND section = $3
+RETURNING id`
+)
+
+func (s *Store) UpdateAttendanceNote(ctx context.Context, sessionID, studentID,
+	editorUserID int64, note string) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, noteOnlySQL, sessionID, studentID, note, editorUserID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not save the note of the student %d: %w", studentID, err)
+	}
+	return nil
+}
+
+func (s *Store) MarkAllPresent(ctx context.Context, sessionID, editorUserID int64) (int, error) {
+	tag, err := s.pool.Exec(ctx, markAllPresentSQL, sessionID, editorUserID)
+	if err != nil {
+		return 0, fmt.Errorf("store: could not mark the roster of %d present: %w", sessionID, err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+func (s *Store) DeleteAttendanceSession(ctx context.Context, sessionID int64) error {
+	var id int64
+	err := s.pool.QueryRow(ctx, deleteSessionSQL, sessionID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not delete the attendance session %d: %w", sessionID, err)
+	}
+	return nil
+}
+
+func (s *Store) DeleteAttendanceSheet(ctx context.Context, courseID int64,
+	batch, section string) (int, error) {
+	rows, err := s.pool.Query(ctx, deleteSheetSQL, courseID, batch, section)
+	if err != nil {
+		return 0, fmt.Errorf("store: could not delete the attendance sheet of %d: %w", courseID, err)
+	}
+	defer rows.Close()
+	deleted := 0
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return 0, fmt.Errorf("store: could not count the deleted sessions: %w", err)
+		}
+		deleted++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("store: could not read the deleted sessions: %w", err)
+	}
+	if deleted == 0 {
+		return 0, ErrNotFound
+	}
+	return deleted, nil
+}
+
 func (s *Store) OpenAttendanceSession(ctx context.Context,
 	fresh NewAttendanceSession) (AttendanceSession, error) {
 	var running int64
@@ -314,8 +406,12 @@ func (s *Store) OpenAttendanceSession(ctx context.Context,
 		return AttendanceSession{}, fmt.Errorf("store: could not look for a running attendance: %w", err)
 	}
 	var id int64
+	method := fresh.Method
+	if method == "" {
+		method = SessionBluetooth
+	}
 	err = s.pool.QueryRow(ctx, openSessionSQL, fresh.CourseID, fresh.Batch, fresh.Section,
-		fresh.ScheduleItemID, fresh.TeacherID, fresh.EndsAt, fresh.TokenKey).Scan(&id)
+		fresh.ScheduleItemID, fresh.TeacherID, fresh.EndsAt, fresh.TokenKey, method).Scan(&id)
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not open an attendance session: %w", err)
 	}
@@ -350,11 +446,21 @@ func (s *Store) OpenSessionForStudent(ctx context.Context, studentID int64) (Att
 	return session, nil
 }
 
+func (s *Store) ListBatchSessions(ctx context.Context, batch string,
+	from, to time.Time) ([]AttendanceSession, error) {
+	return s.sessionList(ctx, batchSessionsSQL, batch, from, to)
+}
+
 func (s *Store) ListTeacherAttendance(ctx context.Context, teacherID int64,
 	from, to time.Time) ([]AttendanceSession, error) {
-	rows, err := s.pool.Query(ctx, teacherSessionsSQL, teacherID, from, to)
+	return s.sessionList(ctx, teacherSessionsSQL, teacherID, from, to)
+}
+
+func (s *Store) sessionList(ctx context.Context, query string,
+	args ...any) ([]AttendanceSession, error) {
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("store: could not list the attendance of the teacher %d: %w", teacherID, err)
+		return nil, fmt.Errorf("store: could not list the attendance sessions: %w", err)
 	}
 	defer rows.Close()
 	sessions := make([]AttendanceSession, 0)
@@ -395,6 +501,7 @@ func scanSession(row rowScanner) (AttendanceSession, error) {
 		&locationAt,
 		&session.TokenKey,
 		&closedAt,
+		&session.Method,
 		&session.Present,
 	)
 	if err != nil {
@@ -541,6 +648,7 @@ func (s *Store) ListSessionRecords(ctx context.Context, sessionID int64) ([]Atte
 			&record.FullName,
 			&record.RegNo,
 			&record.Section,
+			&record.PhotoPath,
 			&record.Status,
 			&record.Method,
 			&record.DeviceID,
