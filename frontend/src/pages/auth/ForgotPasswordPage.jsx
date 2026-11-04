@@ -139,6 +139,8 @@ export default function ForgotPasswordPage({ portal }) {
     <AuthScreen
       images={HERO_BUILDING}
       className="max-w-md"
+      appTitle={page.heading}
+      appSubtitle={page.subtitle}
       note="Lost your password? The account is checked before a code is sent."
     >
       <div>

@@ -171,6 +171,8 @@ export default function ActivatePage() {
     <AuthScreen
       images={HERO_BUILDING}
       className="max-w-md"
+      appTitle={done ? 'Your account is ready' : 'Activate your account'}
+      appSubtitle="Choose the user ID and password you will sign in with"
       note="Teachers choose their own user ID while activating the invitation from the office."
     >
       <div>

@@ -19,12 +19,18 @@ const TONES = {
   },
 }
 
+const APP_TITLE = 'SUST CSE Portal'
+
+const APP_SUBTITLE = 'Classes, exams and attendance in one place'
+
 export default function AuthScreen({
   images,
   rotateAfter,
   overlay,
   tone = 'brand',
   note,
+  appTitle,
+  appSubtitle,
   wide = false,
   className,
   children,
@@ -33,7 +39,12 @@ export default function AuthScreen({
   const slideshow = useCampusSlideshow(images, rotateAfter)
   if (!onWeb) {
     return (
-      <AppAuthScreen wide={wide} className={className}>
+      <AppAuthScreen
+        title={appTitle || APP_TITLE}
+        subtitle={appTitle ? appSubtitle : APP_SUBTITLE}
+        wide={wide}
+        className={className}
+      >
         {children}
       </AppAuthScreen>
     )

@@ -206,6 +206,12 @@ export default function RegisterPage() {
     <AuthScreen
       images={HERO_BUILDING}
       wide
+      appTitle={resuming ? 'Confirm your email' : 'Create your account'}
+      appSubtitle={
+        resuming
+          ? 'Enter the code we sent to your university email'
+          : 'Fill the form once and verify your university email'
+      }
       note="Students register with their registration number and verify their university email."
     >
       <div>

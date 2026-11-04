@@ -72,7 +72,7 @@ export default function LoginPage({ portal }) {
   }
   return (
     <AuthScreen images={HERO_BUILDING} note={page.note}>
-      <div>
+      <div className={app ? 'flex flex-1 flex-col' : undefined}>
         <AuthHeading
           eyebrow={page.eyebrow}
           title={page.heading}
@@ -136,26 +136,28 @@ export default function LoginPage({ portal }) {
             size={app ? 'lg' : 'md'}
             className="w-full"
           >
-            Log in
+            {app ? 'Sign in' : 'Log in'}
           </Button>
         </form>
         {app ? (
-          <div className="mt-5 flex flex-col items-center gap-1">
-            <Link
-              to={page.forgot()}
-              className="tap-target inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold text-brand-600"
-            >
-              Forgot password?
-            </Link>
-            {portal !== PORTAL_TEACHER && (
+          <>
+            <div className="mt-4 flex justify-center">
               <Link
-                to={paths.studentRegister()}
-                className="tap-target inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold text-brand-600"
+                to={page.forgot()}
+                className="tap-target inline-flex items-center rounded-lg px-3 text-sm font-semibold text-brand-600"
               >
-                New student? Register
+                Forgot password?
               </Link>
+            </div>
+            {portal !== PORTAL_TEACHER && (
+              <p className="mt-auto pt-6 text-center text-sm text-muted">
+                New student?{' '}
+                <Link to={paths.studentRegister()} className="font-semibold text-brand-600">
+                  Create an account
+                </Link>
+              </p>
             )}
-          </div>
+          </>
         ) : (
           <div className="mt-5 flex flex-col gap-1 text-sm">
             <Link to={page.forgot()} className="text-brand-600 hover:underline">
