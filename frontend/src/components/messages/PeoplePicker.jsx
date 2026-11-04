@@ -59,11 +59,11 @@ export default function PeoplePicker({ picked, onPick, onDrop, search, onSearchC
                   >
                     <Avatar src={contact.photo_url} name={contact.name} size="sm" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-ink">
+                      <span className="block wrap-long text-sm font-semibold text-ink">
                         {contact.name}
                       </span>
                       {contactDetail(contact) && (
-                        <span className="block truncate text-xs text-muted">
+                        <span className="block wrap-long text-xs text-muted">
                           {contactDetail(contact)}
                         </span>
                       )}

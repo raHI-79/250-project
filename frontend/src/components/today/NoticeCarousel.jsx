@@ -24,7 +24,7 @@ export default function NoticeCarousel({ notices, role }) {
             {notice.description && (
               <p className="mt-1 line-clamp-2 text-xs text-muted">{notice.description}</p>
             )}
-            <p className="mt-1.5 truncate text-2xs text-faint">{notice.created_by_name}</p>
+            <p className="mt-1.5 wrap-long text-2xs text-faint">{notice.created_by_name}</p>
           </div>
         </Link>
       ))}

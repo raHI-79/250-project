@@ -75,7 +75,7 @@ export default function RoutineWeekGrid({ items, periods, section, className }) 
                           <span className="line-clamp-2 font-semibold">
                             {courseLine(entry)}
                           </span>
-                          <span className="truncate text-faint">
+                          <span className="wrap-long text-faint">
                             {entry.room ? entry.room : '—'}
                             {entry.type === 'lab' ? ' · Lab' : ''}
                           </span>

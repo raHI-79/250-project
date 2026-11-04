@@ -23,8 +23,8 @@ export default function ProfileNavLink({ onNavigate }) {
       >
         <Avatar src={user?.photo_url} name={name} size="sm" />
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-sm font-semibold">{name}</span>
-          <span className="block truncate text-2xs tracking-[0.06em] text-muted uppercase">
+          <span className="block wrap-long text-sm font-semibold">{name}</span>
+          <span className="block wrap-long text-2xs tracking-[0.06em] text-muted uppercase">
             {roleLabel(role)}
           </span>
         </span>

@@ -231,10 +231,10 @@ export default function TeacherUpcomingPage() {
                   {formatTimeRange(item.start_time, item.end_time) || 'No time yet'}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink">
+                  <span className="block wrap-long text-sm font-semibold text-ink">
                     {courseLine(item)}
                   </span>
-                  <span className="block truncate text-xs text-muted">
+                  <span className="block wrap-long text-xs text-muted">
                     {item.batch} {sectionShort(item.section)}
                     {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                   </span>

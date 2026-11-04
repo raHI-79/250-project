@@ -11,7 +11,7 @@ import { homeFor } from '../../lib/paths'
 export default function TopBar({ title, collapsed, onOpenMenu, onOpenSearch, showBell = true }) {
   const { role } = useAuth()
   return (
-    <header className="glass sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)]">
+    <header className="sticky top-0 z-50 border-b border-line bg-surface pt-[env(safe-area-inset-top,0px)]">
       <div className="mx-auto flex min-h-14 max-w-6xl items-center gap-2 px-4 sm:px-6 lg:px-8">
         {onOpenMenu && (
           <button

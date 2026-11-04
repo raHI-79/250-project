@@ -117,7 +117,7 @@ function PromoteModal({ open, onClose, batches, onPromoted }) {
                 <span className="flex min-w-0 items-center gap-2.5">
                   <Avatar src={item.photo_url} name={item.full_name} size="sm" />
                   <span className="min-w-0 leading-tight">
-                    <span className="block truncate text-sm font-medium text-ink">
+                    <span className="block wrap-long text-sm font-medium text-ink">
                       {item.full_name}
                     </span>
                     <span className="block text-xs text-muted">

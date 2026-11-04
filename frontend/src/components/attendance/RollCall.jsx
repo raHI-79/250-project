@@ -1,88 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Check, ListChecks, X } from 'lucide-react'
-import Avatar from '../ui/Avatar'
-import { Alert, Button, Card, CardHeader, Field, Textarea, useConfirm, useToast } from '../ui'
+import { useState } from 'react'
+import { ListChecks } from 'lucide-react'
+import StudentRow from './StudentRow'
+import { Alert, Button, Card, CardHeader, useConfirm, useToast } from '../ui'
 import api from '../../lib/api'
-import cx from '../../lib/cx'
-import { sectionLabel } from '../../lib/attendance'
-
-function RollRow({ mark, busy, onMark, onNote }) {
-  const [note, setNote] = useState(mark.note || '')
-  const [saved, setSaved] = useState(false)
-  useEffect(() => {
-    setNote(mark.note || '')
-    setSaved(false)
-  }, [mark.note])
-  const marked = Boolean(mark.marked_at) || mark.method === 'manual'
-  const present = marked && mark.status === 'present'
-  const absent = marked && mark.status === 'absent'
-  return (
-    <li className="flex flex-col gap-3 border-b border-line py-3 last:border-b-0">
-      <div className="flex flex-wrap items-center gap-3">
-        <Avatar name={mark.full_name} src={mark.photo_url} size="sm" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-ink">{mark.full_name}</span>
-          <span className="block truncate text-xs text-muted">{mark.reg_no}</span>
-        </span>
-        <span className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant={present ? 'primary' : 'secondary'}
-            loading={busy}
-            onClick={() => onMark('present', note)}
-          >
-            <Check size={14} />
-            Present
-          </Button>
-          <Button
-            size="sm"
-            variant={absent ? 'danger' : 'secondary'}
-            loading={busy}
-            onClick={() => onMark('absent', note)}
-          >
-            <X size={14} />
-            Absent
-          </Button>
-        </span>
-      </div>
-      <div className="flex flex-col gap-2">
-        <Field label="Note" htmlFor={`roll-note-${mark.student_id}`}>
-          <Textarea
-            id={`roll-note-${mark.student_id}`}
-            rows={2}
-            value={note}
-            onChange={(event) => {
-              setNote(event.target.value)
-              setSaved(false)
-            }}
-            placeholder="Why this student is present or absent"
-          />
-        </Field>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={busy}
-            onClick={async () => {
-              await onNote(note)
-              setSaved(true)
-            }}
-          >
-            Save note
-          </Button>
-          {saved && <span className="text-xs font-semibold text-success-700">Note saved</span>}
-        </div>
-      </div>
-    </li>
-  )
-}
+import { sectionLabel, sortedRoster } from '../../lib/attendance'
 
 export default function RollCall({ session, marks, busy, onReload, onFinish }) {
   const toast = useToast()
   const confirm = useConfirm()
   const [working, setWorking] = useState(0)
-  const present = marks.filter((mark) => mark.status === 'present').length
-  const left = marks.filter((mark) => !mark.marked_at && mark.method !== 'manual').length
+  const roster = sortedRoster(marks)
+  const present = marks.filter((entry) => entry.status === 'present').length
+  const left = marks.filter((entry) => !entry.marked_at && entry.method !== 'manual').length
   const run = async (studentId, call, message) => {
     setWorking(studentId)
     try {
@@ -110,11 +39,10 @@ export default function RollCall({ session, marks, busy, onReload, onFinish }) {
     run(
       studentId,
       () =>
-        api.patch(
-          `/api/teacher/attendance/sessions/${session.id}/students/${studentId}/note`,
-          { note: text },
-        ),
-      '',
+        api.patch(`/api/teacher/attendance/sessions/${session.id}/students/${studentId}/note`, {
+          note: text,
+        }),
+      'Note saved',
     ).catch(() => null)
   const markAll = () =>
     run(
@@ -134,6 +62,10 @@ export default function RollCall({ session, marks, busy, onReload, onFinish }) {
     if (!ok) return
     onFinish()
   }
+  const statusOf = (entry) => {
+    const marked = Boolean(entry.marked_at) || entry.method === 'manual'
+    return marked ? entry.status : ''
+  }
   return (
     <Card hover={false}>
       <CardHeader
@@ -141,6 +73,11 @@ export default function RollCall({ session, marks, busy, onReload, onFinish }) {
         subtitle={`${session.batch} · ${sectionLabel(session.section)} · ${present}/${marks.length} present`}
         className="px-0 pt-0"
       />
+      {left > 0 && (
+        <Alert tone="info" className="mb-4">
+          {left} student{left === 1 ? ' is' : 's are'} still unmarked. Finish marks them absent.
+        </Alert>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" size="sm" loading={working === -1} onClick={markAll}>
           <ListChecks size={15} />
@@ -150,22 +87,18 @@ export default function RollCall({ session, marks, busy, onReload, onFinish }) {
           Finish
         </Button>
       </div>
-      {left > 0 && (
-        <Alert tone="info" className="mt-4">
-          {left} student{left === 1 ? ' is' : 's are'} still unmarked. Finish marks them absent.
-        </Alert>
-      )}
-      {marks.length === 0 ? (
-        <p className={cx('mt-4 text-sm text-muted')}>This class has no students on its roster.</p>
+      {roster.length === 0 ? (
+        <p className="mt-4 text-sm text-muted">This class has no students on its roster.</p>
       ) : (
-        <ul className="mt-4 flex flex-col">
-          {marks.map((entry) => (
-            <RollRow
+        <ul className="mt-3 flex flex-col">
+          {roster.map((entry) => (
+            <StudentRow
               key={entry.student_id}
               mark={entry}
+              status={statusOf(entry)}
               busy={working === entry.student_id}
               onMark={(status, text) => mark(entry.student_id, status, text)}
-              onNote={(text) => note(entry.student_id, text)}
+              onSaveNote={(text) => note(entry.student_id, text)}
             />
           ))}
         </ul>

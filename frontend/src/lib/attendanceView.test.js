@@ -11,7 +11,9 @@ import {
   deleteSheetQuestion,
   methodLabel,
   percentOf,
+  rollNumber,
   sheetTitle,
+  sortedRoster,
 } from './attendanceView.js'
 
 const sheet = {
@@ -60,4 +62,26 @@ test('a share below half is flagged', () => {
   assert.equal(percentOf(0, 0), 0)
   assert.equal(belowPass(49), true)
   assert.equal(belowPass(50), false)
+})
+
+test('reads the roll number off the registration number', () => {
+  assert.equal(rollNumber('2023331079'), '079')
+  assert.equal(rollNumber('2023331001'), '001')
+  assert.equal(rollNumber('2023331120'), '120')
+  assert.equal(rollNumber('2019-331-7'), '317')
+  assert.equal(rollNumber(''), '')
+  assert.equal(rollNumber(undefined), '')
+})
+
+test('sorts a roster by registration number', () => {
+  const roster = [
+    { reg_no: '2023331100' },
+    { reg_no: '2023331009' },
+    { reg_no: '2023331021' },
+  ]
+  assert.deepEqual(
+    sortedRoster(roster).map((entry) => entry.reg_no),
+    ['2023331009', '2023331021', '2023331100'],
+  )
+  assert.deepEqual(sortedRoster(undefined), [])
 })

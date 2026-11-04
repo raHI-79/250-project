@@ -30,18 +30,18 @@ export default function DayTimeline({ items, className }) {
             <div className="min-w-0 flex-1">
               <p
                 className={cx(
-                  'truncate text-sm font-semibold text-ink',
+                  'wrap-long text-sm font-semibold text-ink',
                   cancelled && 'text-muted line-through',
                 )}
               >
                 {courseLine(item)}
               </p>
               {courseCode(item) && (
-                <p className="mt-0.5 truncate text-2xs font-medium text-muted">
+                <p className="mt-0.5 wrap-long text-2xs font-medium text-muted">
                   {courseCode(item)}
                 </p>
               )}
-              <p className="mt-0.5 truncate text-xs text-muted">
+              <p className="mt-0.5 wrap-long text-xs text-muted">
                 {[placeOf(item), item.teacher_name].filter(Boolean).join(' · ')}
               </p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

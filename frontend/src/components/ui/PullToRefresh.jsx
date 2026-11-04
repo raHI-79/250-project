@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import cx from '../../lib/cx'
+import { isScrollLocked } from '../../lib/scrollLock'
 
 const TRIGGER = 72
 
 const MAX_PULL = 110
 
+const SLACK = 12
+
 export default function PullToRefresh({ onRefresh, className, children }) {
   const [pull, setPull] = useState(0)
   const [busy, setBusy] = useState(false)
   const startY = useRef(0)
+  const startX = useRef(0)
   const tracking = useRef(false)
   const run = useCallback(async () => {
     setBusy(true)
@@ -22,22 +26,25 @@ export default function PullToRefresh({ onRefresh, className, children }) {
   }, [onRefresh])
   useEffect(() => {
     if (!onRefresh) return undefined
-    const blocked = () => document.body.style.overflow === 'hidden'
     const atTop = () => (document.scrollingElement?.scrollTop ?? 0) <= 0
     const onStart = (event) => {
-      if (busy || blocked() || event.touches.length !== 1 || !atTop()) return
+      tracking.current = false
+      if (busy || isScrollLocked() || event.touches.length !== 1 || !atTop()) return
       startY.current = event.touches[0].clientY
+      startX.current = event.touches[0].clientX
       tracking.current = true
     }
     const onMove = (event) => {
       if (!tracking.current) return
-      const distance = event.touches[0].clientY - startY.current
-      if (distance <= 0) {
-        tracking.current = false
+      const touch = event.touches[0]
+      const down = touch.clientY - startY.current
+      const sideways = Math.abs(touch.clientX - startX.current)
+      if (down <= SLACK || sideways > Math.abs(down)) {
+        if (down < 0 || sideways > Math.abs(down)) tracking.current = false
         setPull(0)
         return
       }
-      setPull(Math.min(MAX_PULL, distance * 0.5))
+      setPull(Math.min(MAX_PULL, (down - SLACK) * 0.5))
     }
     const onEnd = () => {
       if (!tracking.current) return
@@ -50,15 +57,16 @@ export default function PullToRefresh({ onRefresh, className, children }) {
         return 0
       })
     }
-    window.addEventListener('touchstart', onStart, { passive: true })
-    window.addEventListener('touchmove', onMove, { passive: true })
-    window.addEventListener('touchend', onEnd)
-    window.addEventListener('touchcancel', onEnd)
+    const options = { passive: true }
+    window.addEventListener('touchstart', onStart, options)
+    window.addEventListener('touchmove', onMove, options)
+    window.addEventListener('touchend', onEnd, options)
+    window.addEventListener('touchcancel', onEnd, options)
     return () => {
-      window.removeEventListener('touchstart', onStart)
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchend', onEnd)
-      window.removeEventListener('touchcancel', onEnd)
+      window.removeEventListener('touchstart', onStart, options)
+      window.removeEventListener('touchmove', onMove, options)
+      window.removeEventListener('touchend', onEnd, options)
+      window.removeEventListener('touchcancel', onEnd, options)
     }
   }, [onRefresh, busy, run])
   const active = pull > 0 || busy

@@ -7,7 +7,7 @@ export default function TabBar({ tabs }) {
   return (
     <nav
       aria-label="Main"
-      className="glass fixed inset-x-0 bottom-0 z-50 border-t pb-[env(safe-area-inset-bottom,0px)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] lg:hidden"
     >
       <ul className="flex items-stretch">
         {tabs.map((tab) => {
