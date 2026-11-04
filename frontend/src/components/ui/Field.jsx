@@ -5,8 +5,8 @@ import { isNative } from '../../lib/native'
 
 const shell = (invalid, tone, focused) =>
   cx(
-    'relative rounded-xl border transition-all duration-200',
-    tone === 'dark' ? 'bg-white/5' : 'glass-chip',
+    'relative rounded-input border transition-all duration-200',
+    tone === 'dark' ? 'bg-white/5' : 'bg-input',
     invalid
       ? 'border-danger-500'
       : focused
@@ -15,7 +15,7 @@ const shell = (invalid, tone, focused) =>
           : 'border-brand-600'
         : tone === 'dark'
           ? 'border-white/20'
-          : 'border-line-strong',
+          : 'border-input-line',
     focused && !invalid && 'shadow-[0_0_0_3px_var(--color-brand-100)]',
     focused && invalid && 'shadow-[0_0_0_3px_var(--color-danger-100)]',
   )
@@ -170,7 +170,7 @@ export function PasswordInput({ className, ...rest }) {
         aria-pressed={shown}
         title={shown ? 'Hide password' : 'Show password'}
         className={cx(
-          'absolute top-0 right-0 grid w-12 place-items-center rounded-xl transition-colors',
+          'absolute top-0 right-0 grid w-12 place-items-center rounded-input transition-colors',
           tall ? 'h-13' : 'h-12',
           dark ? 'text-white/60 hover:text-white' : 'text-muted hover:text-ink',
         )}

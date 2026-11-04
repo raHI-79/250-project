@@ -51,7 +51,7 @@ export default function TodayHero({ name, meta, now = new Date(), className }) {
           <button
             type="button"
             onClick={chrome.openSearch}
-            className="mt-5 flex h-12 w-full items-center gap-2.5 rounded-xl bg-white/15 px-3.5 text-left text-sm text-white/80 backdrop-blur-sm transition-colors hover:bg-white/25"
+            className="mt-5 flex h-12 w-full items-center gap-2.5 rounded-input bg-white/20 px-3.5 text-left text-sm text-white transition-colors hover:bg-white/30"
           >
             <Search size={18} className="shrink-0" />
             Search courses, people, notices

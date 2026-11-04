@@ -11,8 +11,8 @@ const SIZES = {
 }
 
 const TONES = {
-  glass: 'border border-white/60 bg-white/85 shadow-[var(--shadow-glass)] backdrop-blur-sm',
-  light: 'border border-white/45 bg-white/90 backdrop-blur-sm',
+  glass: 'border border-white/70 bg-white shadow-[var(--shadow-card)]',
+  light: 'border border-white/50 bg-white',
   plain: 'bg-white',
 }
 

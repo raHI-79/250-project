@@ -7,7 +7,8 @@ const sizes = {
 }
 
 const tones = {
-  glass: 'glass-chip text-ink-soft hover:text-brand-700',
+  glass: 'border border-line bg-surface text-ink-soft hover:border-brand-200 hover:text-brand-700',
+  header: 'bg-white/20 text-white hover:bg-white/30',
   plain: 'text-ink-soft hover:bg-wash hover:text-ink',
   brand: 'bg-brand-50 text-brand-600 hover:bg-brand-100',
   danger: 'text-ink-soft hover:bg-danger-50 hover:text-danger-600',

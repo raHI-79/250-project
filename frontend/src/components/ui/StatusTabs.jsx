@@ -20,10 +20,10 @@ export default function StatusTabs({ tabs, value, onChange, className }) {
             aria-selected={active}
             onClick={() => onChange(tab.value)}
             className={cx(
-              'press min-h-10 shrink-0 rounded-full border px-4 text-sm whitespace-nowrap',
+              'press min-h-11 shrink-0 rounded-full border px-4 text-sm whitespace-nowrap',
               active
-                ? 'border-brand-600 bg-brand-600 font-semibold text-page'
-                : 'glass-chip font-medium text-muted hover:border-brand-300 hover:text-ink',
+                ? 'border-brand-600 bg-brand-600 font-bold text-page'
+                : 'border-line bg-surface font-semibold text-muted hover:border-brand-200 hover:text-brand-700',
             )}
           >
             {tab.label}

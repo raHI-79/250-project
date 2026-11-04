@@ -22,7 +22,7 @@ export default function ContactSearch({
   })
   const people = contacts.data?.items || []
   return (
-    <div className="sticky top-0 z-20 shrink-0 border-b border-line bg-surface/95 p-3 backdrop-blur-sm">
+    <div className="sticky top-0 z-20 shrink-0 border-b border-line bg-surface p-3">
       <Input
         type="search"
         value={search}
