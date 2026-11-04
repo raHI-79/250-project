@@ -4,6 +4,65 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.3.0
+
+- **Continue with Google works in the app again.** `MainActivity` now forwards
+  the social-login authorisation result back to the plugin, so the sign-in no
+  longer waits for a result that never arrives. The screen prints the exact text
+  Google or the server returned, and the server classifies a refused credential
+  (wrong client id, expired, otherwise invalid) and logs the reason without the
+  token. `docs/ANDROID.md` lists everything the Google Cloud Console needs.
+- **Registration and the password reset are single pages.** All fields sit in
+  Account, Contact, Personal and Photo sections with inline validation next to
+  each field, one Submit button, and the email-code input appearing in place
+  after *Send code*. The API did not change. The teacher sign-in screen no
+  longer offers an activation link; teachers still activate from their
+  invitation email.
+- **A phone pass over every page and dialog** at 360, 390, 412 and 768 px: no
+  horizontal scroll, long text wraps, button rows wrap, touch targets are at
+  least 44 px and sheets keep their buttons visible.
+- **A class a class representative creates belongs to the course teacher.** The
+  teacher of the course for that batch and section is chosen automatically and is
+  editable only when the course has several teachers. The class then waits for
+  that teacher with Confirm, Cancel and Request reschedule, reaches the next-day
+  reminders, and flows into the final, today and published routines like a
+  generated class.
+- **A teacher can edit a class or exam they own** until it starts: the date, the
+  start and end time, the room and the mode, with the meeting link editable
+  until the class ends. Every change re-checks the room and batch clashes,
+  updates the published copy and tells the class representative and the students.
+  `PATCH /api/teacher/items/{id}`.
+- **Every routine view reads a date.** Today views show only today. The student
+  and class-representative routine, both final routines and the exams take a date
+  picker with a *Back to today* link; a past day is read-only and carries each
+  item's final status (Held, Cancelled, Rescheduled, Exam held) from the kept
+  rows, so the final-routine cleanup no longer hides it. Teacher and class
+  representative Upcoming open on tomorrow with a Tomorrow | Today toggle and a
+  *Show more days* button that loads the next day group up to the generated
+  horizon.
+- **The class and exam hub** is ordered Upcoming routine · Final routine ·
+  Create class / exam · Room availability and opens on the upcoming routine.
+- **One Attendance item per role**, with tabs inside it: Take attendance ·
+  History · Sheets · Phone requests for a teacher, Mark attendance · My
+  attendance · My phone for a student, History · Sheets · Phone changes for the
+  office. The separate phone screens left the navigation and their routes still
+  work.
+- **Roll call.** A teacher picks Bluetooth or Roll call when starting. Roll call
+  shows the roster with photo, reg no, a Present and an Absent button per
+  student, a Mark all present shortcut, a note with its own Save button, and a
+  Finish that marks the rest absent after a confirm. The same per-student editing
+  works during and after a Bluetooth session.
+- **The website can mark attendance** with the teacher's rotating 4-digit code
+  and browser geolocation within 30 m of the teacher, under the same accuracy and
+  freshness rules. Those marks are stored with method `web` and labelled *Web* in
+  the teacher's list, so the teacher can change them. The app flow is unchanged,
+  and registering a phone stays in the app.
+- **One sheet per course, batch and section.** Bluetooth, code, web and roll-call
+  sessions share the same sheet and the same Excel export. A teacher or the
+  office can delete a single session or a whole sheet after a confirm naming the
+  course, the batch and the section; the deletion is audited, students stop
+  seeing the removed sessions and every percentage is recounted.
+
 ## 2.2.5
 
 - The teacher's upcoming routine opens on tomorrow's full routine instead of only

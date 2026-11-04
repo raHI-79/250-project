@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"github.com/raHI-79/250-project/backend/internal/googleauth"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/validate"
@@ -13,6 +15,9 @@ import (
 const (
 	MessageGoogleDisabled   = "Google sign-in is not configured."
 	MessageGoogleCredential = "credential is required."
+	MessageGoogleAudience   = "Google issued this sign-in for a different client id. The app and the server have to use the same Google web client id."
+	MessageGoogleExpired    = "The Google sign-in expired before it reached the server. Try again."
+	MessageGoogleRefused    = "Google could not verify this sign-in. Try again."
 )
 
 type authConfigResponse struct {
@@ -110,12 +115,15 @@ func (a *Auth) GoogleVerifyEmail() http.HandlerFunc {
 		}
 		identity, err := a.google.Validate(r.Context(), credential, a.cfg.GoogleClientID)
 		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, a.googleDomainMessage())
+			log.Printf("handler: google refused a sign-in credential: %v", err)
+			httpx.WriteError(w, http.StatusBadRequest, googleRefusalMessage(err))
 			return
 		}
 		email := strings.ToLower(strings.TrimSpace(identity.Email))
 		if !identity.EmailVerified || identity.HostedDomain != a.cfg.StudentDomain ||
 			!strings.HasSuffix(email, a.cfg.StudentEmailSuffix()) {
+			log.Printf("handler: google returned an address outside the student domain (verified = %t, hosted domain = %q)",
+				identity.EmailVerified, identity.HostedDomain)
 			httpx.WriteError(w, http.StatusBadRequest, a.googleDomainMessage())
 			return
 		}
@@ -130,6 +138,19 @@ func (a *Auth) GoogleVerifyEmail() http.HandlerFunc {
 			EmailProof: proof,
 			ExpiresAt:  expiresAt.Format(time.RFC3339),
 		})
+	}
+}
+
+func googleRefusalMessage(err error) string {
+	switch {
+	case errors.Is(err, googleauth.ErrWrongAudience):
+		return MessageGoogleAudience
+	case errors.Is(err, googleauth.ErrExpiredToken):
+		return MessageGoogleExpired
+	case errors.Is(err, googleauth.ErrNotConfigured):
+		return MessageGoogleDisabled
+	default:
+		return MessageGoogleRefused
 	}
 }
 

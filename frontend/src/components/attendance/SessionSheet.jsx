@@ -1,18 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Check, X } from 'lucide-react'
-import { Button, Field, Sheet, Textarea, useToast } from '../ui'
+import { Button, Field, Sheet, Textarea, useConfirm, useToast } from '../ui'
 import api from '../../lib/api'
 import cx from '../../lib/cx'
 import { formatClock, formatDate } from '../../lib/time'
-import { sectionLabel } from '../../lib/attendance'
-
-const methodLabel = (method) => {
-  if (method === 'app') return 'App'
-  if (method === 'code') return 'Code'
-  if (method === 'manual') return 'By teacher'
-  if (method === 'system') return 'Not marked'
-  return ''
-}
+import { methodLabel, sectionLabel } from '../../lib/attendance'
 
 function MarkRow({ mark, open, onOpen, onSave, busy }) {
   const [status, setStatus] = useState(mark.status || 'absent')
@@ -55,7 +47,7 @@ function MarkRow({ mark, open, onOpen, onSave, busy }) {
       </button>
       {open && (
         <div className="flex flex-col gap-3 px-1 pb-4">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant={status === 'present' ? 'primary' : 'secondary'}
               size="sm"
@@ -91,8 +83,10 @@ function MarkRow({ mark, open, onOpen, onSave, busy }) {
   )
 }
 
-export default function SessionSheet({ sessionId, onClose, onChanged }) {
+export default function SessionSheet({ sessionId, onClose, onChanged, onDeleted }) {
   const toast = useToast()
+  const confirm = useConfirm()
+  const [removing, setRemoving] = useState(false)
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
   const [open, setOpen] = useState(0)
@@ -131,6 +125,25 @@ export default function SessionSheet({ sessionId, onClose, onChanged }) {
       setBusy(0)
     }
   }
+  const remove = async () => {
+    const ok = await confirm({
+      title: 'Delete this attendance session?',
+      message: 'The marks of this class are removed for everybody. This cannot be undone.',
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
+    setRemoving(true)
+    try {
+      await api.delete(`/api/teacher/attendance/sessions/${sessionId}`)
+      toast.success('The attendance session is deleted.')
+      onDeleted?.()
+      onClose()
+    } catch (failure) {
+      toast.error(failure.message)
+    } finally {
+      setRemoving(false)
+    }
+  }
   const session = detail?.session
   const marks = detail?.marks || []
   const present = marks.filter((mark) => mark.status === 'present').length
@@ -145,6 +158,13 @@ export default function SessionSheet({ sessionId, onClose, onChanged }) {
           : ''
       }
       full
+      footer={
+        detail ? (
+          <Button variant="danger" loading={removing} onClick={remove}>
+            Delete this session
+          </Button>
+        ) : null
+      }
     >
       {error && <p className="text-sm text-danger-600">{error}</p>}
       {!detail && !error && <p className="text-sm text-muted">Loading the class…</p>}

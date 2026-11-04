@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/googleauth"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -134,7 +135,7 @@ func TestGoogleVerifyEmail(t *testing.T) {
 			identity:   googleauth.Identity{Email: studentEmail, EmailVerified: true, HostedDomain: studentDomain},
 			clientID:   "another-client-id.apps.googleusercontent.com",
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Use your @student.sust.edu Google account.",
+			wantError:  MessageGoogleAudience,
 		},
 		{
 			name:       "google refuses the credential",
@@ -142,7 +143,15 @@ func TestGoogleVerifyEmail(t *testing.T) {
 			googleErr:  googleauth.ErrInvalidToken,
 			clientID:   googleClientID,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "Use your @student.sust.edu Google account.",
+			wantError:  MessageGoogleRefused,
+		},
+		{
+			name:       "the credential expired",
+			body:       `{"credential":"a-google-credential"}`,
+			googleErr:  fmt.Errorf("%w: token expired", googleauth.ErrExpiredToken),
+			clientID:   googleClientID,
+			wantStatus: http.StatusBadRequest,
+			wantError:  MessageGoogleExpired,
 		},
 		{
 			name:       "google sign-in is off",

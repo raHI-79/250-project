@@ -33,7 +33,7 @@ import { dayHeading, formatDate, formatTimeRange } from '../../../lib/time'
 import cx from '../../../lib/cx'
 import CourseName from '../../../components/schedule/CourseName'
 
-export default function FinalTab({ final, highlight, onPublished }) {
+export default function FinalTab({ final, day, highlight, onPublished }) {
   const toast = useToast()
   const periods = usePeriods()
   const confirm = useConfirm()
@@ -44,7 +44,12 @@ export default function FinalTab({ final, highlight, onPublished }) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [removing, setRemoving] = useState(false)
-  const days = useMemo(() => final.data?.days || [], [final.data])
+  const readOnly = Boolean(final.data?.read_only)
+  const days = useMemo(() => {
+    if (final.data?.days) return final.data.days
+    if (final.data?.items) return [{ date: final.data.date || day, items: final.data.items }]
+    return []
+  }, [final.data, day])
   const items = useMemo(() => days.flatMap((day) => day.items), [days])
   useEffect(() => {
     setPicked((current) => current.filter((id) => items.some((item) => item.id === id)))
@@ -177,13 +182,18 @@ export default function FinalTab({ final, highlight, onPublished }) {
     return (
       <EmptyState
         icon={ListChecks}
-        title="The final routine is empty"
-        text="Add items from the upcoming routine, then publish them for your batch."
+        title={readOnly ? 'Nothing was held on this day' : 'The final routine is empty'}
+        text={
+          readOnly
+            ? 'This day is over, so it only shows what was finally on the routine.'
+            : 'Add items from the upcoming routine, then publish them for your batch.'
+        }
       />
     )
   }
   return (
     <>
+      {!readOnly && (
       <Card hover={false} className="mb-4 flex flex-wrap items-center gap-3">
         <p className="text-sm text-brand-600">
           {picked.length} of {items.length} picked
@@ -219,6 +229,7 @@ export default function FinalTab({ final, highlight, onPublished }) {
           </Button>
         </div>
       </Card>
+      )}
       <div className="flex flex-col gap-4">
         {days.map((day) => (
           <Card key={day.date} hover={false} className="animate-fade-in-up">
@@ -234,13 +245,16 @@ export default function FinalTab({ final, highlight, onPublished }) {
                   )}
                 >
                   <div className="flex flex-wrap items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={picked.includes(item.id)}
-                      onChange={() => toggle(item.id)}
-                      aria-label={`Pick ${courseLine(item)}`}
-                      className="mt-1 size-4 rounded border-line-strong text-brand-600"
-                    />
+                    {!readOnly && (
+                      <input
+                        type="checkbox"
+                        checked={picked.includes(item.id)}
+                        onChange={() => toggle(item.id)}
+                        aria-label={`Pick ${courseLine(item)}`}
+                        data-compact=""
+                        className="mt-1 size-4 rounded border-line-strong text-brand-600"
+                      />
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                         <span className="font-medium tabular-nums text-brand-600">
@@ -251,10 +265,15 @@ export default function FinalTab({ final, highlight, onPublished }) {
                           {sectionShort(item.section)}
                           {placeOf(item) ? ` · ${placeOf(item)}` : ''}
                         </span>
-                        <ItemBadges item={item} showOrigin showFinal />
+                        <ItemBadges
+                          item={item}
+                          showOrigin
+                          showFinal
+                          statusText={item.final_status}
+                        />
                       </div>
                       {item.note && <p className="mt-1 text-xs text-muted">{item.note}</p>}
-                      {editing === item.id ? (
+                      {readOnly ? null : editing === item.id ? (
                         <div className="mt-3 flex flex-col gap-4 rounded-xl border border-line bg-wash/40 p-3">
                           <TimeRangeFields
                             periods={periods}

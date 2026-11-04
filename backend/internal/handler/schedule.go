@@ -13,6 +13,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -76,6 +77,7 @@ type itemBody struct {
 	Published           bool          `json:"published"`
 	ChangedSincePublish bool          `json:"changed_since_publish"`
 	NeedsTime           bool          `json:"needs_time"`
+	FinalStatus         string        `json:"final_status,omitempty"`
 	AllowedActions      []string      `json:"allowed_actions,omitempty"`
 }
 
@@ -87,6 +89,14 @@ type dayBody struct {
 	Date    string     `json:"date"`
 	Weekday string     `json:"weekday"`
 	Items   []itemBody `json:"items"`
+}
+
+type dateItemsResponse struct {
+	Date     string     `json:"date"`
+	Weekday  string     `json:"weekday"`
+	Past     bool       `json:"past"`
+	ReadOnly bool       `json:"read_only"`
+	Items    []itemBody `json:"items"`
 }
 
 type finalItemsResponse struct {
@@ -174,6 +184,62 @@ func groupItemDays(items []store.ScheduleItem, cfg *config.Config,
 		days[position].Items = append(days[position].Items, body)
 	}
 	return days
+}
+
+const (
+	StatusHeld        = "Held"
+	StatusCancelledAt = "Cancelled"
+	StatusMoved       = "Rescheduled"
+	StatusExamHeld    = "Exam held"
+)
+
+func finalStatusOf(item store.ScheduleItem) string {
+	switch {
+	case item.Status == store.ItemCancelled:
+		return StatusCancelledAt
+	case item.Kind == store.KindExam:
+		return StatusExamHeld
+	case item.Status == store.ItemRescheduled:
+		return StatusMoved
+	default:
+		return StatusHeld
+	}
+}
+
+func weekdayOf(date string, cfg *config.Config) string {
+	parsed, err := time.ParseInLocation(validate.DateLayout, date, cfg.Location)
+	if err != nil {
+		return ""
+	}
+	return validate.DayName(int(parsed.Weekday()))
+}
+
+func dateItems(items []store.ScheduleItem, date string, past bool, cfg *config.Config,
+	actions func(store.ScheduleItem) []string) dateItemsResponse {
+	bodies := make([]itemBody, 0, len(items))
+	for _, item := range items {
+		body := newItemBody(item)
+		if past {
+			body.FinalStatus = finalStatusOf(item)
+		} else if actions != nil {
+			body.AllowedActions = actions(item)
+		}
+		bodies = append(bodies, body)
+	}
+	return dateItemsResponse{
+		Date:     date,
+		Weekday:  weekdayOf(date, cfg),
+		Past:     past,
+		ReadOnly: past,
+		Items:    bodies,
+	}
+}
+
+func firstDays(days []dayBody, limit int) ([]dayBody, bool) {
+	if limit <= 0 || len(days) <= limit {
+		return days, false
+	}
+	return days[:limit], true
 }
 
 func liveItems(items []store.ScheduleItem) []store.ScheduleItem {
@@ -389,4 +455,25 @@ func (s *Schedule) Link() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, itemResponse{Item: newItemBody(item), Message: MessageLinkChanged})
 	}
+}
+
+func requestedDay(w http.ResponseWriter, r *http.Request, cfg *config.Config) (string, bool, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("date"))
+	if raw == "" {
+		return "", false, true
+	}
+	parsed, err := validate.Date("date", raw, cfg.Location)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		return "", true, false
+	}
+	return validate.DateString(parsed), true, true
+}
+
+func requestedDayLimit(r *http.Request) int {
+	limit, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("limit_days")))
+	if err != nil || limit < 0 {
+		return 0
+	}
+	return limit
 }

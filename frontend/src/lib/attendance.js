@@ -4,37 +4,15 @@ import { API_BASE, isAndroidApp } from './native'
 import { readJson } from './storage'
 import { SERVICE_UUID } from './attendanceToken'
 
+export * from './attendanceView.js'
+
 const AttendanceBeacon = registerPlugin('AttendanceBeacon')
 
 const AttendanceMark = registerPlugin('AttendanceMark')
 
-export const PASS_MARK = 50
-
 export const DURATIONS = [5, 10, 15, 20, 30]
 
 export const DEFAULT_MINUTES = 10
-
-export const TEACHER_TAB_TAKE = 'take'
-
-export const TEACHER_TAB_HISTORY = 'history'
-
-export const TEACHER_TAB_CLASSES = 'classes'
-
-export const sectionLabel = (section) => (section === 'ALL' ? 'A and B' : `Section ${section}`)
-
-export const classLabel = (entry) =>
-  `${entry.course_code} · ${entry.batch} · ${sectionLabel(entry.section)}`
-
-export const belowPass = (percent) => Number(percent) < PASS_MARK
-
-export const percentOf = (present, held) => {
-  const total = Number(held) || 0
-  if (total <= 0) return 0
-  return Math.round((Number(present) || 0) * 100 / total)
-}
-
-export const classKey = (entry) =>
-  `${entry.course_id}|${entry.batch}|${entry.section}`
 
 export const beaconSupported = () => isAndroidApp()
 
@@ -179,3 +157,23 @@ export const downloadWorkbook = async (path, filters, fallback = 'attendance.xls
   window.setTimeout(() => URL.revokeObjectURL(link.href), 2000)
   return { path: '', name }
 }
+
+export const browserPosition = () =>
+  new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ found: false })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          found: true,
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy_m: position.coords.accuracy,
+        })
+      },
+      () => resolve({ found: false }),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    )
+  })

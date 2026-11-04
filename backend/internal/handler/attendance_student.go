@@ -103,10 +103,11 @@ type openSessionBody struct {
 }
 
 type studentOpenResponse struct {
-	Session *openSessionBody `json:"session,omitempty"`
-	Phone   phoneBody        `json:"phone"`
-	Service string           `json:"service_uuid"`
-	Message string           `json:"message,omitempty"`
+	Session   *openSessionBody `json:"session,omitempty"`
+	Phone     phoneBody        `json:"phone"`
+	Service   string           `json:"service_uuid"`
+	Message   string           `json:"message,omitempty"`
+	NeedsCode bool             `json:"needs_code,omitempty"`
 }
 
 type myCourseBody struct {
@@ -196,11 +197,8 @@ func (s *StudentAttendance) Open() http.HandlerFunc {
 			Phone:   s.phone(r.Context(), profile, deviceID),
 			Service: attendance.ServiceUUID,
 		}
-		if !middleware.FromAndroidApp(r) {
-			response.Message = attendance.MessageWebsiteOnly
-			httpx.WriteJSON(w, http.StatusOK, response)
-			return
-		}
+		fromApp := middleware.FromAndroidApp(r)
+		response.NeedsCode = !fromApp
 		session, err := s.students.OpenSessionForStudent(r.Context(), profile.StudentID)
 		if errors.Is(err, store.ErrNotFound) {
 			response.Message = MessageNoSession
@@ -235,7 +233,9 @@ func (s *StudentAttendance) Open() http.HandlerFunc {
 			EndsAt:      timestamp(session.EndsAt),
 			Present:     marked,
 		}
-		if !response.Phone.Registered {
+		if !fromApp {
+			response.Message = ""
+		} else if !response.Phone.Registered {
 			response.Message = ""
 		} else if !response.Phone.ThisPhone && deviceID != "" {
 			response.Message = attendance.MessageWrongPhone
@@ -250,32 +250,35 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if !middleware.FromAndroidApp(r) {
-			httpx.WriteError(w, http.StatusForbidden, attendance.MessageWebsiteOnly)
-			return
-		}
 		var request markRequest
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		deviceID := strings.TrimSpace(request.DeviceID)
-		if deviceID == "" {
-			httpx.WriteError(w, http.StatusBadRequest, MessageDeviceIDRequired)
-			return
-		}
-		binding, err := s.students.DeviceBinding(r.Context(), profile.UserID)
-		if errors.Is(err, store.ErrNotFound) {
-			httpx.WriteError(w, http.StatusForbidden, attendance.MessageWrongPhone)
-			return
-		}
-		if err != nil {
-			log.Printf("handler: could not read the phone of a marking student: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
-		}
-		if binding.DeviceID != deviceID {
-			refuse(w, profile.StudentID, request.SessionID, http.StatusForbidden,
-				attendance.MessageWrongPhone, "another phone")
+		fromApp := middleware.FromAndroidApp(r)
+		deviceID := ""
+		if fromApp {
+			deviceID = strings.TrimSpace(request.DeviceID)
+			if deviceID == "" {
+				httpx.WriteError(w, http.StatusBadRequest, MessageDeviceIDRequired)
+				return
+			}
+			binding, err := s.students.DeviceBinding(r.Context(), profile.UserID)
+			if errors.Is(err, store.ErrNotFound) {
+				httpx.WriteError(w, http.StatusForbidden, attendance.MessageWrongPhone)
+				return
+			}
+			if err != nil {
+				log.Printf("handler: could not read the phone of a marking student: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			if binding.DeviceID != deviceID {
+				refuse(w, profile.StudentID, request.SessionID, http.StatusForbidden,
+					attendance.MessageWrongPhone, "another phone")
+				return
+			}
+		} else if strings.TrimSpace(request.Code) == "" {
+			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageWebNeedsCode)
 			return
 		}
 		session, err := s.students.AttendanceSession(r.Context(), request.SessionID)
@@ -305,9 +308,14 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 				attendance.MessageNotOnRoster, "not on the roster")
 			return
 		}
+		if session.Method == attendance.TakeRollCall {
+			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+				attendance.MessageRollCallOnly, "a roll call session")
+			return
+		}
 		method := attendance.MethodApp
 		switch {
-		case strings.TrimSpace(request.Token) != "":
+		case fromApp && strings.TrimSpace(request.Token) != "":
 			if !attendance.TokenMatches(session.TokenKey, session.ID, now, request.Token) {
 				refuse(w, profile.StudentID, session.ID, http.StatusForbidden,
 					attendance.MessageWrongToken, "a token from no current slice")
@@ -320,6 +328,9 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 				return
 			}
 			method = attendance.MethodCode
+			if !fromApp {
+				method = attendance.MethodWeb
+			}
 		default:
 			refuse(w, profile.StudentID, session.ID, http.StatusBadRequest,
 				MessageMarkNeedsProof, "neither a token nor a code")
@@ -330,7 +341,7 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 				Lat:       request.Lat,
 				Lng:       request.Lng,
 				AccuracyM: request.AccuracyM,
-				IsMock:    request.IsMock,
+				IsMock:    fromApp && request.IsMock,
 			},
 			attendance.Anchor{
 				Lat:       session.TeacherLat,

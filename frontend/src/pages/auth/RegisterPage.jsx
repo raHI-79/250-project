@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BadgeCheck, IdCard, KeyRound, Lock, Mail } from 'lucide-react'
-import { Alert, Button, Field, Input, PasswordInput, Select, Stepper } from '../../components/ui'
+import { Alert, Button, Field, Input, PasswordInput, Select } from '../../components/ui'
+import FormSection from '../../components/forms/FormSection'
 import GoogleVerifyButton from '../../components/forms/GoogleVerifyButton'
 import PhoneInput from '../../components/forms/PhoneInput'
 import PhotoPicker from '../../components/forms/PhotoPicker'
@@ -15,20 +16,7 @@ import { HERO_BUILDING } from '../../lib/campus'
 import { useAuthConfig, useCountdown } from '../../lib/hooks'
 import { paths } from '../../lib/paths'
 import { BLOOD_GROUPS } from '../../lib/options'
-import {
-  BATCH_PATTERN,
-  CODE_PATTERN,
-  MAX_FIELD,
-  PHONE_MESSAGE,
-  SECTION_PATTERN,
-  appendIf,
-  birthDateError,
-  emailDomainError,
-  isPhone,
-  passwordError,
-} from '../../lib/account'
-
-const STEPS = ['Personal', 'Academic', 'Account', 'Verify']
+import { appendIf, isCode, registrationErrors } from '../../lib/account'
 
 const RESEND_SECONDS = 60
 
@@ -50,7 +38,6 @@ export default function RegisterPage() {
   const human = useHumanCheck()
   const [params] = useSearchParams()
   const resuming = params.get('verify') || ''
-  const [step, setStep] = useState(resuming ? 4 : 1)
   const [form, setForm] = useState(resuming ? { ...EMPTY, regNo: resuming } : EMPTY)
   const [photo, setPhoto] = useState(null)
   const [errors, setErrors] = useState({})
@@ -58,48 +45,15 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [emailProof, setEmailProof] = useState('')
   const [code, setCode] = useState('')
+  const [sent, setSent] = useState(Boolean(resuming))
   const [emailHint, setEmailHint] = useState('')
   const [devCode, setDevCode] = useState('')
+  const [done, setDone] = useState(false)
   const [seconds, setSeconds] = useCountdown(0)
   const set = (key) => (event) => {
     const { value } = event.target
     setForm((current) => ({ ...current, [key]: value }))
-  }
-  const checkPersonal = () => {
-    const found = {}
-    const name = form.fullName.trim()
-    if (!name) found.fullName = 'Full name is required.'
-    else if (name.length > MAX_FIELD)
-      found.fullName = `Full name must be at most ${MAX_FIELD} characters long.`
-    if (!form.regNo.trim()) found.regNo = 'Registration number is required.'
-    const birth = birthDateError(form.dateOfBirth)
-    if (birth) found.dateOfBirth = birth
-    return found
-  }
-  const checkAcademic = () => {
-    const found = {}
-    if (!BATCH_PATTERN.test(form.batch.trim().toUpperCase()))
-      found.batch = 'Batch must look like CSE-23.'
-    if (!SECTION_PATTERN.test(form.section.trim().toUpperCase()))
-      found.section = 'Section must be a single letter from A to Z.'
-    return found
-  }
-  const checkAccount = () => {
-    const found = {}
-    const email = emailDomainError(form.email, studentEmailDomain)
-    if (email) found.email = email
-    if (!isPhone(form.phone)) found.phone = PHONE_MESSAGE
-    if (!BLOOD_GROUPS.includes(form.bloodGroup)) found.bloodGroup = 'Please choose your blood group.'
-    const password = passwordError(form.password, form.confirmPassword)
-    if (password) found.password = password
-    return found
-  }
-  const advance = (check) => {
-    setError('')
-    const found = check()
-    setErrors(found)
-    if (Object.keys(found).length > 0) return
-    setStep((current) => current + 1)
+    setErrors((current) => ({ ...current, [key]: '' }))
   }
   const clearGoogleEmail = () => {
     setEmailProof('')
@@ -111,11 +65,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await human.confirm()
-      const data = await api.post(
-        '/api/auth/google/verify-email',
-        { credential },
-        { auth: false },
-      )
+      const data = await api.post('/api/auth/google/verify-email', { credential }, { auth: false })
       setEmailProof(data?.email_proof || '')
       setForm((current) => ({ ...current, email: data?.email || current.email }))
       setErrors((current) => ({ ...current, email: '' }))
@@ -126,11 +76,13 @@ export default function RegisterPage() {
       setLoading(false)
     }
   }
-  const submit = async () => {
-    setError('')
-    const found = checkAccount()
+  const register = async () => {
+    const found = registrationErrors(form, studentEmailDomain)
     setErrors(found)
-    if (Object.keys(found).length > 0) return
+    if (Object.keys(found).length > 0) {
+      setError('Please correct the fields marked below.')
+      return false
+    }
     const body = new FormData()
     body.append('full_name', form.fullName.trim())
     body.append('reg_no', form.regNo.trim())
@@ -144,6 +96,7 @@ export default function RegisterPage() {
     body.append('confirm_password', form.confirmPassword)
     appendIf(body, 'photo', photo)
     appendIf(body, 'email_proof', emailProof)
+    setError('')
     setLoading(true)
     try {
       await human.confirm()
@@ -151,24 +104,26 @@ export default function RegisterPage() {
       setEmailHint(data?.email_hint || '')
       setDevCode(data?.dev_code || '')
       if (emailProof) {
-        setStep(5)
-        return
+        setDone(true)
+        return true
       }
+      setSent(true)
       setSeconds(RESEND_SECONDS)
-      setStep(4)
+      return true
     } catch (failure) {
       setError(failure.message)
       human.reset()
+      return false
     } finally {
       setLoading(false)
     }
   }
-  const verify = async () => {
-    setError('')
-    if (!CODE_PATTERN.test(code.trim())) {
-      setError('Please enter the 6-digit code from the email.')
+  const confirm = async () => {
+    if (!isCode(code)) {
+      setErrors((current) => ({ ...current, code: 'Enter the 6-digit code from the email.' }))
       return
     }
+    setError('')
     setLoading(true)
     try {
       await human.confirm()
@@ -177,7 +132,7 @@ export default function RegisterPage() {
         { reg_no: form.regNo.trim(), code: code.trim() },
         { auth: false },
       )
-      setStep(5)
+      setDone(true)
     } catch (failure) {
       setError(failure.message)
       human.reset()
@@ -208,11 +163,45 @@ export default function RegisterPage() {
   }
   const onSubmit = (event) => {
     event.preventDefault()
-    if (step === 1) advance(checkPersonal)
-    else if (step === 2) advance(checkAcademic)
-    else if (step === 3) submit()
-    else if (step === 4) verify()
+    if (sent) confirm()
+    else register()
   }
+  const codeField = (
+    <>
+      <Input
+        label="6-digit code"
+        icon={KeyRound}
+        value={code}
+        onChange={(event) => {
+          setCode(event.target.value)
+          setErrors((current) => ({ ...current, code: '' }))
+        }}
+        error={errors.code}
+        hint={
+          emailHint
+            ? `Sent to ${emailHint}. It expires in 15 minutes.`
+            : 'Sent to your university email address. It expires in 15 minutes.'
+        }
+        inputMode="numeric"
+        maxLength={6}
+        autoComplete="one-time-code"
+        required
+      />
+      {devCode && (
+        <Alert tone="info" title="Development code">
+          No mail server is configured, so the code is shown here: {devCode}
+        </Alert>
+      )}
+      <Button
+        variant="secondary"
+        onClick={resend}
+        disabled={loading || seconds > 0 || human.blocked}
+        className="w-full"
+      >
+        {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
+      </Button>
+    </>
+  )
   return (
     <AuthScreen
       images={HERO_BUILDING}
@@ -223,10 +212,10 @@ export default function RegisterPage() {
         <AuthHeading
           eyebrow="Student registration"
           title="Create your account"
-          subtitle="Register with your registration number and verify your university email."
+          subtitle="Fill the form once and verify your university email."
         />
         <div className="mt-5">
-          {step === 5 ? (
+          {done ? (
             <div className="flex flex-col gap-4">
               <Alert tone="success" title="Registration submitted">
                 Your email address is confirmed. The administration reviews new accounts, so you
@@ -240,21 +229,29 @@ export default function RegisterPage() {
               </Link>
             </div>
           ) : (
-            <>
-              <Stepper steps={STEPS} current={step} className="mb-6" />
-              <form onSubmit={onSubmit} className="flex flex-col gap-4">
-                {error && <Alert tone="error">{error}</Alert>}
-                {step === 1 && (
-                  <>
-                    <PhotoPicker
-                      file={photo}
-                      onChange={(next) => {
-                        setPhoto(next)
-                        setErrors((current) => ({ ...current, photo: '' }))
-                      }}
-                      error={errors.photo}
-                      hint="Optional. Your initials are shown until you add one."
-                    />
+            <form onSubmit={onSubmit} className="flex flex-col gap-6">
+              {error && <Alert tone="error">{error}</Alert>}
+              {resuming ? (
+                <FormSection
+                  title="Confirm your email"
+                  description="Enter the code we sent to your university email address."
+                >
+                  <Input
+                    label="Registration number"
+                    icon={IdCard}
+                    value={form.regNo}
+                    onChange={set('regNo')}
+                    autoComplete="username"
+                    required
+                  />
+                  {codeField}
+                </FormSection>
+              ) : (
+                <>
+                  <FormSection
+                    title="Account"
+                    description="The registration number and password you will log in with."
+                  >
                     <Input
                       label="Full name"
                       value={form.fullName}
@@ -274,29 +271,13 @@ export default function RegisterPage() {
                         required
                       />
                       <Input
-                        label="Date of birth"
-                        type="date"
-                        value={form.dateOfBirth}
-                        onChange={set('dateOfBirth')}
-                        error={errors.dateOfBirth}
-                        hint="Between 15 and 60 years ago"
-                        required
-                      />
-                    </div>
-                  </>
-                )}
-                {step === 2 && (
-                  <>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Input
                         label="Batch"
                         value={form.batch}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            batch: event.target.value.toUpperCase(),
-                          }))
-                        }
+                        onChange={(event) => {
+                          const batch = event.target.value.toUpperCase()
+                          setForm((current) => ({ ...current, batch }))
+                          setErrors((current) => ({ ...current, batch: '' }))
+                        }}
                         error={errors.batch}
                         hint="Like CSE-23"
                         placeholder="CSE-23"
@@ -305,20 +286,40 @@ export default function RegisterPage() {
                       <SectionPicker
                         value={form.section}
                         error={errors.section}
-                        onChange={(section) => setForm((current) => ({ ...current, section }))}
+                        onChange={(section) => {
+                          setForm((current) => ({ ...current, section }))
+                          setErrors((current) => ({ ...current, section: '' }))
+                        }}
+                      />
+                      <PasswordInput
+                        label="New password"
+                        icon={Lock}
+                        value={form.password}
+                        onChange={set('password')}
+                        error={errors.password}
+                        autoComplete="new-password"
+                        hint="At least 8 characters"
+                        required
+                      />
+                      <PasswordInput
+                        label="Confirm password"
+                        icon={Lock}
+                        value={form.confirmPassword}
+                        onChange={set('confirmPassword')}
+                        autoComplete="new-password"
+                        required
                       />
                     </div>
-                  </>
-                )}
-                {step === 3 && (
-                  <>
+                  </FormSection>
+                  <FormSection
+                    title="Contact"
+                    description="Verify your university address with Google, or let us email you a code."
+                  >
                     {emailProof ? (
                       <Field label="University email">
-                        <div className="flex items-center justify-between gap-3 rounded-xl border border-line-strong bg-wash px-3 py-2">
-                          <span className="min-w-0 truncate text-sm text-ink">
-                            {form.email}
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line-strong bg-wash px-3 py-2">
+                          <span className="wrap-long min-w-0 text-sm text-ink">{form.email}</span>
+                          <span className="flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-page">
                               <BadgeCheck size={13} />
                               Verified with Google
@@ -350,30 +351,60 @@ export default function RegisterPage() {
                           autoComplete="email"
                           required
                         />
-                        {googleEnabled && (
+                        {sent ? (
+                          codeField
+                        ) : (
                           <>
-                            <div className="flex items-center gap-3">
-                              <span className="h-px flex-1 bg-brand-100" />
-                              <span className="text-xs text-faint">or</span>
-                              <span className="h-px flex-1 bg-brand-100" />
-                            </div>
-                            <GoogleVerifyButton
-                              hostedDomain={studentEmailDomain}
-                              onCredential={onGoogleCredential}
-                              onError={setError}
-                            />
-                            <p className="text-center text-xs text-faint">
-                              Google confirms your address at once, so you can skip the email code.
-                            </p>
+                            <Button
+                              variant="secondary"
+                              onClick={register}
+                              loading={loading}
+                              disabled={human.blocked}
+                              className="w-full"
+                            >
+                              Send code
+                            </Button>
+                            {googleEnabled && (
+                              <>
+                                <div className="flex items-center gap-3">
+                                  <span className="h-px flex-1 bg-brand-100" />
+                                  <span className="text-xs text-faint">or</span>
+                                  <span className="h-px flex-1 bg-brand-100" />
+                                </div>
+                                <GoogleVerifyButton
+                                  hostedDomain={studentEmailDomain}
+                                  onCredential={onGoogleCredential}
+                                  onError={setError}
+                                />
+                                <p className="text-center text-xs text-faint">
+                                  Google confirms your address at once, so you can skip the email
+                                  code.
+                                </p>
+                              </>
+                            )}
                           </>
                         )}
                       </>
                     )}
+                    <PhoneInput
+                      value={form.phone}
+                      onChange={(next) => {
+                        setForm((current) => ({ ...current, phone: next }))
+                        setErrors((current) => ({ ...current, phone: '' }))
+                      }}
+                      error={errors.phone}
+                      required
+                    />
+                  </FormSection>
+                  <FormSection title="Personal">
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <PhoneInput
-                        value={form.phone}
-                        onChange={(next) => setForm((current) => ({ ...current, phone: next }))}
-                        error={errors.phone}
+                      <Input
+                        label="Date of birth"
+                        type="date"
+                        value={form.dateOfBirth}
+                        onChange={set('dateOfBirth')}
+                        error={errors.dateOfBirth}
+                        hint="Between 15 and 60 years ago"
                         required
                       />
                       <Select
@@ -390,105 +421,46 @@ export default function RegisterPage() {
                           </option>
                         ))}
                       </Select>
-                      <PasswordInput
-                        label="New password"
-                        icon={Lock}
-                        value={form.password}
-                        onChange={set('password')}
-                        error={errors.password}
-                        autoComplete="new-password"
-                        hint="At least 8 characters"
-                        required
-                      />
-                      <PasswordInput
-                        label="Confirm password"
-                        icon={Lock}
-                        value={form.confirmPassword}
-                        onChange={set('confirmPassword')}
-                        autoComplete="new-password"
-                        required
-                      />
                     </div>
-                  </>
-                )}
-                {step === 4 && (
-                  <>
-                    {resuming && (
-                      <Input
-                        label="Registration number"
-                        value={form.regNo}
-                        onChange={set('regNo')}
-                        autoComplete="username"
-                        required
-                      />
-                    )}
-                    <Alert tone="info" title="Confirm your email address">
-                      {emailHint
-                        ? `We sent a 6-digit code to ${emailHint}. It expires in 15 minutes.`
-                        : 'We sent a 6-digit code to your university email address. It expires in 15 minutes.'}
-                    </Alert>
-                    {devCode && (
-                      <Alert tone="info" title="Development code">
-                        No mail server is configured, so the code is shown here: {devCode}
-                      </Alert>
-                    )}
-                    <Input
-                      label="6-digit code"
-                      icon={KeyRound}
-                      value={code}
-                      onChange={(event) => setCode(event.target.value)}
-                      inputMode="numeric"
-                      maxLength={6}
-                      autoComplete="one-time-code"
-                      required
-                    />
-                    <Button
-                      variant="secondary"
-                      onClick={resend}
-                      disabled={loading || seconds > 0 || human.blocked}
-                      className="w-full"
-                    >
-                      {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
-                    </Button>
-                  </>
-                )}
-                {human.needed && step >= 3 && (
-                  <HumanCheck
-                    siteKey={human.siteKey}
-                    round={human.round}
-                    onToken={human.setToken}
-                  />
-                )}
-                <div className="flex gap-2">
-                  {step > 1 && step < 4 && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setError('')
-                        setStep((current) => current - 1)
+                  </FormSection>
+                  <FormSection title="Photo" description="Optional.">
+                    <PhotoPicker
+                      file={photo}
+                      onChange={(next) => {
+                        setPhoto(next)
+                        setErrors((current) => ({ ...current, photo: '' }))
                       }}
-                      className="flex-1"
-                    >
-                      Back
-                    </Button>
-                  )}
-                  <Button
-                    type="submit"
-                    loading={loading}
-                    disabled={step >= 3 && human.blocked}
-                    className="flex-1"
-                  >
-                    {step === 3 ? 'Create account' : step === 4 ? 'Confirm email' : 'Continue'}
-                  </Button>
-                </div>
+                      error={errors.photo}
+                      hint="Optional. Your initials are shown until you add one."
+                    />
+                  </FormSection>
+                </>
+              )}
+              {human.needed && (
+                <HumanCheck
+                  siteKey={human.siteKey}
+                  round={human.round}
+                  onToken={human.setToken}
+                />
+              )}
+              <div className="flex flex-col gap-3">
+                <Button
+                  type="submit"
+                  loading={loading}
+                  disabled={human.blocked}
+                  size="lg"
+                  className="w-full"
+                >
+                  {sent ? 'Confirm email and submit' : 'Submit registration'}
+                </Button>
                 <p className="text-center text-sm text-muted">
                   Already registered?{' '}
                   <Link to={paths.studentLogin()} className="text-brand-600 hover:underline">
                     Log in
                   </Link>
                 </p>
-              </form>
-            </>
+              </div>
+            </form>
           )}
         </div>
       </div>

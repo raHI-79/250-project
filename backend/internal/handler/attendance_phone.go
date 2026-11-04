@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/attendance"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
@@ -40,7 +41,12 @@ type PhoneStore interface {
 	ApprovedDeviceChanges(ctx context.Context, userID int64, semester string) (int, error)
 	FindAccount(ctx context.Context, userID int64) (store.AccountRef, error)
 	WriteAudit(ctx context.Context, adminID int64, action, targetSummary string) error
+	AttendanceSession(ctx context.Context, sessionID int64) (store.AttendanceSession, error)
+	DeleteAttendanceSession(ctx context.Context, sessionID int64) error
+	DeleteAttendanceSheet(ctx context.Context, courseID int64, batch, section string) (int, error)
 	ListBatchClasses(ctx context.Context, batch string, from, to time.Time) ([]store.ClassSummary, error)
+	ListBatchSessions(ctx context.Context, batch string, from, to time.Time) ([]store.AttendanceSession, error)
+	ListSessionRecords(ctx context.Context, sessionID int64) ([]store.AttendanceRecord, error)
 	BatchClassRates(ctx context.Context, courseID int64, batch, section string,
 		from, to time.Time) ([]store.StudentRate, error)
 	BatchExportRows(ctx context.Context, courseID int64, batch, section string,
@@ -371,5 +377,119 @@ func (p *Phones) AdminExport() http.HandlerFunc {
 			return
 		}
 		writeWorkbook(w, sheets, true, from, to)
+	}
+}
+
+func (p *Phones) AdminDeleteSession() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		sessionID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		session, err := p.store.AttendanceSession(r.Context(), sessionID)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageSessionGone)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not load an attendance session for the office: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		if err := p.store.DeleteAttendanceSession(r.Context(), sessionID); err != nil {
+			log.Printf("handler: could not delete an attendance session: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		summary := sheetSummary(session.CourseCode, session.CourseTitle, session.Batch, session.Section) +
+			" · " + session.StartedAt.Format(time.RFC3339)
+		if err := p.store.WriteAudit(r.Context(), current.ID, auditSessionDeleted, summary); err != nil {
+			log.Printf("handler: could not write the attendance delete audit: %v", err)
+		}
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageSessionDeleted})
+	}
+}
+
+func (p *Phones) AdminDeleteSheet() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		request, ok := decodeSheet(w, r)
+		if !ok {
+			return
+		}
+		deleted, err := p.store.DeleteAttendanceSheet(r.Context(), request.CourseID,
+			request.Batch, request.Section)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageSessionGone)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not delete an attendance sheet: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		summary := fmt.Sprintf("course %d · %s %s · %d sessions", request.CourseID,
+			request.Batch, request.Section, deleted)
+		if err := p.store.WriteAudit(r.Context(), current.ID, auditSheetDeleted, summary); err != nil {
+			log.Printf("handler: could not write the attendance delete audit: %v", err)
+		}
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageSheetDeleted})
+	}
+}
+
+func (p *Phones) AdminSessions() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		from, to := p.window(r)
+		batch := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("batch")))
+		sessions, err := p.store.ListBatchSessions(r.Context(), batch, from, to)
+		if err != nil {
+			log.Printf("handler: could not list the attendance sessions of the office: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		now := p.cfg.Now()
+		items := make([]sessionBody, 0, len(sessions))
+		for _, session := range sessions {
+			items = append(items, newSessionBody(session, now, false))
+		}
+		httpx.WriteJSON(w, http.StatusOK, sessionsResponse{Items: items})
+	}
+}
+
+func (p *Phones) AdminSession() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		session, err := p.store.AttendanceSession(r.Context(), sessionID)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageSessionGone)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not read an attendance session for the office: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		records, err := p.store.ListSessionRecords(r.Context(), sessionID)
+		if err != nil {
+			log.Printf("handler: could not read the marks for the office: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, sessionDetailResponse{
+			Session: newSessionBody(session, p.cfg.Now(), false),
+			Marks:   newMarkBodies(records),
+		})
 	}
 }

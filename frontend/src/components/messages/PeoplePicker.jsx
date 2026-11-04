@@ -31,6 +31,7 @@ export default function PeoplePicker({ picked, onPick, onDrop, search, onSearchC
                 type="button"
                 onClick={() => onDrop(contact)}
                 aria-label={`Remove ${contact.name}`}
+                data-compact=""
                 className="grid size-6 place-items-center text-muted hover:text-accent-600"
               >
                 <X size={13} />

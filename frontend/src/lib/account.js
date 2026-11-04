@@ -104,3 +104,46 @@ export const appendIf = (form, key, value) => {
   const text = value === undefined || value === null ? '' : String(value)
   if (text) form.append(key, text)
 }
+
+export const CODE_MESSAGE = 'Enter the 6-digit code from the email.'
+
+export const isCode = (value) => CODE_PATTERN.test(String(value || '').trim())
+
+export const registrationErrors = (form, studentEmailDomain, options = {}) => {
+  const found = {}
+  const name = String(form.fullName || '').trim()
+  if (!name) found.fullName = 'Full name is required.'
+  else if (name.length > MAX_FIELD)
+    found.fullName = `Full name must be at most ${MAX_FIELD} characters long.`
+  if (!String(form.regNo || '').trim()) found.regNo = 'Registration number is required.'
+  if (!BATCH_PATTERN.test(String(form.batch || '').trim().toUpperCase()))
+    found.batch = 'Batch must look like CSE-23.'
+  if (!SECTION_PATTERN.test(String(form.section || '').trim().toUpperCase()))
+    found.section = 'Section must be a single letter from A to Z.'
+  const birth = birthDateError(form.dateOfBirth)
+  if (birth) found.dateOfBirth = birth
+  const email = emailDomainError(form.email, studentEmailDomain)
+  if (email) found.email = email
+  if (!isPhone(form.phone)) found.phone = PHONE_MESSAGE
+  if (!String(form.bloodGroup || '').trim()) found.bloodGroup = 'Please choose your blood group.'
+  const password = passwordError(form.password, form.confirmPassword)
+  if (password) found.password = password
+  if (options.code !== undefined && !isCode(options.code)) found.code = CODE_MESSAGE
+  return found
+}
+
+export const resetErrors = (form, options = {}) => {
+  const found = {}
+  if (!String(form.identifier || '').trim()) found.identifier = 'This field is required.'
+  if (options.byPhone) {
+    if (!isPhone(form.phone)) found.phone = PHONE_MESSAGE
+  } else if (!String(form.dateOfBirth || '').trim()) {
+    found.dateOfBirth = 'Date of birth is required.'
+  }
+  if (options.stage === 'identify') return found
+  if (!isCode(form.code)) found.code = CODE_MESSAGE
+  if (options.stage === 'code') return found
+  const password = passwordError(form.password, form.confirmPassword)
+  if (password) found.password = password.replace('Password', 'New password')
+  return found
+}

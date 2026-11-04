@@ -142,9 +142,17 @@ export const CR_TAB_UPCOMING = 'upcoming'
 
 export const CR_TAB_FINAL = 'final'
 
+export const CR_TAB_ORDER = [CR_TAB_UPCOMING, CR_TAB_FINAL, CR_TAB_CREATE, CR_TAB_ROOMS]
+
+export const CR_TAB_DEFAULT = CR_TAB_ORDER[0]
+
 export const TEACHER_TAB_NEXT_DAY = 'next-day'
 
 export const TEACHER_TAB_FINAL = 'final'
+
+export const ATTENDANCE_TAB_PHONES = 'phones'
+
+export const ATTENDANCE_TAB_MINE = 'mine'
 
 export const notificationTarget = (link, role) => {
   const kind = link?.kind || ''
@@ -167,9 +175,13 @@ export const notificationTarget = (link, role) => {
   if (kind === 'message') return messagesFor(role, { c: ref })
   if (kind === 'poll') return pollsFor(role, { highlight: ref })
   if (kind === 'attendance_mark') return paths.student.attendance({ session: ref })
-  if (kind === 'attendance_mine') return paths.student.myAttendance({ course: ref })
+  if (kind === 'attendance_mine') {
+    return paths.student.attendance({ tab: ATTENDANCE_TAB_MINE, course: ref })
+  }
   if (kind === 'attendance_teacher') return paths.teacher.attendance({ highlight: ref })
-  if (kind === 'phone_requests') return paths.teacher.phoneRequests({ highlight: ref })
+  if (kind === 'phone_requests') {
+    return paths.teacher.attendance({ tab: ATTENDANCE_TAB_PHONES, highlight: ref })
+  }
   if (kind === 'cr_role') return paths.profile()
   return homeFor(role)
 }

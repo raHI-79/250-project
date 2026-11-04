@@ -7,25 +7,33 @@ import {
   googleMessage,
   loadGoogleIdentity,
   nativeGoogleCredential,
+  nativeGoogleMessage,
 } from '../../lib/google'
 
 function NativeGoogleButton({ clientId, hostedDomain, onCredential, onError }) {
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState('')
   const start = async () => {
     setBusy(true)
+    setFailed('')
     try {
       const token = await nativeGoogleCredential(clientId, hostedDomain)
       onCredential?.(token)
     } catch (reason) {
-      onError?.(googleMessage(reason))
+      const text = nativeGoogleMessage(reason, hostedDomain)
+      setFailed(text)
+      onError?.(text)
     } finally {
       setBusy(false)
     }
   }
   return (
-    <Button variant="secondary" size="lg" loading={busy} onClick={start} className="w-full">
-      Continue with Google
-    </Button>
+    <div>
+      <Button variant="secondary" size="lg" loading={busy} onClick={start} className="w-full">
+        Continue with Google
+      </Button>
+      {failed && <p className="mt-2 wrap-long text-xs text-danger-600">{failed}</p>}
+    </div>
   )
 }
 

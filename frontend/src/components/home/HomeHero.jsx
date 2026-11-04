@@ -46,6 +46,7 @@ export default function HomeHero() {
                 type="button"
                 aria-label={`Show campus photo ${position + 1}`}
                 aria-current={position === slideshow.index}
+                data-compact=""
                 onClick={() => slideshow.show(position)}
                 className={cx(
                   'h-1.5 rounded-full transition-all duration-500 motion-reduce:transition-none',

@@ -233,19 +233,60 @@ so Google trusts this package and this signature.
    keystore (`~/.android/debug.keystore`, alias `androiddebugkey`, password
    `android`) if you want Google sign-in to work in a debug build too.
 
-Both Android clients and the web client must sit in the **same** Google Cloud
-project, and that project needs an **OAuth consent screen** with the `email` and
-`profile` scopes. Nothing else has to be enabled.
+### The checklist for the Google Cloud Console
 
-### When it refuses
+All of this has to be true, or the app's **Continue with Google** fails:
+
+- [ ] **One project** holds everything below. Two projects never work together.
+- [ ] An **OAuth client ID → Web application** exists. Its id is the value of
+      `GOOGLE_CLIENT_ID` on Render and the only audience the server accepts. Its
+      **Authorised JavaScript origins** list the website addresses (the app does
+      not need an origin, it never loads Google in the WebView).
+- [ ] An **OAuth client ID → Android** exists with package name
+      `edu.sust.cse.portal` and the **SHA-1** printed by the
+      *Print the signing certificate fingerprints* step of `android.yml` for the
+      very build that is installed. A release APK signed with another keystore
+      needs that keystore's SHA-1 added as a further Android client.
+- [ ] The **OAuth consent screen** is filled in and **published to
+      production** (an app left *In testing* only works for the accounts listed
+      as test users), with the `email`, `profile` and `openid` scopes.
+- [ ] **User type** is *Internal* only if every student account belongs to the
+      same Google Workspace as the project; otherwise *External*, published.
+- [ ] The phone has a Google account for the student domain signed in at the
+      Android level. Credential Manager filters by the hosted domain the portal
+      reports, so a personal Gmail account is not offered.
+
+Nothing else has to be enabled; the flow uses no Google API beyond sign-in.
+
+### What goes wrong inside the app
+
+The screen now prints the exact text Google or the server returned, under the
+button, and the server logs the reason for every refusal (never the token).
+
+- *`[28433]` or `DEVELOPER_ERROR` or `10:`* — the Android client is missing, or
+  its package name or SHA-1 does not match the installed APK. Re-read the
+  fingerprint from the workflow log for the build you installed.
+- *`16:` or `NoCredentialException`* — no Google account for the student domain
+  is signed in on the phone, or the consent screen is still *In testing* and
+  this account is not a test user.
+- *Google issued this sign-in for a different client id* — `GOOGLE_CLIENT_ID` on
+  Render is not the **web** client id of the same project.
+- *The Google sign-in expired* — the phone clock is wrong, or the token sat
+  unused for more than an hour.
+
+`MainActivity` must stay an implementation of
+`ModifiedMainActivityForSocialLoginPlugin` and must forward `onActivityResult`
+to `SocialLoginPlugin.handleGoogleLoginIntent` for the request codes between
+`GoogleProvider.REQUEST_AUTHORIZE_GOOGLE_MIN` and
+`REQUEST_AUTHORIZE_GOOGLE_MAX`. Without that forwarding the plugin waits for an
+authorisation result that never arrives and **Continue with Google** hangs and
+then fails with no reason — that was the original fault.
+
+### When the website refuses
 
 - *Google refused this address* — the address in the browser is not in the web
   client's authorised origins. Add it exactly, without a path.
 - *Your browser blocked the Google window* — allow popups for the site.
-- In the app, a failure that mentions `10:` or `DEVELOPER_ERROR` means the
-  package name or the SHA-1 of the Android client does not match the APK that is
-  running. Re-read the fingerprint from the workflow log for the build you
-  installed.
 
 ## Who the app is for
 

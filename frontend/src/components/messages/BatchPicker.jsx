@@ -62,6 +62,7 @@ export default function BatchPicker({ batches, onAdd, onDrop, lockedBatch }) {
                 type="button"
                 onClick={() => onDrop(entry)}
                 aria-label={`Remove ${entry.batch}`}
+                data-compact=""
                 className="grid size-6 place-items-center text-muted hover:text-accent-600"
               >
                 <X size={13} />

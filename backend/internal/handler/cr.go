@@ -18,18 +18,19 @@ import (
 )
 
 const (
-	MessageNotACR           = "No class representative profile found for this account."
-	MessageDateRequired     = "date is required."
-	MessageItemCreated      = "Added to your batch schedule."
-	MessageItemUpdated      = "Schedule item updated."
-	MessageItemRemoved      = "Schedule item deleted."
-	MessageAskedTeacher     = "The teacher was asked for the new slot."
-	MessageAddedToFinal     = "Added to the final routine."
-	MessageRemovedFromFinal = "Removed from the final routine."
-	MessageRoutinePublished = "Routine published."
-	MessageTimesTogether    = "Send the start time and the end time together."
-	MessageRoomForRoomMode  = "Room is required for a class in a room."
-	MessageIDsRequired      = "item_ids is required."
+	MessageNotACR             = "No class representative profile found for this account."
+	MessageDateRequired       = "date is required."
+	MessageItemCreated        = "Added to your batch schedule."
+	MessageItemUpdated        = "Schedule item updated."
+	MessageItemRemoved        = "Schedule item deleted."
+	MessageAskedTeacher       = "The teacher was asked for the new slot."
+	MessageAddedToFinal       = "Added to the final routine."
+	MessageRemovedFromFinal   = "Removed from the final routine."
+	MessageRoutinePublished   = "Routine published."
+	MessageTimesTogether      = "Send the start time and the end time together."
+	MessageRoomForRoomMode    = "Room is required for a class in a room."
+	MessageIDsRequired        = "item_ids is required."
+	MessageTeacherNotOnCourse = "That teacher does not teach this course for your batch and section."
 
 	titleRoutinePublished = "Routine published"
 	titleRoutineChanged   = "Routine changed"
@@ -49,6 +50,10 @@ type CRStore interface {
 	ListRoomAvailability(ctx context.Context, from, to string) ([]store.RoomSlot, error)
 	ListPeriods(ctx context.Context) ([]store.Period, error)
 	TeacherOfCourse(ctx context.Context, batch, section string, courseID int64) (int64, error)
+	ListCourseTeachers(ctx context.Context, batch, section string, courseID int64) ([]store.CourseTeacher, error)
+	ListBatchItemsOnDate(ctx context.Context, batch, date string) ([]store.ScheduleItem, error)
+	ListFinalItemsOnDate(ctx context.Context, batch, date, today string) ([]store.ScheduleItem, error)
+	GeneratedHorizon(ctx context.Context) (string, error)
 	CreateCRItem(ctx context.Context, item store.NewScheduleItem) (store.ScheduleItem, error)
 	ListBatchItems(ctx context.Context, batch, from string) ([]store.ScheduleItem, error)
 	CRRequestReschedule(ctx context.Context, itemID int64, batch string,
@@ -107,6 +112,7 @@ type availabilityResponse struct {
 type crItemRequest struct {
 	Kind         string `json:"kind"`
 	CourseID     int64  `json:"course_id"`
+	TeacherID    int64  `json:"teacher_id"`
 	Section      string `json:"section"`
 	ItemDate     string `json:"item_date"`
 	StartTime    string `json:"start_time"`
@@ -148,6 +154,24 @@ type finalDayBody struct {
 	Date    string     `json:"date"`
 	Weekday string     `json:"weekday"`
 	Items   []itemBody `json:"items"`
+}
+
+type courseTeacherBody struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type courseTeachersResponse struct {
+	CourseID int64               `json:"course_id"`
+	Section  string              `json:"section"`
+	Items    []courseTeacherBody `json:"items"`
+}
+
+type crUpcomingResponse struct {
+	Items   []itemBody `json:"items"`
+	Days    []dayBody  `json:"days"`
+	Horizon string     `json:"horizon,omitempty"`
+	HasMore bool       `json:"has_more"`
 }
 
 type finalResponse struct {
@@ -234,6 +258,26 @@ func (c *CR) RoomAvailability() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		day, picked, ok := requestedDay(w, r, c.cfg)
+		if !ok {
+			return
+		}
+		if picked {
+			today := validate.DateString(c.cfg.Now())
+			items, err := c.classes.ListBatchItemsOnDate(r.Context(), profile.Batch, day)
+			if err != nil {
+				log.Printf("handler: could not list a day of a class representative: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			past := day < today
+			kept := items
+			if !past {
+				kept = liveItems(items)
+			}
+			httpx.WriteJSON(w, http.StatusOK, dateItems(kept, day, past, c.cfg, crActions))
+			return
+		}
 		from := c.cfg.Now()
 		if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
 			parsed, err := validate.Date("from", raw, c.cfg.Location)
@@ -295,13 +339,26 @@ func (c *CR) CreateItem() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		teacherID, err := c.classes.TeacherOfCourse(r.Context(), item.Batch, item.Section, item.CourseID)
+		teachers, err := c.classes.ListCourseTeachers(r.Context(), item.Batch, item.Section, item.CourseID)
 		if err != nil {
-			log.Printf("handler: could not find the teacher of a course: %v", err)
+			log.Printf("handler: could not list the teachers of a course: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		item.TeacherID = teacherID
+		item.TeacherID = pickCourseTeacher(teachers, request.TeacherID)
+		if request.TeacherID > 0 && item.TeacherID != request.TeacherID {
+			httpx.WriteError(w, http.StatusBadRequest, MessageTeacherNotOnCourse)
+			return
+		}
+		if item.TeacherID == 0 {
+			fallback, err := c.classes.TeacherOfCourse(r.Context(), item.Batch, item.Section, item.CourseID)
+			if err != nil {
+				log.Printf("handler: could not find the teacher of a course: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			item.TeacherID = fallback
+		}
 		created, err := c.classes.CreateCRItem(r.Context(), item)
 		if scheduleError(w, err) {
 			return
@@ -397,7 +454,13 @@ func (c *CR) Upcoming() http.HandlerFunc {
 		for index := range bodies {
 			bodies[index].AllowedActions = crActions(items[index])
 		}
-		httpx.WriteJSON(w, http.StatusOK, itemsResponse{Items: bodies})
+		days, more := firstDays(groupItemDays(liveItems(items), c.cfg, crActions), requestedDayLimit(r))
+		httpx.WriteJSON(w, http.StatusOK, crUpcomingResponse{
+			Items:   bodies,
+			Days:    days,
+			Horizon: c.horizon(r, validate.DateString(from)),
+			HasMore: more,
+		})
 	}
 }
 
@@ -709,7 +772,22 @@ func (c *CR) Final() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		items, err := c.classes.ListFinalItems(r.Context(), profile.Batch, validate.DateString(c.cfg.Now()))
+		today := validate.DateString(c.cfg.Now())
+		day, picked, ok := requestedDay(w, r, c.cfg)
+		if !ok {
+			return
+		}
+		if picked {
+			items, err := c.classes.ListFinalItemsOnDate(r.Context(), profile.Batch, day, today)
+			if err != nil {
+				log.Printf("handler: could not list a final day of a class representative: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			httpx.WriteJSON(w, http.StatusOK, dateItems(items, day, day < today, c.cfg, crActions))
+			return
+		}
+		items, err := c.classes.ListFinalItems(r.Context(), profile.Batch, today)
 		if err != nil {
 			log.Printf("handler: could not list the final routine of a class representative: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -944,4 +1022,68 @@ func groupFinal(items []store.ScheduleItem, cfg *config.Config) finalResponse {
 		}
 	}
 	return response
+}
+
+func pickCourseTeacher(teachers []store.CourseTeacher, wanted int64) int64 {
+	if len(teachers) == 0 {
+		return 0
+	}
+	if wanted <= 0 {
+		return teachers[0].ID
+	}
+	for _, teacher := range teachers {
+		if teacher.ID == wanted {
+			return teacher.ID
+		}
+	}
+	return 0
+}
+
+func (c *CR) horizon(r *http.Request, fallback string) string {
+	horizon, err := c.classes.GeneratedHorizon(r.Context())
+	if err != nil {
+		log.Printf("handler: could not read the generated horizon: %v", err)
+		return fallback
+	}
+	if horizon == "" {
+		return fallback
+	}
+	return horizon
+}
+
+func (c *CR) CourseTeachers() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := c.profile(w, r)
+		if !ok {
+			return
+		}
+		courseID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("course_id")), 10, 64)
+		if err != nil || courseID <= 0 {
+			httpx.WriteError(w, http.StatusBadRequest, "course_id must be a positive number.")
+			return
+		}
+		section := profile.Section
+		if raw := strings.TrimSpace(r.URL.Query().Get("section")); raw != "" {
+			section, err = validate.RoutineSection("Section", raw)
+			if err != nil {
+				httpx.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
+		teachers, err := c.classes.ListCourseTeachers(r.Context(), profile.Batch, section, courseID)
+		if err != nil {
+			log.Printf("handler: could not list the teachers of a course: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		items := make([]courseTeacherBody, 0, len(teachers))
+		for _, teacher := range teachers {
+			items = append(items, courseTeacherBody{ID: teacher.ID, Name: teacher.Name})
+		}
+		httpx.WriteJSON(w, http.StatusOK, courseTeachersResponse{
+			CourseID: courseID,
+			Section:  section,
+			Items:    items,
+		})
+	}
 }

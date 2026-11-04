@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { ClipboardList, Video } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import DateBlock from '../../components/DateBlock'
+import DayPicker from '../../components/schedule/DayPicker'
 import {
   Alert,
   Button,
@@ -22,7 +24,11 @@ import { externalLinkProps } from '../../lib/native'
 
 export default function ExamsPage() {
   useSectionSeen(BADGE_EXAMS)
-  const { data, loading, error, reload } = useResource('/api/students/exams')
+  const [day, setDay] = useState('')
+  const { data, loading, error, reload } = useResource(
+    '/api/students/exams',
+    day ? { date: day } : undefined,
+  )
   const highlight = useHighlight(Boolean(data))
   const items = data?.items || []
   return (
@@ -31,6 +37,13 @@ export default function ExamsPage() {
         eyebrow="Examinations"
         title="Exams"
         subtitle="Every exam ahead with its syllabus; the time and the room arrive with the published routine"
+      />
+      <DayPicker
+        value={day}
+        onChange={setDay}
+        label="Pick a date"
+        onClear={() => setDay('')}
+        clearLabel="Show every exam ahead"
       />
       {error && (
         <Alert tone="error" className="mb-5">
@@ -42,7 +55,7 @@ export default function ExamsPage() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title="No exams ahead"
+          title={day ? 'No exam on this day' : 'No exams ahead'}
           text="Nothing has been filed for your section yet."
           action={
             <Button as={Link} to={paths.student.upcomingRoutine()} variant="secondary" size="sm">
@@ -73,8 +86,12 @@ export default function ExamsPage() {
                         label={`${item.batch} ${sectionShort(item.section)}`}
                       />
                       {isOnline(item) && <StatusBadge status="gold" label="Online" />}
-                      {!item.published && (
-                        <StatusBadge status="pending" label="Time to be announced" />
+                      {item.final_status ? (
+                        <StatusBadge status="unavailable" label={item.final_status} />
+                      ) : (
+                        !item.published && (
+                          <StatusBadge status="pending" label="Time to be announced" />
+                        )
                       )}
                     </div>
                     <p className="font-numeral mt-1.5 text-sm text-ink-soft">

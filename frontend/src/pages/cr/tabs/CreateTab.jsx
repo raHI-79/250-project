@@ -4,7 +4,7 @@ import SlotFields from '../../../components/schedule/SlotFields'
 import TimeRangeFields from '../../../components/forms/TimeRangeFields'
 import { Alert, Button, Card, Input, Select, SkeletonLines, Textarea, useToast } from '../../../components/ui'
 import api from '../../../lib/api'
-import { usePeriods } from '../../../lib/hooks'
+import { usePeriods, useResource } from '../../../lib/hooks'
 import { MODE_ROOM, SECTION_ALL, periodRangeError, sectionLabel, slotError } from '../../../lib/schedule'
 import { today } from '../../../lib/time'
 
@@ -18,6 +18,7 @@ const EMPTY = {
   syllabus: '',
   instructions: '',
   note: '',
+  teacher_id: '',
 }
 
 const weekdayOf = (date) => new Date(`${date}T00:00:00`).getDay()
@@ -48,6 +49,17 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
   const items = courses.data?.items || []
   const course = items.find((entry) => String(entry.id) === form.course_id) || null
   const routineSlot = slotFor(course, form.item_date)
+  const section = form.section || ownSection || ''
+  const staff = useResource(form.course_id ? '/api/cr/course-teachers' : null, {
+    course_id: form.course_id,
+    section,
+  })
+  const teachers = staff.data?.items || []
+  const chosenTeacher =
+    teachers.find((entry) => String(entry.id) === String(form.teacher_id)) || teachers[0] || null
+  useEffect(() => {
+    setForm((current) => ({ ...current, teacher_id: '' }))
+  }, [form.course_id, section])
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
   const timeProblem = periodRangeError(periods, form.start, form.end)
   const useRoutineSlot = () => {
@@ -83,6 +95,7 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
         mode: slot.mode,
         room: slot.room,
         meeting_link: slot.meeting_link,
+        teacher_id: chosenTeacher ? Number(chosenTeacher.id) : 0,
         syllabus: form.kind === 'exam' ? form.syllabus : '',
         instructions: form.kind === 'exam' ? form.instructions : '',
         note: form.note,
@@ -132,15 +145,31 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
             required
           />
         </div>
-        {course?.teacher?.name && (
-          <p className="text-xs text-muted">
-            {course.code} is taught by {course.teacher.name}.
-            {routineSlot && (
-              <Button variant="ghost" size="sm" onClick={useRoutineSlot} className="ml-1 align-baseline">
-                Use the routine slot
-              </Button>
-            )}
-          </p>
+        {form.course_id && teachers.length > 1 ? (
+          <Select
+            label="Teacher"
+            value={String(chosenTeacher?.id || '')}
+            onChange={set('teacher_id')}
+            hint="This course has more than one teacher, so pick the one taking the class."
+          >
+            {teachers.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          (chosenTeacher?.name || course?.teacher?.name) && (
+            <p className="text-xs text-muted">
+              {course?.code} is taught by {chosenTeacher?.name || course?.teacher?.name}, who
+              decides this class.
+            </p>
+          )
+        )}
+        {routineSlot && (
+          <Button variant="ghost" size="sm" onClick={useRoutineSlot} className="self-start">
+            Use the routine slot
+          </Button>
         )}
         <TimeRangeFields
           periods={periods}

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { IdCard, KeyRound, Lock } from 'lucide-react'
-import { Alert, Button, Input, PasswordInput, Stepper } from '../../components/ui'
+import { Alert, Button, Input, PasswordInput } from '../../components/ui'
+import FormSection from '../../components/forms/FormSection'
 import PhoneInput from '../../components/forms/PhoneInput'
 import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
@@ -11,16 +12,9 @@ import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
 import { useCountdown } from '../../lib/hooks'
 import { PORTAL_ADMIN, loginForPortal } from '../../lib/paths'
-import {
-  CODE_PATTERN,
-  PHONE_MESSAGE,
-  isPhone,
-  passwordError,
-} from '../../lib/account'
+import { resetErrors } from '../../lib/account'
 
 const RESEND_SECONDS = 60
-
-const STEPS = ['Your account', 'Email code', 'New password']
 
 const copy = {
   student: {
@@ -40,46 +34,55 @@ const copy = {
   },
 }
 
+const EMPTY = {
+  identifier: '',
+  phone: '',
+  dateOfBirth: '',
+  code: '',
+  password: '',
+  confirmPassword: '',
+}
+
 export default function ForgotPasswordPage({ portal }) {
   const page = copy[portal] || copy.student
   const byPhone = portal === PORTAL_ADMIN
   const loginPath = loginForPortal(portal)
   const human = useHumanCheck()
-  const [step, setStep] = useState(1)
-  const [identifier, setIdentifier] = useState('')
-  const [phone, setPhone] = useState('')
-  const [dateOfBirth, setDateOfBirth] = useState('')
-  const [code, setCode] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [form, setForm] = useState(EMPTY)
+  const [errors, setErrors] = useState({})
+  const [sent, setSent] = useState(false)
   const [emailHint, setEmailHint] = useState('')
   const [devCode, setDevCode] = useState('')
   const [resetToken, setResetToken] = useState('')
+  const [done, setDone] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [seconds, setSeconds] = useCountdown(0)
-  const requestCode = async () => {
+  const set = (key) => (event) => {
+    const { value } = event.target
+    setForm((current) => ({ ...current, [key]: value }))
+    setErrors((current) => ({ ...current, [key]: '' }))
+  }
+  const sendCode = async () => {
+    const found = resetErrors(form, { byPhone, stage: 'identify' })
+    setErrors(found)
+    if (Object.keys(found).length > 0) {
+      setError('Please correct the fields marked below.')
+      return
+    }
     setError('')
-    if (byPhone && !isPhone(phone)) {
-      setError(PHONE_MESSAGE)
-      return
-    }
-    if (!byPhone && !dateOfBirth) {
-      setError('Date of birth is required.')
-      return
-    }
     setLoading(true)
     try {
       await human.confirm()
       const body = byPhone
-        ? { identifier: identifier.trim(), phone: phone.trim() }
-        : { identifier: identifier.trim(), date_of_birth: dateOfBirth }
+        ? { identifier: form.identifier.trim(), phone: form.phone.trim() }
+        : { identifier: form.identifier.trim(), date_of_birth: form.dateOfBirth }
       const data = await api.post('/api/auth/forgot-password', body, { auth: false })
       setEmailHint(data?.email_hint || '')
       setDevCode(data?.dev_code || '')
-      setCode('')
+      setForm((current) => ({ ...current, code: '' }))
       setSeconds(RESEND_SECONDS)
-      setStep(2)
+      setSent(true)
     } catch (failure) {
       setError(failure.message)
       human.reset()
@@ -87,51 +90,40 @@ export default function ForgotPasswordPage({ portal }) {
       setLoading(false)
     }
   }
-  const verifyCode = async () => {
-    setError('')
-    if (!CODE_PATTERN.test(code.trim())) {
-      setError('Please enter the 6-digit code from the email.')
+  const save = async () => {
+    const found = resetErrors(form, { byPhone })
+    setErrors(found)
+    if (Object.keys(found).length > 0) {
+      setError('Please correct the fields marked below.')
       return
     }
+    setError('')
     setLoading(true)
     try {
       await human.confirm()
-      const data = await api.post(
-        '/api/auth/verify-reset-code',
-        { identifier: identifier.trim(), code: code.trim() },
-        { auth: false },
-      )
-      setResetToken(data?.reset_token || '')
-      setStep(3)
-    } catch (failure) {
-      setError(failure.message)
-      human.reset()
-    } finally {
-      setLoading(false)
-    }
-  }
-  const savePassword = async () => {
-    setError('')
-    const problem = passwordError(password, confirmPassword)
-    if (problem) {
-      setError(problem.replace('Password', 'New password'))
-      return
-    }
-    setLoading(true)
-    try {
-      await human.confirm()
+      let token = resetToken
+      if (!token) {
+        const data = await api.post(
+          '/api/auth/verify-reset-code',
+          { identifier: form.identifier.trim(), code: form.code.trim() },
+          { auth: false },
+        )
+        token = data?.reset_token || ''
+        setResetToken(token)
+      }
       await api.post(
         '/api/auth/reset-password',
         {
-          identifier: identifier.trim(),
-          reset_token: resetToken,
-          new_password: password,
-          confirm_password: confirmPassword,
+          identifier: form.identifier.trim(),
+          reset_token: token,
+          new_password: form.password,
+          confirm_password: form.confirmPassword,
         },
         { auth: false },
       )
-      setStep(4)
+      setDone(true)
     } catch (failure) {
+      setResetToken('')
       setError(failure.message)
       human.reset()
     } finally {
@@ -140,9 +132,8 @@ export default function ForgotPasswordPage({ portal }) {
   }
   const onSubmit = (event) => {
     event.preventDefault()
-    if (step === 1) requestCode()
-    else if (step === 2) verifyCode()
-    else if (step === 3) savePassword()
+    if (sent) save()
+    else sendCode()
   }
   return (
     <AuthScreen
@@ -152,8 +143,7 @@ export default function ForgotPasswordPage({ portal }) {
     >
       <div>
         <AuthHeading eyebrow="Password reset" title={page.heading} subtitle={page.subtitle} />
-        {step < 4 && <Stepper steps={STEPS} current={step} className="mt-5" />}
-        {step === 4 ? (
+        {done ? (
           <div className="mt-5 flex flex-col gap-4">
             <Alert tone="success" title="Password updated">
               You can now log in with your new password.
@@ -163,135 +153,121 @@ export default function ForgotPasswordPage({ portal }) {
             </Link>
           </div>
         ) : (
-          <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-4">
+          <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-6">
             {error && <Alert tone="error">{error}</Alert>}
-            {step === 1 && (
-              <>
-                <Input
-                  label={page.identifier}
-                  icon={IdCard}
-                  value={identifier}
-                  onChange={(event) => setIdentifier(event.target.value)}
-                  autoComplete="username"
+            <FormSection title="Your account">
+              <Input
+                label={page.identifier}
+                icon={IdCard}
+                value={form.identifier}
+                onChange={set('identifier')}
+                error={errors.identifier}
+                autoComplete="username"
+                required
+              />
+              {byPhone ? (
+                <PhoneInput
+                  label="Registered phone number"
+                  value={form.phone}
+                  onChange={(next) => {
+                    setForm((current) => ({ ...current, phone: next }))
+                    setErrors((current) => ({ ...current, phone: '' }))
+                  }}
+                  error={errors.phone}
+                  hint="The number saved on your account"
                   required
                 />
-                {byPhone ? (
-                  <PhoneInput
-                    label="Registered phone number"
-                    value={phone}
-                    onChange={setPhone}
-                    hint="The number saved on your account"
-                    required
-                  />
-                ) : (
-                  <Input
-                    label="Date of birth"
-                    type="date"
-                    value={dateOfBirth}
-                    onChange={(event) => setDateOfBirth(event.target.value)}
-                    hint="The date saved on your account"
-                    required
-                  />
-                )}
-                {human.needed && (
-                  <HumanCheck
-                    siteKey={human.siteKey}
-                    round={human.round}
-                    onToken={human.setToken}
-                  />
-                )}
-                <Button
-                  type="submit"
-                  loading={loading}
-                  disabled={human.blocked}
-                  className="w-full"
-                >
-                  Send the code
-                </Button>
-              </>
-            )}
-            {step === 2 && (
-              <>
-                <Alert tone="info" title="Check your email">
-                  {emailHint
-                    ? `We sent a 6-digit code to ${emailHint}. It expires in 10 minutes.`
-                    : 'We sent a 6-digit code to the email address registered with your account. It expires in 10 minutes.'}
-                </Alert>
-                {devCode && (
-                  <Alert tone="info" title="Development code">
-                    No mail server is configured, so the code is shown here: {devCode}
-                  </Alert>
-                )}
+              ) : (
                 <Input
-                  label="6-digit code"
-                  icon={KeyRound}
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                  inputMode="numeric"
-                  maxLength={6}
-                  autoComplete="one-time-code"
+                  label="Date of birth"
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={set('dateOfBirth')}
+                  error={errors.dateOfBirth}
+                  hint="The date saved on your account"
                   required
                 />
-                {human.needed && (
-                  <HumanCheck
-                    siteKey={human.siteKey}
-                    round={human.round}
-                    onToken={human.setToken}
-                  />
-                )}
-                <Button
-                  type="submit"
-                  loading={loading}
-                  disabled={human.blocked}
-                  className="w-full"
-                >
-                  Verify the code
-                </Button>
+              )}
+              {!sent && (
                 <Button
                   variant="secondary"
-                  onClick={requestCode}
-                  disabled={loading || seconds > 0 || human.blocked}
-                  className="w-full"
-                >
-                  {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
-                </Button>
-              </>
-            )}
-            {step === 3 && (
-              <>
-                <PasswordInput
-                  label="New password"
-                  icon={Lock}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="new-password"
-                  hint="At least 8 characters"
-                  required
-                />
-                <PasswordInput
-                  label="Confirm new password"
-                  icon={Lock}
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  autoComplete="new-password"
-                  required
-                />
-                {human.needed && (
-                  <HumanCheck
-                    siteKey={human.siteKey}
-                    round={human.round}
-                    onToken={human.setToken}
-                  />
-                )}
-                <Button
-                  type="submit"
+                  onClick={sendCode}
                   loading={loading}
                   disabled={human.blocked}
                   className="w-full"
                 >
-                  Save the new password
+                  Send code
                 </Button>
+              )}
+            </FormSection>
+            {sent && (
+              <>
+                <FormSection title="Email code">
+                  <Input
+                    label="6-digit code"
+                    icon={KeyRound}
+                    value={form.code}
+                    onChange={set('code')}
+                    error={errors.code}
+                    hint={
+                      emailHint
+                        ? `Sent to ${emailHint}. It expires in 10 minutes.`
+                        : 'Sent to the email address registered with your account. It expires in 10 minutes.'
+                    }
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    required
+                  />
+                  {devCode && (
+                    <Alert tone="info" title="Development code">
+                      No mail server is configured, so the code is shown here: {devCode}
+                    </Alert>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={sendCode}
+                    disabled={loading || seconds > 0 || human.blocked}
+                    className="w-full"
+                  >
+                    {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
+                  </Button>
+                </FormSection>
+                <FormSection title="New password">
+                  <PasswordInput
+                    label="New password"
+                    icon={Lock}
+                    value={form.password}
+                    onChange={set('password')}
+                    error={errors.password}
+                    autoComplete="new-password"
+                    hint="At least 8 characters"
+                    required
+                  />
+                  <PasswordInput
+                    label="Confirm new password"
+                    icon={Lock}
+                    value={form.confirmPassword}
+                    onChange={set('confirmPassword')}
+                    autoComplete="new-password"
+                    required
+                  />
+                </FormSection>
               </>
+            )}
+            {human.needed && (
+              <HumanCheck siteKey={human.siteKey} round={human.round} onToken={human.setToken} />
+            )}
+            {sent && (
+              <Button
+                type="submit"
+                loading={loading}
+                disabled={human.blocked}
+                size="lg"
+                className="w-full"
+              >
+                Save the new password
+              </Button>
             )}
             <Link to={loginPath} className="text-sm text-brand-600 hover:underline">
               Back to log in

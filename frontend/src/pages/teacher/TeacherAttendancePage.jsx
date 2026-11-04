@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CalendarCheck, Download, Radio } from 'lucide-react'
+import { CalendarCheck, Download, Radio, Trash2 } from 'lucide-react'
 import {
   Alert,
   Button,
@@ -12,20 +12,27 @@ import {
   Select,
   SkeletonCard,
   StatusTabs,
+  useConfirm,
   useToast,
 } from '../../components/ui'
 import OpenSession from '../../components/attendance/OpenSession'
+import RollCall from '../../components/attendance/RollCall'
 import SessionSheet from '../../components/attendance/SessionSheet'
+import PhoneRequestList from '../../components/attendance/PhoneRequestList'
 import api from '../../lib/api'
 import cx from '../../lib/cx'
-import { useNow, usePolling, useResource } from '../../lib/hooks'
+import { useNow, usePolling, useQueryTab, useResource } from '../../lib/hooks'
 import { formatDate, formatClock } from '../../lib/time'
 import {
   DEFAULT_MINUTES,
   DURATIONS,
+  TAKE_BLUETOOTH,
+  TAKE_ROLL_CALL,
   TEACHER_TAB_CLASSES,
   TEACHER_TAB_HISTORY,
+  TEACHER_TAB_PHONES,
   TEACHER_TAB_TAKE,
+  deleteSheetQuestion,
   askBeacon,
   askBeaconLocation,
   beaconStatus,
@@ -45,7 +52,15 @@ import {
 const TABS = [
   { value: TEACHER_TAB_TAKE, label: 'Take attendance' },
   { value: TEACHER_TAB_HISTORY, label: 'History' },
-  { value: TEACHER_TAB_CLASSES, label: 'My classes' },
+  { value: TEACHER_TAB_CLASSES, label: 'Sheets' },
+  { value: TEACHER_TAB_PHONES, label: 'Phone requests' },
+]
+
+const TAB_VALUES = TABS.map((entry) => entry.value)
+
+const METHODS = [
+  { value: TAKE_BLUETOOTH, label: 'Bluetooth' },
+  { value: TAKE_ROLL_CALL, label: 'Roll call' },
 ]
 
 const OFF_BROWSER = 'The website shows the code for a projector. Bluetooth needs the Android app.'
@@ -61,7 +76,17 @@ const WEB_STATUS = {
   error: OFF_BROWSER,
 }
 
-function StartPanel({ options, minutes, setMinutes, picked, setPicked, busy, onStart }) {
+function StartPanel({
+  options,
+  minutes,
+  setMinutes,
+  picked,
+  setPicked,
+  method,
+  setMethod,
+  busy,
+  onStart,
+}) {
   const today = options?.today || []
   const classes = options?.classes || []
   const choices = today.length > 0 ? today : classes
@@ -118,6 +143,21 @@ function StartPanel({ options, minutes, setMinutes, picked, setPicked, busy, onS
               ))}
             </Select>
           </Field>
+          <div>
+            <p className="label-caps">How attendance is taken</p>
+            <Segmented
+              className="mt-2 max-w-sm"
+              label="Method"
+              options={METHODS}
+              value={method}
+              onChange={setMethod}
+            />
+            <p className="mt-2 text-xs text-muted">
+              {method === TAKE_ROLL_CALL
+                ? 'You read the roster and tap Present or Absent for each student.'
+                : 'Students mark themselves from their registered phone, or with the code on the board.'}
+            </p>
+          </div>
           <div>
             <p className="label-caps">How long it stays open</p>
             <Segmented
@@ -180,7 +220,7 @@ function HistoryList({ sessions, loading, onOpen }) {
   )
 }
 
-function ClassList({ classes, loading, onExport, busy }) {
+function ClassList({ classes, loading, onExport, onDelete, busy }) {
   if (loading) return <SkeletonCard />
   if (classes.length === 0) {
     return (
@@ -213,14 +253,24 @@ function ClassList({ classes, loading, onExport, busy }) {
             >
               {entry.average_rate} %
             </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={busy === classKey(entry)}
-              onClick={() => onExport(entry)}
-            >
-              <Download size={15} /> Excel
-            </Button>
+            <span className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={busy === classKey(entry)}
+                onClick={() => onExport(entry)}
+              >
+                <Download size={15} /> Excel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                loading={busy === `delete-${classKey(entry)}`}
+                onClick={() => onDelete(entry)}
+              >
+                <Trash2 size={15} /> Delete
+              </Button>
+            </span>
           </li>
         ))}
       </ul>
@@ -230,9 +280,11 @@ function ClassList({ classes, loading, onExport, busy }) {
 
 export default function TeacherAttendancePage() {
   const toast = useToast()
+  const confirm = useConfirm()
   const now = useNow(5000)
-  const [tab, setTab] = useState(TEACHER_TAB_TAKE)
+  const [tab, setTab] = useQueryTab(TAB_VALUES, TEACHER_TAB_TAKE)
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
+  const [method, setMethod] = useState(TAKE_BLUETOOTH)
   const [picked, setPicked] = useState('')
   const [busy, setBusy] = useState('')
   const [open, setOpen] = useState(null)
@@ -247,10 +299,10 @@ export default function TeacherAttendancePage() {
   useEffect(() => {
     if (options.data?.open) setOpen(options.data.open)
   }, [options.data])
-  const refreshOpen = useCallback(async () => {
-    if (!open?.id) return
+  const refreshSession = useCallback(async (sessionID) => {
+    if (!sessionID) return
     try {
-      const data = await api.get(`/api/teacher/attendance/sessions/${open.id}`)
+      const data = await api.get(`/api/teacher/attendance/sessions/${sessionID}`)
       setMarks(data?.marks || [])
       if (data?.session?.status === 'open') {
         setOpen(data.session)
@@ -264,8 +316,9 @@ export default function TeacherAttendancePage() {
     } catch {
       return
     }
-  }, [open?.id])
-  usePolling(open?.id ? refreshOpen : null, 5000)
+  }, [])
+  const refreshOpen = useCallback(() => refreshSession(open?.id), [refreshSession, open?.id])
+  usePolling(open?.id && open?.method !== TAKE_ROLL_CALL ? refreshOpen : null, 5000)
   const readStatus = useCallback(async () => {
     if (!beaconSupported()) {
       setStatus(WEB_STATUS)
@@ -280,7 +333,10 @@ export default function TeacherAttendancePage() {
       return null
     }
   }, [])
-  usePolling(beaconSupported() && open?.id ? readStatus : null, 4000)
+  usePolling(
+    beaconSupported() && open?.id && open?.method !== TAKE_ROLL_CALL ? readStatus : null,
+    4000,
+  )
   const prepare = useCallback(
     async (session) => {
       if (!beaconSupported()) {
@@ -321,7 +377,7 @@ export default function TeacherAttendancePage() {
     }
   }
   useEffect(() => {
-    if (!open?.id) return
+    if (!open?.id || open.method === TAKE_ROLL_CALL) return
     if (!open.token_key) {
       toast.error('This session did not come with its Bluetooth key. Close it and start again.')
       return
@@ -347,10 +403,12 @@ export default function TeacherAttendancePage() {
         section: entry.section,
         schedule_item_id: entry.schedule_item_id || 0,
         minutes,
+        method,
       })
       setOpen(session)
       setMarks([])
-      toast.success('Attendance is open.')
+      await refreshSession(session.id)
+      toast.success(method === TAKE_ROLL_CALL ? 'The roll call is open.' : 'Attendance is open.')
     } catch (failure) {
       toast.error(failure.message)
     } finally {
@@ -366,6 +424,29 @@ export default function TeacherAttendancePage() {
       )
       setOpen(session)
       toast.success('Attendance stays open longer.')
+    } catch (failure) {
+      toast.error(failure.message)
+    } finally {
+      setBusy('')
+    }
+  }
+  const removeSheet = async (entry) => {
+    const ok = await confirm({
+      title: 'Delete the attendance sheet?',
+      message: deleteSheetQuestion(entry),
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
+    setBusy(`delete-${classKey(entry)}`)
+    try {
+      await api.delete('/api/teacher/attendance/sheet', {
+        course_id: entry.course_id,
+        batch: entry.batch,
+        section: entry.section,
+      })
+      toast.success('The attendance sheet is deleted.')
+      classes.reload()
+      history.reload()
     } catch (failure) {
       toast.error(failure.message)
     } finally {
@@ -433,7 +514,15 @@ export default function TeacherAttendancePage() {
       )}
       {tab === TEACHER_TAB_TAKE && (
         <div className="flex flex-col gap-5">
-          {open ? (
+          {open && open.method === TAKE_ROLL_CALL ? (
+            <RollCall
+              session={open}
+              marks={marks}
+              busy={busy}
+              onReload={refreshOpen}
+              onFinish={close}
+            />
+          ) : open ? (
             <OpenSession
               session={open}
               marks={marks}
@@ -453,6 +542,8 @@ export default function TeacherAttendancePage() {
               setMinutes={setMinutes}
               picked={picked}
               setPicked={setPicked}
+              method={method}
+              setMethod={setMethod}
               busy={busy === 'start'}
               onStart={start}
             />
@@ -472,14 +563,21 @@ export default function TeacherAttendancePage() {
           loading={classes.loading}
           busy={busy}
           onExport={exportOne}
+          onDelete={removeSheet}
         />
       )}
+      {tab === TEACHER_TAB_PHONES && <PhoneRequestList />}
       <SessionSheet
         sessionId={detailID}
         onClose={() => setDetailID(0)}
         onChanged={() => {
           history.reload()
           classes.reload()
+        }}
+        onDeleted={() => {
+          history.reload()
+          classes.reload()
+          options.reload()
         }}
       />
     </>

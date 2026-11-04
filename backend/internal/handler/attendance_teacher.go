@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/attendance"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
@@ -21,6 +22,13 @@ type startRequest struct {
 	Section        string `json:"section"`
 	ScheduleItemID int64  `json:"schedule_item_id"`
 	Minutes        int    `json:"minutes"`
+	Method         string `json:"method"`
+}
+
+type sheetRequest struct {
+	CourseID int64  `json:"course_id"`
+	Batch    string `json:"batch"`
+	Section  string `json:"section"`
 }
 
 type extendRequest struct {
@@ -36,6 +44,10 @@ type locationRequest struct {
 type editMarkRequest struct {
 	Status string `json:"status"`
 	Note   string `json:"note"`
+}
+
+type noteRequest struct {
+	Note string `json:"note"`
 }
 
 type todayClassBody struct {
@@ -155,6 +167,14 @@ func (a *Attendance) Start() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, "Pick the course of this class.")
 			return
 		}
+		method := strings.ToLower(strings.TrimSpace(request.Method))
+		if method == "" {
+			method = attendance.TakeBluetooth
+		}
+		if !attendance.ValidTakeMethod(method) {
+			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadTakeMethod)
+			return
+		}
 		if !attendance.ValidDuration(request.Minutes) {
 			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadDuration)
 			return
@@ -184,6 +204,7 @@ func (a *Attendance) Start() http.HandlerFunc {
 			TeacherID:      teacher.ID,
 			EndsAt:         now.Add(time.Duration(request.Minutes) * time.Minute),
 			TokenKey:       key,
+			Method:         method,
 		})
 		if err != nil {
 			log.Printf("handler: could not open an attendance session: %v", err)
@@ -191,10 +212,12 @@ func (a *Attendance) Start() http.HandlerFunc {
 			return
 		}
 		if session.TokenKey == key {
-			log.Printf("handler: attendance %d opened by teacher %d for %s %s-%s until %s",
+			log.Printf("handler: attendance %d opened by teacher %d for %s %s-%s by %s until %s",
 				session.ID, teacher.ID, session.CourseCode, session.Batch, session.Section,
-				session.EndsAt.Format(time.TimeOnly))
-			a.announce(r.Context(), session)
+				session.Method, session.EndsAt.Format(time.TimeOnly))
+			if session.Method != attendance.TakeRollCall {
+				a.announce(r.Context(), session)
+			}
 		}
 		httpx.WriteJSON(w, http.StatusCreated, newSessionBody(session, now, true))
 	}
@@ -352,9 +375,8 @@ func (a *Attendance) EditMark() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		studentID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("student_id")), 10, 64)
-		if err != nil || studentID <= 0 {
-			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidID)
+		studentID, ok := studentPathID(w, r)
+		if !ok {
 			return
 		}
 		var request editMarkRequest
@@ -395,22 +417,7 @@ func (a *Attendance) EditMark() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		records, err := a.store.ListSessionRecords(r.Context(), session.ID)
-		if err != nil {
-			log.Printf("handler: could not reload the marks of an attendance session: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
-		}
-		fresh, err := a.store.AttendanceSession(r.Context(), session.ID)
-		if err != nil {
-			log.Printf("handler: could not reload an attendance session: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
-		}
-		httpx.WriteJSON(w, http.StatusOK, sessionDetailResponse{
-			Session: newSessionBody(fresh, a.cfg.Now(), false),
-			Marks:   newMarkBodies(records),
-		})
+		a.writeSession(w, r, session.ID)
 	}
 }
 
@@ -461,4 +468,192 @@ func (a *Attendance) Classes() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, classesResponse{Items: items})
 	}
+}
+
+func (a *Attendance) MarkAll() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := a.teacher(w, r)
+		if !ok {
+			return
+		}
+		session, ok := a.ownSession(w, r, teacher)
+		if !ok {
+			return
+		}
+		current, _ := middleware.CurrentUser(r.Context())
+		if _, err := a.store.MarkAllPresent(r.Context(), session.ID, current.ID); err != nil {
+			log.Printf("handler: could not mark a whole roster present: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		a.writeSession(w, r, session.ID)
+	}
+}
+
+func (a *Attendance) SaveNote() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := a.teacher(w, r)
+		if !ok {
+			return
+		}
+		session, ok := a.ownSession(w, r, teacher)
+		if !ok {
+			return
+		}
+		studentID, ok := studentPathID(w, r)
+		if !ok {
+			return
+		}
+		var request noteRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		note, err := validate.Description("Note", request.Note)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		current, _ := middleware.CurrentUser(r.Context())
+		err = a.store.UpdateAttendanceNote(r.Context(), session.ID, studentID, current.ID, note)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusConflict, MessageMarkMissing)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not save an attendance note: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		a.writeSession(w, r, session.ID)
+	}
+}
+
+func (a *Attendance) DeleteSession() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := a.teacher(w, r)
+		if !ok {
+			return
+		}
+		session, ok := a.ownSession(w, r, teacher)
+		if !ok {
+			return
+		}
+		current, _ := middleware.CurrentUser(r.Context())
+		a.removeSession(w, r, session, current.ID)
+	}
+}
+
+func (a *Attendance) DeleteSheet() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := a.teacher(w, r)
+		if !ok {
+			return
+		}
+		request, ok := decodeSheet(w, r)
+		if !ok {
+			return
+		}
+		mine, err := a.teaches(r.Context(), teacher.ID, request.CourseID, request.Batch, request.Section)
+		if err != nil {
+			log.Printf("handler: could not check the classes of a teacher: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		if !mine {
+			httpx.WriteError(w, http.StatusForbidden, MessageNotYourClass)
+			return
+		}
+		current, _ := middleware.CurrentUser(r.Context())
+		a.removeSheet(w, r, request, current.ID)
+	}
+}
+
+func decodeSheet(w http.ResponseWriter, r *http.Request) (sheetRequest, bool) {
+	var request sheetRequest
+	if !httpx.DecodeJSON(w, r, &request) {
+		return sheetRequest{}, false
+	}
+	batch, err := validate.Batch("Batch", request.Batch)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		return sheetRequest{}, false
+	}
+	section, err := validate.RoutineSection("Section", request.Section)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		return sheetRequest{}, false
+	}
+	if request.CourseID <= 0 {
+		httpx.WriteError(w, http.StatusBadRequest, MessageSheetFields)
+		return sheetRequest{}, false
+	}
+	return sheetRequest{CourseID: request.CourseID, Batch: batch, Section: section}, true
+}
+
+func (a *Attendance) removeSession(w http.ResponseWriter, r *http.Request,
+	session store.AttendanceSession, actorID int64) {
+	if err := a.store.DeleteAttendanceSession(r.Context(), session.ID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageSessionGone)
+			return
+		}
+		log.Printf("handler: could not delete an attendance session: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return
+	}
+	summary := sheetSummary(session.CourseCode, session.CourseTitle, session.Batch, session.Section) +
+		" · " + session.StartedAt.Format(time.RFC3339)
+	if err := a.store.WriteAudit(r.Context(), actorID, auditSessionDeleted, summary); err != nil {
+		log.Printf("handler: could not write the attendance delete audit: %v", err)
+	}
+	httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageSessionDeleted})
+}
+
+func (a *Attendance) removeSheet(w http.ResponseWriter, r *http.Request,
+	request sheetRequest, actorID int64) {
+	deleted, err := a.store.DeleteAttendanceSheet(r.Context(), request.CourseID,
+		request.Batch, request.Section)
+	if errors.Is(err, store.ErrNotFound) {
+		httpx.WriteError(w, http.StatusNotFound, MessageSessionGone)
+		return
+	}
+	if err != nil {
+		log.Printf("handler: could not delete an attendance sheet: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return
+	}
+	summary := fmt.Sprintf("course %d · %s %s · %d sessions", request.CourseID,
+		request.Batch, request.Section, deleted)
+	if err := a.store.WriteAudit(r.Context(), actorID, auditSheetDeleted, summary); err != nil {
+		log.Printf("handler: could not write the attendance delete audit: %v", err)
+	}
+	httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageSheetDeleted})
+}
+
+func (a *Attendance) writeSession(w http.ResponseWriter, r *http.Request, sessionID int64) {
+	records, err := a.store.ListSessionRecords(r.Context(), sessionID)
+	if err != nil {
+		log.Printf("handler: could not reload the marks of an attendance session: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return
+	}
+	fresh, err := a.store.AttendanceSession(r.Context(), sessionID)
+	if err != nil {
+		log.Printf("handler: could not reload an attendance session: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, sessionDetailResponse{
+		Session: newSessionBody(fresh, a.cfg.Now(), true),
+		Marks:   newMarkBodies(records),
+	})
+}
+
+func studentPathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	studentID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("student_id")), 10, 64)
+	if err != nil || studentID <= 0 {
+		httpx.WriteError(w, http.StatusBadRequest, MessageInvalidID)
+		return 0, false
+	}
+	return studentID, true
 }

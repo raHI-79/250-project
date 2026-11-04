@@ -45,7 +45,7 @@ func (f *fakeGoogle) Validate(ctx context.Context, credential, audience string) 
 		return googleauth.Identity{}, f.err
 	}
 	if audience != googleClientID {
-		return googleauth.Identity{}, googleauth.ErrInvalidToken
+		return googleauth.Identity{}, googleauth.ErrWrongAudience
 	}
 	return f.identity, nil
 }

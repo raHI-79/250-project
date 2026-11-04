@@ -3,7 +3,13 @@ import { Bluetooth, Clock, MapPin, Users } from 'lucide-react'
 import { Alert, Button, Card, StatusBadge } from '../ui'
 import cx from '../../lib/cx'
 import { formatClock } from '../../lib/time'
-import { DURATIONS, bluetoothState, positionState, sectionLabel } from '../../lib/attendance'
+import {
+  DURATIONS,
+  bluetoothState,
+  methodLabel,
+  positionState,
+  sectionLabel,
+} from '../../lib/attendance'
 
 const minutesLeft = (endsAt, now) => {
   const end = new Date(endsAt).getTime()
@@ -186,7 +192,7 @@ export default function OpenSession({
                 <span className="shrink-0 text-xs text-muted">
                   {formatClock(mark.marked_at)}
                   {mark.distance_m ? ` · ${mark.distance_m} m` : ''}
-                  {mark.method === 'code' ? ' · code' : ''}
+                  {mark.method === 'app' ? '' : ` · ${methodLabel(mark.method)}`}
                 </span>
               </li>
             ))}

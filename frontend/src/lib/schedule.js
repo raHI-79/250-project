@@ -191,3 +191,24 @@ export const periodRangeError = (periods, start, end) => {
   if (broken) return `Classes cannot run during ${broken.label}.`
   return ''
 }
+
+export const itemStarted = (item, now = new Date()) => {
+  if (!item?.item_date || !item?.start_time) return false
+  const stamp = `${item.item_date} ${item.start_time}`
+  const pad = (value) => String(value).padStart(2, '0')
+  const here = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
+    now.getHours(),
+  )}:${pad(now.getMinutes())}`
+  return stamp < here
+}
+
+export const itemEnded = (item, now = new Date()) => {
+  if (!item?.item_date || !item?.end_time) return false
+  return itemStarted({ item_date: item.item_date, start_time: item.end_time }, now)
+}
+
+export const canEditItem = (item, now = new Date()) =>
+  Boolean(item) && item.status !== STATUS_CANCELLED && !itemStarted(item, now)
+
+export const canEditLink = (item, now = new Date()) =>
+  isOnline(item) && item?.status !== STATUS_CANCELLED && !itemEnded(item, now)

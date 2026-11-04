@@ -215,3 +215,20 @@ func serve(t *testing.T, router http.Handler, method, path, body, token string) 
 	router.ServeHTTP(rec, request)
 	return rec
 }
+
+func (emptyCRStore) ListCourseTeachers(ctx context.Context, batch, section string,
+	courseID int64) ([]store.CourseTeacher, error) {
+	return nil, nil
+}
+
+func (emptyCRStore) ListBatchItemsOnDate(ctx context.Context, batch, date string) ([]store.ScheduleItem, error) {
+	return nil, nil
+}
+
+func (emptyCRStore) ListFinalItemsOnDate(ctx context.Context, batch, date, today string) ([]store.ScheduleItem, error) {
+	return nil, nil
+}
+
+func (emptyCRStore) GeneratedHorizon(ctx context.Context) (string, error) {
+	return "", nil
+}

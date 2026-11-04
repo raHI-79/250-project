@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from './api'
+import { shiftDate } from './time'
 
 const NO_QUERY = {}
 
@@ -223,4 +224,41 @@ export const useUnreadMessages = (enabled = true) => {
   }, [load])
   usePolling(enabled ? load : null, 20000)
   return count
+}
+
+export const useMoreDays = (path, after, horizon) => {
+  const [days, setDays] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+  const reset = useCallback(() => {
+    setDays([])
+    setError('')
+    setDone(false)
+  }, [])
+  useEffect(() => {
+    reset()
+  }, [path, after, reset])
+  const last = days.length > 0 ? days[days.length - 1].date : after
+  const exhausted = done || !path || !last || (horizon && last >= horizon)
+  const more = useCallback(async () => {
+    if (!path || !last) return
+    setLoading(true)
+    setError('')
+    try {
+      const from = shiftDate(last, 1)
+      const result = await api.get(path, {
+        query: { from, to: horizon || from, limit_days: 1 },
+      })
+      const next = result?.days || []
+      if (next.length === 0) setDone(true)
+      else setDays((current) => [...current, ...next])
+      if (!result?.has_more && next.length <= 1) setDone(true)
+    } catch (failure) {
+      setError(failure.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [path, last, horizon])
+  return { days, loading, error, exhausted, more, reset }
 }

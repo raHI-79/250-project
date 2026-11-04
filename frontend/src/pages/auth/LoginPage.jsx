@@ -143,30 +143,25 @@ export default function LoginPage({ portal }) {
           <div className="mt-5 flex flex-col items-center gap-1">
             <Link
               to={page.forgot()}
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-brand-600"
+              className="tap-target inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold text-brand-600"
             >
               Forgot password?
             </Link>
-            <Link
-              to={portal === PORTAL_TEACHER ? paths.teacherActivate() : paths.studentRegister()}
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-brand-600"
-            >
-              {portal === PORTAL_TEACHER ? 'Invited? Activate' : 'New student? Register'}
-            </Link>
+            {portal !== PORTAL_TEACHER && (
+              <Link
+                to={paths.studentRegister()}
+                className="tap-target inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold text-brand-600"
+              >
+                New student? Register
+              </Link>
+            )}
           </div>
         ) : (
           <div className="mt-5 flex flex-col gap-1 text-sm">
             <Link to={page.forgot()} className="text-brand-600 hover:underline">
               Forgot your password?
             </Link>
-            {portal === PORTAL_TEACHER ? (
-              <p className="text-muted">
-                Invited but not activated?{' '}
-                <Link to={paths.teacherActivate()} className="text-brand-600 hover:underline">
-                  Use your invitation link
-                </Link>
-              </p>
-            ) : (
+            {portal !== PORTAL_TEACHER && (
               <p className="text-muted">
                 New student?{' '}
                 <Link to={paths.studentRegister()} className="text-brand-600 hover:underline">

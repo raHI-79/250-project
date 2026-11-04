@@ -1,41 +1,60 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import AvailabilityGrid from '../../components/schedule/AvailabilityGrid'
+import DayPicker from '../../components/schedule/DayPicker'
 import CreateTab from './tabs/CreateTab'
 import FinalTab from './tabs/FinalTab'
 import UpcomingTab from './tabs/UpcomingTab'
 import { Alert, Card, Input, PageHeader, SkeletonCard, StatusTabs } from '../../components/ui'
 import { useAuth } from '../../context/auth'
-import { useHighlight, useQueryTab, useResource } from '../../lib/hooks'
+import { useHighlight, useMoreDays, useQueryTab, useResource } from '../../lib/hooks'
 import {
   CR_TAB_CREATE,
+  CR_TAB_DEFAULT,
   CR_TAB_FINAL,
+  CR_TAB_ORDER,
   CR_TAB_ROOMS,
   CR_TAB_UPCOMING,
 } from '../../lib/paths'
-import { today } from '../../lib/time'
+import { defaultUpcomingDay, today } from '../../lib/time'
 
-const TABS = [
-  { value: CR_TAB_CREATE, label: 'Create' },
-  { value: CR_TAB_ROOMS, label: 'Room availability' },
-  { value: CR_TAB_UPCOMING, label: 'Upcoming routine' },
-  { value: CR_TAB_FINAL, label: 'Final routine' },
-]
+const LABELS = {
+  [CR_TAB_UPCOMING]: 'Upcoming routine',
+  [CR_TAB_FINAL]: 'Final routine',
+  [CR_TAB_CREATE]: 'Create class / exam',
+  [CR_TAB_ROOMS]: 'Room availability',
+}
 
-const TAB_VALUES = TABS.map((entry) => entry.value)
+const TABS = CR_TAB_ORDER.map((value) => ({ value, label: LABELS[value] }))
 
 export default function CreateClassExamPage() {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
-  const [tab, setTab] = useQueryTab(TAB_VALUES, CR_TAB_CREATE)
+  const [tab, setTab] = useQueryTab(CR_TAB_ORDER, CR_TAB_DEFAULT)
   const [from, setFrom] = useState(params.get('date') || today())
+  const [day, setDay] = useState(params.get('date') || defaultUpcomingDay())
+  const [finalDay, setFinalDay] = useState(today())
   const [prefill, setPrefill] = useState(null)
   const courses = useResource('/api/cr/courses')
   const rooms = useResource(tab === CR_TAB_ROOMS ? '/api/cr/room-availability' : null, { from })
-  const upcoming = useResource(tab === CR_TAB_UPCOMING ? '/api/cr/upcoming' : null, { from })
-  const final = useResource(tab === CR_TAB_FINAL ? '/api/cr/final' : null)
+  const upcoming = useResource(tab === CR_TAB_UPCOMING ? '/api/cr/upcoming' : null, { date: day })
+  const final = useResource(tab === CR_TAB_FINAL ? '/api/cr/final' : null, { date: finalDay })
+  const horizon = useResource(tab === CR_TAB_UPCOMING ? '/api/cr/upcoming' : null, {
+    from: today(),
+    limit_days: 1,
+  })
+  const later = useMoreDays(
+    tab === CR_TAB_UPCOMING ? '/api/cr/upcoming' : null,
+    day,
+    horizon.data?.horizon || '',
+  )
   const upcomingHighlight = useHighlight(Boolean(upcoming.data), 'item')
   const finalHighlight = useHighlight(Boolean(final.data), 'item')
+  const reloadAll = () => {
+    upcoming.reload()
+    final.reload()
+    later.reset()
+  }
   const pickSlot = (slot) => {
     setPrefill(slot)
     setParams(
@@ -51,19 +70,38 @@ export default function CreateClassExamPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Class representative" title="Create Class & Exam"
-        subtitle="Add classes and exams, find a free room, decide what your batch sees"
+        eyebrow="Class representative" title="Class & Exam hub"
+        subtitle="Decide the coming days, keep the final routine, add classes and find a free room"
       />
       <StatusTabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
+      {tab === CR_TAB_UPCOMING && (
+        <>
+          <DayPicker value={day} onChange={setDay} toggle label="Jump to a date" />
+          <UpcomingTab
+            upcoming={upcoming}
+            later={later}
+            highlight={upcomingHighlight}
+            onChanged={reloadAll}
+          />
+        </>
+      )}
+      {tab === CR_TAB_FINAL && (
+        <>
+          <DayPicker value={finalDay} onChange={setFinalDay} label="Jump to a date" />
+          <FinalTab
+            final={final}
+            day={finalDay}
+            highlight={finalHighlight}
+            onPublished={reloadAll}
+          />
+        </>
+      )}
       {tab === CR_TAB_CREATE && (
         <CreateTab
           courses={courses}
           ownSection={user?.section}
           prefill={prefill}
-          onCreated={() => {
-            upcoming.reload()
-            final.reload()
-          }}
+          onCreated={reloadAll}
         />
       )}
       {tab === CR_TAB_ROOMS && (
@@ -94,23 +132,6 @@ export default function CreateClassExamPage() {
             />
           )}
         </>
-      )}
-      {tab === CR_TAB_UPCOMING && (
-        <>
-          <Card hover={false} className="mb-5">
-            <Input
-              label="From"
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              className="max-w-xs"
-            />
-          </Card>
-          <UpcomingTab upcoming={upcoming} highlight={upcomingHighlight} />
-        </>
-      )}
-      {tab === CR_TAB_FINAL && (
-        <FinalTab final={final} highlight={finalHighlight} onPublished={() => upcoming.reload()} />
       )}
     </>
   )

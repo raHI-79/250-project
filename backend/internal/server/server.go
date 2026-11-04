@@ -260,6 +260,7 @@ func registerTeacherRoutes(group RouteGroup, teacher *handler.Teacher) {
 	group.Handle("GET /api/teacher/upcoming", teacher.Upcoming())
 	group.Handle("GET /api/teacher/upcoming/next-day", teacher.NextDay())
 	group.Handle("GET /api/teacher/upcoming/final", teacher.FinalRoutine())
+	group.Handle("PATCH /api/teacher/items/{id}", teacher.UpdateItem())
 	group.Handle("POST /api/teacher/items/{id}/confirm", teacher.Confirm())
 	group.Handle("POST /api/teacher/items/{id}/cancel", teacher.Cancel())
 	group.Handle("POST /api/teacher/items/{id}/request-reschedule", teacher.RequestReschedule())
@@ -280,7 +281,11 @@ func registerAttendanceTeacherRoutes(group RouteGroup, marks *handler.Attendance
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/location", marks.Location())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/extend", marks.Extend())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/close", marks.Close())
+	group.Handle("POST /api/teacher/attendance/sessions/{id}/mark-all", marks.MarkAll())
+	group.Handle("DELETE /api/teacher/attendance/sessions/{id}", marks.DeleteSession())
+	group.Handle("DELETE /api/teacher/attendance/sheet", marks.DeleteSheet())
 	group.Handle("PATCH /api/teacher/attendance/sessions/{id}/students/{student_id}", marks.EditMark())
+	group.Handle("PATCH /api/teacher/attendance/sessions/{id}/students/{student_id}/note", marks.SaveNote())
 	group.Handle("GET /api/teacher/attendance/classes", marks.Classes())
 	group.Handle("GET /api/teacher/attendance/export", marks.Export())
 }
@@ -294,6 +299,10 @@ func registerPhoneRoutes(mux *http.ServeMux, deps Dependencies, phones *handler.
 	admin.Handle("GET /api/admin/phone-changes", phones.AdminHistory())
 	admin.Handle("GET /api/admin/attendance", phones.AdminOverview())
 	admin.Handle("GET /api/admin/attendance/export", phones.AdminExport())
+	admin.Handle("GET /api/admin/attendance/sessions", phones.AdminSessions())
+	admin.Handle("GET /api/admin/attendance/sessions/{id}", phones.AdminSession())
+	admin.Handle("DELETE /api/admin/attendance/sessions/{id}", phones.AdminDeleteSession())
+	admin.Handle("DELETE /api/admin/attendance/sheet", phones.AdminDeleteSheet())
 }
 
 func registerAttendanceStudentRoutes(group RouteGroup, presence *handler.StudentAttendance) {
@@ -316,6 +325,7 @@ func registerStudentRoutes(group RouteGroup, student *handler.Student) {
 func registerCRRoutes(group RouteGroup, cr *handler.CR) {
 	group.Handle("GET /api/cr/routine", cr.Routine())
 	group.Handle("GET /api/cr/courses", cr.Courses())
+	group.Handle("GET /api/cr/course-teachers", cr.CourseTeachers())
 	group.Handle("GET /api/cr/room-availability", cr.RoomAvailability())
 	group.Handle("GET /api/cr/upcoming", cr.Upcoming())
 	group.Handle("POST /api/cr/items", cr.CreateItem())

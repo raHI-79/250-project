@@ -17,18 +17,19 @@ import (
 )
 
 const (
-	MessageNotATeacher     = "No teacher profile found for this account."
-	MessageItemConfirmed   = "Class confirmed."
-	MessageItemCancelled   = "Class cancelled."
-	MessageRescheduleAsked = "Reschedule requested. The class representative picks a new slot."
-	MessageProposalTaken   = "New slot accepted."
-	MessageProposalLeft    = "The original slot stays."
-	MessageExamCreated     = "Exam added. The class representative sets the time and the room."
-	MessageExamUpdated     = "Exam updated."
-	MessageExamCancelled   = "Exam cancelled."
-	MessageExamDeleted     = "Exam deleted."
-	MessagePastDate        = "Date must be today or later."
-	MessageRangeOrder      = "to must be the same day as from or later."
+	MessageNotATeacher          = "No teacher profile found for this account."
+	MessageItemConfirmed        = "Class confirmed."
+	MessageItemCancelled        = "Class cancelled."
+	MessageRescheduleAsked      = "Reschedule requested. The class representative picks a new slot."
+	MessageProposalTaken        = "New slot accepted."
+	MessageProposalLeft         = "The original slot stays."
+	MessageExamCreated          = "Exam added. The class representative sets the time and the room."
+	MessageExamUpdated          = "Exam updated."
+	MessageItemUpdatedByTeacher = "Class updated. The class representative and the students were told."
+	MessageExamCancelled        = "Exam cancelled."
+	MessageExamDeleted          = "Exam deleted."
+	MessagePastDate             = "Date must be today or later."
+	MessageRangeOrder           = "to must be the same day as from or later."
 
 	titleTeacherConfirmed = "Class confirmed by the teacher"
 	titleTeacherCancelled = "Class cancelled by the teacher"
@@ -38,6 +39,7 @@ const (
 	titleExamAdded        = "New exam from the teacher"
 	titleExamChanged      = "Exam changed by the teacher"
 	titleExamCancelled    = "Exam cancelled by the teacher"
+	titleTeacherEdited    = "The teacher changed a class"
 	titleStudentCancelled = "Class cancelled"
 	titleStudentChanged   = "Class changed"
 )
@@ -49,6 +51,11 @@ type TeacherStore interface {
 	ListTeacherItemsRange(ctx context.Context, teacherID int64, from, to string) ([]store.ScheduleItem, error)
 	ListTeacherFinalItems(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
 	ListTeacherExams(ctx context.Context, teacherID int64, from string) ([]store.ScheduleItem, error)
+	ListTeacherExamsOnDate(ctx context.Context, teacherID int64, date string) ([]store.ScheduleItem, error)
+	UpdateTeacherItem(ctx context.Context, itemID, teacherID int64, patch store.ItemPatch,
+		now time.Time) (store.ScheduleItem, error)
+	GeneratedHorizon(ctx context.Context) (string, error)
+	ListPeriods(ctx context.Context) ([]store.Period, error)
 	ConfirmItem(ctx context.Context, itemID, teacherID int64, mode, room, link string,
 		now time.Time) (store.ScheduleItem, error)
 	CancelItemAsTeacher(ctx context.Context, itemID, teacherID int64, reason string,
@@ -82,9 +89,20 @@ type nextDayResponse struct {
 }
 
 type rangeResponse struct {
-	From string    `json:"from"`
-	To   string    `json:"to"`
-	Days []dayBody `json:"days"`
+	From    string    `json:"from"`
+	To      string    `json:"to"`
+	Horizon string    `json:"horizon,omitempty"`
+	HasMore bool      `json:"has_more"`
+	Days    []dayBody `json:"days"`
+}
+
+type itemPatchRequest struct {
+	ItemDate    *string `json:"item_date"`
+	StartTime   *string `json:"start_time"`
+	EndTime     *string `json:"end_time"`
+	Mode        *string `json:"mode"`
+	Room        *string `json:"room"`
+	MeetingLink *string `json:"meeting_link"`
 }
 
 type confirmRequest struct {
@@ -185,6 +203,25 @@ func (t *Teacher) Upcoming() http.HandlerFunc {
 			return
 		}
 		now := t.cfg.Now()
+		day, picked, ok := requestedDay(w, r, t.cfg)
+		if !ok {
+			return
+		}
+		if picked {
+			items, err := t.teachers.ListTeacherDayItems(r.Context(), teacher.ID, day)
+			if err != nil {
+				log.Printf("handler: could not list a day of a teacher: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			past := day < validate.DateString(now)
+			kept := items
+			if !past {
+				kept = liveItems(items)
+			}
+			httpx.WriteJSON(w, http.StatusOK, dateItems(kept, day, past, t.cfg, teacherActions))
+			return
+		}
 		from, to, ok := t.upcomingRange(w, r, now)
 		if !ok {
 			return
@@ -195,12 +232,28 @@ func (t *Teacher) Upcoming() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		days, more := firstDays(groupItemDays(liveItems(items), t.cfg, teacherActions),
+			requestedDayLimit(r))
 		httpx.WriteJSON(w, http.StatusOK, rangeResponse{
-			From: from,
-			To:   to,
-			Days: groupItemDays(liveItems(items), t.cfg, teacherActions),
+			From:    from,
+			To:      to,
+			Horizon: t.horizon(r, to),
+			HasMore: more,
+			Days:    days,
 		})
 	}
+}
+
+func (t *Teacher) horizon(r *http.Request, fallback string) string {
+	horizon, err := t.teachers.GeneratedHorizon(r.Context())
+	if err != nil {
+		log.Printf("handler: could not read the generated horizon: %v", err)
+		return fallback
+	}
+	if horizon == "" {
+		return fallback
+	}
+	return horizon
 }
 
 func (t *Teacher) upcomingRange(w http.ResponseWriter, r *http.Request, now time.Time) (string, string, bool) {
@@ -236,6 +289,20 @@ func (t *Teacher) FinalRoutine() http.HandlerFunc {
 			return
 		}
 		from := validate.DateString(t.cfg.Now())
+		day, picked, ok := requestedDay(w, r, t.cfg)
+		if !ok {
+			return
+		}
+		if picked {
+			items, err := t.teachers.ListTeacherDayItems(r.Context(), teacher.ID, day)
+			if err != nil {
+				log.Printf("handler: could not list a final day of a teacher: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			httpx.WriteJSON(w, http.StatusOK, dateItems(items, day, day < from, t.cfg, teacherActions))
+			return
+		}
 		items, err := t.teachers.ListTeacherFinalItems(r.Context(), teacher.ID, from)
 		if err != nil {
 			log.Printf("handler: could not list the final routine of a teacher: %v", err)
@@ -395,6 +462,20 @@ func (t *Teacher) Exams() http.HandlerFunc {
 			return
 		}
 		from := validate.DateString(t.cfg.Now())
+		day, picked, ok := requestedDay(w, r, t.cfg)
+		if !ok {
+			return
+		}
+		if picked {
+			items, err := t.teachers.ListTeacherExamsOnDate(r.Context(), teacher.ID, day)
+			if err != nil {
+				log.Printf("handler: could not list the exams of a teacher on a date: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			httpx.WriteJSON(w, http.StatusOK, dateItems(items, day, day < from, t.cfg, teacherActions))
+			return
+		}
 		items, err := t.teachers.ListTeacherExams(r.Context(), teacher.ID, from)
 		if err != nil {
 			log.Printf("handler: could not list the exams of a teacher: %v", err)
@@ -608,4 +689,105 @@ func (t *Teacher) tellStudents(r *http.Request, item store.ScheduleItem, title s
 		log.Printf("handler: could not announce a change to the students: %v", err)
 	}
 	tellDropCourseStudents(r, t.teachers, t.alerts, item, title)
+}
+
+func (t *Teacher) UpdateItem() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := t.profile(w, r)
+		if !ok {
+			return
+		}
+		itemID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request itemPatchRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		periods, err := t.teachers.ListPeriods(r.Context())
+		if err != nil {
+			log.Printf("handler: could not load the class periods: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		patch, err := t.patchFrom(request, store.PeriodRules(periods))
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		item, err := t.teachers.UpdateTeacherItem(r.Context(), itemID, teacher.ID, patch, t.cfg.Now())
+		if scheduleError(w, err) {
+			return
+		}
+		t.tellCRs(r, item, notify.TypeRoutine, titleTeacherEdited)
+		t.tellStudents(r, item, titleStudentChanged)
+		httpx.WriteJSON(w, http.StatusOK, itemResponse{
+			Item:    newItemBody(item),
+			Message: MessageItemUpdatedByTeacher,
+		})
+	}
+}
+
+func (t *Teacher) patchFrom(request itemPatchRequest, periods []validate.Period) (store.ItemPatch, error) {
+	var patch store.ItemPatch
+	if request.ItemDate != nil {
+		date, err := validate.Date("Date", *request.ItemDate, t.cfg.Location)
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		if validate.DateString(date) < validate.DateString(t.cfg.Now()) {
+			return store.ItemPatch{}, errors.New(MessagePastDate)
+		}
+		day := validate.DateString(date)
+		patch.ItemDate = &day
+	}
+	if request.StartTime != nil || request.EndTime != nil {
+		if request.StartTime == nil || request.EndTime == nil {
+			return store.ItemPatch{}, errors.New(MessageTimesTogether)
+		}
+		start, end, err := clockRange(periods, *request.StartTime, *request.EndTime)
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		if start == "" || end == "" {
+			return store.ItemPatch{}, errors.New(MessageTimesTogether)
+		}
+		patch.StartTime = &start
+		patch.EndTime = &end
+	}
+	if request.Mode != nil {
+		mode, room, link, err := slotFields(*request.Mode, value(request.Room), value(request.MeetingLink))
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		patch.Mode = &mode
+		patch.Room = &room
+		if request.MeetingLink != nil || mode == store.ModeRoom {
+			patch.MeetingLink = &link
+		}
+		return patch, nil
+	}
+	if request.Room != nil {
+		room, err := validate.Room("Room", *request.Room)
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		patch.Room = &room
+	}
+	if request.MeetingLink != nil {
+		link, err := validate.OptionalLink("Meeting link", *request.MeetingLink)
+		if err != nil {
+			return store.ItemPatch{}, err
+		}
+		patch.MeetingLink = &link
+	}
+	return patch, nil
+}
+
+func value(text *string) string {
+	if text == nil {
+		return ""
+	}
+	return *text
 }

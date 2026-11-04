@@ -28,11 +28,17 @@ type examItem struct {
 	Syllabus     string `json:"syllabus,omitempty"`
 	Instructions string `json:"instructions,omitempty"`
 	Origin       string `json:"origin"`
+	Status       string `json:"status,omitempty"`
+	FinalStatus  string `json:"final_status,omitempty"`
 	Published    bool   `json:"published"`
 }
 
 type examsResponse struct {
-	Items []examItem `json:"items"`
+	Items    []examItem `json:"items"`
+	Date     string     `json:"date,omitempty"`
+	Weekday  string     `json:"weekday,omitempty"`
+	Past     bool       `json:"past,omitempty"`
+	ReadOnly bool       `json:"read_only,omitempty"`
 }
 
 type routineWeekResponse struct {
@@ -78,6 +84,14 @@ func (s *Student) Exams() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		day, picked, ok := requestedDay(w, r, s.cfg)
+		if !ok {
+			return
+		}
+		if picked {
+			s.examsOnDate(w, r, profile, day, codes)
+			return
+		}
 		exams, err := s.students.ListStudentExams(r.Context(), profile.Batch, profile.Section,
 			s.cfg.Now(), codes)
 		if err != nil {
@@ -91,6 +105,37 @@ func (s *Student) Exams() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, examsResponse{Items: items})
 	}
+}
+
+func (s *Student) examsOnDate(w http.ResponseWriter, r *http.Request, profile store.StudentProfile,
+	day string, codes []string) {
+	exams, err := s.students.ListStudentExamsOnDate(r.Context(), profile.Batch, profile.Section, day, codes)
+	if err != nil {
+		log.Printf("handler: could not list the exams of a student on a date: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return
+	}
+	past := day < validate.DateString(s.cfg.Now())
+	items := make([]examItem, 0, len(exams))
+	for _, exam := range exams {
+		item := newExamItem(exam)
+		if past {
+			item.FinalStatus = StatusExamHeld
+			if exam.Status == store.ItemCancelled {
+				item.FinalStatus = StatusCancelledAt
+			}
+		} else if exam.Status == store.ItemCancelled {
+			continue
+		}
+		items = append(items, item)
+	}
+	httpx.WriteJSON(w, http.StatusOK, examsResponse{
+		Items:    items,
+		Date:     day,
+		Weekday:  weekdayOf(day, s.cfg),
+		Past:     past,
+		ReadOnly: past,
+	})
 }
 
 func newExamItem(exam store.StudentExam) examItem {
@@ -109,6 +154,7 @@ func newExamItem(exam store.StudentExam) examItem {
 		Syllabus:     exam.Syllabus,
 		Instructions: exam.Instructions,
 		Origin:       exam.Origin,
+		Status:       exam.Status,
 		Published:    exam.Published,
 	}
 }

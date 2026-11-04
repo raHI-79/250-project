@@ -142,3 +142,5 @@ export const shiftDate = (value, days) => {
   date.setDate(date.getDate() + days)
   return isoDate(date)
 }
+
+export const defaultUpcomingDay = () => tomorrow()

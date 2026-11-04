@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { dayHeading, shiftDate, today, tomorrow } from './time.js'
+import { dayHeading, defaultUpcomingDay, shiftDate, today, tomorrow } from './time.js'
 
 test('names today and tomorrow in a day heading', () => {
   assert.match(dayHeading(today()), /^Today · /)
   assert.match(dayHeading(tomorrow()), /^Tomorrow · /)
+})
+
+test('the upcoming views open on tomorrow', () => {
+  assert.equal(defaultUpcomingDay(), tomorrow())
+  assert.notEqual(defaultUpcomingDay(), today())
 })
 
 test('leaves a later day with its own name', () => {
