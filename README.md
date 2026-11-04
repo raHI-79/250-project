@@ -8,7 +8,9 @@ approve, teachers manage their daily schedule and messages, and the
 administration manages users, courses and the fixed weekly routine from a
 hidden admin panel. Class attendance is taken by Bluetooth from the Android app,
 so a student can only be marked present inside the room, on their own
-registered phone. Built as a course project for **CSE 250**.
+registered phone; a teacher can also read a roll call, and the website marks a
+student with the code on the board plus their browser position. Built as a
+course project for **CSE 250**.
 
 The full requirements live in [docs/SPEC.md](docs/SPEC.md). The build order is
 tracked in [docs/ROADMAP.md](docs/ROADMAP.md). To put the portal online for
@@ -352,35 +354,50 @@ of `robots.txt` on purpose so the file does not advertise it.
 Every route and every link is built in `src/lib/paths.js`, which also holds the
 query-string helpers, so no page writes a URL by hand.
 
-**The class representative** works on one page, `Create Class & Exam`, with four
-tabs that the URL remembers (`?tab=`, `?date=`, `?item=`):
+**The class representative** works on one page, `Class & Exam hub`, with four
+tabs that the URL remembers (`?tab=`, `?date=`, `?item=`). It opens on the
+upcoming routine:
 
 | Tab | What it does |
 |---|---|
-| Create | A class or an exam with the course, the section, the date, a From period and a To period, a room or an online link, and the syllabus and instructions of an exam. A refused rule comes back inline. |
+| Upcoming routine | Opens on tomorrow with a `Tomorrow | Today` toggle and a date picker. Each item carries its status, the teacher's message and a proposed slot, and only the actions the API allows. `Show more days` loads the next day group up to the generated horizon; a past date is read-only with each item's final status. |
+| Final routine | The items the representative added with `Add to final`, with `Needs time` and `Changed since publish`, inline editing of the time, place, link and note, checkboxes, a timetable preview and Publish All behind a confirm. A date picker reads any day, and a past day is read-only. |
+| Create class / exam | A class or an exam with the course, the section, the date, a From period and a To period, a room or an online link, and the syllabus and instructions of an exam. The teacher of the course for that batch and section is chosen automatically and can only be changed when the course has several teachers. A refused rule comes back inline. |
 | Room availability | Every managed room against the class periods, one table per date: a shaded break column, green free and red booked with the batch, course and status in the tooltip. Clicking a free period fills the create form. |
-| Upcoming routine | The batch's items by date with their status, the teacher's message and a proposed slot, and only the actions the API allows on each one. |
-| Final routine | Items grouped by date with `Needs time` and `Changed since publish`, inline editing of the time, place, link and note, checkboxes, a timetable preview and Publish All behind a confirm. |
+
+A class the representative creates is not a note on the side: it waits for the
+teacher of its course exactly like a generated class, so it reaches that
+teacher's upcoming routine with Confirm, Cancel and Request reschedule, the
+next-day reminders, and after a confirmation the final, today and published
+routines.
 
 **The teacher** has `Fixed weekly routine`, `Upcoming routine` and
-`Create exam`. The upcoming page has two tabs: `Next day`, which opens with the
-decision window banner — *Opens at 4:00 PM for tomorrow's classes* before it,
-*Open until 11:00 PM · `<h m>` left* inside it, and
-*Closed for tomorrow — undecided classes are marked No response* after it — and
-offers Confirm, Cancel and Request reschedule per item plus Accept and Decline
-on a request from the class representative. Those three buttons are disabled
-outside the window for a **first** decision; a later change to a class the
-teacher already confirmed stays allowed until it starts, and the class
-representative is never limited. The second tab, `Final routine`, lists what the
-batches published from today with a `By teacher` or `By CR` badge and the link
-editor for an online class. An online class with no link yet reads
-`Link coming soon` and offers `Add link` to the teacher and to the CR.
+`Create exam`. Today's confirmed classes sit at the top of the upcoming page on
+their own, with no date picker. Below them are two tabs. `Upcoming` opens on
+tomorrow with a `Tomorrow | Today` toggle and a date picker, offers Confirm,
+Cancel and Request reschedule per item plus Accept and Decline on a request from
+the class representative, and loads the following dates one group at a time with
+`Show more days`. Those three buttons are disabled outside the decision window
+for a **first** decision; a later change to a class the teacher already confirmed
+stays allowed until it starts, and the class representative is never limited.
+The second tab, `Final routine`, reads any date with a `By teacher` or `By CR`
+badge. A past date in either tab is read-only and shows each item as Held,
+Cancelled, Rescheduled or Exam held.
 
-**A student** reads only the published routine. `Today` and `Upcoming routine`
-show date chips, an `Online` badge with a `Join` button when a link exists,
-cancelled classes struck through, and the notes. `Exams` lists every exam with
-its syllabus and instructions, and either the time and the place or
-`Time to be announced`. A class representative sees exactly the same pages.
+On any class or exam the teacher owns, `Edit` changes the date, the start and end
+time, the room and the mode until the class starts, and `Add meeting link` or
+`Change link` works until it ends. Each change re-checks the room and batch
+clashes, updates the published copy and tells the class representative and the
+students.
+
+**A student** reads only the published routine. `Today` shows only today, with
+no date picker. `Upcoming routine` carries date chips, a date picker and a
+`Back to today` link, an `Online` badge with a `Join` button when a link exists,
+cancelled classes struck through, and the notes. `Exams` lists every exam ahead
+with its syllabus and instructions, and either the time and the place or
+`Time to be announced`; its date picker narrows the list to one day and a past
+day shows `Exam held` or `Cancelled`. A class representative sees exactly the
+same pages.
 
 ### Messaging and group chats
 
@@ -751,10 +768,20 @@ over the current, previous and expired slices and a wrong key, the great-circle
 distance, the accuracy and mock-provider refusals, a stale teacher position, the
 percentage, the once-then-weekly warning, the semester change limit and the
 contents of the Excel workbook. The phone bindings, the change requests, the
-roster, one-phone-one-student, the absentees written on close and the manual
-edits are covered against a real database in `backend/internal/store`, and
-`backend/internal/server` checks the permissions of every attendance route and
-that a student cannot mark from the website.
+roster, one-phone-one-student, the absentees written on close, the manual edits,
+the roll-call marks and notes, `Mark all present`, the Bluetooth, code, web and
+roll-call sessions sharing one sheet and one export, and the recount after a
+session or a sheet is deleted are covered against a real database in
+`backend/internal/store`. `backend/internal/server` checks the permissions of
+every attendance route, that the website needs the code and the position to
+mark, that such a mark is stored as `web`, and that a roll call is never offered
+to a student.
+
+The frontend keeps its pure rules in `frontend/src/lib`, where `node --test`
+reads them without a browser: the single-page registration and password-reset
+validation, the day headings and the Tomorrow default of the upcoming views, the
+attendance method labels and delete wording, and the hub and attendance tab
+order with the notification links that open them.
 
 The frontend has its own three checks:
 
@@ -937,20 +964,24 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/push/fcm` | student, CR, teacher | `{token, platform, device_id}` stores the Android device token of the app |
 | `DELETE` | `/api/push/fcm` | student, CR, teacher | `{token}` forgets that device, used on sign-out |
 | `GET` | `/api/teacher/attendance/options` | teacher | Today's classes to prefill from, every class of the running semester, and the open session if there is one |
-| `POST` | `/api/teacher/attendance/sessions` | teacher | `{course_id, batch, section, schedule_item_id?, minutes}` opens attendance for 5 to 30 minutes and pushes every roster student; returns the session with its `token_key` and the current code. Starting again while one is open returns the running one |
+| `POST` | `/api/teacher/attendance/sessions` | teacher | `{course_id, batch, section, schedule_item_id?, minutes, method}` opens attendance for 5 to 30 minutes with `method` `bluetooth` (the default) or `roll_call`. A Bluetooth session pushes every roster student and returns its `token_key` and current code; a roll call pushes nobody and shows no code. Starting again while one is open returns the running one |
 | `GET` | `/api/teacher/attendance/sessions` | teacher | This teacher's sessions in `from`/`to`, newest first, each with its present count and roster size |
 | `GET` | `/api/teacher/attendance/sessions/{id}` | teacher | One of this teacher's own sessions with every roster student, their status, time, distance, accuracy, method and note, plus the `token_key` and the current `code` while it is open; `403` for another teacher's session |
 | `POST` | `/api/teacher/attendance/sessions/{id}/location` | teacher | `{lat, lng, accuracy_m}`; the app's foreground service posts this every 15 seconds. `409` once the session is closed |
 | `POST` | `/api/teacher/attendance/sessions/{id}/extend` | teacher | `{minutes}` between 5 and 30 |
 | `POST` | `/api/teacher/attendance/sessions/{id}/close` | teacher | Closes it and marks every roster student without a record absent with method `system`; `409` if already closed |
-| `PATCH` | `/api/teacher/attendance/sessions/{id}/students/{student_id}` | teacher | `{status, note}` sets Present or Absent by hand, audited with who and when |
-| `GET` | `/api/teacher/attendance/classes` | teacher | Each course-batch-section with its session count, average attendance and how many students are below 50 % |
+| `PATCH` | `/api/teacher/attendance/sessions/{id}/students/{student_id}` | teacher | `{status, note}` sets Present or Absent by hand, during or after the session, audited with who and when |
+| `PATCH` | `/api/teacher/attendance/sessions/{id}/students/{student_id}/note` | teacher | `{note}` saves the note of a student who is already marked; `409` when there is no mark yet |
+| `POST` | `/api/teacher/attendance/sessions/{id}/mark-all` | teacher | Marks every unmarked roster student present and leaves the marks the teacher already set |
+| `DELETE` | `/api/teacher/attendance/sessions/{id}` | teacher | Deletes one of this teacher's sessions with its marks, audited |
+| `DELETE` | `/api/teacher/attendance/sheet` | teacher | `{course_id, batch, section}` deletes every session of that sheet, audited; `403` when the class is not this teacher's |
+| `GET` | `/api/teacher/attendance/classes` | teacher | Each course-batch-section as one sheet with its session count, average attendance and how many students are below 50 %, counting the Bluetooth, code, web and roll-call sessions together |
 | `GET` | `/api/teacher/attendance/export` | teacher | An `.xlsx` workbook; `course_id`, `batch` and `section` narrow it to one class, no filter gives every class plus a Summary sheet. `404` when the range is empty |
-| `GET` | `/api/teacher/phone-requests` | teacher | Pending phone requests of the students in the batches this teacher teaches this semester |
+| `GET` | `/api/teacher/phone-requests` | teacher | Pending phone requests of the students in the batches this teacher teaches this semester, read inside the `Phone requests` tab of Attendance |
 | `POST` | `/api/teacher/phone-requests/{id}/approve` | teacher | `{note}` rebinds the phone and tells the student; `400` when the note is missing beyond two changes a semester, `403` for another batch's student, `409` once another teacher answered |
 | `POST` | `/api/teacher/phone-requests/{id}/reject` | teacher | `{note}` refuses it and tells the student |
-| `GET` | `/api/students/attendance/open` | student, CR | `?device_id=` answers the open session of their courses, the state of their registered phone, the service UUID to scan for, and on the website the message to use the app |
-| `POST` | `/api/students/attendance/mark` | student, CR, app only | `{session_id, token or code, lat, lng, accuracy_m, is_mock, device_id}`; `403` from the website, from another phone, on a wrong token, on a mock position, on a weak signal, beyond 30 metres or with a stale teacher position, `409` when already marked or the phone already marked somebody |
+| `GET` | `/api/students/attendance/open` | student, CR | `?device_id=` answers the open Bluetooth session of their courses, the state of their registered phone and the service UUID to scan for; on the website it answers `needs_code` so the page asks for the code instead |
+| `POST` | `/api/students/attendance/mark` | student, CR | From the app: `{session_id, token or code, lat, lng, accuracy_m, is_mock, device_id}`. From the website: `{session_id, code, lat, lng, accuracy_m}`, stored with method `web` and no device binding. `400` without a code on the website, `403` from another phone, on a wrong token or code, on a mock position, on a weak signal, beyond 30 metres or with a stale teacher position, `409` when already marked, when the phone already marked somebody, or when the session is a roll call |
 | `GET` | `/api/students/attendance/mine` | student, CR | Every course with its held, present and percentage, and every class with its status, method, time and note |
 | `POST` | `/api/students/attendance/phone` | student, CR, app only | `{device_id}` registers this phone when the student has none yet |
 | `POST` | `/api/students/attendance/phone-request` | student, CR, app only | `{device_id, reason}` asks the batch's teachers for a new phone; `409` when one is pending, when it is already the registered phone, or when another account holds it |

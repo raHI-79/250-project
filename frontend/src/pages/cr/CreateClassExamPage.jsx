@@ -10,27 +10,29 @@ import { useAuth } from '../../context/auth'
 import { useHighlight, useMoreDays, useQueryTab, useResource } from '../../lib/hooks'
 import {
   CR_TAB_CREATE,
+  CR_TAB_DEFAULT,
   CR_TAB_FINAL,
+  CR_TAB_ORDER,
   CR_TAB_ROOMS,
   CR_TAB_UPCOMING,
 } from '../../lib/paths'
-import { today, tomorrow } from '../../lib/time'
+import { defaultUpcomingDay, today } from '../../lib/time'
 
-const TABS = [
-  { value: CR_TAB_UPCOMING, label: 'Upcoming routine' },
-  { value: CR_TAB_FINAL, label: 'Final routine' },
-  { value: CR_TAB_CREATE, label: 'Create class / exam' },
-  { value: CR_TAB_ROOMS, label: 'Room availability' },
-]
+const LABELS = {
+  [CR_TAB_UPCOMING]: 'Upcoming routine',
+  [CR_TAB_FINAL]: 'Final routine',
+  [CR_TAB_CREATE]: 'Create class / exam',
+  [CR_TAB_ROOMS]: 'Room availability',
+}
 
-const TAB_VALUES = TABS.map((entry) => entry.value)
+const TABS = CR_TAB_ORDER.map((value) => ({ value, label: LABELS[value] }))
 
 export default function CreateClassExamPage() {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
-  const [tab, setTab] = useQueryTab(TAB_VALUES, CR_TAB_UPCOMING)
+  const [tab, setTab] = useQueryTab(CR_TAB_ORDER, CR_TAB_DEFAULT)
   const [from, setFrom] = useState(params.get('date') || today())
-  const [day, setDay] = useState(params.get('date') || tomorrow())
+  const [day, setDay] = useState(params.get('date') || defaultUpcomingDay())
   const [finalDay, setFinalDay] = useState(today())
   const [prefill, setPrefill] = useState(null)
   const courses = useResource('/api/cr/courses')

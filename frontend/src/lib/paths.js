@@ -142,6 +142,10 @@ export const CR_TAB_UPCOMING = 'upcoming'
 
 export const CR_TAB_FINAL = 'final'
 
+export const CR_TAB_ORDER = [CR_TAB_UPCOMING, CR_TAB_FINAL, CR_TAB_CREATE, CR_TAB_ROOMS]
+
+export const CR_TAB_DEFAULT = CR_TAB_ORDER[0]
+
 export const TEACHER_TAB_NEXT_DAY = 'next-day'
 
 export const TEACHER_TAB_FINAL = 'final'

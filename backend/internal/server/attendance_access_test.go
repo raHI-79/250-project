@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/raHI-79/250-project/backend/internal/attendance"
 	"github.com/raHI-79/250-project/backend/internal/auth"
@@ -15,7 +16,10 @@ import (
 )
 
 type stubPresenceStore struct {
-	marks int
+	marks    int
+	session  store.AttendanceSession
+	hasOpen  bool
+	lastMark store.MarkInput
 }
 
 func (stubPresenceStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {
@@ -33,14 +37,20 @@ func (stubPresenceStore) RunningSemester(ctx context.Context, batch string) (str
 	return "3-1", nil
 }
 
-func (stubPresenceStore) OpenSessionForStudent(ctx context.Context,
+func (s *stubPresenceStore) OpenSessionForStudent(ctx context.Context,
 	studentID int64) (store.AttendanceSession, error) {
-	return store.AttendanceSession{}, store.ErrNotFound
+	if !s.hasOpen {
+		return store.AttendanceSession{}, store.ErrNotFound
+	}
+	return s.session, nil
 }
 
-func (stubPresenceStore) AttendanceSession(ctx context.Context,
+func (s *stubPresenceStore) AttendanceSession(ctx context.Context,
 	sessionID int64) (store.AttendanceSession, error) {
-	return store.AttendanceSession{}, store.ErrNotFound
+	if !s.hasOpen || s.session.ID != sessionID {
+		return store.AttendanceSession{}, store.ErrNotFound
+	}
+	return s.session, nil
 }
 
 func (stubPresenceStore) OnRoster(ctx context.Context, sessionID, studentID int64) (bool, error) {
@@ -49,7 +59,30 @@ func (stubPresenceStore) OnRoster(ctx context.Context, sessionID, studentID int6
 
 func (s *stubPresenceStore) MarkAttendance(ctx context.Context, mark store.MarkInput) error {
 	s.marks++
+	s.lastMark = mark
 	return nil
+}
+
+func openWebSession(presence *stubPresenceStore, method string) {
+	presence.hasOpen = true
+	presence.session = store.AttendanceSession{
+		ID:          9,
+		CourseID:    4,
+		CourseCode:  "CSE245",
+		CourseTitle: "Databases",
+		Batch:       "CSE-23",
+		Section:     "A",
+		TeacherID:   3,
+		StartedAt:   time.Now().Add(-time.Minute),
+		EndsAt:      time.Now().Add(9 * time.Minute),
+		Status:      attendance.StatusOpen,
+		Method:      method,
+		TokenKey:    "a-session-key",
+		TeacherLat:  24.9,
+		TeacherLng:  91.8,
+		LocationAt:  time.Now(),
+		HasLocation: true,
+	}
 }
 
 func (stubPresenceStore) StudentCourseAttendance(ctx context.Context,
@@ -235,5 +268,89 @@ func TestTeachersCannotReachTheStudentMarkScreen(t *testing.T) {
 				t.Errorf("error = %q, want %q", got, middleware.MessageAccessDenied)
 			}
 		})
+	}
+}
+
+func TestTheWebsiteMarksWithTheCodeAndThePosition(t *testing.T) {
+	deps, router, presence := newAttendanceRouter(t)
+	openWebSession(presence, attendance.TakeBluetooth)
+	tokens := accessTokens(t, deps)
+	code := attendance.CurrentCode(presence.session.TokenKey, presence.session.ID, time.Now())
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantError  string
+	}{
+		{
+			name:       "too far from the teacher",
+			body:       `{"session_id":9,"code":"` + code + `","lat":25.9,"lng":91.8,"accuracy_m":10}`,
+			wantStatus: http.StatusForbidden,
+			wantError:  attendance.MessageTooFar,
+		},
+		{
+			name:       "a weak position",
+			body:       `{"session_id":9,"code":"` + code + `","lat":24.9,"lng":91.8,"accuracy_m":400}`,
+			wantStatus: http.StatusForbidden,
+			wantError:  attendance.MessageWeakSignal,
+		},
+		{
+			name:       "a code from another slice",
+			body:       `{"session_id":9,"code":"9999","lat":24.9,"lng":91.8,"accuracy_m":10}`,
+			wantStatus: http.StatusForbidden,
+			wantError:  attendance.MessageWrongToken,
+		},
+		{
+			name:       "the code and a position inside the class",
+			body:       `{"session_id":9,"code":"` + code + `","lat":24.9,"lng":91.8,"accuracy_m":10}`,
+			wantStatus: http.StatusCreated,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.name == "a code from another slice" &&
+				attendance.CodeMatches(presence.session.TokenKey, presence.session.ID, time.Now(), "9999") {
+				t.Skip("9999 happens to be the current code")
+			}
+			rec := serveJSON(t, router, http.MethodPost, "/api/students/attendance/mark", test.body,
+				tokens[auth.RoleStudent], false)
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantStatus != http.StatusCreated {
+				if got := errorField(t, rec); got != test.wantError {
+					t.Errorf("error = %q, want %q", got, test.wantError)
+				}
+				return
+			}
+			if presence.marks != 1 {
+				t.Fatalf("marks = %d, want one", presence.marks)
+			}
+			if presence.lastMark.Method != attendance.MethodWeb {
+				t.Errorf("method = %q, want %q", presence.lastMark.Method, attendance.MethodWeb)
+			}
+			if presence.lastMark.DeviceID != "" {
+				t.Errorf("device = %q, want no phone binding on the website", presence.lastMark.DeviceID)
+			}
+		})
+	}
+}
+
+func TestARollCallIsNotOfferedToStudents(t *testing.T) {
+	deps, router, presence := newAttendanceRouter(t)
+	openWebSession(presence, attendance.TakeRollCall)
+	tokens := accessTokens(t, deps)
+	code := attendance.CurrentCode(presence.session.TokenKey, presence.session.ID, time.Now())
+	body := `{"session_id":9,"code":"` + code + `","lat":24.9,"lng":91.8,"accuracy_m":10}`
+	rec := serveJSON(t, router, http.MethodPost, "/api/students/attendance/mark", body,
+		tokens[auth.RoleStudent], false)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if got := errorField(t, rec); got != attendance.MessageRollCallOnly {
+		t.Errorf("error = %q, want %q", got, attendance.MessageRollCallOnly)
+	}
+	if presence.marks != 0 {
+		t.Errorf("marks = %d, want none in a roll call", presence.marks)
 	}
 }

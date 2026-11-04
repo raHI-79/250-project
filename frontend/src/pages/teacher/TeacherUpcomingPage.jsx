@@ -53,10 +53,10 @@ import {
 } from '../../lib/schedule'
 import {
   dayHeading,
+  defaultUpcomingDay,
   formatDate,
   formatTimeRange,
   today as todayDate,
-  tomorrow as tomorrowDate,
 } from '../../lib/time'
 import cx from '../../lib/cx'
 import { externalLinkProps } from '../../lib/native'
@@ -82,7 +82,7 @@ export default function TeacherUpcomingPage() {
   const toast = useToast()
   const now = useNow(60000)
   const [tab, setTab] = useQueryTab(TAB_VALUES, TEACHER_TAB_NEXT_DAY)
-  const tomorrow = tomorrowDate()
+  const tomorrow = defaultUpcomingDay()
   const [day, setDay] = useState(tomorrow)
   const [finalDay, setFinalDay] = useState(todayDate())
   const upcoming = useResource('/api/teacher/upcoming', { date: day })

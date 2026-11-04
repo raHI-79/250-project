@@ -84,11 +84,16 @@ check before the handler runs, so a route that is not in a group is unreachable.
 ### 2.5 Account security
 
 - Passwords are bcrypt hashes. Nothing stores or logs a password.
-- A student registers, verifies their university email, and waits for the
-  office to approve the account.
+- A student registers on **one page** — Account, Contact, Personal and an
+  optional Photo, each field validated next to itself — verifies their
+  university email with *Continue with Google* or the 6-digit code that appears
+  in place after *Send code*, and waits for the office to approve the account.
 - A teacher is invited by the office, opens the invitation link, chooses a User
-  ID and a password, and the account becomes active.
-- Password reset runs on a short-lived emailed code.
+  ID and a password, and the account becomes active. The teacher sign-in screen
+  offers no way to reach that page; the link only arrives in the invitation
+  email.
+- Password reset is **one page** as well: the ID or email and the date of birth,
+  then the emailed code and the new password, on a short-lived code.
 - A removed or rejected account cannot sign in and its token is rejected.
 
 ## 3. Sections, semesters and class periods
@@ -226,11 +231,11 @@ was published; a new publication replaces it.
 
 | Page | Content |
 |---|---|
-| Today | Today's published classes, exams and notices in one timeline |
-| Upcoming routine | The published routine ahead, by date |
+| Today | Today's published classes, exams and notices in one timeline, today only |
+| Upcoming routine | The published routine of any date, with a date picker and a *Back to today* link |
 | Fixed routine | Any batch and semester as a week grid, sections A and B side by side |
 | Courses | The courses of a batch's running semester with their credits and teachers |
-| Exams | Upcoming exams with syllabus and instructions |
+| Exams | Every exam ahead with syllabus and instructions, narrowed to one date with the date picker |
 | Materials | The batch Drive links the CR keeps |
 | Notices | Office and CR notices as date blocks |
 | Students | The directory of their batch |
@@ -248,16 +253,29 @@ are never asked for at registration.
 
 Everything a student has, plus:
 
-- **Create class & exam** with the create form, the room availability grid, the
-  upcoming routine of the batch and the final routine builder.
+- **Class & exam hub**, ordered *Upcoming routine · Final routine · Create class
+  / exam · Room availability* and opening on the upcoming routine. The upcoming
+  tab opens on tomorrow with a `Tomorrow | Today` toggle, a date picker and a
+  *Show more days* button; the final routine holds only what the representative
+  added with *Add to final* and reads any date too. Creating a class picks the
+  teacher of that course for the batch and section by itself, editable only when
+  the course has several teachers, and the class then waits for that teacher like
+  a generated one.
 - **Notices** for their batch.
 - **Materials** — the Drive links their batch reads.
 - **Polls** they open and close.
 
 ## 7. Teacher pages
 
-- **Next day** — tomorrow's classes with Confirm, Cancel, Request reschedule,
+- **Upcoming** — opens on tomorrow with a `Tomorrow | Today` toggle, a date
+  picker and *Show more days*, offering Confirm, Cancel and Request reschedule
   and accepting or declining a CR's proposal, under the decision window banner.
+  Today's confirmed classes sit above it on their own. Any class or exam the
+  teacher owns can be edited until it starts — the date, the start and end time,
+  the room and the mode — and its meeting link until it ends; each change
+  re-checks the room and batch clashes, updates the published copy and tells the
+  class representative and the students. A past date is read-only and shows
+  Held, Cancelled, Rescheduled or Exam held.
 - **Final routine** — what the class representatives published for their classes.
 - **Fixed routine** — their weekly routine.
 - **Create exam** — the course, batch, section, date, syllabus and instructions;
@@ -497,17 +515,35 @@ of the app until the visitor holds a valid pass.
 
 Attendance is taken by Bluetooth from the Android app and is built so that one
 student cannot mark another. Teachers create the session; students only mark
-themselves, with one tap, from the phone they registered. There are no QR codes
-and no selfies.
+themselves, with one tap, from the phone they registered. A teacher who would
+rather read the roster aloud takes a **roll call** instead, and a student at a
+computer marks themselves on the **website** with the code on the board and
+their browser position. There are no QR codes and no selfies.
+
+Every role reaches all of this through one **Attendance** item in the
+navigation, with tabs inside it: *Take attendance · History · Sheets · Phone
+requests* for a teacher, *Mark attendance · My attendance · My phone* for a
+student or class representative, and *History · Sheets · Phone changes* for the
+office.
 
 ### 12.1 The session
 
 A teacher starts attendance for one course, batch and section of the running
-semester, prefilled from today's class. Section `ALL` covers both sections. The
-session stays open for a duration the teacher picks between **5 and 30 minutes**
-and can be extended by the same amount or closed early. Starting one sends every
-roster student a push, `Attendance open · <course title>`, that opens the mark
-screen.
+semester, prefilled from today's class, and chooses the method: **Bluetooth** or
+**Roll call**. Section `ALL` covers both sections. The session stays open for a
+duration the teacher picks between **5 and 30 minutes** and can be extended by
+the same amount or closed early. Starting a Bluetooth session sends every roster
+student a push, `Attendance open · <course title>`, that opens the mark screen; a
+roll call pushes nobody, shows no code and is never offered to a student, because
+the teacher marks the roster.
+
+A roll call shows the roster with each student's name, registration number and
+photo, two clear buttons — **Present** and **Absent**, unmarked until one is
+tapped and highlighted afterwards — a **Mark all present** shortcut that leaves
+the marks the teacher already set, and a note per student with its own Save
+button that says when it is saved. **Finish** asks for a confirmation and then
+marks everybody still unmarked absent. The same per-student Present, Absent and
+note editing works during and after a Bluetooth session.
 
 Each session draws its own random `token_key`, which never reaches a student.
 
@@ -537,6 +573,14 @@ When a phone has no Bluetooth, or hears nothing within ten seconds, a 4-digit
 code derived the same way over **20-second** slices is shown on the teacher's
 screen and on the website for a projector, and the student types it. The
 location rules are unchanged.
+
+The same code is how the **website** marks a student. A browser cannot bind a
+phone and cannot be asked about a mock provider, so a web mark needs the code
+plus the browser's own position under the same rules — within 30 metres of the
+teacher, accuracy 50 metres or better, and a teacher position less than 60
+seconds old. Such a mark is stored with method `web` and shown with a **Web**
+label in the teacher's list, so the teacher can change it like any other mark.
+Registering a phone and asking for a new one stay in the app.
 
 ### 12.3 The location rules
 
@@ -622,20 +666,34 @@ that course's attendance.
   mark screen. **My attendance** lists each course with its percentage, red below
   50 %, and every session date with Present or Absent, the time, the teacher's
   name and any note, filtered by course and month, in the app and on the website.
-- **Teachers** — start, extend and close a session; the live count, the latest
-  marks and **Show code**; the session detail with every student's status, time,
-  distance and method, each settable to Present or Absent with a note; the
-  history; **Phone requests**; and the Excel export. The course list shows each
+- **Teachers** — start, extend and close a session by Bluetooth or roll call;
+  the live count, the latest marks with their method and **Show code**; the
+  session detail with every student's status, time, distance and method, each
+  settable to Present or Absent with a note; the history; **Sheets** with the
+  Excel export and the delete; and **Phone requests**. The sheet list shows each
   course's average attendance and the students below 50 %.
-- **The office** — a read-only phone change history and an attendance overview
-  per batch and course with the same Excel export across every batch.
+- **The office** — the history of every session, the sheets with the same Excel
+  export across every batch and the same delete, and a read-only phone change
+  history.
 
-### 12.9 The Excel export
+### 12.9 Deleting a sheet or a session
 
-Generated on the server with `excelize`. One sheet per course-batch-section
-carries the student name, the registration number, one column per session date
-with `P` or `A` and the note as a cell comment, the present count, the total and
-the percentage, with below 50 % highlighted red and the header frozen.
+A teacher, for their own classes, and the office, for any class, can delete a
+whole attendance sheet or a single session from **Sheets**. The delete first
+asks *Are you sure you want to delete the attendance sheet for `<course>` ·
+`<batch> <section>`? This cannot be undone.* with **Cancel** and **Delete**.
+Every delete is written to the audit log with who did it and which sheet or
+session it was. The marks go with the session, so students stop seeing it and
+every percentage is recounted from what is left.
+
+### 12.10 The Excel export
+
+Generated on the server with `excelize`. There is **one sheet per course, batch
+and section**, and the Bluetooth, code, web and roll-call sessions of that class
+all land in it. The sheet carries the student name, the registration number, one
+column per session date with `P` or `A` and the note as a cell comment, the
+present count, the total and the percentage, with below 50 % highlighted red and
+the header frozen.
 **Download all my classes** puts every course-batch-section the teacher teaches
 into one workbook and adds a Summary sheet with the course, batch, section,
 number of sessions, average percentage and how many students are below 50 %. A
