@@ -21,6 +21,8 @@ const (
 
 var expectedTables = []string{
 	"admin_audit",
+	"admin_permissions",
+	"approval_requests",
 	"analytics_daily",
 	"app_meta",
 	"attendance_alerts",
@@ -34,6 +36,7 @@ var expectedTables = []string{
 	"device_bindings",
 	"device_change_requests",
 	"fcm_tokens",
+	"ip_blocks",
 	"messages",
 	"notices",
 	"notifications",
@@ -54,7 +57,9 @@ var expectedTables = []string{
 	"backup_status",
 	"schema_migrations",
 	"section_views",
+	"settings",
 	"system_events",
+	"user_sessions",
 	"student_drop_courses",
 	"stored_files",
 	"students",

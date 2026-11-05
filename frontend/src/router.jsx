@@ -10,6 +10,13 @@ import AdminInvitePage from './pages/auth/AdminInvitePage'
 import ControlLoginPage from './pages/control/ControlLoginPage'
 import ControlAdminsPage from './pages/control/ControlAdminsPage'
 import ControlMonitorPage from './pages/control/ControlMonitorPage'
+import ControlUsersPage from './pages/control/ControlUsersPage'
+import SecurityPage from './pages/office/SecurityPage'
+import ApprovalsPage from './pages/office/ApprovalsPage'
+import ControlSettingsPage from './pages/control/ControlSettingsPage'
+import ControlSecurityMonitorPage from './pages/control/ControlSecurityMonitorPage'
+import ControlReleasePage from './pages/control/ControlReleasePage'
+import ControlDataPage from './pages/control/ControlDataPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ActivatePage from './pages/auth/ActivatePage'
@@ -59,6 +66,7 @@ import { useNativeBackButton } from './lib/shell'
 import { usePageViews } from './lib/views'
 import {
   PORTAL_ADMIN,
+  PORTAL_CONTROL,
   PORTAL_STUDENT,
   PORTAL_TEACHER,
   ROLE_SUPER_ADMIN,
@@ -112,6 +120,10 @@ export default function Router() {
             element={<ForgotPasswordPage portal={PORTAL_ADMIN} />}
           />
           <Route path={paths.adminInvite()} element={<AdminInvitePage />} />
+          <Route
+            path={paths.controlForgotPassword()}
+            element={<ForgotPasswordPage portal={PORTAL_CONTROL} />}
+          />
         </>
       ) : (
         <>
@@ -190,8 +202,15 @@ export default function Router() {
           }
         />
         <Route path="admins" element={<ControlAdminsPage />} />
+        <Route path="users" element={<ControlUsersPage />} />
         <Route path="activity" element={<ActivityLogPage />} />
         <Route path="activity/:adminId" element={<ControlMonitorPage />} />
+        <Route path="settings/security" element={<SecurityPage eyebrow="Control room" />} />
+        <Route path="settings" element={<ControlSettingsPage />} />
+        <Route path="settings/monitor" element={<ControlSecurityMonitorPage />} />
+        <Route path="settings/app" element={<ControlReleasePage />} />
+        <Route path="approvals" element={<ApprovalsPage eyebrow="Control room" />} />
+        <Route path="data" element={<ControlDataPage />} />
       </Route>
       )}
       {office && (
@@ -210,6 +229,8 @@ export default function Router() {
           <Route path={paths.admin.activity()} element={<ActivityLogPage />} />
           <Route path={paths.admin.attendance()} element={<AdminAttendancePage />} />
           <Route path={paths.admin.phoneChanges()} element={<AdminPhoneChangesPage />} />
+          <Route path={paths.admin.security()} element={<SecurityPage />} />
+          <Route path={paths.admin.approvals()} element={<ApprovalsPage />} />
         </Route>
       </Route>
       )}

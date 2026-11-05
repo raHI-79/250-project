@@ -51,6 +51,8 @@ type RegistrationResult struct {
 
 type LoginUser struct {
 	AuthUser
+	LockedUntil     *time.Time
+	TwoStepEnabled  bool
 	PasswordHash    string
 	Name            string
 	Batch           string
@@ -97,6 +99,8 @@ LIMIT 1`
 u.password_hash,
 COALESCE(s.is_cr, FALSE),
 u.office_access,
+u.locked_until,
+u.two_step_enabled,
 COALESCE(s.full_name, t.name, ''),
 COALESCE(s.batch, ''),
 COALESCE(s.section, ''),
@@ -281,6 +285,8 @@ func (s *Store) FindLoginUser(ctx context.Context, identifier string) (LoginUser
 		&user.PasswordHash,
 		&user.IsCR,
 		&user.OfficeAccess,
+		&user.LockedUntil,
+		&user.TwoStepEnabled,
 		&user.Name,
 		&user.Batch,
 		&user.Section,

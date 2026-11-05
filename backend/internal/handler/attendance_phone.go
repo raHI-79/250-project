@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/attendance"
@@ -58,10 +59,28 @@ type Phones struct {
 	cfg    *config.Config
 	store  PhoneStore
 	alerts BroadcastNotifier
+	asks   *Approvals
 }
 
 func NewPhones(cfg *config.Config, phones PhoneStore, alerts BroadcastNotifier) *Phones {
 	return &Phones{cfg: cfg, store: phones, alerts: alerts}
+}
+
+func (p *Phones) WithApprovals(asks *Approvals) *Phones {
+	p.asks = asks
+	return p
+}
+
+func (p *Phones) RunDeleteSheet(ctx context.Context, payload string) error {
+	var request sheetRequest
+	if err := json.Unmarshal([]byte(payload), &request); err != nil {
+		return err
+	}
+	if request.CourseID <= 0 || request.Batch == "" || request.Section == "" {
+		return errors.New("handler: the approved request has no attendance sheet")
+	}
+	_, err := p.store.DeleteAttendanceSheet(ctx, request.CourseID, request.Batch, request.Section)
+	return err
 }
 
 type decideRequest struct {
@@ -424,6 +443,12 @@ func (p *Phones) AdminDeleteSheet() http.HandlerFunc {
 		}
 		request, ok := decodeSheet(w, r)
 		if !ok {
+			return
+		}
+		if p.asks != nil && p.asks.Needed(w, r, ActionDeleteSheet, "attendance",
+			idText(request.CourseID),
+			fmt.Sprintf("Delete the whole attendance sheet of course %d · %s %s",
+				request.CourseID, request.Batch, request.Section), request) {
 			return
 		}
 		deleted, err := p.store.DeleteAttendanceSheet(r.Context(), request.CourseID,

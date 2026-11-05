@@ -41,13 +41,19 @@ type Details struct {
 	Version     string
 	VersionCode int
 	APKURL      string
+	AssetAPI    string
+	Size        int64
 	Notes       string
 	Required    bool
+	Downloads   int
 }
 
 type asset struct {
-	Name string `json:"name"`
-	URL  string `json:"browser_download_url"`
+	Name      string `json:"name"`
+	URL       string `json:"browser_download_url"`
+	APIURL    string `json:"url"`
+	Size      int64  `json:"size"`
+	Downloads int    `json:"download_count"`
 }
 
 type payload struct {
@@ -152,6 +158,34 @@ func (l *Lookup) stale(now time.Time) (Details, error) {
 	return l.answer()
 }
 
+func (l *Lookup) list(ctx context.Context) ([]payload, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, l.URL(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("release: could not build the request: %w", err)
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	request.Header.Set("User-Agent", userAgent)
+	if l.token != "" {
+		request.Header.Set("Authorization", "Bearer "+l.token)
+	}
+	response, err := l.client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("release: could not reach GitHub: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	body := io.LimitReader(response.Body, maxBody)
+	if response.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("release: GitHub answered %d %s (%s)",
+			response.StatusCode, http.StatusText(response.StatusCode), reason(response, body))
+	}
+	var releases []payload
+	if err := json.NewDecoder(body).Decode(&releases); err != nil {
+		return nil, fmt.Errorf("release: GitHub sent something unreadable: %w", err)
+	}
+	return releases, nil
+}
+
 func (l *Lookup) fetch(ctx context.Context) (Details, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, l.URL(), nil)
 	if err != nil {
@@ -185,16 +219,19 @@ func (l *Lookup) fetch(ctx context.Context) (Details, error) {
 		if version == "" {
 			version = Version(entry.Name)
 		}
-		url := assetURL(entry.Assets, version)
-		if version == "" || url == "" {
+		found := assetOf(entry.Assets, version)
+		if version == "" || found.URL == "" {
 			continue
 		}
 		return Details{
 			Version:     version,
 			VersionCode: VersionCode(version),
-			APKURL:      url,
+			APKURL:      found.URL,
+			AssetAPI:    found.APIURL,
+			Size:        found.Size,
 			Notes:       strings.TrimSpace(entry.Body),
 			Required:    IsRequired(entry.Body),
+			Downloads:   assetDownloads(entry.Assets),
 		}, nil
 	}
 	return Details{}, ErrNoAsset
@@ -240,14 +277,18 @@ func AssetName(version string) string {
 	return assetPrefix + version + assetSuffix
 }
 
-func assetURL(assets []asset, version string) string {
+func assetOf(assets []asset, version string) asset {
 	wanted := AssetName(version)
 	for _, item := range assets {
 		if item.Name == wanted && item.URL != "" {
-			return item.URL
+			return item
 		}
 	}
-	return ""
+	return asset{}
+}
+
+func assetURL(assets []asset, version string) string {
+	return assetOf(assets, version).URL
 }
 
 func VersionCode(version string) int {
@@ -269,4 +310,14 @@ func VersionCode(version string) int {
 
 func Newer(latest, installed string) bool {
 	return VersionCode(latest) > VersionCode(installed)
+}
+
+func assetDownloads(assets []asset) int {
+	total := 0
+	for _, entry := range assets {
+		if strings.HasSuffix(strings.ToLower(entry.Name), ".apk") {
+			total += entry.Downloads
+		}
+	}
+	return total
 }

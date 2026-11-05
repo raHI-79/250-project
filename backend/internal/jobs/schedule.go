@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/notify"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -41,11 +43,46 @@ type Scheduler struct {
 	cfg       *config.Config
 	items     Store
 	alerts    Notifier
+	values    *settings.Cache
 	cleanedOn string
 }
 
 func NewScheduler(cfg *config.Config, items Store, alerts Notifier) *Scheduler {
 	return &Scheduler{cfg: cfg, items: items, alerts: alerts}
+}
+
+func (s *Scheduler) WithSettings(values *settings.Cache) *Scheduler {
+	s.values = values
+	return s
+}
+
+func (s *Scheduler) reminderTimes(ctx context.Context) []string {
+	if s.values == nil {
+		return s.cfg.ReminderTimes
+	}
+	times := s.values.List(ctx, settings.KeyReminderTimes)
+	if len(times) == 0 {
+		return s.cfg.ReminderTimes
+	}
+	return times
+}
+
+func (s *Scheduler) morningReminder(ctx context.Context) string {
+	if s.values == nil {
+		return s.cfg.MorningReminder
+	}
+	clock := strings.TrimSpace(s.values.Get(ctx, settings.KeyMorningReminder))
+	if clock == "" {
+		return s.cfg.MorningReminder
+	}
+	return clock
+}
+
+func (s *Scheduler) daysAhead(ctx context.Context) int {
+	if s.values == nil {
+		return s.cfg.DaysAhead
+	}
+	return s.values.Number(ctx, settings.KeyDaysAhead, s.cfg.DaysAhead)
 }
 
 func (s *Scheduler) Run(ctx context.Context, interval time.Duration) {
@@ -98,12 +135,12 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 
 func (s *Scheduler) Generate(ctx context.Context, now time.Time) (int, error) {
 	from := now.Format(dateLayout)
-	to := now.AddDate(0, 0, s.cfg.DaysAhead).Format(dateLayout)
+	to := now.AddDate(0, 0, s.daysAhead(ctx)).Format(dateLayout)
 	return s.items.GenerateFixedItems(ctx, from, to)
 }
 
 func (s *Scheduler) CloseDecisions(ctx context.Context, now time.Time) (int, error) {
-	if !s.pastLastReminder(now) {
+	if !s.pastLastReminder(ctx, now) {
 		return 0, nil
 	}
 	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
@@ -118,8 +155,8 @@ func (s *Scheduler) CloseDecisions(ctx context.Context, now time.Time) (int, err
 	return len(items), nil
 }
 
-func (s *Scheduler) pastLastReminder(now time.Time) bool {
-	times := s.cfg.ReminderTimes
+func (s *Scheduler) pastLastReminder(ctx context.Context, now time.Time) bool {
+	times := s.reminderTimes(ctx)
 	if len(times) == 0 {
 		return false
 	}

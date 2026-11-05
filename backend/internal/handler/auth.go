@@ -13,6 +13,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -43,7 +44,10 @@ const (
 	MessagePasswordUpdated     = "Password updated. Please log in with your new password."
 	MessageUnknownLoginPortal  = "portal must be student or teacher."
 	MessageDateOfBirthRequired = "Date of birth is required."
+	MessageAccountLocked       = "Too many wrong passwords. Try again in a few minutes."
+	MessageRegistrationClosed  = "Registration is closed right now."
 	ResetEmailSubject          = "Password reset code"
+	NewDeviceEmailSubject      = "A new sign-in to your office account"
 	PortalStudent              = "student"
 	PortalTeacher              = "teacher"
 	loginPublic                = "public"
@@ -87,10 +91,20 @@ type OfficeInvites interface {
 	FindAdminInvite(ctx context.Context, inviteHash string) (store.AdminInvite, error)
 	ActivateAdmin(ctx context.Context, userID int64, chosenID, passwordHash string) error
 	TouchSignIn(ctx context.Context, userID int64) error
+	CreateSession(ctx context.Context, session store.NewSession) (int64, error)
+	RevokeSession(ctx context.Context, userID, sessionID int64) error
+	StartTwoStep(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error
+	TwoStepChallenge(ctx context.Context, identifier string) (store.TwoStepChallenge, error)
+	CountTwoStepAttempt(ctx context.Context, userID int64) (int, error)
+	ClearTwoStep(ctx context.Context, userID int64) error
+	SetPermissions(ctx context.Context, userID int64, names []string, grantedBy int64) error
 }
 
 type TokenIssuer interface {
 	IssueToken(userID int64, effectiveRole string, tokenVersion int) (string, error)
+	IssueSessionToken(userID int64, effectiveRole string, tokenVersion int,
+		sessionID int64) (string, error)
+	TTL() time.Duration
 }
 
 type ProofIssuer interface {
@@ -113,7 +127,34 @@ type Auth struct {
 	google googleauth.Validator
 	photos PhotoStore
 	office OfficeInvites
+	watch  DeviceWatch
+	locks  Lockout
+	values *settings.Cache
 	events *Recorder
+}
+
+func (a *Auth) WithSettings(values *settings.Cache) *Auth {
+	a.values = values
+	return a
+}
+
+type DeviceWatch interface {
+	KnownDevice(ctx context.Context, userID int64, device, ipHash string) (bool, error)
+}
+
+type Lockout interface {
+	RegisterFailure(ctx context.Context, userID int64) (bool, error)
+	ClearFailures(ctx context.Context, userID int64) error
+}
+
+func (a *Auth) WithLockout(locks Lockout) *Auth {
+	a.locks = locks
+	return a
+}
+
+func (a *Auth) WithWatch(watch DeviceWatch) *Auth {
+	a.watch = watch
+	return a
 }
 
 func (a *Auth) WithOffice(office OfficeInvites, events *Recorder) *Auth {
@@ -154,8 +195,13 @@ type loginUser struct {
 }
 
 type loginResponse struct {
-	Token string    `json:"token"`
-	User  loginUser `json:"user"`
+	Token     string    `json:"token,omitempty"`
+	User      loginUser `json:"user"`
+	TwoStep   bool      `json:"two_step,omitempty"`
+	Pending   string    `json:"pending,omitempty"`
+	Message   string    `json:"message,omitempty"`
+	EmailHint string    `json:"email_hint,omitempty"`
+	DevCode   string    `json:"dev_code,omitempty"`
 }
 
 type forgotPasswordRequest struct {
@@ -248,10 +294,29 @@ func (a *Auth) login(mode string) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusForbidden, MessageInvitedAccount)
 			return
 		}
+		if a.locked(w, r, user) {
+			return
+		}
 		if auth.CheckPassword(user.PasswordHash, request.Password) != nil {
 			a.failedSignIn(r, user.ID, user.Role, identifier)
+			if a.locks != nil {
+				locked, err := a.locks.RegisterFailure(r.Context(), user.ID)
+				if err != nil {
+					log.Printf("handler: could not record a failed sign-in: %v", err)
+				} else if locked {
+					a.events.RecordAs(r, user.ID, user.Role, identifier, store.ActionLocked,
+						"account", idText(user.ID), identifier+" was locked after too many tries")
+					httpx.WriteError(w, http.StatusForbidden, MessageAccountLocked)
+					return
+				}
+			}
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return
+		}
+		if a.locks != nil {
+			if err := a.locks.ClearFailures(r.Context(), user.ID); err != nil {
+				log.Printf("handler: could not clear the failed sign-ins: %v", err)
+			}
 		}
 		if officeOnly {
 			if !user.IsActive() {
@@ -266,30 +331,62 @@ func (a *Auth) login(mode string) http.HandlerFunc {
 		if mode == loginOffice {
 			role = auth.RoleAdmin
 		}
-		token, err := a.tokens.IssueToken(user.ID, role, user.TokenVersion)
+		if officeOnly && user.TwoStepEnabled && a.office != nil {
+			email, err := a.users.FindResetTarget(r.Context(), identifier)
+			if err != nil {
+				log.Printf("handler: could not load the email of a two-step account: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			a.twoStepStart(w, r, user, email.Email)
+			return
+		}
+		a.finishLogin(w, r, user, role)
+	}
+}
+
+func (a *Auth) finishLogin(w http.ResponseWriter, r *http.Request, user store.LoginUser, role string) {
+	sessionID := int64(0)
+	if a.office != nil {
+		opened, err := a.office.CreateSession(r.Context(), store.NewSession{
+			UserID:    user.ID,
+			Device:    RequestDevice(r),
+			Client:    RequestClient(r),
+			IPHash:    HashAddress(a.cfg.AnalyticsSalt, RequestAddress(r)),
+			Country:   RequestCountry(r),
+			ExpiresAt: a.cfg.Now().Add(a.tokens.TTL()),
+		})
 		if err != nil {
-			log.Printf("handler: could not issue a token: %v", err)
+			log.Printf("handler: could not open a session: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		body := loginResponse{
-			Token: token,
-			User: loginUser{
-				ID:         user.ID,
-				UserID:     user.ID,
-				Identifier: user.Identifier,
-				Role:       role,
-				Name:       user.Name,
-				PhotoURL:   user.PhotoPath,
-			},
-		}
-		if role == auth.RoleStudent || role == auth.RoleCR {
-			body.User.Batch = user.Batch
-			body.User.Section = user.Section
-		}
-		a.signedIn(r, user.ID, role, user.Identifier)
-		httpx.WriteJSON(w, http.StatusOK, body)
+		sessionID = opened
 	}
+	token, err := a.tokens.IssueSessionToken(user.ID, role, user.TokenVersion, sessionID)
+	if err != nil {
+		log.Printf("handler: could not issue a token: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return
+	}
+	body := loginResponse{
+		Token: token,
+		User: loginUser{
+			ID:         user.ID,
+			UserID:     user.ID,
+			Identifier: user.Identifier,
+			Role:       role,
+			Name:       user.Name,
+			PhotoURL:   user.PhotoPath,
+		},
+	}
+	if role == auth.RoleStudent || role == auth.RoleCR {
+		body.User.Batch = user.Batch
+		body.User.Section = user.Section
+	}
+	a.signedIn(r, user.ID, role, user.Identifier)
+	a.newDeviceNotice(r, user, role)
+	httpx.WriteJSON(w, http.StatusOK, body)
 }
 
 func allowedEntrance(mode string, user store.LoginUser) bool {
@@ -304,6 +401,46 @@ func allowedEntrance(mode string, user store.LoginUser) bool {
 	default:
 		return !auth.IsOfficeRole(user.Role)
 	}
+}
+
+func (a *Auth) locked(w http.ResponseWriter, r *http.Request, user store.LoginUser) bool {
+	if user.LockedUntil == nil || !user.LockedUntil.After(a.cfg.Now()) {
+		return false
+	}
+	a.failedSignIn(r, user.ID, user.Role, user.Identifier)
+	httpx.WriteError(w, http.StatusForbidden, MessageAccountLocked)
+	return true
+}
+
+func (a *Auth) newDeviceNotice(r *http.Request, user store.LoginUser, role string) {
+	if !auth.IsOfficeRole(role) || a.watch == nil {
+		return
+	}
+	device := RequestDevice(r)
+	ipHash := HashAddress(a.cfg.AnalyticsSalt, RequestAddress(r))
+	seen, err := a.watch.KnownDevice(r.Context(), user.ID, device, ipHash)
+	if err != nil {
+		log.Printf("handler: could not check the device of a sign-in: %v", err)
+		return
+	}
+	if seen {
+		return
+	}
+	a.events.RecordAs(r, user.ID, role, user.Identifier, store.ActionNewDevice, "session",
+		idText(user.ID), user.Identifier+" signed in from "+device)
+	target, err := a.users.FindResetTarget(r.Context(), user.Identifier)
+	if err != nil || target.Email == "" || !a.mailerReady() {
+		return
+	}
+	body := newDeviceEmailBody(device)
+	if err := a.mail.Send(r.Context(), target.Email, NewDeviceEmailSubject, body); err != nil {
+		log.Printf("handler: could not email a new device notice: %v", err)
+	}
+}
+
+func newDeviceEmailBody(device string) string {
+	return "A new sign-in to the SUST CSE portal office pages was just made from " +
+		device + ". If that was not you, change your password now."
 }
 
 func (a *Auth) signedIn(r *http.Request, userID int64, role, label string) {
@@ -369,6 +506,12 @@ func (a *Auth) Logout() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
 			return
 		}
+		if a.office != nil && current.SessionID > 0 {
+			if err := a.office.RevokeSession(r.Context(), current.ID, current.SessionID); err != nil &&
+				!errors.Is(err, store.ErrNotFound) {
+				log.Printf("handler: could not revoke a session on sign-out: %v", err)
+			}
+		}
 		if _, err := a.users.IncrementTokenVersion(r.Context(), current.ID); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageSessionExpired)
@@ -415,7 +558,7 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		if target.Role == auth.RoleAdmin {
+		if auth.IsOfficeRole(target.Role) {
 			mismatch = MessageResetMismatch
 			if phone == "" || !target.IsActive() || !validate.SamePhone(phone, target.Phone) {
 				httpx.WriteError(w, http.StatusBadRequest, mismatch)
@@ -466,6 +609,8 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 		} else if !a.cfg.IsProduction() {
 			body.DevCode = code
 		}
+		a.events.RecordAs(r, target.ID, target.Role, identifier, store.ActionPasswordReset,
+			"account", idText(target.ID), "A password reset code was sent for "+identifier)
 		httpx.WriteJSON(w, http.StatusOK, body)
 	}
 }
@@ -575,6 +720,8 @@ func (a *Auth) ResetPassword() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		a.events.Record(r, store.ActionPasswordChange, "account", "",
+			"The password of "+identifier+" was reset with an email code")
 		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessagePasswordUpdated})
 	}
 }

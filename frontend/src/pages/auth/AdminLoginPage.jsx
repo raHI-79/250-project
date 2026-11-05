@@ -7,13 +7,14 @@ import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
 import NoIndex from '../../components/layout/NoIndex'
 import HumanCheck from '../../components/forms/HumanCheck'
+import TwoStepForm from '../../components/forms/TwoStepForm'
 import { useAuth } from '../../context/auth'
 import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
 import { homeFor, paths } from '../../lib/paths'
 
 export default function AdminLoginPage() {
-  const { adminLogin, isAuthenticated, role } = useAuth()
+  const { adminLogin, twoStepLogin, isAuthenticated, role } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const human = useHumanCheck()
@@ -21,6 +22,7 @@ export default function AdminLoginPage() {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [challenge, setChallenge] = useState(null)
   const [loading, setLoading] = useState(false)
   if (isAuthenticated) return <Navigate to={homeFor(role)} replace />
   const onSubmit = async (event) => {
@@ -30,6 +32,10 @@ export default function AdminLoginPage() {
     try {
       await human.confirm()
       const user = await adminLogin(identifier.trim(), password)
+      if (user.two_step) {
+        setChallenge(user)
+        return
+      }
       navigate(homeFor(user.role), { replace: true })
     } catch (failure) {
       setError(failure.message)
@@ -37,6 +43,10 @@ export default function AdminLoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+  const finishTwoStep = async (code) => {
+    const user = await twoStepLogin(identifier.trim(), code, challenge.pending)
+    navigate(homeFor(user.role), { replace: true })
   }
   return (
     <>
@@ -52,6 +62,13 @@ export default function AdminLoginPage() {
             title="Staff sign in"
             subtitle="This entrance is for department staff accounts only."
           />
+          {challenge ? (
+            <TwoStepForm
+              challenge={challenge}
+              onSubmit={finishTwoStep}
+              onCancel={() => setChallenge(null)}
+            />
+          ) : (
           <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
             {notice && <Alert tone="success">{notice}</Alert>}
             {error && <Alert tone="error">{error}</Alert>}
@@ -76,6 +93,7 @@ export default function AdminLoginPage() {
               Sign in
             </Button>
           </form>
+          )}
           <div className="mt-5 text-sm">
             <Link to={paths.adminForgotPassword()} className="text-brand-600 hover:underline">
               Forgot your password?

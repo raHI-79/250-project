@@ -83,6 +83,12 @@ type Admin struct {
 	mail   mailer.Sender
 	photos PhotoStore
 	events *Recorder
+	asks   *Approvals
+}
+
+func (a *Admin) WithApprovals(asks *Approvals) *Admin {
+	a.asks = asks
+	return a
 }
 
 func (a *Admin) WithEvents(events *Recorder) *Admin {

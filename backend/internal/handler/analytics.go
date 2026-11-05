@@ -30,12 +30,18 @@ type AnalyticsStore interface {
 }
 
 type Analytics struct {
-	cfg   *config.Config
-	views AnalyticsStore
+	cfg    *config.Config
+	views  AnalyticsStore
+	events *Recorder
 }
 
 func NewAnalytics(cfg *config.Config, views AnalyticsStore) *Analytics {
 	return &Analytics{cfg: cfg, views: views}
+}
+
+func (a *Analytics) WithEvents(events *Recorder) *Analytics {
+	a.events = events
+	return a
 }
 
 type viewItem struct {
@@ -144,6 +150,9 @@ func (a *Analytics) BackupStatus() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		a.events.RecordAs(r, 0, "", "backup", store.ActionBackup, "database",
+			clipped(request.Note, maxViewPath), "A database backup finished: "+
+				clipped(request.Note, maxViewPath))
 		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageBackupStored})
 	}
 }

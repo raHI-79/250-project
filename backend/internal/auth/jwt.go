@@ -23,6 +23,7 @@ type Claims struct {
 	UserID       int64
 	Role         string
 	TokenVersion int
+	SessionID    int64
 	IssuedAt     time.Time
 	ExpiresAt    time.Time
 }
@@ -30,6 +31,7 @@ type Claims struct {
 type tokenClaims struct {
 	Role         string `json:"role"`
 	TokenVersion int    `json:"ver"`
+	SessionID    int64  `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -54,6 +56,11 @@ func (t *Tokens) TTL() time.Duration {
 }
 
 func (t *Tokens) IssueToken(userID int64, effectiveRole string, tokenVersion int) (string, error) {
+	return t.IssueSessionToken(userID, effectiveRole, tokenVersion, 0)
+}
+
+func (t *Tokens) IssueSessionToken(userID int64, effectiveRole string, tokenVersion int,
+	sessionID int64) (string, error) {
 	if userID <= 0 {
 		return "", fmt.Errorf("auth: user id must be positive, got %d", userID)
 	}
@@ -64,9 +71,13 @@ func (t *Tokens) IssueToken(userID int64, effectiveRole string, tokenVersion int
 		return "", fmt.Errorf("auth: token version must not be negative, got %d", tokenVersion)
 	}
 	issuedAt := t.now()
+	if sessionID < 0 {
+		return "", fmt.Errorf("auth: session id must not be negative, got %d", sessionID)
+	}
 	claims := tokenClaims{
 		Role:         effectiveRole,
 		TokenVersion: tokenVersion,
+		SessionID:    sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatInt(userID, 10),
 			IssuedAt:  jwt.NewNumericDate(issuedAt),
@@ -98,7 +109,7 @@ func (t *Tokens) ParseToken(token string) (Claims, error) {
 	if !IsEffectiveRole(parsed.Role) {
 		return Claims{}, ErrInvalidToken
 	}
-	if parsed.TokenVersion < 0 {
+	if parsed.TokenVersion < 0 || parsed.SessionID < 0 {
 		return Claims{}, ErrInvalidToken
 	}
 	if parsed.IssuedAt == nil || parsed.ExpiresAt == nil {
@@ -108,6 +119,7 @@ func (t *Tokens) ParseToken(token string) (Claims, error) {
 		UserID:       userID,
 		Role:         parsed.Role,
 		TokenVersion: parsed.TokenVersion,
+		SessionID:    parsed.SessionID,
 		IssuedAt:     parsed.IssuedAt.Time,
 		ExpiresAt:    parsed.ExpiresAt.Time,
 	}, nil

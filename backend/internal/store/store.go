@@ -14,6 +14,7 @@ const (
 	RoleTeacher      = "teacher"
 	RoleAdmin        = "admin"
 	RoleSuperAdmin   = "super_admin"
+	RoleCR           = "cr"
 	StatusActive     = "active"
 	StatusPending    = "pending"
 	StatusRejected   = "rejected"

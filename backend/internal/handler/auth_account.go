@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/googleauth"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
@@ -21,11 +23,20 @@ const (
 )
 
 type authConfigResponse struct {
-	StudentEmailDomain string `json:"student_email_domain"`
-	GoogleEnabled      bool   `json:"google_enabled"`
-	GoogleClientID     string `json:"google_client_id,omitempty"`
-	HumanCheckEnabled  bool   `json:"human_check_enabled"`
-	TurnstileSiteKey   string `json:"turnstile_site_key,omitempty"`
+	Maintenance         bool            `json:"maintenance"`
+	MaintenanceMessage  string          `json:"maintenance_message,omitempty"`
+	RegistrationOpen    bool            `json:"registration_open"`
+	RegistrationMessage string          `json:"registration_message,omitempty"`
+	Announcement        string          `json:"announcement,omitempty"`
+	AnnouncementTone    string          `json:"announcement_tone,omitempty"`
+	AnnouncementRoles   []string        `json:"announcement_roles,omitempty"`
+	MinAppVersion       string          `json:"min_app_version,omitempty"`
+	Features            map[string]bool `json:"features,omitempty"`
+	StudentEmailDomain  string          `json:"student_email_domain"`
+	GoogleEnabled       bool            `json:"google_enabled"`
+	GoogleClientID      string          `json:"google_client_id,omitempty"`
+	HumanCheckEnabled   bool            `json:"human_check_enabled"`
+	TurnstileSiteKey    string          `json:"turnstile_site_key,omitempty"`
 }
 
 type dropCourseOption struct {
@@ -50,14 +61,38 @@ type googleVerifyResponse struct {
 
 func (a *Auth) Config() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		httpx.WriteJSON(w, http.StatusOK, authConfigResponse{
+		body := authConfigResponse{
 			StudentEmailDomain: a.cfg.StudentDomain,
 			GoogleEnabled:      a.cfg.GoogleEnabled(),
 			GoogleClientID:     strings.TrimSpace(a.cfg.GoogleClientID),
 			HumanCheckEnabled:  a.cfg.HumanCheckEnabled(),
 			TurnstileSiteKey:   a.cfg.TurnstileSiteKey,
-		})
+			RegistrationOpen:   true,
+		}
+		if a.values != nil {
+			closed, message := a.values.Maintenance(r.Context())
+			body.Maintenance = closed
+			body.MaintenanceMessage = message
+			open, note := a.values.Registration(r.Context())
+			body.RegistrationOpen = open
+			body.RegistrationMessage = note
+			body.MinAppVersion = a.values.Get(r.Context(), settings.KeyMinAppVersion)
+			body.Features = featureState(r.Context(), a.values)
+			text, tone := announcementFor(r.Context(), a.values, "")
+			body.Announcement = text
+			body.AnnouncementTone = tone
+			body.AnnouncementRoles = a.values.List(r.Context(), settings.KeyAnnouncementRoles)
+		}
+		httpx.WriteJSON(w, http.StatusOK, body)
 	}
+}
+
+func featureState(ctx context.Context, values *settings.Cache) map[string]bool {
+	state := make(map[string]bool, len(settings.Features()))
+	for _, key := range settings.Features() {
+		state[strings.TrimPrefix(key, "feature_")] = values.On(ctx, key)
+	}
+	return state
 }
 
 func (a *Auth) DropCourseOptions() http.HandlerFunc {

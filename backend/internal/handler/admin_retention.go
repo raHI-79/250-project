@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
@@ -87,6 +88,10 @@ func (a *Admin) PermanentDelete() http.HandlerFunc {
 			return
 		}
 		summary := accountSummary(account)
+		if a.asks != nil && a.asks.Needed(w, r, ActionDeleteUser, "account", idText(userID),
+			"Delete "+summary+" for good", nil) {
+			return
+		}
 		photoPath, err := a.people.DeleteAccount(r.Context(), userID)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
@@ -107,6 +112,15 @@ func (a *Admin) PermanentDelete() http.HandlerFunc {
 		a.audit(r, store.ActionDelete, summary)
 		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageAccountDeleted})
 	}
+}
+
+func (a *Admin) RunPermanentDelete(ctx context.Context, userID int64) error {
+	photoPath, err := a.people.DeleteAccount(ctx, userID)
+	if err != nil {
+		return err
+	}
+	a.removePhoto(photoPath)
+	return nil
 }
 
 func (a *Admin) Audit() http.HandlerFunc {

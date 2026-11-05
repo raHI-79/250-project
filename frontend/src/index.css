@@ -768,3 +768,51 @@
     scroll-behavior: auto !important;
   }
 }
+
+@utility field-skin {
+  caret-color: var(--color-brand-600);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 6000000s ease-out 0s;
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus,
+  &:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px var(--color-input) inset;
+    box-shadow: 0 0 0 1000px var(--color-input) inset;
+    -webkit-text-fill-color: var(--color-ink);
+    caret-color: var(--color-brand-600);
+    border-radius: var(--radius-input);
+    transition: background-color 6000000s ease-out 0s;
+  }
+  &:-webkit-autofill::first-line {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    color: var(--color-ink);
+  }
+}
+
+@utility field-skin-dark {
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus,
+  &:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px var(--color-night-soft) inset;
+    box-shadow: 0 0 0 1000px var(--color-night-soft) inset;
+    -webkit-text-fill-color: #ffffff;
+  }
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--color-input) inset;
+  box-shadow: 0 0 0 1000px var(--color-input) inset;
+  -webkit-text-fill-color: var(--color-ink);
+  caret-color: var(--color-brand-600);
+  transition: background-color 6000000s ease-out 0s;
+}

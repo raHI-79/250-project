@@ -40,6 +40,7 @@ export const paths = {
       ? `${build('office-portal', 'accept-invite')}?token=${encodeURIComponent(token)}`
       : build('office-portal', 'accept-invite'),
   controlLogin: () => build('control-room'),
+  controlForgotPassword: () => build('control-room', 'forgot-password'),
   student: {
     home: () => build('student'),
     today: (params) => query(build('student', 'today'), params),
@@ -88,6 +89,8 @@ export const paths = {
     activity: () => build('office-portal', 'activity'),
     attendance: (params) => query(build('office-portal', 'attendance'), params),
     phoneChanges: () => build('office-portal', 'phone-changes'),
+    security: () => build('office-portal', 'security'),
+    approvals: () => build('office-portal', 'approvals'),
   },
   control: {
     home: () => build('control-room'),
@@ -95,6 +98,13 @@ export const paths = {
     activity: (params) => query(build('control-room', 'activity'), params),
     monitor: (adminId) => build('control-room', 'activity', String(adminId)),
     monitorPattern: () => routePattern('control-room', 'activity', ':adminId'),
+    security: () => build('control-room', 'settings', 'security'),
+    users: (params) => query(build('control-room', 'users'), params),
+    settings: () => build('control-room', 'settings'),
+    watch: () => build('control-room', 'settings', 'monitor'),
+    release: () => build('control-room', 'settings', 'app'),
+    approvals: () => build('control-room', 'approvals'),
+    data: () => build('control-room', 'data'),
     office: () => build('office-portal', 'overview'),
   },
 }
@@ -132,7 +142,7 @@ export const loginForPortal = (portal) => {
 }
 
 export const forgotPasswordForPortal = (portal) => {
-  if (portal === PORTAL_CONTROL) return paths.adminForgotPassword()
+  if (portal === PORTAL_CONTROL) return paths.controlForgotPassword()
   if (portal === PORTAL_ADMIN) return paths.adminForgotPassword()
   if (portal === PORTAL_TEACHER) return paths.teacherForgotPassword()
   return paths.studentForgotPassword()

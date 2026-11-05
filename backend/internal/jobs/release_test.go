@@ -16,6 +16,18 @@ type fakeReleaseStore struct {
 	browsers  []int64
 }
 
+func (f *fakeReleaseStore) ForgetVersionAnnouncement(ctx context.Context, version string) error {
+	delete(f.seen, version)
+	kept := make([]string, 0, len(f.announced))
+	for _, entry := range f.announced {
+		if entry != version {
+			kept = append(kept, entry)
+		}
+	}
+	f.announced = kept
+	return nil
+}
+
 func newReleaseStore(devices, browsers []int64) *fakeReleaseStore {
 	return &fakeReleaseStore{seen: map[string]bool{}, devices: devices, browsers: browsers}
 }

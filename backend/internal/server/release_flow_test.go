@@ -61,8 +61,9 @@ func TestTheAndroidLatestEndpointIsPublic(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("body is not valid JSON: %v (body = %q)", err, rec.Body.String())
 	}
-	if payload["version"] != "2.1.0" || payload["apk_url"] != flowAPK {
-		t.Errorf("payload = %#v", payload)
+	wantedLink := testFrontend + handler.DownloadAndroidPath + "/2.1.0"
+	if payload["version"] != "2.1.0" || payload["apk_url"] != wantedLink {
+		t.Errorf("payload = %#v, want apk_url %q", payload, wantedLink)
 	}
 	if payload["required"] != false {
 		t.Errorf("required = %#v, want false", payload["required"])

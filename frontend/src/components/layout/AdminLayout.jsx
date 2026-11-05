@@ -2,12 +2,16 @@ import AppShell from './AppShell'
 import NoIndex from './NoIndex'
 import Alert from '../ui/Alert'
 import { useAuth } from '../../context/auth'
+import { useResource } from '../../lib/hooks'
 import { ROLE_SUPER_ADMIN } from '../../lib/paths'
 import { adminNav, controlNav } from '../../lib/nav'
+import { filterNav } from '../../lib/permissions'
 
 export default function AdminLayout() {
   const { role } = useAuth()
   const watching = role === ROLE_SUPER_ADMIN
+  const { data } = useResource('/api/office/permissions')
+  const groups = watching ? controlNav : filterNav(adminNav, data?.permissions)
   return (
     <>
       <NoIndex />
@@ -16,7 +20,7 @@ export default function AdminLayout() {
           Control room view. The office pages are read-only here.
         </Alert>
       )}
-      <AppShell groups={watching ? controlNav : adminNav} showBell={false} showSearch={false} />
+      <AppShell groups={groups} showBell={false} showSearch={false} />
     </>
   )
 }

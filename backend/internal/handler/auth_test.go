@@ -221,11 +221,12 @@ func (f *fakeAuthStore) FinishPasswordReset(ctx context.Context, identifier, tok
 }
 
 type fakeIssuer struct {
-	token  string
-	err    error
-	userID int64
-	role   string
-	calls  int
+	token     string
+	err       error
+	userID    int64
+	role      string
+	calls     int
+	sessionID int64
 }
 
 func (f *fakeIssuer) IssueToken(userID int64, effectiveRole string, tokenVersion int) (string, error) {
@@ -236,6 +237,16 @@ func (f *fakeIssuer) IssueToken(userID int64, effectiveRole string, tokenVersion
 		return "", f.err
 	}
 	return f.token, nil
+}
+
+func (f *fakeIssuer) IssueSessionToken(userID int64, effectiveRole string, tokenVersion int,
+	sessionID int64) (string, error) {
+	f.sessionID = sessionID
+	return f.IssueToken(userID, effectiveRole, tokenVersion)
+}
+
+func (f *fakeIssuer) TTL() time.Duration {
+	return time.Hour
 }
 
 func newAuthStore(t *testing.T) *fakeAuthStore {

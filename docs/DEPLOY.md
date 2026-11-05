@@ -98,6 +98,12 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 - **Backup status secret** — `BACKUP_STATUS_SECRET`, one more long random
   string. Step 8 puts the same value in GitHub.
 
+Nothing else moves to Render: from 2.6.0 the maintenance mode, the registration
+switch, the announcement banner, the feature switches, the reminder times, the
+number of days the routine is generated ahead, the minimum app version and the
+retention windows all live in **Control room → Site settings** and take effect
+within half a minute. The environment values are only their defaults.
+
 ## 4. The web service on Render
 
 1. Sign up at [render.com](https://render.com) with GitHub and allow it to read
@@ -212,11 +218,15 @@ Postgres with everything else, so one dump holds the whole portal.
 1. In GitHub, open **Settings → Secrets and variables → Actions**.
 2. **New repository secret**, name it `BACKUP_DATABASE_URL`, and paste the same
    Neon connection string.
-3. **New repository secret** again, name it `BACKUP_STATUS_SECRET`, and paste
+3. **New repository secret** again, name it `BACKUP_PASSPHRASE`, and put a long
+   random phrase in it. The dump is encrypted with it before it is uploaded, and
+   the job fails with a clear message if the secret is missing. Keep the phrase
+   somewhere safe and offline: without it the backups cannot be read.
+4. **New repository secret** again, name it `BACKUP_STATUS_SECRET`, and paste
    the same value you put in the Render environment in step 4.
-4. **New repository secret** once more, name it `BACKUP_STATUS_URL`, and set it
+5. **New repository secret** once more, name it `BACKUP_STATUS_URL`, and set it
    to `https://<your address>/api/system/backup-status`.
-5. The workflow `.github/workflows/backup.yml` then runs every night at 21:30
+6. The workflow `.github/workflows/backup.yml` then runs every night at 21:30
    UTC, which is 03:30 in Dhaka, and you can also start it by hand from the
    **Actions** tab with **Run workflow**. It installs the PostgreSQL 18 client
    from the PostgreSQL apt repository, because Neon runs PostgreSQL 18 and
@@ -256,20 +266,68 @@ teacher account and their app access untouched.
 ### Downloading a backup
 
 Open **Actions → Database backup**, click the run you want, and download the
-artifact at the bottom of the page. It is a gzipped SQL dump named by date, for
-example `sust-cse-2026-10-23.sql.gz`, and GitHub keeps it for 30 days.
+artifact at the bottom of the page. On a public repository any signed-in GitHub
+user can download an artifact, which is why the dump is encrypted before it is
+uploaded: the artifact is a single `.gpg` file named by date, for example
+`sust-cse-2026-10-23.sql.gz.gpg`, and GitHub keeps it for 30 days. Only
+`BACKUP_PASSPHRASE` opens it, and the passphrase is never printed in the log.
+
+### Decrypting a backup
+
+```bash
+gpg --decrypt --output sust-cse-2026-10-23.sql.gz sust-cse-2026-10-23.sql.gz.gpg
+```
+
+`gpg` asks for the passphrase. To decrypt without a prompt, for example in a
+script, pass it on standard input instead of on the command line:
+
+```bash
+gpg --batch --decrypt --passphrase-fd 0 \
+  --output sust-cse-2026-10-23.sql.gz sust-cse-2026-10-23.sql.gz.gpg < passphrase.txt
+```
 
 ### Restoring a backup
 
-```powershell
+```bash
 gunzip -c sust-cse-2026-10-23.sql.gz | psql "postgres://...neon.tech/neondb?sslmode=require"
+```
+
+Or in one pass, without writing the plain dump to disk:
+
+```bash
+gpg --decrypt sust-cse-2026-10-23.sql.gz.gpg | gunzip -c |
+  psql "postgres://...neon.tech/neondb?sslmode=require"
 ```
 
 Restore into an empty database. In Neon, the simplest way to get one is
 **Branches → New branch**, which gives a fresh connection string you can point
 the command at, test, and then promote.
 
-## 10. Rebuilding the Android app
+## 10. The emergency password reset
+
+If the super admin password is lost, reset it from the server — never from an
+argument on the command line, which would land in the shell history.
+
+1. In Render, open the service and choose **Shell**.
+2. Set the new password in the environment of that shell and run the command.
+   The image carries the tool next to the server, so there is no Go toolchain and
+   no source to build:
+
+```bash
+export NEW_SUPER_ADMIN_PASSWORD='a long new password with 1 digit'
+/app/sust-admin -reset-super
+unset NEW_SUPER_ADMIN_PASSWORD
+```
+
+On a development machine with the source checked out, `cd backend && go run
+./cmd/admin -reset-super` does the same thing.
+
+It refuses anything under 10 characters or without a letter and a digit, replaces
+the hash, closes every session of that account, prints only `Password updated`
+and records the reset in the activity log. Sign in again at `/control-room` and
+change the password from **Security** if you want a different one.
+
+## 11. Rebuilding the Android app
 
 The installed Android app is a Trusted Web Activity wrapper around the same
 site, package `edu.sust.cse.portal`. The web part updates itself on the next
@@ -293,7 +351,26 @@ example after the status bar colour changed.
 The digital asset link is unchanged as long as the signing key is the same, so
 `frontend/public/.well-known/assetlinks.json` needs no edit on a rebuild.
 
-## 11. The Android app
+## 12. The app download
+
+`GET /download/android` is served by our own server, not by a redirect to
+GitHub, so downloads keep working even if the repository becomes private. The
+server asks the GitHub asset API for the newest
+`sust-cse-portal-<version>.apk` with `GITHUB_TOKEN`, follows the redirect to the
+storage host without passing the token on, writes the file into
+`UPLOAD_DIR/apk/` and answers it with
+`Content-Type: application/vnd.android.package-archive`, a
+`Content-Disposition: attachment` name and a `Content-Length`. Every later
+request for that version is answered from the cached file, so GitHub is asked
+once per release. `GET /download/android/<version>` serves one specific version,
+and that address is what `apk_url` in `GET /api/app/android-latest` points at, so
+the in-app updater downloads through the portal too.
+
+Without `GITHUB_TOKEN`, or when GitHub refuses, the answer is `503` with *The
+app download is not available right now. Please try again later.* and the log
+holds the status only — never the token.
+
+## 13. The Android app
 
 The installed Android app is now a Capacitor build, not a web wrapper, and its
 notifications come through Firebase. `docs/ANDROID.md` covers the Firebase

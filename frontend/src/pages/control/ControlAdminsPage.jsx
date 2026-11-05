@@ -14,11 +14,13 @@ import {
   StatusBadge,
   useToast,
 } from '../../components/ui'
+import PermissionPicker from '../../components/control/PermissionPicker'
 import api from '../../lib/api'
+import { permissionLabel } from '../../lib/permissions'
 import { useResource } from '../../lib/hooks'
 import { formatDateTime } from '../../lib/time'
 
-const ADMIN_HEADINGS = ['Account', 'Status', 'Last sign-in', 'Actions', '']
+const ADMIN_HEADINGS = ['Account', 'Status', 'Last sign-in', 'Actions', 'May do', '']
 
 const TEACHER_HEADINGS = ['Teacher', 'Office access', 'Last sign-in', '']
 
@@ -39,6 +41,7 @@ export default function ControlAdminsPage() {
   const [inviting, setInviting] = useState(false)
   const [error, setError] = useState('')
   const [removing, setRemoving] = useState(null)
+  const [editing, setEditing] = useState(null)
   const [confirmName, setConfirmName] = useState('')
   const [busy, setBusy] = useState(false)
   const items = admins.data?.items || []
@@ -49,7 +52,7 @@ export default function ControlAdminsPage() {
     setInviting(true)
     try {
       const data = await api.post('/api/super-admin/admins/invite', { email: email.trim() })
-      toast(data.message)
+      toast.success(data.message)
       setEmail('')
       await admins.reload()
     } catch (failure) {
@@ -62,11 +65,11 @@ export default function ControlAdminsPage() {
     setBusy(true)
     try {
       const data = await call()
-      toast(data.message)
+      toast.success(data.message)
       await admins.reload()
       await teachers.reload()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy(false)
     }
@@ -150,6 +153,21 @@ export default function ControlAdminsPage() {
                   {when(item.last_sign_in)}
                 </td>
                 <td className="px-4 py-3 text-ink-soft">{item.action_count}</td>
+                <td className="px-4 py-3">
+                  {item.role === 'super_admin' ? (
+                    <span className="text-xs text-muted">Everything</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(item)}
+                      className="text-left text-xs font-semibold text-brand-600 hover:underline"
+                    >
+                      {item.permissions?.length
+                        ? item.permissions.map(permissionLabel).join(', ')
+                        : 'No permissions yet'}
+                    </button>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap justify-end gap-2">
                     {item.status === 'invited' && (
@@ -292,6 +310,20 @@ export default function ControlAdminsPage() {
           </DataTable>
         )}
       </Card>
+      {editing && (
+        <PermissionPicker
+          admin={editing}
+          open={Boolean(editing)}
+          onClose={() => setEditing(null)}
+          onSave={async (permissions) => {
+            const target = editing
+            setEditing(null)
+            await act(() =>
+              api.put(`/api/super-admin/admins/${target.id}/permissions`, { permissions }),
+            )
+          }}
+        />
+      )}
       <Modal
         open={Boolean(removing)}
         onClose={() => setRemoving(null)}

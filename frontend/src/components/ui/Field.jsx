@@ -3,9 +3,12 @@ import { Eye, EyeOff } from 'lucide-react'
 import cx from '../../lib/cx'
 import { isNative } from '../../lib/native'
 
-const shell = (invalid, tone, focused) =>
+const shell = () => 'relative rounded-input'
+
+const skin = (invalid, tone, focused) =>
   cx(
-    'relative rounded-input transition-all duration-200',
+    'field-skin rounded-input transition-all duration-200',
+    tone === 'dark' && 'field-skin-dark',
     isNative() && focused ? 'border-2' : 'border',
     tone === 'dark' ? 'bg-white/5' : 'bg-input',
     invalid
@@ -24,9 +27,10 @@ const shell = (invalid, tone, focused) =>
     focused && invalid && 'shadow-[0_0_0_3px_var(--color-danger-100)]',
   )
 
-const control = (tone, floating, tall, leading) =>
+const control = (tone, floating, tall, leading, invalid, focused) =>
   cx(
-    'w-full bg-transparent text-base outline-none',
+    'w-full text-base outline-none',
+    skin(invalid, tone, focused),
     leading ? 'pr-3.5 pl-11' : 'px-3.5',
     tone === 'dark' ? 'text-white placeholder:text-white/35' : 'text-ink placeholder:text-faint',
     tall ? 'h-[3.125rem]' : 'h-12',
@@ -129,14 +133,14 @@ export function Input({ label, error, hint, required, tone, className, id, icon,
       className={className}
       id={fieldId}
     >
-      <div className={shell(Boolean(error), tone, focused)}>
+      <div className={shell()}>
         <LeadingIcon icon={Icon} tone={tone} />
         <input
           id={fieldId}
           aria-label={label}
           required={required}
           className={cx(
-            control(tone, Boolean(label), tall, Boolean(Icon)),
+            control(tone, Boolean(label), tall, Boolean(Icon), Boolean(error), focused),
             !floated && 'placeholder:text-transparent',
           )}
           {...rest}
@@ -200,12 +204,12 @@ export function Select({ label, error, hint, required, tone, className, id, chil
       className={className}
       id={fieldId}
     >
-      <div className={shell(Boolean(error), tone, focused)}>
+      <div className={shell()}>
         <select
           id={fieldId}
           aria-label={label}
           required={required}
-          className={control(tone, Boolean(label), tall, false)}
+          className={control(tone, Boolean(label), tall, false, Boolean(error), focused)}
           {...rest}
           onFocus={(event) => {
             setFocused(true)
@@ -243,14 +247,15 @@ export function Textarea({ label, error, hint, required, tone, className, id, ro
       className={className}
       id={fieldId}
     >
-      <div className={shell(Boolean(error), tone, focused)}>
+      <div className={shell()}>
         <textarea
           id={fieldId}
           rows={rows}
           aria-label={label}
           required={required}
           className={cx(
-            'w-full resize-y bg-transparent px-3.5 leading-relaxed outline-none',
+            'w-full resize-y px-3.5 leading-relaxed outline-none',
+            skin(Boolean(error), tone, focused),
             tone === 'dark'
               ? 'text-white placeholder:text-white/35'
               : 'text-ink placeholder:text-faint',

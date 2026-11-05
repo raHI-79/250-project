@@ -18,6 +18,7 @@ const (
 
 type ReleaseStore interface {
 	ClaimVersionAnnouncement(ctx context.Context, version string) (bool, error)
+	ForgetVersionAnnouncement(ctx context.Context, version string) error
 	ListPushTargets(ctx context.Context) ([]int64, error)
 	ListDeviceTargets(ctx context.Context) ([]int64, error)
 }

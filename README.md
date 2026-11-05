@@ -335,6 +335,36 @@ read-only — the backend refuses any write from that role. It cannot be
 suspended or removed from inside the portal, and the Android app cannot reach
 any of it.
 
+### The emergency password reset
+
+If the super admin password is lost, `go run ./cmd/admin -reset-super` replaces
+it. The command reads the new password from `NEW_SUPER_ADMIN_PASSWORD` in the
+environment and never from an argument, refuses anything under 10 characters or
+without a letter and a digit, replaces the hash, closes every session of that
+account, prints only `Password updated` and records the reset in the activity
+log. `docs/DEPLOY.md` has the three lines to paste into the Render shell.
+
+### Sessions, permissions and settings
+
+- Every sign-in opens a row in `user_sessions` and the token carries its id, so
+  a session can be ended from the server. The token check refuses a revoked or
+  expired session, and **Security** lists the devices with *Sign out* per row.
+- An office password needs 10 characters with a letter and a digit, two-step
+  sign-in mails a 6-digit code that lives 10 minutes with five tries, and five
+  wrong passwords lock an account for 15 minutes.
+- Each office admin holds a set of permissions. One middleware checks the matched
+  route against a table and answers `You do not have permission for this`; the
+  super admin bypasses the table and stays read-only on the office pages.
+- Every write in the control room needs a password confirmation first, which
+  opens a five-minute window on that session; without it the answer is `428`.
+- Maintenance mode, the registration switch, the announcement banner, the feature
+  switches, the reminder times, the days ahead, the minimum app version and the
+  retention windows live in the `settings` table and take effect within half a
+  minute. The environment values are their defaults.
+- Deleting an account for good, deleting a whole attendance sheet and removing an
+  office admin need a second office admin to approve within 24 hours whenever one
+  exists; the super admin overrides after confirming its password.
+
 `ANALYTICS_SALT` hashes every IP address the portal records, in the activity log
 and in the page-view rows alike, so no readable address is ever stored.
 `BACKUP_STATUS_SECRET` guards `POST /api/system/backup-status`, which the nightly
@@ -924,6 +954,39 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/auth/admin-invite/accept` | public | `{token, username, password, confirm_password}` activates the office admin |
 | `POST` | `/api/auth/control-room/login` | public | The control room entrance; super admin only, refused from the app |
 | `POST` | `/api/analytics/view` | public | A batch of page views, 20 a minute per address, answers `202` |
+| `POST` | `/api/auth/two-step` | public | `{identifier, code, pending}` finishes a two-step sign-in |
+| `GET` | `/api/office/security` | office | The identifier, role, two-step state and the confirmation window |
+| `GET` | `/api/office/permissions` | office | What the signed-in office account may do |
+| `POST` | `/api/office/security/confirm` | office | `{password}` opens the five-minute confirmation window |
+| `POST` | `/api/office/security/password` | office | Changes the password and signs every other session out |
+| `PATCH` | `/api/office/security/contact` | office | `{password, email, phone}` changes the contact details |
+| `PUT` | `/api/office/security/two-step` | office | `{password, enabled}` turns two-step sign-in on or off |
+| `GET` | `/api/office/security/sessions` | office | Every live session with its device, client, country and last seen |
+| `DELETE` | `/api/office/security/sessions/{id}` | office | Signs one session out |
+| `DELETE` | `/api/office/security/sessions` | office | Signs every other session out |
+| `GET` | `/api/office/approvals` | office | The two-person requests, newest first |
+| `POST` | `/api/office/approvals/{id}/approve` | office | Approves and carries out somebody else's request |
+| `POST` | `/api/office/approvals/{id}/decline` | office | Declines somebody else's request |
+| `GET` | `/api/super-admin/permissions` | super admin | The permission names with their labels and the default set |
+| `PUT` | `/api/super-admin/admins/{id}/permissions` | super admin | `{permissions}` replaces what one admin may do |
+| `GET` | `/api/super-admin/users` | super admin | Accounts with the `search`, `role`, `status`, `batch`, `limit` and `offset` filters |
+| `GET` | `/api/super-admin/users/export` | super admin | The same filter as a CSV download |
+| `GET` | `/api/super-admin/users/{id}` | super admin | One account with its sessions, phone binding and recent activity |
+| `POST` | `/api/super-admin/users/{id}/suspend` | super admin | Suspends an account and closes its sessions |
+| `POST` | `/api/super-admin/users/{id}/restore` | super admin | Brings a suspended account back |
+| `POST` | `/api/super-admin/users/{id}/sign-out` | super admin | Signs one account out everywhere |
+| `POST` | `/api/super-admin/users/{id}/reset-phone` | super admin | Forgets the attendance phone of one student |
+| `PUT` | `/api/super-admin/users/{id}/role` | super admin | `{role}` switches a student between `student` and `cr` |
+| `POST` | `/api/super-admin/users/bulk` | super admin | `{ids, action}` suspends or signs out up to 100 accounts |
+| `GET` | `/api/super-admin/settings` | super admin | Every setting with the editable keys and the feature keys |
+| `PUT` | `/api/super-admin/settings` | super admin | `{values}` saves the settings and clears the cache |
+| `GET` | `/api/super-admin/security` | super admin | Failed sign-ins, locked accounts, blocked addresses and the latest events |
+| `POST` | `/api/super-admin/security/blocks` | super admin | `{cidr, reason, hours}` blocks an address or a range |
+| `DELETE` | `/api/super-admin/security/blocks/{id}` | super admin | Frees a blocked address |
+| `POST` | `/api/super-admin/security/unlock/{id}` | super admin | Unlocks an account locked by failed sign-ins |
+| `GET` | `/api/super-admin/release` | super admin | The current Android release, its downloads, the share link and the floor |
+| `POST` | `/api/super-admin/release/announce` | super admin | Sends the update notification again |
+| `GET` | `/api/super-admin/data` | super admin | Row counts, the last backups and the retention windows |
 | `POST` | `/api/system/backup-status` | secret | Records a successful backup; needs the `X-Backup-Secret` header |
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
 | `POST` | `/api/admin/courses` | admin | Adds a course with `code`, `title` and a required `credit` of 0.5 to 6.0 in steps of 0.25; the code is stored in upper case, `409` on a duplicate |
@@ -1071,10 +1134,20 @@ of `GITHUB_RELEASES_REPO` through one shared lookup in
   release that is neither a draft nor a prerelease **and** carries an asset named
   `sust-cse-portal-<version>.apk`. A release published without the APK attached,
   as `v2.2.0` was, is skipped rather than reported as the newest build.
-- `GITHUB_TOKEN` is optional. Without it GitHub allows 60 requests an hour per
-  IP address, which a free Render instance shares with other services; with a
+- `GITHUB_TOKEN` is **required for the app download** from 2.6.0 and still worth
+  setting for the lookup. Without it GitHub allows 60 requests an hour per IP
+  address, which a free Render instance shares with other services; with a
   read-only token the account gets 5000. A `User-Agent` always goes out, and the
   token is never written to the log.
+- `GET /download/android` streams the APK from the GitHub asset API through our
+  own server instead of redirecting to GitHub, so downloads keep working if the
+  repository becomes private. The redirect to the storage host is followed
+  without passing the token on, the file is cached under `UPLOAD_DIR/apk/` per
+  version so GitHub is asked once per release, and the answer carries
+  `application/vnd.android.package-archive`, an attachment name and a
+  `Content-Length`. `GET /download/android/<version>` serves one version and is
+  what `apk_url` points at. Without a token, or when GitHub refuses, the answer
+  is `503` and the log holds the status only.
 - A good answer is cached ten minutes. When GitHub answers `403`, `429` or `5xx`,
   times out or sends something that is not JSON, the last good answer is served
   for up to **six hours**, and a failed attempt is not retried for a minute so a
