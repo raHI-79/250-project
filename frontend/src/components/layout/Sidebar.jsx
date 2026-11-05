@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { X } from 'lucide-react'
 import ProfileNavLink from './ProfileNavLink'
 import CountBadge from '../ui/CountBadge'
@@ -7,11 +7,14 @@ import IconButton from '../ui/IconButton'
 import LogoBadge from '../ui/LogoBadge'
 import cx from '../../lib/cx'
 import { homeFor } from '../../lib/paths'
+import { activeNavPath, isNavActive } from '../../lib/nav'
 import { lockScroll } from '../../lib/scrollLock'
 import { useAuth } from '../../context/auth'
 
 export default function Sidebar({ groups, open, onClose }) {
   const { role } = useAuth()
+  const { pathname } = useLocation()
+  const activePath = activeNavPath(groups, pathname)
   useEffect(() => {
     if (!open) return undefined
     const release = lockScroll()
@@ -38,36 +41,34 @@ export default function Sidebar({ groups, open, onClose }) {
             </p>
           )}
           <div className="flex flex-col gap-0.5">
-            {group.items.map((item) => (
-              <NavLink
-                key={item.to()}
-                to={item.to()}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  cx(
+            {group.items.map((item) => {
+              const active = isNavActive(item, activePath)
+              return (
+                <NavLink
+                  key={item.to()}
+                  to={item.to()}
+                  onClick={onClose}
+                  aria-current={active ? 'page' : undefined}
+                  className={cx(
                     'press relative flex min-h-12 items-center gap-3 rounded-xl px-2.5 py-1.5 text-sm',
-                    isActive
+                    active
                       ? 'bg-brand-50 font-semibold text-brand-700 ring-1 ring-brand-200'
                       : 'font-medium text-ink-soft hover:bg-wash',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      className={cx(
-                        'grid size-9 shrink-0 place-items-center rounded-[0.7rem] transition-colors',
-                        isActive ? 'bg-brand-600 text-white' : 'bg-wash text-muted',
-                      )}
-                    >
-                      <item.icon size={17} strokeWidth={isActive ? 2.2 : 1.8} />
-                    </span>
-                    <span className="min-w-0 flex-1 wrap-long">{item.label}</span>
-                    <CountBadge count={item.count} className="shrink-0" />
-                  </>
-                )}
-              </NavLink>
-            ))}
+                  )}
+                >
+                  <span
+                    className={cx(
+                      'grid size-9 shrink-0 place-items-center rounded-[0.7rem] transition-colors',
+                      active ? 'bg-brand-600 text-white' : 'bg-wash text-muted',
+                    )}
+                  >
+                    <item.icon size={17} strokeWidth={active ? 2.2 : 1.8} />
+                  </span>
+                  <span className="min-w-0 flex-1 wrap-long">{item.label}</span>
+                  <CountBadge count={item.count} className="shrink-0" />
+                </NavLink>
+              )
+            })}
           </div>
         </div>
       ))}

@@ -2,6 +2,8 @@ import { readJson, remove } from './storage'
 import { HUMAN_HEADER, clearHumanPass, humanPass } from './human'
 import { CLIENT_ANDROID, CLIENT_HEADER, apiURL, isAndroidApp } from './native'
 import { loginFor } from './paths'
+import { askOnce, needsConfirm } from './confirmgate'
+import { afterRequest } from './refresh'
 
 export const SESSION_KEY = 'sustcse.session'
 
@@ -77,7 +79,7 @@ const parseBody = async (response) => {
   }
 }
 
-const request = async (method, path, { body, query, signal, auth = true, cache } = {}) => {
+const send = async (method, path, { body, query, signal, auth = true, cache } = {}) => {
   const headers = {}
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData
   let payload
@@ -105,7 +107,10 @@ const request = async (method, path, { body, query, signal, auth = true, cache }
     throw new ApiError(0, 'Cannot reach the server. Please check your connection.')
   }
   const data = await parseBody(response)
-  if (response.ok) return data
+  if (response.ok) {
+    afterRequest(method)
+    return data
+  }
   if (response.status === 401 && !isPublicEndpoint(path)) {
     expireSession()
   }
@@ -117,6 +122,16 @@ const request = async (method, path, { body, query, signal, auth = true, cache }
     (typeof data === 'string' && data) ||
     'Something went wrong. Please try again.'
   throw new ApiError(response.status, message)
+}
+
+const request = async (method, path, options) => {
+  try {
+    return await send(method, path, options)
+  } catch (failure) {
+    if (!needsConfirm(failure)) throw failure
+    await askOnce()
+    return send(method, path, options)
+  }
 }
 
 export const api = {

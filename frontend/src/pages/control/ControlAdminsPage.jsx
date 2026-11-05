@@ -20,8 +20,6 @@ import { permissionLabel } from '../../lib/permissions'
 import { useResource } from '../../lib/hooks'
 import { formatDateTime } from '../../lib/time'
 
-const ADMIN_HEADINGS = ['Account', 'Status', 'Last sign-in', 'Actions', 'May do', '']
-
 const TEACHER_HEADINGS = ['Teacher', 'Office access', 'Last sign-in', '']
 
 const statusTone = (status) => {
@@ -118,26 +116,19 @@ export default function ControlAdminsPage() {
         </Alert>
       )}
       {admins.loading ? (
-        <SkeletonTable columns={5} />
+        <SkeletonTable columns={3} />
       ) : items.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="No office admins yet" text="Invite one above." />
       ) : (
-        <DataTable className="mb-6">
-          <thead>
-            <tr className="border-b border-line bg-wash">
-              {ADMIN_HEADINGS.map((heading, index) => (
-                <th key={heading || index} className="px-4 py-3 font-semibold text-ink-soft">
-                  {heading}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="border-b border-line last:border-b-0">
-                <td className="px-4 py-3">
-                  <p className="font-semibold text-ink">{item.username || item.name || item.email}</p>
-                  <p className="text-xs text-muted">
+        <ul className="mb-6 flex flex-col gap-3">
+          {items.map((item) => (
+            <li key={item.id} className="surface-card flex flex-col gap-3 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                <div className="min-w-0 flex-1">
+                  <p className="wrap-long font-semibold text-ink">
+                    {item.username || item.name || item.email}
+                  </p>
+                  <p className="wrap-long text-xs text-muted">
                     {item.role === 'super_admin'
                       ? 'Super admin'
                       : item.source === 'teacher'
@@ -145,106 +136,101 @@ export default function ControlAdminsPage() {
                         : 'Office admin'}
                     {item.email ? ` · ${item.email}` : ''}
                   </p>
-                </td>
-                <td className="px-4 py-3">
+                  <p className="mt-1 text-xs text-muted">
+                    Last sign-in {when(item.last_sign_in)} · {item.action_count} actions
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
                   <StatusBadge status={statusTone(item.status)} label={item.status} />
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
-                  {when(item.last_sign_in)}
-                </td>
-                <td className="px-4 py-3 text-ink-soft">{item.action_count}</td>
-                <td className="px-4 py-3">
-                  {item.role === 'super_admin' ? (
-                    <span className="text-xs text-muted">Everything</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setEditing(item)}
-                      className="text-left text-xs font-semibold text-brand-600 hover:underline"
+                </div>
+              </div>
+              <div className="min-w-0">
+                {item.role === 'super_admin' ? (
+                  <span className="text-xs text-muted">May do everything</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(item)}
+                    className="wrap-long text-left text-xs font-semibold text-brand-600 hover:underline"
+                  >
+                    {item.permissions?.length
+                      ? item.permissions.map(permissionLabel).join(', ')
+                      : 'No permissions yet'}
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+                {item.status === 'invited' && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        act(() => api.post(`/api/super-admin/admins/${item.id}/resend-invite`))
+                      }
                     >
-                      {item.permissions?.length
-                        ? item.permissions.map(permissionLabel).join(', ')
-                        : 'No permissions yet'}
-                    </button>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {item.status === 'invited' && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() =>
-                            act(() => api.post(`/api/super-admin/admins/${item.id}/resend-invite`))
-                          }
-                        >
-                          Resend
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() =>
-                            act(() => api.delete(`/api/super-admin/admins/${item.id}/invite`))
-                          }
-                        >
-                          Cancel invite
-                        </Button>
-                      </>
-                    )}
-                    {item.role === 'admin' && item.status === 'active' && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() => act(() => api.post(`/api/super-admin/admins/${item.id}/suspend`))}
-                      >
-                        Suspend
-                      </Button>
-                    )}
-                    {item.role === 'admin' && item.status === 'removed' && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() => act(() => api.post(`/api/super-admin/admins/${item.id}/restore`))}
-                      >
-                        Restore
-                      </Button>
-                    )}
-                    {item.role === 'admin' && item.status !== 'invited' && (
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        disabled={busy}
-                        onClick={() => {
-                          setConfirmName('')
-                          setRemoving(item)
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                    {item.source === 'teacher' && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() =>
-                          act(() => api.delete(`/api/super-admin/teachers/${item.id}/office-access`))
-                        }
-                      >
-                        Revoke access
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+                      Resend
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => act(() => api.delete(`/api/super-admin/admins/${item.id}/invite`))}
+                    >
+                      Cancel invite
+                    </Button>
+                  </>
+                )}
+                {item.role === 'admin' && item.status === 'active' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => act(() => api.post(`/api/super-admin/admins/${item.id}/suspend`))}
+                  >
+                    Suspend
+                  </Button>
+                )}
+                {item.role === 'admin' && item.status === 'removed' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => act(() => api.post(`/api/super-admin/admins/${item.id}/restore`))}
+                  >
+                    Restore
+                  </Button>
+                )}
+                {item.role === 'admin' && item.status !== 'invited' && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirmName('')
+                      setRemoving(item)
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+                {item.source === 'teacher' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      act(() => api.delete(`/api/super-admin/teachers/${item.id}/office-access`))
+                    }
+                  >
+                    Revoke access
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
       <Card>
         <CardHeader title="Teachers" subtitle="Lend the office pages to a teacher." />

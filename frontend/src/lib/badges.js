@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import api, { hasSession } from './api'
+import {
+  BADGE_COURSES,
+  BADGE_EXAMS,
+  BADGE_MATERIALS,
+  BADGE_NOTICES,
+  BADGE_POLLS,
+  BADGE_ROUTINE,
+} from './badgekeys.js'
 
-export const BADGE_NOTICES = 'notices'
-
-export const BADGE_MATERIALS = 'materials'
-
-export const BADGE_POLLS = 'polls'
-
-export const BADGE_EXAMS = 'exams'
-
-export const BADGE_ROUTINE = 'routine'
-
-export const BADGE_COURSES = 'courses'
+export {
+  BADGE_COURSES,
+  BADGE_EXAMS,
+  BADGE_MATERIALS,
+  BADGE_NOTICES,
+  BADGE_POLLS,
+  BADGE_ROUTINE,
+} from './badgekeys.js'
 
 export const BADGE_SECTIONS = [
   BADGE_NOTICES,

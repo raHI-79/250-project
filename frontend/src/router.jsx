@@ -205,7 +205,11 @@ export default function Router() {
         <Route path="users" element={<ControlUsersPage />} />
         <Route path="activity" element={<ActivityLogPage />} />
         <Route path="activity/:adminId" element={<ControlMonitorPage />} />
-        <Route path="settings/security" element={<SecurityPage eyebrow="Control room" />} />
+        <Route path="settings/account" element={<SecurityPage eyebrow="Control room" />} />
+        <Route
+          path="settings/security"
+          element={<Navigate to={paths.control.account()} replace />}
+        />
         <Route path="settings" element={<ControlSettingsPage />} />
         <Route path="settings/monitor" element={<ControlSecurityMonitorPage />} />
         <Route path="settings/app" element={<ControlReleasePage />} />
@@ -229,7 +233,11 @@ export default function Router() {
           <Route path={paths.admin.activity()} element={<ActivityLogPage />} />
           <Route path={paths.admin.attendance()} element={<AdminAttendancePage />} />
           <Route path={paths.admin.phoneChanges()} element={<AdminPhoneChangesPage />} />
-          <Route path={paths.admin.security()} element={<SecurityPage />} />
+          <Route path={paths.admin.account()} element={<SecurityPage />} />
+          <Route
+            path={paths.admin.security()}
+            element={<Navigate to={paths.admin.account()} replace />}
+          />
           <Route path={paths.admin.approvals()} element={<ApprovalsPage />} />
         </Route>
       </Route>

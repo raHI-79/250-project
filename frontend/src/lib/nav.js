@@ -29,7 +29,7 @@ import {
   UserCog,
   Vote,
 } from 'lucide-react'
-import { paths } from './paths'
+import { paths } from './paths.js'
 import {
   BADGE_COURSES,
   BADGE_EXAMS,
@@ -37,7 +37,7 @@ import {
   BADGE_NOTICES,
   BADGE_POLLS,
   BADGE_ROUTINE,
-} from './badges'
+} from './badgekeys.js'
 
 export const MESSAGES_BADGE = 'messages'
 
@@ -139,7 +139,7 @@ export const adminNav = [
       { label: 'Messages', to: paths.admin.messages, icon: Mail, badge: MESSAGES_BADGE },
       { label: 'Activity log', to: paths.admin.activity, icon: ScrollText },
       { label: 'Approvals', to: paths.admin.approvals, icon: UserCheck },
-      { label: 'Security', to: paths.admin.security, icon: ShieldCheck },
+      { label: 'My account', to: paths.admin.account, icon: ShieldCheck },
     ],
   },
 ]
@@ -153,10 +153,10 @@ export const controlNav = [
       { label: 'Activity log', to: paths.control.activity, icon: ScrollText },
       { label: 'Approvals', to: paths.control.approvals, icon: UserCheck },
       { label: 'Site settings', to: paths.control.settings, icon: Settings },
-      { label: 'Security', to: paths.control.watch, icon: ShieldAlert },
+      { label: 'Security monitor', to: paths.control.watch, icon: ShieldAlert },
       { label: 'Android app', to: paths.control.release, icon: Smartphone },
       { label: 'Data', to: paths.control.data, icon: Database },
-      { label: 'My security', to: paths.control.security, icon: ShieldCheck },
+      { label: 'My account', to: paths.control.account, icon: ShieldCheck },
     ],
   },
   {
@@ -175,6 +175,24 @@ export const controlNav = [
     ],
   },
 ]
+
+export const activeNavPath = (groups, pathname) => {
+  const here = String(pathname || '').replace(/\/+$/, '') || '/'
+  let best = ''
+  groups.forEach((group) => {
+    group.items.forEach((item) => {
+      const target = String(item.to() || '').split('?')[0].replace(/\/+$/, '') || '/'
+      const exact = target === here
+      const inside = target !== '/' && here.startsWith(target + '/')
+      if (!exact && !inside) return
+      if (target.length > best.length) best = target
+    })
+  })
+  return best
+}
+
+export const isNavActive = (item, activePath) =>
+  String(item.to() || '').split('?')[0].replace(/\/+$/, '') === activePath
 
 export const navForRole = (role) => {
   if (role === 'super_admin') return controlNav
