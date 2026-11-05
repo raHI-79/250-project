@@ -3,9 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
 import DateButton from '../../components/DateButton'
 import DateChips from '../../components/DateChips'
+import DayKindChip from '../../components/schedule/DayKindChip'
 import PublishedLine from '../../components/schedule/PublishedLine'
 import { Link } from 'react-router-dom'
 import { Alert, Button, EmptyState, PageHeader, SkeletonCard } from '../../components/ui'
+import { dayKindNote } from '../../lib/dayKind'
 import { useResource } from '../../lib/hooks'
 import paths from '../../lib/paths'
 import { today } from '../../lib/time'
@@ -53,11 +55,16 @@ export default function UpcomingRoutinePage() {
           <p className="font-display text-lg font-semibold text-ink">
             {data.batch} · {data.date_label} ({data.weekday})
           </p>
+          {data.day_kind && <DayKindChip kind={data.day_kind} className="self-start" />}
           {groups.length === 0 ? (
             <EmptyState
               icon={CalendarClock}
-              title="Nothing published"
-              text="Your class representative has not published anything for this day yet."
+              title={data.day_kind ? data.day_kind.label : 'Nothing published'}
+              text={
+                data.day_kind
+                  ? dayKindNote(data.day_kind)
+                  : 'Your class representative has not published anything for this day yet.'
+              }
               action={
                 <Button as={Link} to={paths.student.fixedRoutine()} variant="secondary" size="sm">
                   Open the weekly routine

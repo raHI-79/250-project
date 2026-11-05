@@ -13,6 +13,11 @@ import (
 
 type emptyTeacherStore struct{}
 
+func (emptyTeacherStore) DayKinds(ctx context.Context, from, to string,
+	offDays []int) (map[string]store.DayKind, error) {
+	return nil, nil
+}
+
 func (emptyTeacherStore) GetTeacherByUser(ctx context.Context, userID int64) (store.Teacher, error) {
 	return store.Teacher{ID: 7, UserID: userID, Name: "Active Teacher"}, nil
 }
@@ -93,6 +98,11 @@ func (emptyTeacherStore) ListActiveCRs(ctx context.Context, batch, section strin
 }
 
 type emptyStudentStore struct{}
+
+func (emptyStudentStore) DayKinds(ctx context.Context, from, to string,
+	offDays []int) (map[string]store.DayKind, error) {
+	return nil, nil
+}
 
 func (emptyStudentStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {
 	return store.StudentProfile{UserID: userID, Batch: "CSE-23", Section: "A"}, nil

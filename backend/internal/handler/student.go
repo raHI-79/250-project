@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/daydate"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -27,6 +29,7 @@ const (
 
 type StudentStore interface {
 	GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error)
+	DayKinds(ctx context.Context, from, to string, offDays []int) (map[string]store.DayKind, error)
 	ListStudentDropCourses(ctx context.Context, studentID int64) ([]store.Course, error)
 	ListPublishedDay(ctx context.Context, batch, date string, dropCourseCodes []string) ([]store.PlanItem, error)
 	ListStudentExams(ctx context.Context, batch, section string, now time.Time,
@@ -47,10 +50,22 @@ type StudentStore interface {
 type Student struct {
 	cfg      *config.Config
 	students StudentStore
+	values   *settings.Cache
 }
 
 func NewStudent(cfg *config.Config, students StudentStore) *Student {
 	return &Student{cfg: cfg, students: students}
+}
+
+// WithSettings gives the student views the weekly off days, so that the holiday chip a
+// student sees is the chip the class representative and the teacher see.
+func (s *Student) WithSettings(values *settings.Cache) *Student {
+	s.values = values
+	return s
+}
+
+func (s *Student) dayKind(r *http.Request, date string) *dayKindBody {
+	return kindOf(dayKinds(r, s.students, s.values, date, date), date)
 }
 
 type planItem struct {
@@ -78,11 +93,12 @@ type planGroup struct {
 }
 
 type upcomingRoutineResponse struct {
-	Date      string      `json:"date"`
-	DateLabel string      `json:"date_label"`
-	Weekday   string      `json:"weekday"`
-	Batch     string      `json:"batch"`
-	Groups    []planGroup `json:"groups"`
+	Date      string       `json:"date"`
+	DateLabel string       `json:"date_label"`
+	Weekday   string       `json:"weekday"`
+	Kind      *dayKindBody `json:"day_kind,omitempty"`
+	Batch     string       `json:"batch"`
+	Groups    []planGroup  `json:"groups"`
 }
 
 func (s *Student) profile(w http.ResponseWriter, r *http.Request) (store.StudentProfile, bool) {
@@ -114,14 +130,16 @@ func (s *Student) UpcomingRoutine() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		groups, ok := s.dayGroups(w, r, profile, validate.DateString(date))
+		day := s.cfg.DateOf(date)
+		groups, ok := s.dayGroups(w, r, profile, day)
 		if !ok {
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, upcomingRoutineResponse{
-			Date:      validate.DateString(date),
-			DateLabel: date.Format(dateLabelLayout),
-			Weekday:   validate.DayName(int(date.Weekday())),
+			Date:      day,
+			DateLabel: daydate.Readable(day),
+			Weekday:   weekdayOf(day, s.cfg),
+			Kind:      s.dayKind(r, day),
 			Batch:     profile.Batch,
 			Groups:    groups,
 		})

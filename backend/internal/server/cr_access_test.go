@@ -13,6 +13,11 @@ import (
 
 type emptyCRStore struct{}
 
+func (emptyCRStore) DayKinds(ctx context.Context, from, to string,
+	offDays []int) (map[string]store.DayKind, error) {
+	return nil, nil
+}
+
 func (emptyCRStore) GetStudentProfile(ctx context.Context, userID int64) (store.StudentProfile, error) {
 	return store.StudentProfile{UserID: userID, Batch: "CSE-23", Section: "A", IsCR: true}, nil
 }

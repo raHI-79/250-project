@@ -93,6 +93,8 @@ export const ACTION_DECLINE = 'decline_reschedule'
 
 export const ACTION_EDIT = 'edit'
 
+export const ACTION_EDIT_LINK = 'edit_link'
+
 export const ACTION_CANCEL = 'cancel'
 
 export const ACTION_DELETE = 'delete'

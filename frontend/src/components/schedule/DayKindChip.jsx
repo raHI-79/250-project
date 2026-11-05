@@ -1,0 +1,23 @@
+import { CalendarCheck, CalendarOff } from 'lucide-react'
+import cx from '../../lib/cx'
+
+// DayKindChip sits at the top of a day in every routine view. An off day or a holiday
+// stops only the automatic fixed routine, so whatever a class representative or a teacher
+// created for the date is still listed under the chip with its usual actions.
+export default function DayKindChip({ kind, className }) {
+  if (!kind) return null
+  const working = Boolean(kind.working_day)
+  const Icon = working ? CalendarCheck : CalendarOff
+  return (
+    <p
+      className={cx(
+        'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold',
+        working ? 'bg-success-50 text-success-600' : 'bg-warning-50 text-warning-600',
+        className,
+      )}
+    >
+      <Icon size={15} aria-hidden="true" />
+      {kind.label}
+    </p>
+  )
+}

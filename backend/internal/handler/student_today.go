@@ -22,6 +22,7 @@ type nextExam struct {
 
 type todayResponse struct {
 	Date           string       `json:"date"`
+	DayKind        *dayKindBody `json:"day_kind,omitempty"`
 	Semester       string       `json:"semester"`
 	SemesterLabel  string       `json:"semester_label"`
 	Week           int          `json:"week"`
@@ -41,7 +42,7 @@ func (s *Student) Today() http.HandlerFunc {
 			return
 		}
 		now := s.cfg.Now()
-		day := validate.DateString(now)
+		day := s.cfg.DateOf(now)
 		groups, ok := s.dayGroups(w, r, profile, day)
 		if !ok {
 			return
@@ -80,6 +81,7 @@ func (s *Student) Today() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, todayResponse{
 			Date:           day,
+			DayKind:        s.dayKind(r, day),
 			Semester:       semester,
 			SemesterLabel:  validate.SemesterLabel(semester),
 			Week:           semesterWeek(since, now),

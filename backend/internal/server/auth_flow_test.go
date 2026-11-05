@@ -100,7 +100,20 @@ func baseFlowConfig(t *testing.T) *config.Config {
 	}
 }
 
+// newFlowRouterAt builds a router whose clock stands still at a chosen instant, for the
+// flows that have to land on named weekdays.
+func newFlowRouterAt(t *testing.T, at time.Time) (context.Context, *pgxpool.Pool, http.Handler) {
+	t.Helper()
+	return newFlowRouterWith(t, flowRateLimit, flowConfigAt(t, at))
+}
+
 func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxpool.Pool, http.Handler) {
+	t.Helper()
+	return newFlowRouterWith(t, rateLimit, flowConfig(t))
+}
+
+func newFlowRouterWith(t *testing.T, rateLimit int,
+	cfg *config.Config) (context.Context, *pgxpool.Pool, http.Handler) {
 	t.Helper()
 	ctx, pool := dbtest.Pool(t)
 	if err := db.Migrate(ctx, pool); err != nil {
@@ -120,7 +133,7 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	return ctx, pool, NewRouter(Dependencies{
 		RateLimit: rateLimit,
-		Config:    flowConfig(t),
+		Config:    cfg,
 		Database:  stubPinger{},
 		Tokens:    tokens,
 		Proofs:    proofs,

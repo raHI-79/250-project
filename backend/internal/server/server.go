@@ -241,10 +241,12 @@ func NewRouter(deps Dependencies) http.Handler {
 	authenticated.Handle("GET /api/lookups/periods", periods.List())
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
 	registerPushRoutes(mux, deps, handler.NewPush(deps.Config, deps.Devices, deps.PushTests))
-	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Alarms))
+	registerCRRoutes(CRGroup(mux, deps),
+		handler.NewCR(deps.Config, deps.Classes, deps.Alarms).WithSettings(deps.Values))
 	authenticated.Handle("PATCH /api/schedule/items/{id}/link",
 		handler.NewSchedule(deps.Config, deps.Items, deps.Alarms).Link())
-	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
+	registerTeacherRoutes(TeacherGroup(mux, deps),
+		handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms).WithSettings(deps.Values))
 	marks := handler.NewAttendance(deps.Config, deps.Marks, deps.Alarms)
 	attendanceOn := gates.Feature(settings.KeyAttendance)
 	registerAttendanceTeacherRoutes(TeacherGroup(mux, deps).With(attendanceOn), marks)
@@ -281,7 +283,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	chiefOnly.Handle("PUT /api/super-admin/calendar/holidays", calendar.Save())
 	chiefOnly.Handle("DELETE /api/super-admin/calendar/holidays/{date}", calendar.Delete())
 	chiefOnly.Handle("PUT /api/super-admin/calendar/off-days", calendar.SaveOffDays())
-	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
+	registerStudentRoutes(StudentGroup(mux, deps),
+		handler.NewStudent(deps.Config, deps.Students).WithSettings(deps.Values))
 	files := deps.Files
 	if files == nil {
 		files = upload.NewSaver(deps.Config.UploadDir, deps.Config.MaxUploadMB)

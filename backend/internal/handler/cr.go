@@ -8,6 +8,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/notify"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -69,16 +70,25 @@ type CRStore interface {
 	PublishFinal(ctx context.Context, batch string, publishedBy int64,
 		ids []int64) (store.Publication, []store.ScheduleItem, error)
 	ListDropCourseStudents(ctx context.Context, courseID int64, batch string) ([]int64, error)
+	DayKinds(ctx context.Context, from, to string, offDays []int) (map[string]store.DayKind, error)
 }
 
 type CR struct {
 	cfg     *config.Config
 	classes CRStore
 	alerts  BroadcastNotifier
+	values  *settings.Cache
 }
 
 func NewCR(cfg *config.Config, classes CRStore, alerts BroadcastNotifier) *CR {
 	return &CR{cfg: cfg, classes: classes, alerts: alerts}
+}
+
+// WithSettings gives the views the weekly off days, so that the holiday chips agree with
+// the generator.
+func (c *CR) WithSettings(values *settings.Cache) *CR {
+	c.values = values
+	return c
 }
 
 type roomSlotBody struct {
@@ -151,9 +161,10 @@ type publishRequest struct {
 }
 
 type finalDayBody struct {
-	Date    string     `json:"date"`
-	Weekday string     `json:"weekday"`
-	Items   []itemBody `json:"items"`
+	Date    string       `json:"date"`
+	Weekday string       `json:"weekday"`
+	Kind    *dayKindBody `json:"day_kind,omitempty"`
+	Items   []itemBody   `json:"items"`
 }
 
 type courseTeacherBody struct {
@@ -263,7 +274,7 @@ func (c *CR) RoomAvailability() http.HandlerFunc {
 			return
 		}
 		if picked {
-			today := validate.DateString(c.cfg.Now())
+			today := c.cfg.Today()
 			items, err := c.classes.ListBatchItemsOnDate(r.Context(), profile.Batch, day)
 			if err != nil {
 				log.Printf("handler: could not list a day of a class representative: %v", err)
@@ -275,7 +286,8 @@ func (c *CR) RoomAvailability() http.HandlerFunc {
 			if !past {
 				kept = liveItems(items)
 			}
-			httpx.WriteJSON(w, http.StatusOK, dateItems(kept, day, past, c.cfg, crActions))
+			kind := kindOf(dayKinds(r, c.classes, c.values, day, day), day)
+			httpx.WriteJSON(w, http.StatusOK, dateItems(kept, day, past, c.cfg, ViewerRoleCR, kind))
 			return
 		}
 		from := c.cfg.Now()
@@ -429,36 +441,63 @@ func (c *CR) itemFrom(request crItemRequest, profile store.StudentProfile,
 	}, nil
 }
 
+// Upcoming answers in two shapes. With a date it returns exactly that day, which is what
+// the Tomorrow and Today toggle and the date picker of the hub ask for; without one it
+// returns the days from "from" onwards, which is what Show more days asks for. Reading
+// only "from" was the bug that made Tomorrow and Today list the very same classes.
 func (c *CR) Upcoming() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		profile, ok := c.profile(w, r)
 		if !ok {
 			return
 		}
-		from := c.cfg.Now()
+		day, picked, ok := requestedDay(w, r, c.cfg)
+		if !ok {
+			return
+		}
+		if picked {
+			items, err := c.classes.ListBatchItemsOnDate(r.Context(), profile.Batch, day)
+			if err != nil {
+				log.Printf("handler: could not list a day of a class representative: %v", err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			past := day < c.cfg.Today()
+			kept := items
+			if !past {
+				kept = liveItems(items)
+			}
+			kind := kindOf(dayKinds(r, c.classes, c.values, day, day), day)
+			httpx.WriteJSON(w, http.StatusOK, dateItems(kept, day, past, c.cfg, ViewerRoleCR, kind))
+			return
+		}
+		from := c.cfg.Today()
 		if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
 			parsed, err := validate.Date("from", raw, c.cfg.Location)
 			if err != nil {
 				httpx.WriteError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			from = parsed
+			from = c.cfg.DateOf(parsed)
 		}
-		items, err := c.classes.ListBatchItems(r.Context(), profile.Batch, validate.DateString(from))
+		items, err := c.classes.ListBatchItems(r.Context(), profile.Batch, from)
 		if err != nil {
 			log.Printf("handler: could not list the upcoming items of a class representative: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		live := liveItems(items)
+		horizon := c.horizon(r, from)
+		kinds := dayKinds(r, c.classes, c.values, from, horizon)
 		bodies := newItemBodies(items)
 		for index := range bodies {
-			bodies[index].AllowedActions = crActions(items[index])
+			bodies[index].AllowedActions = AllowedActions(ViewerRoleCR, items[index], false)
 		}
-		days, more := firstDays(groupItemDays(liveItems(items), c.cfg, crActions), requestedDayLimit(r))
+		days, more := firstDays(groupItemDays(live, c.cfg, ViewerRoleCR, kinds), requestedDayLimit(r))
 		httpx.WriteJSON(w, http.StatusOK, crUpcomingResponse{
 			Items:   bodies,
 			Days:    days,
-			Horizon: c.horizon(r, validate.DateString(from)),
+			Horizon: horizon,
 			HasMore: more,
 		})
 	}
@@ -772,7 +811,7 @@ func (c *CR) Final() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		today := validate.DateString(c.cfg.Now())
+		today := c.cfg.Today()
 		day, picked, ok := requestedDay(w, r, c.cfg)
 		if !ok {
 			return
@@ -784,7 +823,9 @@ func (c *CR) Final() http.HandlerFunc {
 				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 				return
 			}
-			httpx.WriteJSON(w, http.StatusOK, dateItems(items, day, day < today, c.cfg, crActions))
+			kind := kindOf(dayKinds(r, c.classes, c.values, day, day), day)
+			httpx.WriteJSON(w, http.StatusOK,
+				dateItems(items, day, day < today, c.cfg, ViewerRoleCR, kind))
 			return
 		}
 		items, err := c.classes.ListFinalItems(r.Context(), profile.Batch, today)
@@ -793,7 +834,8 @@ func (c *CR) Final() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, groupFinal(items, c.cfg))
+		kinds := dayKinds(r, c.classes, c.values, today, c.horizon(r, today))
+		httpx.WriteJSON(w, http.StatusOK, groupFinal(items, c.cfg, kinds))
 	}
 }
 
@@ -814,7 +856,7 @@ func (c *CR) FinalPreview() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, groupFinal(items, c.cfg))
+		httpx.WriteJSON(w, http.StatusOK, groupFinal(items, c.cfg, nil))
 	}
 }
 
@@ -993,7 +1035,8 @@ func groupRoomSlots(slots []store.RoomSlot, batch string, location *time.Locatio
 	return rooms
 }
 
-func groupFinal(items []store.ScheduleItem, cfg *config.Config) finalResponse {
+func groupFinal(items []store.ScheduleItem, cfg *config.Config,
+	kinds map[string]store.DayKind) finalResponse {
 	response := finalResponse{Days: make([]finalDayBody, 0)}
 	index := make(map[string]int)
 	for _, item := range items {
@@ -1001,18 +1044,15 @@ func groupFinal(items []store.ScheduleItem, cfg *config.Config) finalResponse {
 		if !seen {
 			position = len(response.Days)
 			index[item.ItemDate] = position
-			weekday := ""
-			if parsed, err := time.ParseInLocation(validate.DateLayout, item.ItemDate, cfg.Location); err == nil {
-				weekday = validate.DayName(int(parsed.Weekday()))
-			}
 			response.Days = append(response.Days, finalDayBody{
 				Date:    item.ItemDate,
-				Weekday: weekday,
+				Weekday: weekdayOf(item.ItemDate, cfg),
+				Kind:    kindOf(kinds, item.ItemDate),
 				Items:   make([]itemBody, 0),
 			})
 		}
 		body := newItemBody(item)
-		body.AllowedActions = crActions(item)
+		body.AllowedActions = AllowedActions(ViewerRoleCR, item, false)
 		response.Days[position].Items = append(response.Days[position].Items, body)
 		if !item.HasTimes() {
 			response.NeedsTime++
