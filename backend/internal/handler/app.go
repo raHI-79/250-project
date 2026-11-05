@@ -84,6 +84,13 @@ func NewAppRelease(releases ReleaseLookup, home string) *AppRelease {
 	return &AppRelease{releases: releases, home: home}
 }
 
+func (a *AppRelease) apkLink(version string) string {
+	if strings.TrimSpace(version) == "" {
+		return ""
+	}
+	return strings.TrimRight(a.home, "/") + DownloadAndroidPath + "/" + version
+}
+
 func (a *AppRelease) Download() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		details, err := a.releases.Latest(r.Context())
@@ -119,7 +126,7 @@ func (a *AppRelease) Latest() http.HandlerFunc {
 		body := androidLatestResponse{
 			Version:     details.Version,
 			VersionCode: details.VersionCode,
-			APKURL:      details.APKURL,
+			APKURL:      a.apkLink(details.Version),
 			Notes:       details.Notes,
 			Required:    details.Required,
 		}
@@ -128,6 +135,10 @@ func (a *AppRelease) Latest() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, body)
 	}
+}
+
+func (a *AppRelease) Fallback(w http.ResponseWriter) {
+	a.writeFallback(w)
 }
 
 func (a *AppRelease) writeFallback(w http.ResponseWriter) {

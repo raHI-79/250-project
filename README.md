@@ -1134,10 +1134,20 @@ of `GITHUB_RELEASES_REPO` through one shared lookup in
   release that is neither a draft nor a prerelease **and** carries an asset named
   `sust-cse-portal-<version>.apk`. A release published without the APK attached,
   as `v2.2.0` was, is skipped rather than reported as the newest build.
-- `GITHUB_TOKEN` is optional. Without it GitHub allows 60 requests an hour per
-  IP address, which a free Render instance shares with other services; with a
+- `GITHUB_TOKEN` is **required for the app download** from 2.6.0 and still worth
+  setting for the lookup. Without it GitHub allows 60 requests an hour per IP
+  address, which a free Render instance shares with other services; with a
   read-only token the account gets 5000. A `User-Agent` always goes out, and the
   token is never written to the log.
+- `GET /download/android` streams the APK from the GitHub asset API through our
+  own server instead of redirecting to GitHub, so downloads keep working if the
+  repository becomes private. The redirect to the storage host is followed
+  without passing the token on, the file is cached under `UPLOAD_DIR/apk/` per
+  version so GitHub is asked once per release, and the answer carries
+  `application/vnd.android.package-archive`, an attachment name and a
+  `Content-Length`. `GET /download/android/<version>` serves one version and is
+  what `apk_url` points at. Without a token, or when GitHub refuses, the answer
+  is `503` and the log holds the status only.
 - A good answer is cached ten minutes. When GitHub answers `403`, `429` or `5xx`,
   times out or sends something that is not JSON, the last good answer is served
   for up to **six hours**, and a failed attempt is not retried for a minute so a

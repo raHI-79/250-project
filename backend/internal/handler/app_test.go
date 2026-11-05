@@ -89,7 +89,7 @@ func TestAndroidLatestReportsTheRelease(t *testing.T) {
 	want := map[string]any{
 		"version":      "2.1.0",
 		"version_code": float64(release.VersionCode("2.1.0")),
-		"apk_url":      fakeAPK,
+		"apk_url":      "https://portal.test" + DownloadAndroidPath + "/2.1.0",
 		"notes":        "Adds in-app updates [required]",
 		"required":     true,
 	}

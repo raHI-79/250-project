@@ -164,8 +164,14 @@ func NewRouter(deps Dependencies) http.Handler {
 			WithToken(deps.Config.ReleasesToken)
 	}
 	apps := handler.NewAppRelease(releases, deps.Config.FrontendOrigin).WithSettings(deps.Values)
-	throttled.Handle("GET "+handler.DownloadAndroidPath, apps.Download())
 	throttled.Handle("GET "+handler.AndroidLatestPath, apps.Latest())
+	if assets, ok := releases.(handler.AssetSource); ok {
+		apks := handler.NewAPKs(deps.Config, assets).WithFallback(apps.Fallback)
+		throttled.Handle("GET "+handler.DownloadAndroidPath, apks.Serve())
+		throttled.Handle("GET "+handler.DownloadAndroidPath+"/{version}", apks.Serve())
+	} else {
+		throttled.Handle("GET "+handler.DownloadAndroidPath, apps.Download())
+	}
 	mux.HandleFunc("GET /api/auth/config", authHandler.Config())
 	throttled.Handle("POST /api/human/verify", handler.NewHuman(deps.Config, deps.Passes, humans).Verify())
 	throttled.Handle("GET /api/public/stats", handler.NewPublic(deps.Numbers, nil).Stats())

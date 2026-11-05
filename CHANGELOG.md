@@ -95,6 +95,31 @@ and the one the Android release is tagged with.
   colour and caret, and parks the background transition far in the future. The
   floating label, the show-password eye and the focus ring stay where they were.
 
+- **Encrypted nightly backups.** The dump is encrypted with
+  `gpg --symmetric --cipher-algo AES256` against the new `BACKUP_PASSPHRASE`
+  secret before it is uploaded, and only the `.gpg` file leaves the runner, so an
+  artifact on a public repository is no longer a readable copy of the database.
+  The job fails with a clear message when the secret is missing, the passphrase is
+  never printed, retention stays 30 days and the backup still reports itself to
+  the portal. `docs/DEPLOY.md` has the download, `gpg --decrypt` and `psql`
+  restore steps.
+- **The app is served by the portal.** `GET /download/android` no longer
+  redirects to GitHub: the server asks the GitHub asset API for
+  `sust-cse-portal-<version>.apk` with `GITHUB_TOKEN`, follows the redirect to the
+  storage host without passing the token on, caches the file under
+  `UPLOAD_DIR/apk/` so GitHub is asked once per release, and answers it as
+  `application/vnd.android.package-archive` with an attachment name and a
+  `Content-Length`. `GET /download/android/<version>` serves one version and is
+  what `apk_url` points at, so the in-app updater downloads through the portal as
+  well; downloads keep working if the repository becomes private. Without a token
+  or when GitHub refuses, the answer is `503` with a readable message and the log
+  holds the status only.
+- **The emergency reset runs on Render.** The image now carries
+  `/app/sust-admin` next to the server, so the reset needs no Go toolchain and no
+  source: `export NEW_SUPER_ADMIN_PASSWORD='…'`, `/app/sust-admin -reset-super`,
+  `unset NEW_SUPER_ADMIN_PASSWORD`. `go run ./cmd/admin -reset-super` still works
+  on a development machine.
+
 ## 2.5.0
 
 - **A sign-in screen built for the phone.** Inside the Android app only, the

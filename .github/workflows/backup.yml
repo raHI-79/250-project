@@ -30,11 +30,27 @@ jobs:
           fi
           pg_dump --no-owner --no-privileges "$BACKUP_DATABASE_URL" | gzip -9 > "${{ steps.name.outputs.file }}"
           ls -lh "${{ steps.name.outputs.file }}"
-      - name: Upload the dump
+      - name: Encrypt the dump
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "BACKUP_PASSPHRASE is not set in the repository secrets."
+            echo "Add it under Settings -> Secrets and variables -> Actions, then run this again."
+            exit 1
+          fi
+          printf '%s' "$BACKUP_PASSPHRASE" > passphrase.txt
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase-file passphrase.txt \
+            --output "${{ steps.name.outputs.file }}.gpg" "${{ steps.name.outputs.file }}"
+          shred -u passphrase.txt || rm -f passphrase.txt
+          rm -f "${{ steps.name.outputs.file }}"
+          ls -lh "${{ steps.name.outputs.file }}.gpg"
+      - name: Upload the encrypted dump
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.name.outputs.file }}
-          path: ${{ steps.name.outputs.file }}
+          name: ${{ steps.name.outputs.file }}.gpg
+          path: ${{ steps.name.outputs.file }}.gpg
           retention-days: 30
           if-no-files-found: error
       - name: Tell the portal the backup worked
