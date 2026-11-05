@@ -164,7 +164,7 @@ func TestClearConversationHidesOnlyTheCallersHistory(t *testing.T) {
 	if before != 2 {
 		t.Fatalf("unread = %d, want 2 before the chat is cleared", before)
 	}
-	if err := store.ClearConversation(ctx, people["cr"], direct.ID, time.Now()); err != nil {
+	if err := store.ClearConversation(ctx, people["cr"], direct.ID); err != nil {
 		t.Fatalf("ClearConversation() returned an unexpected error: %v", err)
 	}
 	cleared, err := store.ListChatMessages(ctx, direct.ID, nil, MessagePageSize, people["cr"])
@@ -228,7 +228,7 @@ func TestClearedConversationComesBackWithTheNewMessages(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateChatMessage() returned an unexpected error: %v", err)
 	}
-	if err := store.ClearConversation(ctx, people["cr"], group.ID, time.Now()); err != nil {
+	if err := store.ClearConversation(ctx, people["cr"], group.ID); err != nil {
 		t.Fatalf("ClearConversation() returned an unexpected error: %v", err)
 	}
 	members, err := store.ListConversationMembers(ctx, group.ID)

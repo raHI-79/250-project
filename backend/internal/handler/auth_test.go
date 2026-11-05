@@ -49,16 +49,15 @@ type resetCall struct {
 }
 
 type startResetCall struct {
-	userID    int64
-	codeHash  string
-	expiresAt time.Time
-	sentAt    time.Time
+	userID   int64
+	codeHash string
+	lifetime time.Duration
 }
 
 type verifyCall struct {
 	userID    int64
 	tokenHash string
-	expiresAt time.Time
+	lifetime  time.Duration
 }
 
 type sentMail struct {
@@ -178,15 +177,15 @@ func (f *fakeAuthStore) FindResetChallenge(ctx context.Context, identifier strin
 	return challenge, nil
 }
 
-func (f *fakeAuthStore) StartPasswordReset(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error {
+func (f *fakeAuthStore) StartPasswordReset(ctx context.Context, userID int64, codeHash string,
+	lifetime time.Duration) error {
 	if f.startResetErr != nil {
 		return f.startResetErr
 	}
 	f.startResetCalls = append(f.startResetCalls, startResetCall{
-		userID:    userID,
-		codeHash:  codeHash,
-		expiresAt: expiresAt,
-		sentAt:    sentAt,
+		userID:   userID,
+		codeHash: codeHash,
+		lifetime: lifetime,
 	})
 	return nil
 }
@@ -204,11 +203,13 @@ func (f *fakeAuthStore) ClearPasswordReset(ctx context.Context, userID int64) er
 	return nil
 }
 
-func (f *fakeAuthStore) VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+func (f *fakeAuthStore) VerifyResetCode(ctx context.Context, userID int64, tokenHash string,
+	lifetime time.Duration) error {
 	if f.verifyErr != nil {
 		return f.verifyErr
 	}
-	f.verifyCalls = append(f.verifyCalls, verifyCall{userID: userID, tokenHash: tokenHash, expiresAt: expiresAt})
+	f.verifyCalls = append(f.verifyCalls, verifyCall{userID: userID, tokenHash: tokenHash,
+		lifetime: lifetime})
 	return nil
 }
 
@@ -890,8 +891,8 @@ func TestForgotPassword(t *testing.T) {
 			if call.codeHash != hashResetSecret(body.DevCode) {
 				t.Error("the stored value is not the SHA-256 hash of the issued code")
 			}
-			if call.sentAt.IsZero() {
-				t.Error("the store did not receive a sent_at timestamp for the cooldown")
+			if call.lifetime < 9*time.Minute || call.lifetime > 11*time.Minute {
+				t.Errorf("the store received a lifetime of %v, want about 10 minutes", call.lifetime)
 			}
 		})
 	}
@@ -1105,7 +1106,6 @@ func TestVerifyResetCode(t *testing.T) {
 				planCodeChallenge(users, "2023331001", 1, code, stage, expiresIn, tc.attempts)
 			}
 			handler := newAuthHandler(t, users, &fakeIssuer{token: issuedToken})
-			before := time.Now()
 			rec := post(t, handler.VerifyResetCode(), "/api/auth/verify-reset-code", tc.body)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, tc.wantStatus, rec.Body.String())
@@ -1146,9 +1146,8 @@ func TestVerifyResetCode(t *testing.T) {
 			if call.tokenHash != hashResetSecret(body.ResetToken) {
 				t.Error("the stored value is not the SHA-256 hash of the issued token")
 			}
-			lifetime := call.expiresAt.Sub(before)
-			if lifetime < 9*time.Minute || lifetime > 11*time.Minute {
-				t.Errorf("the token expires in %v, want about 10 minutes", lifetime)
+			if call.lifetime < 9*time.Minute || call.lifetime > 11*time.Minute {
+				t.Errorf("the token expires in %v, want about 10 minutes", call.lifetime)
 			}
 		})
 	}

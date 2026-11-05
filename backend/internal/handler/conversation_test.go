@@ -250,8 +250,7 @@ func (f *fakeChatStore) CreateChatMessage(ctx context.Context, message store.New
 	}, nil
 }
 
-func (f *fakeChatStore) ClearConversation(ctx context.Context, userID, conversationID int64,
-	at time.Time) error {
+func (f *fakeChatStore) ClearConversation(ctx context.Context, userID, conversationID int64) error {
 	if f.clearErr != nil {
 		return f.clearErr
 	}
@@ -259,7 +258,7 @@ func (f *fakeChatStore) ClearConversation(ctx context.Context, userID, conversat
 	return nil
 }
 
-func (f *fakeChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error {
+func (f *fakeChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64) error {
 	f.reads = append(f.reads, conversationID)
 	return nil
 }

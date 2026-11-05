@@ -85,6 +85,7 @@ type Dependencies struct {
 	Walls     handler.BlockStore
 	Announcer handler.ReleaseAnnouncer
 	Figures2  handler.DataStore
+	Calendar  handler.HolidayStore
 }
 
 type RouteGroup struct {
@@ -206,6 +207,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	periods := handler.NewPeriods(deps.Periods)
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerPeriodRoutes(AdminGroup(mux, deps), periods)
+	calendar := handler.NewHolidays(deps.Config, deps.Calendar, deps.Values, deps.Alarms)
+	registerHolidayRoutes(AdminGroup(mux, deps), authenticated, calendar)
 	registerSuperAdminRoutes(SuperAdminGroup(mux, deps),
 		handler.NewSuperAdmin(deps.Config, deps.Office, mail, events))
 	security := handler.NewSecurity(deps.Config, deps.Guards, mail, events)
@@ -274,6 +277,10 @@ func NewRouter(deps Dependencies) http.Handler {
 	chiefOnly.Handle("GET /api/super-admin/data", control.Data())
 	chiefOnly.Handle("GET /api/super-admin/release", control.Release())
 	chiefOnly.Handle("POST /api/super-admin/release/announce", control.AnnounceRelease())
+	chiefOnly.Handle("GET /api/super-admin/calendar", calendar.Calendar())
+	chiefOnly.Handle("PUT /api/super-admin/calendar/holidays", calendar.Save())
+	chiefOnly.Handle("DELETE /api/super-admin/calendar/holidays/{date}", calendar.Delete())
+	chiefOnly.Handle("PUT /api/super-admin/calendar/off-days", calendar.SaveOffDays())
 	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
 	files := deps.Files
 	if files == nil {
@@ -681,6 +688,16 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("DELETE /api/admin/routines/{id}", catalog.DeleteRoutine())
 	group.Handle("GET /api/admin/batches/running-semester", catalog.RunningSemesters())
 	group.Handle("PUT /api/admin/batches/{batch}/running-semester", catalog.SetRunningSemester())
+}
+
+// registerHolidayRoutes gives the office portal the calendar it edits and every signed in
+// account the read-only view the routine pages need for their holiday chips.
+func registerHolidayRoutes(office, everyone RouteGroup, calendar *handler.Holidays) {
+	office.Handle("GET /api/admin/calendar", calendar.Calendar())
+	office.Handle("PUT /api/admin/calendar/holidays", calendar.Save())
+	office.Handle("DELETE /api/admin/calendar/holidays/{date}", calendar.Delete())
+	office.Handle("PUT /api/admin/calendar/off-days", calendar.SaveOffDays())
+	everyone.Handle("GET /api/calendar", calendar.Calendar())
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {

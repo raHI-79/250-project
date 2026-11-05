@@ -217,15 +217,27 @@ const selectItem = `SELECT ` + itemColumns + `
 ` + itemJoins
 
 const (
-	generateFixedItemsSQL = `INSERT INTO schedule_items
+	// Weekly off days and holidays keep a date out of the automatic generation. A
+	// holiday row marked as a working day puts the date back in and makes it follow
+	// the weekday the office chose, so that a make-up Saturday carries a Sunday.
+	generateFixedItemsSQL = `WITH teaching AS (
+    SELECT day::date AS day,
+           CASE WHEN h.working_day THEN h.follows_weekday
+                ELSE EXTRACT(DOW FROM day)::int END AS day_of_week
+    FROM generate_series($1::date, $2::date, interval '1 day') AS day
+    LEFT JOIN holidays h ON h.holiday_date = day::date
+    WHERE h.working_day
+       OR (h.holiday_date IS NULL
+           AND NOT (EXTRACT(DOW FROM day)::int = ANY(COALESCE($3::int[], '{}'::int[]))))
+)
+INSERT INTO schedule_items
 (batch, section, course_id, teacher_id, kind, origin, routine_id, item_date,
 start_time, end_time, mode, room, status)
-SELECT r.batch, r.section, r.course_id, r.teacher_id, r.type, 'fixed', r.id, day::date,
+SELECT r.batch, r.section, r.course_id, r.teacher_id, r.type, 'fixed', r.id, t.day,
 r.start_time, r.end_time, 'room', r.room, 'awaiting_teacher'
 FROM routines r
 JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
-CROSS JOIN generate_series($1::date, $2::date, interval '1 day') AS day
-WHERE EXTRACT(DOW FROM day)::int = r.day_of_week
+JOIN teaching t ON t.day_of_week = r.day_of_week
 ON CONFLICT DO NOTHING`
 	markNoResponseSQL = `WITH updated AS (
     UPDATE schedule_items
@@ -355,23 +367,7 @@ func scanItem(row scanner) (ScheduleItem, error) {
 }
 
 func (s *Store) items(ctx context.Context, query string, args ...any) ([]ScheduleItem, error) {
-	rows, err := s.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("store: could not list the schedule items: %w", err)
-	}
-	defer rows.Close()
-	items := make([]ScheduleItem, 0)
-	for rows.Next() {
-		item, err := scanItem(rows)
-		if err != nil {
-			return nil, fmt.Errorf("store: could not scan a schedule item: %w", err)
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: could not read the schedule items: %w", err)
-	}
-	return items, nil
+	return itemsOn(ctx, s.pool, query, args...)
 }
 
 func (s *Store) GetScheduleItem(ctx context.Context, itemID int64) (ScheduleItem, error) {
@@ -385,8 +381,8 @@ func (s *Store) GetScheduleItem(ctx context.Context, itemID int64) (ScheduleItem
 	return item, nil
 }
 
-func (s *Store) GenerateFixedItems(ctx context.Context, from, to string) (int, error) {
-	tag, err := s.pool.Exec(ctx, generateFixedItemsSQL, from, to)
+func (s *Store) GenerateFixedItems(ctx context.Context, from, to string, offDays []int) (int, error) {
+	tag, err := s.pool.Exec(ctx, generateFixedItemsSQL, from, to, offDays)
 	if err != nil {
 		return 0, fmt.Errorf("store: could not generate the fixed routine items: %w", err)
 	}
@@ -622,4 +618,28 @@ func (s *Store) GeneratedHorizon(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("store: could not read the generated horizon: %w", err)
 	}
 	return horizon, nil
+}
+
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+func itemsOn(ctx context.Context, from querier, query string, args ...any) ([]ScheduleItem, error) {
+	rows, err := from.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: could not list the schedule items: %w", err)
+	}
+	defer rows.Close()
+	items := make([]ScheduleItem, 0)
+	for rows.Next() {
+		item, err := scanItem(rows)
+		if err != nil {
+			return nil, fmt.Errorf("store: could not scan a schedule item: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: could not read the schedule items: %w", err)
+	}
+	return items, nil
 }

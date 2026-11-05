@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"testing"
-	"time"
 )
 
 func seedChatPeople(t *testing.T, ctx context.Context, pool *pgxpool.Pool) map[string]int64 {
@@ -358,7 +357,7 @@ func TestConversationListAndUnreadCounts(t *testing.T) {
 			t.Errorf("group unread = %d, want 1", row.UnreadCount)
 		}
 	}
-	if err := store.MarkConversationRead(ctx, people["student"], direct.ID, time.Now()); err != nil {
+	if err := store.MarkConversationRead(ctx, people["student"], direct.ID); err != nil {
 		t.Fatalf("MarkConversationRead() returned an unexpected error: %v", err)
 	}
 	afterRead, err := store.CountUnreadMessages(ctx, studentViewer)

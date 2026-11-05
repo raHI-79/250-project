@@ -78,7 +78,7 @@ VALUES ('CSE-23', '1-2', 'A', $1, $2, $3, TIME '10:30', TIME '11:15', '2104', 'c
 	}
 	today := now.Format(dateLayout)
 	week := now.AddDate(0, 0, 6).Format(dateLayout)
-	if _, err := store.GenerateFixedItems(ctx, today, week); err != nil {
+	if _, err := store.GenerateFixedItems(ctx, today, week, nil); err != nil {
 		t.Fatalf("GenerateFixedItems() returned an unexpected error: %v", err)
 	}
 	items, err := store.ListBatchItems(ctx, "CSE-23", today)
@@ -96,7 +96,7 @@ VALUES ('CSE-23', '1-2', 'A', $1, $2, $3, TIME '10:30', TIME '11:15', '2104', 'c
 	if err := store.SetRunningSemester(ctx, "CSE-23", "1-2"); err != nil {
 		t.Fatalf("SetRunningSemester() returned an unexpected error: %v", err)
 	}
-	if _, err := store.GenerateFixedItems(ctx, today, week); err != nil {
+	if _, err := store.GenerateFixedItems(ctx, today, week, nil); err != nil {
 		t.Fatalf("GenerateFixedItems() returned an unexpected error: %v", err)
 	}
 	after, err := store.ListBatchItems(ctx, "CSE-23", today)

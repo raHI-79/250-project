@@ -49,8 +49,8 @@ type ConversationStore interface {
 	FindOwnMessage(ctx context.Context, messageID, senderID int64) (store.OwnMessage, error)
 	EditChatMessage(ctx context.Context, messageID, senderID int64, body string, now time.Time) (store.ChatMessageRow, error)
 	DeleteChatMessage(ctx context.Context, messageID, senderID int64, now time.Time) (int64, error)
-	ClearConversation(ctx context.Context, userID, conversationID int64, at time.Time) error
-	MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error
+	ClearConversation(ctx context.Context, userID, conversationID int64) error
+	MarkConversationRead(ctx context.Context, userID, conversationID int64) error
 	CountUnreadMessages(ctx context.Context, viewer store.MessageViewer) (int, error)
 	ConversationRecipients(ctx context.Context, conversationID, senderID int64) ([]int64, error)
 	ListConversationMembers(ctx context.Context, conversationID int64) ([]store.MemberRow, error)
@@ -332,7 +332,7 @@ func (c *Conversations) Messages() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		if err := c.chats.MarkConversationRead(r.Context(), viewer.UserID, access.ID, c.cfg.Now()); err != nil {
+		if err := c.chats.MarkConversationRead(r.Context(), viewer.UserID, access.ID); err != nil {
 			log.Printf("handler: could not mark the conversation read: %v", err)
 		}
 		items := make([]chatMessageItem, 0, len(messages))
@@ -409,7 +409,7 @@ func (c *Conversations) ClearChat() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if err := c.chats.ClearConversation(r.Context(), viewer.UserID, access.ID, c.cfg.Now()); err != nil {
+		if err := c.chats.ClearConversation(r.Context(), viewer.UserID, access.ID); err != nil {
 			log.Printf("handler: could not clear a conversation: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return

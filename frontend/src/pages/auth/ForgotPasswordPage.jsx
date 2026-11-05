@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { IdCard, KeyRound, Lock } from 'lucide-react'
-import { Alert, Button, Input, PasswordInput } from '../../components/ui'
+import { Alert, Button, DateField, Input, PasswordInput } from '../../components/ui'
 import FormSection from '../../components/forms/FormSection'
 import PhoneInput from '../../components/forms/PhoneInput'
 import AuthScreen from '../../components/layout/AuthScreen'
@@ -185,11 +185,10 @@ export default function ForgotPasswordPage({ portal }) {
                   required
                 />
               ) : (
-                <Input
+                <DateField
                   label="Date of birth"
-                  type="date"
                   value={form.dateOfBirth}
-                  onChange={set('dateOfBirth')}
+                  onChange={(next) => set('dateOfBirth')({ target: { value: next } })}
                   error={errors.dateOfBirth}
                   hint="The date saved on your account"
                   required

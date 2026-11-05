@@ -67,10 +67,10 @@ type AuthStore interface {
 	IncrementTokenVersion(ctx context.Context, userID int64) (int, error)
 	FindResetTarget(ctx context.Context, identifier string) (store.ResetTarget, error)
 	FindResetChallenge(ctx context.Context, identifier string) (store.ResetChallenge, error)
-	StartPasswordReset(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error
+	StartPasswordReset(ctx context.Context, userID int64, codeHash string, lifetime time.Duration) error
 	CountResetAttempt(ctx context.Context, userID int64) (int, error)
 	ClearPasswordReset(ctx context.Context, userID int64) error
-	VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
+	VerifyResetCode(ctx context.Context, userID int64, tokenHash string, lifetime time.Duration) error
 	FinishPasswordReset(ctx context.Context, identifier, tokenHash, passwordHash string) error
 	FindEmailChallenge(ctx context.Context, regNo string) (store.EmailChallenge, error)
 	StartEmailVerification(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error
@@ -583,7 +583,7 @@ func (a *Auth) ForgotPassword() http.HandlerFunc {
 			return
 		}
 		expiresAt := now.Add(resetCodeLifetime)
-		if err := a.users.StartPasswordReset(r.Context(), target.ID, hashResetSecret(code), expiresAt, now); err != nil {
+		if err := a.users.StartPasswordReset(r.Context(), target.ID, hashResetSecret(code), resetCodeLifetime); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				httpx.WriteError(w, http.StatusBadRequest, mismatch)
 				return
@@ -670,7 +670,7 @@ func (a *Auth) VerifyResetCode() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		err = a.users.VerifyResetCode(r.Context(), challenge.UserID, hash, now.Add(resetTokenLifetime))
+		err = a.users.VerifyResetCode(r.Context(), challenge.UserID, hash, resetTokenLifetime)
 		if errors.Is(err, store.ErrInvalidResetToken) || errors.Is(err, store.ErrNotFound) {
 			httpx.WriteError(w, http.StatusBadRequest, MessageInvalidResetCode)
 			return

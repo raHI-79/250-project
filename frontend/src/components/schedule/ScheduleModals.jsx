@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Input, Modal, Textarea } from '../ui'
+import { Alert, Button, DateField, Input, Modal, Textarea } from '../ui'
 import SlotFields from './SlotFields'
 import TimeRangeFields from '../forms/TimeRangeFields'
 import { MODE_ROOM, courseLine, periodRangeError, slotError } from '../../lib/schedule'
@@ -283,12 +283,11 @@ export function RescheduleModal({ item, title, taken, onClose, onConfirm, busy }
             {item.teacher_message}
           </Alert>
         )}
-        <Input
+        <DateField
           label="Date"
-          type="date"
           value={form.date}
           min={today()}
-          onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+          onChange={(next) => setForm((current) => ({ ...current, date: next }))}
           required
         />
         <TimeRangeFields

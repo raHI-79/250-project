@@ -337,9 +337,9 @@ func TestStartPasswordReset(t *testing.T) {
 	activeID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
 	pendingID := insertUser(t, ctx, pool, "student", "2023331002", StatusPending, 0)
 	removedID := insertUser(t, ctx, pool, "student", "2023331003", StatusRemoved, 0)
-	sentAt := time.Now()
-	expiresAt := sentAt.Add(10 * time.Minute)
-	if err := store.StartPasswordReset(ctx, activeID, "code-hash", expiresAt, sentAt); err != nil {
+	const lifetime = 10 * time.Minute
+	before := time.Now()
+	if err := store.StartPasswordReset(ctx, activeID, "code-hash", lifetime); err != nil {
 		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
 	}
 	var storedHash, storedStage string
@@ -359,11 +359,13 @@ FROM users WHERE id = $1`
 	if attempts != 0 {
 		t.Errorf("stored attempts = %d, want 0", attempts)
 	}
-	if storedExpiry.Sub(expiresAt).Abs() > time.Second {
-		t.Errorf("stored expiry = %v, want about %v", storedExpiry, expiresAt)
+	// The database writes both stamps, so that they can be compared with the database
+	// clock later on without depending on the clock of the server that asked for them.
+	if ahead := storedExpiry.Sub(before); ahead < 9*time.Minute || ahead > 11*time.Minute {
+		t.Errorf("stored expiry is %v ahead, want about %v", ahead, lifetime)
 	}
-	if storedSentAt.Sub(sentAt).Abs() > time.Second {
-		t.Errorf("stored sent_at = %v, want about %v", storedSentAt, sentAt)
+	if storedSentAt.Sub(before) < 0 || storedSentAt.Sub(before) > time.Minute {
+		t.Errorf("stored sent_at = %v, want a stamp from around now", storedSentAt)
 	}
 	tests := []struct {
 		name   string
@@ -375,7 +377,7 @@ FROM users WHERE id = $1`
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := store.StartPasswordReset(ctx, tc.userID, "code-hash-2", expiresAt, sentAt)
+			err := store.StartPasswordReset(ctx, tc.userID, "code-hash-2", lifetime)
 			if !errors.Is(err, ErrNotFound) {
 				t.Errorf("StartPasswordReset() error = %v, want ErrNotFound", err)
 			}
@@ -435,8 +437,7 @@ func TestFindResetTarget(t *testing.T) {
 func TestResetChallengeAttemptsAndClear(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	userID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
-	now := time.Now()
-	if err := store.StartPasswordReset(ctx, userID, "code-hash", now.Add(10*time.Minute), now); err != nil {
+	if err := store.StartPasswordReset(ctx, userID, "code-hash", 10*time.Minute); err != nil {
 		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
 	}
 	challenge, err := store.FindResetChallenge(ctx, "2023331001")
@@ -479,17 +480,16 @@ func TestResetChallengeAttemptsAndClear(t *testing.T) {
 func TestVerifyResetCodeNeedsTheCodeStage(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	userID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 0)
-	now := time.Now()
-	if err := store.VerifyResetCode(ctx, userID, "token-hash", now.Add(10*time.Minute)); !errors.Is(err, ErrInvalidResetToken) {
+	if err := store.VerifyResetCode(ctx, userID, "token-hash", 10*time.Minute); !errors.Is(err, ErrInvalidResetToken) {
 		t.Fatalf("VerifyResetCode() without a code stage = %v, want ErrInvalidResetToken", err)
 	}
-	if err := store.StartPasswordReset(ctx, userID, "code-hash", now.Add(10*time.Minute), now); err != nil {
+	if err := store.StartPasswordReset(ctx, userID, "code-hash", 10*time.Minute); err != nil {
 		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
 	}
 	if _, err := store.CountResetAttempt(ctx, userID); err != nil {
 		t.Fatalf("CountResetAttempt() returned an unexpected error: %v", err)
 	}
-	if err := store.VerifyResetCode(ctx, userID, "token-hash", now.Add(10*time.Minute)); err != nil {
+	if err := store.VerifyResetCode(ctx, userID, "token-hash", 10*time.Minute); err != nil {
 		t.Fatalf("VerifyResetCode() returned an unexpected error: %v", err)
 	}
 	challenge, err := store.FindResetChallenge(ctx, "2023331001")
@@ -505,7 +505,7 @@ func TestVerifyResetCodeNeedsTheCodeStage(t *testing.T) {
 	if challenge.Attempts != 0 {
 		t.Errorf("attempts = %d, want them reset to 0", challenge.Attempts)
 	}
-	if err := store.VerifyResetCode(ctx, userID, "second-hash", now.Add(10*time.Minute)); !errors.Is(err, ErrInvalidResetToken) {
+	if err := store.VerifyResetCode(ctx, userID, "second-hash", 10*time.Minute); !errors.Is(err, ErrInvalidResetToken) {
 		t.Errorf("VerifyResetCode() on an already verified reset = %v, want ErrInvalidResetToken", err)
 	}
 }
@@ -513,15 +513,14 @@ func TestVerifyResetCodeNeedsTheCodeStage(t *testing.T) {
 func TestFinishPasswordReset(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	userID := insertUser(t, ctx, pool, "student", "2023331001", StatusActive, 4)
-	now := time.Now()
-	if err := store.StartPasswordReset(ctx, userID, "code-hash", now.Add(10*time.Minute), now); err != nil {
+	if err := store.StartPasswordReset(ctx, userID, "code-hash", 10*time.Minute); err != nil {
 		t.Fatalf("StartPasswordReset() returned an unexpected error: %v", err)
 	}
 	err := store.FinishPasswordReset(ctx, "2023331001", "code-hash", "new-stored-hash")
 	if !errors.Is(err, ErrInvalidResetToken) {
 		t.Fatalf("FinishPasswordReset() at the code stage = %v, want ErrInvalidResetToken", err)
 	}
-	if err := store.VerifyResetCode(ctx, userID, "token-hash", now.Add(10*time.Minute)); err != nil {
+	if err := store.VerifyResetCode(ctx, userID, "token-hash", 10*time.Minute); err != nil {
 		t.Fatalf("VerifyResetCode() returned an unexpected error: %v", err)
 	}
 	if err := store.FinishPasswordReset(ctx, "2023331001", "wrong-hash", "new-stored-hash"); !errors.Is(err, ErrInvalidResetToken) {

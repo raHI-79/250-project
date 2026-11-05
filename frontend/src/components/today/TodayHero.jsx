@@ -2,6 +2,7 @@ import { Search } from 'lucide-react'
 import Avatar from '../ui/Avatar'
 import cx from '../../lib/cx'
 import { useChrome } from '../../context/chrome'
+import { hourIn, longDate } from '../../lib/time'
 
 const greeting = (hour) => {
   if (hour < 12) return 'Good morning'
@@ -9,8 +10,7 @@ const greeting = (hour) => {
   return 'Good evening'
 }
 
-const dateLine = (date) =>
-  date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+const dateLine = (date) => longDate(date)
 
 export default function TodayHero({ name, regNo, photo, meta, now = new Date(), className }) {
   const chrome = useChrome()
@@ -39,7 +39,7 @@ export default function TodayHero({ name, regNo, photo, meta, now = new Date(), 
         </div>
       </div>
       <h1 className="font-display mt-4 text-title leading-tight text-white">
-        {greeting(now.getHours())}
+        {greeting(hourIn(now))}
         {first ? <>,&nbsp;{first}</> : null}
       </h1>
       <p className="mt-1 wrap-long text-sm text-white/80">

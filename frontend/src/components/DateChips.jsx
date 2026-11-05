@@ -1,5 +1,5 @@
-import { Input } from './ui'
-import { WEEKDAYS, shiftDate, today } from '../lib/time'
+import { DateField } from './ui'
+import { shiftDate, today, weekdayName } from '../lib/time'
 import cx from '../lib/cx'
 
 const CHIP_DAYS = 7
@@ -7,7 +7,7 @@ const CHIP_DAYS = 7
 const chipLabel = (value, index) => {
   if (index === 0) return 'Today'
   if (index === 1) return 'Tomorrow'
-  return WEEKDAYS[new Date(`${value}T00:00:00`).getDay()].slice(0, 3)
+  return weekdayName(value).slice(0, 3)
 }
 
 const chipDate = (value) => `${value.slice(8, 10)}.${value.slice(5, 7)}`
@@ -43,13 +43,12 @@ export default function DateChips({ value, onChange, label = 'Pick a day', min, 
           </button>
         ))}
       </div>
-      <Input
+      <DateField
         label={label}
-        type="date"
         value={value}
         min={min}
-        onChange={(event) => {
-          if (event.target.value) onChange(event.target.value)
+        onChange={(next) => {
+          if (next) onChange(next)
         }}
         className="mt-4 max-w-xs"
       />

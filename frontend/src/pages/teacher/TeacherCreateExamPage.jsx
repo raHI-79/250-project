@@ -6,6 +6,7 @@ import {
   Alert,
   Button,
   Card,
+  DateField,
   EmptyState,
   Input,
   PageHeader,
@@ -163,12 +164,11 @@ export default function TeacherCreateExamPage() {
                 </option>
               ))}
             </Select>
-            <Input
+            <DateField
               label="Date"
-              type="date"
               value={form.item_date}
               min={today()}
-              onChange={set('item_date')}
+              onChange={(next) => set('item_date')({ target: { value: next } })}
               required
             />
           </div>

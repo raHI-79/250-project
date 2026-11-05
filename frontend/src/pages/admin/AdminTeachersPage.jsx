@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   DataTable,
+  DateField,
   EmptyState,
   Input,
   Modal,
@@ -233,11 +234,10 @@ export default function AdminTeachersPage() {
           hint="Any working address the teacher reads"
           required
         />
-        <Input
+        <DateField
           label="Date of birth"
-          type="date"
           value={form.date_of_birth}
-          onChange={set('date_of_birth')}
+          onChange={(next) => set('date_of_birth')({ target: { value: next } })}
           hint="The teacher confirms this when activating the account"
           required
         />
@@ -261,11 +261,10 @@ export default function AdminTeachersPage() {
           placeholder="AB-401"
           required
         />
-        <Input
+        <DateField
           label="Joining date"
-          type="date"
           value={form.joining_date}
-          onChange={set('joining_date')}
+          onChange={(next) => set('joining_date')({ target: { value: next } })}
           hint="Optional"
         />
       </div>

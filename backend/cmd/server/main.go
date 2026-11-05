@@ -50,7 +50,7 @@ func run() error {
 	defer stop()
 	startupContext, cancelStartup := context.WithTimeout(notifyContext, startupTimeout)
 	defer cancelStartup()
-	pool, err := db.Connect(startupContext, cfg.DatabaseURL, cfg.DBMaxConns, db.ConnectWindow)
+	pool, err := db.Connect(startupContext, cfg.DatabaseURL, cfg.DBMaxConns, cfg.Timezone, db.ConnectWindow)
 	if err != nil {
 		return err
 	}
@@ -166,6 +166,7 @@ func run() error {
 			Walls:     userStore,
 			Announcer: announcer,
 			Figures2:  userStore,
+			Calendar:  userStore,
 			Values:    values,
 			Invites:   userStore,
 			Events:    userStore,

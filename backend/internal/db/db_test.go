@@ -36,6 +36,7 @@ var expectedTables = []string{
 	"device_bindings",
 	"device_change_requests",
 	"fcm_tokens",
+	"holidays",
 	"ip_blocks",
 	"messages",
 	"notices",

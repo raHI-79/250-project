@@ -1,4 +1,4 @@
-import { Input } from '../ui'
+import { DateField } from '../ui'
 import Segmented from '../ui/Segmented'
 import { today as todayDate, tomorrow as tomorrowDate } from '../../lib/time'
 import cx from '../../lib/cx'
@@ -34,12 +34,11 @@ export default function DayPicker({
             onChange={(next) => onChange(next === DAY_TODAY ? today : tomorrow)}
           />
         )}
-        <Input
+        <DateField
           label={label}
-          type="date"
           value={value || ''}
-          onChange={(event) => {
-            if (event.target.value) onChange(event.target.value)
+          onChange={(next) => {
+            if (next) onChange(next)
           }}
           className="w-full max-w-xs"
         />

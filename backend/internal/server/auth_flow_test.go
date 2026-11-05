@@ -41,7 +41,45 @@ func newFlowRouter(t *testing.T) (context.Context, *pgxpool.Pool, http.Handler) 
 	return newFlowRouterWithLimit(t, flowRateLimit)
 }
 
+func dhakaZone() *time.Location {
+	loc, err := time.LoadLocation("Asia/Dhaka")
+	if err != nil {
+		panic("could not load Asia/Dhaka: " + err.Error())
+	}
+	return loc
+}
+
+// flowClock freezes the flow tests at 10:00 Dhaka time on a day whose tomorrow is a
+// teaching day, so that the fixed routine the fixtures generate always lands and no
+// flow depends on the weekday the suite happens to run on. It stays within the current
+// week so that the frozen clock never drifts far from the stamps the database writes.
+func flowClock() time.Time {
+	zone := dhakaZone()
+	here := time.Now().In(zone)
+	day := time.Date(here.Year(), here.Month(), here.Day(), 10, 0, 0, 0, zone)
+	for isOffDay(day.AddDate(0, 0, 1).Weekday()) {
+		day = day.AddDate(0, 0, -1)
+	}
+	return day
+}
+
+func isOffDay(weekday time.Weekday) bool {
+	return weekday == time.Friday || weekday == time.Saturday
+}
+
 func flowConfig(t *testing.T) *config.Config {
+	t.Helper()
+	return flowConfigAt(t, flowClock())
+}
+
+func flowConfigAt(t *testing.T, at time.Time) *config.Config {
+	t.Helper()
+	cfg := baseFlowConfig(t)
+	cfg.Freeze(at)
+	return cfg
+}
+
+func baseFlowConfig(t *testing.T) *config.Config {
 	t.Helper()
 	loc, err := time.LoadLocation("Asia/Dhaka")
 	if err != nil {
@@ -110,6 +148,7 @@ func newFlowRouterWithLimit(t *testing.T, rateLimit int) (context.Context, *pgxp
 		Files:     upload.NewSaver(t.TempDir(), 1),
 		Chats:     userStore,
 		Votes:     userStore,
+		Calendar:  userStore,
 	})
 }
 

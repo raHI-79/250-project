@@ -1,3 +1,4 @@
+import { DateField } from '../ui'
 import cx from '../../lib/cx'
 
 const RANGES = [
@@ -32,25 +33,9 @@ export default function RangePicker({ value, onChange, from, to, onFrom, onTo, c
         })}
       </div>
       {value === 'custom' && (
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-2xs font-semibold text-white/80">
-            From
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => onFrom(event.target.value)}
-              className="h-10 rounded-input border border-white/30 bg-white/15 px-2 text-sm text-white"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-2xs font-semibold text-white/80">
-            To
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => onTo(event.target.value)}
-              className="h-10 rounded-input border border-white/30 bg-white/15 px-2 text-sm text-white"
-            />
-          </label>
+        <div className="flex flex-wrap items-end gap-3">
+          <DateField label="From" tone="dark" value={from} onChange={onFrom} className="w-56" />
+          <DateField label="To" tone="dark" value={to} onChange={onTo} className="w-56" />
         </div>
       )}
     </div>

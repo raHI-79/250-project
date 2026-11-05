@@ -2,6 +2,7 @@ package settings
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ const (
 	KeyReminderTimes      = "reminder_times"
 	KeyMorningReminder    = "morning_reminder"
 	KeyDaysAhead          = "schedule_days_ahead"
+	KeyOffDays            = "weekly_off_days"
 	KeyMinAppVersion      = "min_app_version"
 	KeyRetainViews        = "retain_analytics_days"
 	KeyRetainEvents       = "retain_audit_days"
@@ -52,6 +54,7 @@ var editable = []string{
 	KeyReminderTimes,
 	KeyMorningReminder,
 	KeyDaysAhead,
+	KeyOffDays,
 	KeyMinAppVersion,
 	KeyRetainViews,
 	KeyRetainEvents,
@@ -80,6 +83,8 @@ func IsEditable(key string) bool {
 	}
 	return false
 }
+
+var ErrNoStore = errors.New("settings: no settings store is configured")
 
 type Store interface {
 	AllSettings(ctx context.Context) (map[string]string, error)
@@ -170,6 +175,26 @@ func (c *Cache) Number(ctx context.Context, key string, fallback int) int {
 	return value
 }
 
+// Numbers reads a comma separated list of whole numbers, used for the weekly off days.
+func (c *Cache) Numbers(ctx context.Context, key string, fallback []int) []int {
+	entries := c.List(ctx, key)
+	if len(entries) == 0 {
+		return fallback
+	}
+	numbers := make([]int, 0, len(entries))
+	for _, entry := range entries {
+		number, err := strconv.Atoi(entry)
+		if err != nil {
+			continue
+		}
+		numbers = append(numbers, number)
+	}
+	if len(numbers) == 0 {
+		return fallback
+	}
+	return numbers
+}
+
 func (c *Cache) List(ctx context.Context, key string) []string {
 	raw := strings.Split(c.Get(ctx, key), ",")
 	kept := make([]string, 0, len(raw))
@@ -191,6 +216,9 @@ func (c *Cache) Save(ctx context.Context, values map[string]string, by int64) er
 	}
 	if len(kept) == 0 {
 		return nil
+	}
+	if c.store == nil {
+		return ErrNoStore
 	}
 	if err := c.store.SaveSettings(ctx, kept, by); err != nil {
 		return err
@@ -217,4 +245,11 @@ func (c *Cache) Registration(ctx context.Context) (bool, string) {
 		message = "Registration is closed right now. Please contact the department office."
 	}
 	return open, message
+}
+
+// DefaultOffDays names Friday and Saturday, the weekly off days of the department.
+const DefaultOffDays = "5,6"
+
+func OffDayNumbers() []int {
+	return []int{5, 6}
 }

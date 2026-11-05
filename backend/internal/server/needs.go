@@ -113,6 +113,10 @@ func OfficeNeeds() *RouteNeeds {
 		"POST /api/admin/periods/reorder",
 	)
 	needs.Need(auth.PermRoutines,
+		"GET /api/admin/calendar",
+		"PUT /api/admin/calendar/holidays",
+		"DELETE /api/admin/calendar/holidays/{date}",
+		"PUT /api/admin/calendar/off-days",
 		"POST /api/admin/routines",
 		"GET /api/admin/routines",
 		"PATCH /api/admin/routines/{id}",

@@ -36,7 +36,7 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	pool, err := db.Connect(ctx, cfg.DatabaseURL, cfg.DBMaxConns, db.ConnectWindow)
+	pool, err := db.Connect(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.Timezone, db.ConnectWindow)
 	if err != nil {
 		return err
 	}

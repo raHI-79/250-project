@@ -44,7 +44,7 @@ type fakeItems struct {
 	err         error
 }
 
-func (f *fakeItems) GenerateFixedItems(ctx context.Context, from, to string) (int, error) {
+func (f *fakeItems) GenerateFixedItems(ctx context.Context, from, to string, offDays []int) (int, error) {
 	f.generated = append(f.generated, generateCall{from: from, to: to})
 	return f.created, f.err
 }

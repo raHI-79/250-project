@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   CardHeader,
+  DateField,
   Input,
   PageHeader,
   Select,
@@ -11,6 +12,7 @@ import {
   Textarea,
   useToast,
 } from '../../components/ui'
+import CalendarSettings from '../../components/CalendarSettings'
 import api from '../../lib/api'
 import { useResource } from '../../lib/hooks'
 import { readSite } from '../../lib/site'
@@ -97,6 +99,7 @@ export default function ControlSettingsPage() {
           {error}
         </Alert>
       )}
+      <CalendarSettings base="/api/super-admin" title="Off days and holidays" />
       {loading ? (
         <SkeletonLines lines={6} />
       ) : (
@@ -158,11 +161,10 @@ export default function ControlSettingsPage() {
                 ))}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Input
+                <DateField
                   label="Until"
-                  type="date"
                   value={field('announcement_until')}
-                  onChange={(event) => set('announcement_until')(event.target.value)}
+                  onChange={set('announcement_until')}
                 />
                 <Select
                   label="Severity"

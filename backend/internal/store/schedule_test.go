@@ -69,14 +69,14 @@ func TestGenerateFixedItemsIsIdempotent(t *testing.T) {
 	fixture := seedEngine(t, ctx, store, pool, int(now.Weekday()))
 	today := now.Format(dateLayout)
 	week := now.AddDate(0, 0, 6).Format(dateLayout)
-	created, err := store.GenerateFixedItems(ctx, today, week)
+	created, err := store.GenerateFixedItems(ctx, today, week, nil)
 	if err != nil {
 		t.Fatalf("GenerateFixedItems() returned an unexpected error: %v", err)
 	}
 	if created != 1 {
 		t.Fatalf("created = %d, want one item for the only matching weekday", created)
 	}
-	again, err := store.GenerateFixedItems(ctx, today, week)
+	again, err := store.GenerateFixedItems(ctx, today, week, nil)
 	if err != nil {
 		t.Fatalf("second GenerateFixedItems() returned an unexpected error: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestTeacherDecisionsOnAProposal(t *testing.T) {
 			if _, err := pool.Exec(ctx, "DELETE FROM schedule_items"); err != nil {
 				t.Fatalf("could not clear the items: %v", err)
 			}
-			if _, err := store.GenerateFixedItems(ctx, tomorrow, tomorrow); err != nil {
+			if _, err := store.GenerateFixedItems(ctx, tomorrow, tomorrow, nil); err != nil {
 				t.Fatalf("GenerateFixedItems() returned an unexpected error: %v", err)
 			}
 			items, err := store.ListTeacherDayItems(ctx, fixture.teacherID, tomorrow)
@@ -262,7 +262,7 @@ func TestConfirmWindowAndLaterChanges(t *testing.T) {
 	now := time.Now()
 	fixture := seedEngine(t, ctx, store, pool, int(now.AddDate(0, 0, 1).Weekday()))
 	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
-	if _, err := store.GenerateFixedItems(ctx, tomorrow, tomorrow); err != nil {
+	if _, err := store.GenerateFixedItems(ctx, tomorrow, tomorrow, nil); err != nil {
 		t.Fatalf("GenerateFixedItems() returned an unexpected error: %v", err)
 	}
 	items, err := store.ListTeacherDayItems(ctx, fixture.teacherID, tomorrow)
@@ -644,5 +644,16 @@ func TestCourseSearchIgnoresSpaces(t *testing.T) {
 				t.Errorf("SearchCourses(%q) returned %v, want %d course(s)", test.search, courses, test.want)
 			}
 		})
+	}
+}
+
+func addRoutineDay(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
+	fixture engineFixture, day int) {
+	t.Helper()
+	query := `INSERT INTO routines
+(batch, semester, section, course_id, teacher_id, day_of_week, start_time, end_time, room, type)
+VALUES ('CSE-23', '1-1', 'A', $1, $2, $3, TIME '08:00', TIME '09:30', '1003', 'class')`
+	if _, err := pool.Exec(ctx, query, fixture.courseID, fixture.teacherID, day); err != nil {
+		t.Fatalf("could not insert the routine entry for day %d: %v", day, err)
 	}
 }

@@ -1,4 +1,4 @@
-import { formatClock } from './time'
+import { clockIn, formatClock, minutesOfDay, today } from './time.js'
 
 export const MODE_ROOM = 'room'
 
@@ -146,15 +146,12 @@ export const startsInText = (seconds) => {
   return 'in under a minute'
 }
 
-export const secondsUntilClock = (clock) => {
-  const [hour, minute] = String(clock || '')
-    .split(':')
-    .map((part) => Number(part))
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return 0
-  const now = new Date()
-  const target = new Date(now)
-  target.setHours(hour, minute, 0, 0)
-  return Math.max(0, Math.round((target.getTime() - now.getTime()) / 1000))
+export const secondsUntilClock = (clock, now = new Date()) => {
+  const target = minutesOfDay(clock)
+  if (target < 0) return 0
+  const here = minutesOfDay(clockIn(now))
+  if (here < 0) return 0
+  return Math.max(0, (target - here) * 60 - now.getSeconds())
 }
 
 export const teachingPeriods = (periods) => (periods || []).filter((period) => !period.is_break)
@@ -192,14 +189,11 @@ export const periodRangeError = (periods, start, end) => {
   return ''
 }
 
+// itemStarted compares the item against the Dhaka wall clock, so that a phone set to
+// another zone still agrees with the server about what has already begun.
 export const itemStarted = (item, now = new Date()) => {
   if (!item?.item_date || !item?.start_time) return false
-  const stamp = `${item.item_date} ${item.start_time}`
-  const pad = (value) => String(value).padStart(2, '0')
-  const here = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
-    now.getHours(),
-  )}:${pad(now.getMinutes())}`
-  return stamp < here
+  return `${item.item_date} ${item.start_time}` < `${today(now)} ${clockIn(now)}`
 }
 
 export const itemEnded = (item, now = new Date()) => {

@@ -65,8 +65,7 @@ func (emptyChatStore) GetOrCreateDirect(ctx context.Context, viewerID int64, vie
 	return store.Conversation{}, store.ErrInactiveTarget
 }
 
-func (emptyChatStore) ClearConversation(ctx context.Context, userID, conversationID int64,
-	at time.Time) error {
+func (emptyChatStore) ClearConversation(ctx context.Context, userID, conversationID int64) error {
 	return nil
 }
 
@@ -139,7 +138,7 @@ func (emptyChatStore) CreateChatMessage(ctx context.Context, message store.NewCh
 	return store.ChatMessageRow{}, store.ErrNotFound
 }
 
-func (emptyChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error {
+func (emptyChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64) error {
 	return nil
 }
 
