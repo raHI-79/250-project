@@ -4,6 +4,33 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.6.1
+
+- **The portal asks for the password instead of refusing.** A `428` from the
+  confirmation rule now opens one shared *Confirm it's you* dialog in the API
+  client, calls the confirm endpoint and retries the original request once, so
+  Remove, Suspend, Resend, Cancel invite, Revoke access, permission changes,
+  settings saves, IP blocks and the user actions finish in one go. Several
+  requests that need it at the same time share the one dialog and are all
+  retried after a single confirmation, a wrong password keeps its error in the
+  dialog, cancelling rejects quietly with no toast, a two-step account gets a
+  code field with the code mailed to it, and the header shows *Confirmed for 5
+  minutes* while the window is open. The office portal uses the same flow.
+- **One menu item is active at a time.** The sidebar and the tab bar no longer
+  rely on prefix matching, which lit up Dashboard, Site settings and My security
+  together: the active item is the longest menu path that matches the current
+  route, so Dashboard is active only on `/control-room` and a detail page keeps
+  its own list highlighted. The two security entries are now *Security monitor*
+  and *My account*, at `/control-room/settings/account` and
+  `/office-portal/account`, with the old addresses redirecting.
+- **Pages update themselves after an action.** Every successful change
+  invalidates the shared resource version, so each mounted list, detail,
+  dashboard count and sidebar badge refetches at once instead of waiting for a
+  reload, and an empty toast is never shown.
+- **The Admins page fits a phone.** The rows wrap instead of scrolling
+  sideways: the name, status and counts on one line, the permissions under them
+  and the buttons on their own line.
+
 ## 2.6.0
 
 - **Sessions you can see and close.** Every sign-in now opens a row in

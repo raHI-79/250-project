@@ -3,6 +3,7 @@ import GlassBackdrop from './components/layout/GlassBackdrop'
 import AuthProvider from './context/AuthProvider'
 import ThemeProvider from './context/ThemeProvider'
 import ConfirmProvider from './components/ui/ConfirmProvider'
+import ConfirmPasswordProvider from './components/ui/ConfirmPasswordProvider'
 import ToastProvider from './components/ui/ToastProvider'
 import Router from './router'
 import SiteGate from './components/layout/SiteGate'
@@ -19,6 +20,7 @@ export default function App() {
         <AuthProvider>
           <ToastProvider>
             <ConfirmProvider>
+              <ConfirmPasswordProvider>
               <GlassBackdrop />
               <SiteGate>
                 <Router />
@@ -26,6 +28,7 @@ export default function App() {
               <AppBanner />
               <AppUpdate />
               <UpdateBanner />
+              </ConfirmPasswordProvider>
             </ConfirmProvider>
           </ToastProvider>
         </AuthProvider>

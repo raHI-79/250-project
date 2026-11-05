@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Menu, Search } from 'lucide-react'
 import NotificationBell from './NotificationBell'
+import ConfirmedNote from './ConfirmedNote'
 import LogoBadge from '../ui/LogoBadge'
 import cx from '../../lib/cx'
 import { useAuth } from '../../context/auth'
@@ -47,7 +48,8 @@ export default function TopBar({ title, collapsed, onOpenMenu, onOpenSearch, sho
           <span className="px-2 text-white/40">·</span>
           <span className="font-bold text-white">{roleLabel(role)}</span>
         </p>
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <ConfirmedNote />
           {onOpenSearch && (
             <button
               type="button"

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from './api'
+import { resourceVersion, watchResources } from './refresh'
 import { shiftDate } from './time'
 
 const NO_QUERY = {}
@@ -10,8 +11,15 @@ export const usePeriods = () => {
   return data?.items || []
 }
 
+export const useResourceVersion = () => {
+  const [version, setVersion] = useState(resourceVersion)
+  useEffect(() => watchResources(setVersion), [])
+  return version
+}
+
 export const useResource = (path, query) => {
   const key = JSON.stringify(query || NO_QUERY)
+  const fresh = useResourceVersion()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,7 +61,7 @@ export const useResource = (path, query) => {
       active = false
       controller.abort()
     }
-  }, [path, key, attempt, settle])
+  }, [path, key, attempt, fresh, settle])
   return { data, loading, error, reload }
 }
 

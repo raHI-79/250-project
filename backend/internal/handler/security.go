@@ -19,6 +19,8 @@ import (
 
 const (
 	MessageConfirmNeeded    = "Please confirm your password first."
+	MessageConfirmCode      = "We sent a 6-digit code to the email address on your account."
+	MessageConfirmBadCode   = "Invalid or expired code."
 	MessageConfirmOpen      = "Password confirmed. Sensitive actions are open for five minutes."
 	MessagePasswordChanged  = "Password changed. Every other session was signed out."
 	MessageContactChanged   = "Contact details updated."
@@ -39,6 +41,8 @@ type SecurityStore interface {
 	GrantSudo(ctx context.Context, sessionID int64, until time.Time) error
 	DropSudo(ctx context.Context, userID int64) error
 	SetTwoStep(ctx context.Context, userID int64, enabled bool) error
+	StartTwoStep(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error
+	ClearTwoStep(ctx context.Context, userID int64) error
 	UpdateOfficeContact(ctx context.Context, userID int64, email, phone string) error
 	TwoStepChallenge(ctx context.Context, identifier string) (store.TwoStepChallenge, error)
 	Permissions(ctx context.Context, userID int64) ([]string, error)
@@ -58,6 +62,7 @@ func NewSecurity(cfg *config.Config, people SecurityStore, mail mailer.Sender,
 
 type confirmPasswordRequest struct {
 	Password string `json:"password"`
+	Code     string `json:"code"`
 }
 
 type securityPasswordRequest struct {
@@ -92,8 +97,9 @@ type signedInResponse struct {
 }
 
 type sudoResponse struct {
-	Message string `json:"message"`
-	Until   string `json:"until"`
+	Message   string `json:"message"`
+	Until     string `json:"until,omitempty"`
+	NeedsCode bool   `json:"needs_code,omitempty"`
 }
 
 type securityStateResponse struct {
@@ -197,6 +203,9 @@ func (s *Security) Confirm() http.HandlerFunc {
 		if !s.checkPassword(w, r, current.ID, request.Password) {
 			return
 		}
+		if !s.secondStep(w, r, current.Identifier, strings.TrimSpace(request.Code)) {
+			return
+		}
 		if current.SessionID <= 0 {
 			httpx.WriteError(w, http.StatusConflict, middleware.MessageSessionExpired)
 			return
@@ -217,6 +226,62 @@ func (s *Security) Confirm() http.HandlerFunc {
 			Message: MessageConfirmOpen,
 			Until:   until.Format(time.RFC3339),
 		})
+	}
+}
+
+func (s *Security) secondStep(w http.ResponseWriter, r *http.Request, identifier,
+	code string) bool {
+	challenge, err := s.people.TwoStepChallenge(r.Context(), identifier)
+	if errors.Is(err, store.ErrNotFound) {
+		return true
+	}
+	if err != nil {
+		log.Printf("handler: could not read a two-step setting: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return false
+	}
+	if !challenge.Enabled {
+		return true
+	}
+	now := s.cfg.Now()
+	if code == "" {
+		s.sendConfirmCode(r, challenge)
+		httpx.WriteJSON(w, http.StatusOK, sudoResponse{
+			Message:   MessageConfirmCode,
+			NeedsCode: true,
+		})
+		return false
+	}
+	fresh := challenge.CodeHash != "" && challenge.ExpiresAt != nil && challenge.ExpiresAt.After(now)
+	if !fresh || challenge.CodeHash != hashResetSecret(code) {
+		httpx.WriteError(w, http.StatusBadRequest, MessageConfirmBadCode)
+		return false
+	}
+	if err := s.people.ClearTwoStep(r.Context(), challenge.UserID); err != nil {
+		log.Printf("handler: could not clear a two-step code: %v", err)
+	}
+	return true
+}
+
+func (s *Security) sendConfirmCode(r *http.Request, challenge store.TwoStepChallenge) {
+	code, err := newResetCode()
+	if err != nil {
+		log.Printf("handler: could not generate a confirmation code: %v", err)
+		return
+	}
+	now := s.cfg.Now()
+	err = s.people.StartTwoStep(r.Context(), challenge.UserID, hashResetSecret(code),
+		now.Add(twoStepLifetime), now)
+	if err != nil {
+		log.Printf("handler: could not store a confirmation code: %v", err)
+		return
+	}
+	if s.mail == nil || !s.mail.Configured() || challenge.Email == "" {
+		return
+	}
+	if err := s.mail.Send(r.Context(), challenge.Email, TwoStepEmailSubject,
+		twoStepEmailBody(code)); err != nil {
+		log.Printf("handler: could not email a confirmation code: %v", err)
 	}
 }
 

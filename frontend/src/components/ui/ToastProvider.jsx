@@ -27,6 +27,7 @@ export default function ToastProvider({ children }) {
   }, [])
   const push = useCallback(
     (message, tone = 'info') => {
+      if (!String(message || '').trim()) return 0
       counter.current += 1
       const id = counter.current
       setToasts((current) => [...current, { id, message, tone }].slice(-MAX_TOASTS))
