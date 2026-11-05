@@ -62,6 +62,13 @@ type resendVerificationRequest struct {
 
 func (a *Auth) Register() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if a.values != nil {
+			open, message := a.values.Registration(r.Context())
+			if !open {
+				httpx.WriteError(w, http.StatusServiceUnavailable, message)
+				return
+			}
+		}
 		if err := a.photos.Parse(r); err != nil {
 			status, message := photoError(err)
 			httpx.WriteError(w, status, message)

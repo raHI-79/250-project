@@ -16,6 +16,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/push"
 	"github.com/raHI-79/250-project/backend/internal/release"
 	"github.com/raHI-79/250-project/backend/internal/server"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/upload"
 	"log"
@@ -110,6 +111,8 @@ func run() error {
 	if cfg.ReleasesToken == "" {
 		log.Println("release: GITHUB_TOKEN is missing, the release lookup stays anonymous")
 	}
+	values := settings.New(userStore, server.SettingDefaults(cfg))
+	announcer := jobs.NewAnnouncer(userStore, pushWorker, devices, cfg.FrontendOrigin)
 	httpServer := &http.Server{
 		Addr: net.JoinHostPort("", cfg.Port),
 		Handler: server.NewRouter(server.Dependencies{
@@ -156,6 +159,13 @@ func run() error {
 			Live:      userStore,
 			Granted:   userStore,
 			Folks:     userStore,
+			Locks:     userStore,
+			Keys:      userStore,
+			Guardians: userStore,
+			Asks:      userStore,
+			Walls:     userStore,
+			Announcer: announcer,
+			Values:    values,
 			Invites:   userStore,
 			Events:    userStore,
 			Files:     upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
@@ -177,7 +187,7 @@ func run() error {
 	}
 	jobContext, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
-	go jobs.NewScheduler(cfg, userStore, alerts).Run(jobContext, jobs.Interval)
+	go jobs.NewScheduler(cfg, userStore, alerts).WithSettings(values).Run(jobContext, jobs.Interval)
 	go jobs.NewAnalytics(cfg, userStore).Run(jobContext, jobs.AnalyticsInterval)
 	if pushWorker != nil || devices.Ready() {
 		watcher := jobs.NewReleaseWatcher(userStore, pushWorker, devices, releases, cfg.FrontendOrigin)

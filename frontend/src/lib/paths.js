@@ -90,6 +90,7 @@ export const paths = {
     attendance: (params) => query(build('office-portal', 'attendance'), params),
     phoneChanges: () => build('office-portal', 'phone-changes'),
     security: () => build('office-portal', 'security'),
+    approvals: () => build('office-portal', 'approvals'),
   },
   control: {
     home: () => build('control-room'),
@@ -99,6 +100,10 @@ export const paths = {
     monitorPattern: () => routePattern('control-room', 'activity', ':adminId'),
     security: () => build('control-room', 'settings', 'security'),
     users: (params) => query(build('control-room', 'users'), params),
+    settings: () => build('control-room', 'settings'),
+    watch: () => build('control-room', 'settings', 'monitor'),
+    release: () => build('control-room', 'settings', 'app'),
+    approvals: () => build('control-room', 'approvals'),
     office: () => build('office-portal', 'overview'),
   },
 }

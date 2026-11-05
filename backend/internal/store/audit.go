@@ -44,6 +44,17 @@ const (
 	ActionResetPhone      = "reset_phone"
 	ActionRoleChange      = "role_change"
 	ActionPermissions     = "permissions"
+	ActionSettings        = "settings"
+	ActionBlockIP         = "block_ip"
+	ActionUnblockIP       = "unblock_ip"
+	ActionUnlock          = "unlock_account"
+	ActionAnnounce        = "announce_release"
+	ActionApprovalAsked   = "approval_asked"
+	ActionApprovalDone    = "approval_approved"
+	ActionApprovalNo      = "approval_declined"
+	ActionOverride        = "override"
+	ActionLocked          = "account_locked"
+	ActionRetention       = "retention"
 )
 
 type AuditEvent struct {

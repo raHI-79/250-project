@@ -43,11 +43,13 @@ type Details struct {
 	APKURL      string
 	Notes       string
 	Required    bool
+	Downloads   int
 }
 
 type asset struct {
-	Name string `json:"name"`
-	URL  string `json:"browser_download_url"`
+	Name      string `json:"name"`
+	URL       string `json:"browser_download_url"`
+	Downloads int    `json:"download_count"`
 }
 
 type payload struct {
@@ -195,6 +197,7 @@ func (l *Lookup) fetch(ctx context.Context) (Details, error) {
 			APKURL:      url,
 			Notes:       strings.TrimSpace(entry.Body),
 			Required:    IsRequired(entry.Body),
+			Downloads:   assetDownloads(entry.Assets),
 		}, nil
 	}
 	return Details{}, ErrNoAsset
@@ -269,4 +272,14 @@ func VersionCode(version string) int {
 
 func Newer(latest, installed string) bool {
 	return VersionCode(latest) > VersionCode(installed)
+}
+
+func assetDownloads(assets []asset) int {
+	total := 0
+	for _, entry := range assets {
+		if strings.HasSuffix(strings.ToLower(entry.Name), ".apk") {
+			total += entry.Downloads
+		}
+	}
+	return total
 }

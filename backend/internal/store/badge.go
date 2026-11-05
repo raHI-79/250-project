@@ -226,6 +226,7 @@ VALUES ($1, $2)
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
 WHERE app_meta.value <> EXCLUDED.value
 RETURNING value`
+	forgetVersionSQL     = `DELETE FROM app_meta WHERE key = $1 AND value = $2`
 	listPushTargetsSQL   = `SELECT DISTINCT user_id FROM push_subscriptions`
 	listDeviceTargetsSQL = `SELECT DISTINCT user_id FROM fcm_tokens`
 )
@@ -240,6 +241,13 @@ func (s *Store) ClaimVersionAnnouncement(ctx context.Context, version string) (b
 		return false, fmt.Errorf("store: could not claim the release announcement: %w", err)
 	}
 	return true, nil
+}
+
+func (s *Store) ForgetVersionAnnouncement(ctx context.Context, version string) error {
+	if _, err := s.pool.Exec(ctx, forgetVersionSQL, MetaAnnouncedVersion, version); err != nil {
+		return fmt.Errorf("store: could not forget the release announcement: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) ListDeviceTargets(ctx context.Context) ([]int64, error) {

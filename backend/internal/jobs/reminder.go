@@ -50,7 +50,7 @@ func (s *Scheduler) RemindTeachers(ctx context.Context, now time.Time) (int, err
 	sent := 0
 	today := now.Format(dateLayout)
 	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
-	for index, clock := range s.cfg.ReminderTimes {
+	for index, clock := range s.reminderTimes(ctx) {
 		if !dueSlot(now, clock) {
 			continue
 		}
@@ -64,12 +64,13 @@ func (s *Scheduler) RemindTeachers(ctx context.Context, now time.Time) (int, err
 		}
 		sent += s.remind(ctx, teachers, slotKey("evening", clock), today, title, sentence)
 	}
-	if dueSlot(now, s.cfg.MorningReminder) {
+	morning := s.morningReminder(ctx)
+	if dueSlot(now, morning) {
 		teachers, err := s.items.ListUndecidedTeachersFrom(ctx, today, now.Format(clockLayout))
 		if err != nil {
 			return sent, err
 		}
-		sent += s.remind(ctx, teachers, slotKey(SlotMorning, s.cfg.MorningReminder), today,
+		sent += s.remind(ctx, teachers, slotKey(SlotMorning, morning), today,
 			TitleTodayPending, todaySentence)
 	}
 	return sent, nil

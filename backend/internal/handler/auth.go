@@ -13,6 +13,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -43,6 +44,8 @@ const (
 	MessagePasswordUpdated     = "Password updated. Please log in with your new password."
 	MessageUnknownLoginPortal  = "portal must be student or teacher."
 	MessageDateOfBirthRequired = "Date of birth is required."
+	MessageAccountLocked       = "Too many wrong passwords. Try again in a few minutes."
+	MessageRegistrationClosed  = "Registration is closed right now."
 	ResetEmailSubject          = "Password reset code"
 	NewDeviceEmailSubject      = "A new sign-in to your office account"
 	PortalStudent              = "student"
@@ -125,11 +128,28 @@ type Auth struct {
 	photos PhotoStore
 	office OfficeInvites
 	watch  DeviceWatch
+	locks  Lockout
+	values *settings.Cache
 	events *Recorder
+}
+
+func (a *Auth) WithSettings(values *settings.Cache) *Auth {
+	a.values = values
+	return a
 }
 
 type DeviceWatch interface {
 	KnownDevice(ctx context.Context, userID int64, device, ipHash string) (bool, error)
+}
+
+type Lockout interface {
+	RegisterFailure(ctx context.Context, userID int64) (bool, error)
+	ClearFailures(ctx context.Context, userID int64) error
+}
+
+func (a *Auth) WithLockout(locks Lockout) *Auth {
+	a.locks = locks
+	return a
 }
 
 func (a *Auth) WithWatch(watch DeviceWatch) *Auth {
@@ -274,10 +294,29 @@ func (a *Auth) login(mode string) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusForbidden, MessageInvitedAccount)
 			return
 		}
+		if a.locked(w, r, user) {
+			return
+		}
 		if auth.CheckPassword(user.PasswordHash, request.Password) != nil {
 			a.failedSignIn(r, user.ID, user.Role, identifier)
+			if a.locks != nil {
+				locked, err := a.locks.RegisterFailure(r.Context(), user.ID)
+				if err != nil {
+					log.Printf("handler: could not record a failed sign-in: %v", err)
+				} else if locked {
+					a.events.RecordAs(r, user.ID, user.Role, identifier, store.ActionLocked,
+						"account", idText(user.ID), identifier+" was locked after too many tries")
+					httpx.WriteError(w, http.StatusForbidden, MessageAccountLocked)
+					return
+				}
+			}
 			httpx.WriteError(w, http.StatusUnauthorized, MessageInvalidLogin)
 			return
+		}
+		if a.locks != nil {
+			if err := a.locks.ClearFailures(r.Context(), user.ID); err != nil {
+				log.Printf("handler: could not clear the failed sign-ins: %v", err)
+			}
 		}
 		if officeOnly {
 			if !user.IsActive() {
@@ -362,6 +401,15 @@ func allowedEntrance(mode string, user store.LoginUser) bool {
 	default:
 		return !auth.IsOfficeRole(user.Role)
 	}
+}
+
+func (a *Auth) locked(w http.ResponseWriter, r *http.Request, user store.LoginUser) bool {
+	if user.LockedUntil == nil || !user.LockedUntil.After(a.cfg.Now()) {
+		return false
+	}
+	a.failedSignIn(r, user.ID, user.Role, user.Identifier)
+	httpx.WriteError(w, http.StatusForbidden, MessageAccountLocked)
+	return true
 }
 
 func (a *Auth) newDeviceNotice(r *http.Request, user store.LoginUser, role string) {

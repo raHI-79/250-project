@@ -6,9 +6,11 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/release"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 )
 
 const (
@@ -26,6 +28,7 @@ type ReleaseLookup interface {
 }
 
 type androidLatestResponse struct {
+	MinVersion  string `json:"min_version,omitempty"`
 	Version     string `json:"version"`
 	VersionCode int    `json:"version_code"`
 	APKURL      string `json:"apk_url"`
@@ -69,6 +72,12 @@ this link again in a little while.</p>
 type AppRelease struct {
 	releases ReleaseLookup
 	home     string
+	values   *settings.Cache
+}
+
+func (a *AppRelease) WithSettings(values *settings.Cache) *AppRelease {
+	a.values = values
+	return a
 }
 
 func NewAppRelease(releases ReleaseLookup, home string) *AppRelease {
@@ -107,13 +116,17 @@ func (a *AppRelease) Latest() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Cache-Control", noStore)
-		httpx.WriteJSON(w, http.StatusOK, androidLatestResponse{
+		body := androidLatestResponse{
 			Version:     details.Version,
 			VersionCode: details.VersionCode,
 			APKURL:      details.APKURL,
 			Notes:       details.Notes,
 			Required:    details.Required,
-		})
+		}
+		if a.values != nil {
+			body.MinVersion = strings.TrimSpace(a.values.Get(r.Context(), settings.KeyMinAppVersion))
+		}
+		httpx.WriteJSON(w, http.StatusOK, body)
 	}
 }
 

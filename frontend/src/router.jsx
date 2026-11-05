@@ -12,6 +12,10 @@ import ControlAdminsPage from './pages/control/ControlAdminsPage'
 import ControlMonitorPage from './pages/control/ControlMonitorPage'
 import ControlUsersPage from './pages/control/ControlUsersPage'
 import SecurityPage from './pages/office/SecurityPage'
+import ApprovalsPage from './pages/office/ApprovalsPage'
+import ControlSettingsPage from './pages/control/ControlSettingsPage'
+import ControlSecurityMonitorPage from './pages/control/ControlSecurityMonitorPage'
+import ControlReleasePage from './pages/control/ControlReleasePage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ActivatePage from './pages/auth/ActivatePage'
@@ -201,6 +205,10 @@ export default function Router() {
         <Route path="activity" element={<ActivityLogPage />} />
         <Route path="activity/:adminId" element={<ControlMonitorPage />} />
         <Route path="settings/security" element={<SecurityPage eyebrow="Control room" />} />
+        <Route path="settings" element={<ControlSettingsPage />} />
+        <Route path="settings/monitor" element={<ControlSecurityMonitorPage />} />
+        <Route path="settings/app" element={<ControlReleasePage />} />
+        <Route path="approvals" element={<ApprovalsPage eyebrow="Control room" />} />
       </Route>
       )}
       {office && (
@@ -220,6 +228,7 @@ export default function Router() {
           <Route path={paths.admin.attendance()} element={<AdminAttendancePage />} />
           <Route path={paths.admin.phoneChanges()} element={<AdminPhoneChangesPage />} />
           <Route path={paths.admin.security()} element={<SecurityPage />} />
+          <Route path={paths.admin.approvals()} element={<ApprovalsPage />} />
         </Route>
       </Route>
       )}
