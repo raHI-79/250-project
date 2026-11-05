@@ -10,14 +10,14 @@ services:
       ignoredPaths:
         - docs/**
     dockerBuildArgs:
-      APP_VERSION: 2.4.0
+      APP_VERSION: 2.5.0
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: APP_ENV
         value: production
       - key: APP_VERSION
-        value: 2.4.0
+        value: 2.5.0
       - key: APP_TIMEZONE
         value: Asia/Dhaka
       - key: GITHUB_RELEASES_REPO
@@ -49,6 +49,12 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: ADMIN_IDENTIFIER
+        sync: false
+      - key: SUPER_ADMIN_IDENTIFIER
+        sync: false
+      - key: ANALYTICS_SALT
+        sync: false
+      - key: BACKUP_STATUS_SECRET
         sync: false
       - key: ADMIN_PASSWORD
         sync: false

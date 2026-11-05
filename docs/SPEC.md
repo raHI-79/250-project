@@ -43,9 +43,20 @@ runs two sections, A and B.
 | `cr` | A student the office promoted to class representative | Registration number |
 | `teacher` | A teacher of the department | A User ID they choose |
 | `admin` | The department office | A hidden office portal |
+| `super_admin` | The one owner of the portal | A hidden control room |
 
 `cr` is not a separate account. It is a student account with `is_cr` set, and the
 backend resolves it to the effective role `cr` on every request.
+
+`super_admin` sits above `admin`. There is exactly one: the account seeded from
+`ADMIN_IDENTIFIER`, or from `SUPER_ADMIN_IDENTIFIER` when that is set. It is the
+only role that reaches `/control-room`, it cannot be suspended or removed from
+inside the portal, and it opens every office page read-only.
+
+A teacher can be given office access. That teacher then signs in at
+`/office-portal` with their own credentials and holds the effective role `admin`
+for that session, while their teacher account, their teacher pages and their app
+access stay exactly as they were.
 
 ## 2. Access control
 
@@ -56,6 +67,11 @@ backend resolves it to the effective role `cr` on every request.
 - The **teacher panel** is for teacher User IDs.
 - The **office portal** is hidden. It is never linked from a student, CR or
   teacher page, and it is excluded from search engines.
+- The **control room** at `/control-room` is hidden the same way: nothing links
+  to it, it carries `noindex,nofollow`, its sign-in form passes the same human
+  check as the others, and the Android app redirects away from both it and the
+  office portal. Office accounts are rejected from the app by the backend as
+  well, so a token is not enough.
 
 ### 2.2 Backend enforcement
 
@@ -699,7 +715,97 @@ into one workbook and adds a Summary sheet with the course, batch, section,
 number of sessions, average percentage and how many students are below 50 %. A
 date range filter defaults to the running semester.
 
-## 13. Interface
+## 13. The control room
+
+### 13.1 Signing in
+
+The super admin signs in at `/control-room`, which is a separate entrance from
+`/office-portal`: the office form refuses the super admin and the control-room
+form refuses everybody else. Both refuse the Android client outright.
+
+### 13.2 Office admins
+
+**Control room → Office admins** lists every office account and every teacher
+who holds office access, with its status, its last sign-in and the number of
+actions it has taken. The super admin can:
+
+- invite an office admin by email through the existing mailer. The link lives
+  for 72 hours and lands on `/office-portal/accept-invite`, where the invitee
+  picks a username under the teacher User ID rules and a password;
+- resend or cancel an invitation that is still waiting;
+- suspend and restore an office admin, which also invalidates their tokens;
+- remove an office admin after typing its username to confirm;
+- grant or revoke office access for any active teacher at any time.
+
+Every one of those actions is written to the activity log.
+
+### 13.3 Read-only office pages
+
+The control room links to every office page. The super admin can read them all,
+and the backend refuses any write from that role with *The control room opens
+the office pages read-only.* Office admins are unaffected.
+
+## 14. History and analytics
+
+### 14.1 The activity log
+
+`audit_events` holds one row per recorded action: the actor and their role, the
+action, the target type and id, a summary, the IP address hashed with
+`ANALYTICS_SALT`, the user agent, whether it came from the website or the app,
+and the time. Every create, update, delete and publish of every role is written
+by one middleware that runs after the token check and records only answers in
+the 2xx range, and every sign-in, sign-out and failed sign-in is written by the
+sign-in handlers themselves. Account removals, restores and permanent deletions
+keep their own readable summary and are written once, not twice.
+
+The activity log page filters by person, role, action, client and date range,
+searches the summaries, loads more as the page scrolls and exports the current
+filter as CSV. From the control room each row offers **Monitor this admin**,
+which opens that account's own timeline with its counts per action type. Office
+admins keep the same page for the office-wide log.
+
+### 14.2 Page views
+
+Every page opens a privacy-friendly beacon: a visitor id kept in
+`localStorage`, a session id kept in `sessionStorage`, the path, the client, the
+device kind and the app version, batched and sent to
+`POST /api/analytics/view`, which is rate limited per address. No account id and
+no readable IP address is stored. An hourly job rolls the rows up into
+`analytics_daily` and deletes raw rows older than 90 days.
+
+### 14.3 The dashboard
+
+`/control-room` is the dashboard. A date range picker offers Today, 7 days,
+30 days, Semester and a custom range, the numbers refresh themselves every
+minute and the header carries the time they were last read.
+
+- **Overview** — KPI cards for unique visitors, page views, active users today,
+  sign-ins, new registrations and pending approvals, each with a sparkline and
+  the change against the previous period; a line chart of visitors and sign-ins
+  per day; a bar chart of sign-ins by role; a donut of website against app; the
+  app versions in use; the top pages; the devices.
+- **Academic** — attendance average per batch and section, how many students sit
+  below 50%, classes held against cancelled against rescheduled per course,
+  tomorrow's undecided classes per teacher, pending phone change requests, and
+  the notices, polls and messages of the period.
+- **System health** — server uptime, version and commit, database size,
+  uploaded file storage, 4xx and 5xx counts with the latest five 5xx paths,
+  push and FCM sends with their failure share and token counts, emails sent and
+  failed, and the time of the last successful database backup.
+
+An alerts banner sits at the top for a 5xx spike, an email or push failure share
+above a fifth, a backup older than 36 hours, a failed sign-in spike from one
+address and a deleted attendance sheet. Every number carries a label and a
+tooltip, and each panel has its own empty state.
+
+### 14.4 The backup status endpoint
+
+`POST /api/system/backup-status` records the time of a successful database dump.
+It is protected by the `X-Backup-Secret` header, compared against
+`BACKUP_STATUS_SECRET`; anything else is refused with `403`. The nightly backup
+workflow calls it after it uploads the dump.
+
+## 15. Interface
 
 - A frosted glass look on the department's own colours: maroon `#7A1F2B`, paper
   `#FAF9F6` and a muted gold for highlights. A soft background of blurred maroon
@@ -719,12 +825,25 @@ date range filter defaults to the running semester.
 - Readable at 360px wide, touch targets of at least 48px, `env(safe-area-inset-*)`
   respected, no horizontal scroll, AA contrast, and transitions that respect
   `prefers-reduced-motion`.
-- No admin link or admin wording on any non-admin page.
+- In the Android app the sign-in, register, verify, forgot-password and teacher
+  activation screens share one shape: a solid primary panel of about 330 px with
+  the SUST logo on a white rounded square, the screen title and a one-line
+  subtitle, and a white sheet overlapping it by 40 px with 28 px rounded top
+  corners that carries the Student | Teacher segmented control, the labelled
+  inputs, a full-width 52 px primary button, the *Forgot password?* link,
+  *New student? Create an account* and the department and version line. Inputs
+  are 50 px high and take a 2 px primary border with a soft tint ring on focus,
+  the form scrolls inside the sheet, the keyboard never hides the focused input,
+  touch targets stay at least 44 px and dark mode uses the dark tokens. The
+  website keeps its own sign-in screens, and no sign-in logic or API call
+  differs between the two.
+- No admin link, admin wording, super admin link or control room wording on any
+  non-admin page, and none of it inside the Android app.
 - The only logo is `frontend/public/brand/sust-logo.png`, with a monogram
   fallback. `npm run icons` generates the app icons, the maskable icons, the
   monochrome badge, the apple-touch icon and the favicon from it.
 
-## 14. Demo data
+## 16. Demo data
 
 `go run ./cmd/seed -demo` loads a demonstration department: batches CSE-21 to
 CSE-24 with sections A and B, each on its own running semester with an older one

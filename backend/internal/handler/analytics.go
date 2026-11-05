@@ -136,7 +136,7 @@ func (a *Analytics) BackupStatus() http.HandlerFunc {
 			return
 		}
 		var request backupRequest
-		if !httpx.DecodeJSON(w, r, &request) {
+		if r.ContentLength > 0 && !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
 		if err := a.views.SetBackupStatus(r.Context(), a.cfg.Now(), clipped(request.Note, maxViewPath)); err != nil {

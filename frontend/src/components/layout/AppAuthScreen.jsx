@@ -3,10 +3,9 @@ import BrandMark from '../ui/BrandMark'
 import { SUST_LOGO } from '../../lib/brand'
 import { UNIVERSITY } from '../ui/IdentityBar'
 import { APP_VERSION } from '../../lib/version'
+import { appFooter } from '../../lib/authpanel'
 
 const PANEL_MIN_HEIGHT = '20.625rem'
-
-export const APP_AUTH_FOOTER = 'Department of CSE, SUST'
 
 export default function AppAuthScreen({ title, subtitle, wide = false, className, children }) {
   return (
@@ -32,9 +31,7 @@ export default function AppAuthScreen({ title, subtitle, wide = false, className
           )}
         >
           {children}
-          <p className="mt-auto pt-8 text-center text-2xs text-faint">
-            {APP_AUTH_FOOTER} · Version {APP_VERSION}
-          </p>
+          <p className="mt-auto pt-8 text-center text-2xs text-faint">{appFooter(APP_VERSION)}</p>
         </div>
       </div>
     </div>

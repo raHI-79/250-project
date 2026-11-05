@@ -318,6 +318,28 @@ startup and inserts one `active` user with role `admin`. The insert uses
 - the log line is only `auth: admin account ready` — the identifier and the
   password are never printed or logged.
 
+### The super admin
+
+One account sits above the office admins. On every start the server promotes the
+account named by `SUPER_ADMIN_IDENTIFIER` to the role `super_admin`, falling back
+to `ADMIN_IDENTIFIER` when that variable is empty; if the named account does not
+exist yet it is seeded first with `ADMIN_PASSWORD`. The promotion is idempotent
+and prints `auth: the seeded office account is now the super admin` only the
+first time.
+
+The super admin signs in at the hidden website route `/control-room`, never at
+`/office-portal`, and the two forms refuse each other's accounts. From there it
+runs the dashboard, invites and manages the office admins, grants or revokes
+office access for teachers, reads the activity log and opens every office page
+read-only — the backend refuses any write from that role. It cannot be
+suspended or removed from inside the portal, and the Android app cannot reach
+any of it.
+
+`ANALYTICS_SALT` hashes every IP address the portal records, in the activity log
+and in the page-view rows alike, so no readable address is ever stored.
+`BACKUP_STATUS_SECRET` guards `POST /api/system/backup-status`, which the nightly
+backup workflow calls so the dashboard can show the last successful backup.
+
 ## How to run the frontend
 
 The browser client lives in `frontend/`. It needs **Node.js 20.19+ or 22.12+**
@@ -498,6 +520,33 @@ colour:
 | `line`, `line-strong` | `#E4E7EC` hairlines | rules and borders |
 | `glass` | translucent surface | the top app bar and the bottom tab bar |
 | `night`, `deep-*`, `sand` | fixed, never themed | the few surfaces that stay dark in both themes, such as a photo overlay |
+
+#### The Android sign-in screens
+
+Inside `Capacitor.isNativePlatform()` only, the sign-in, register, verify,
+forgot-password and teacher-activation screens share one shape; the website
+keeps its own campus-photo sign-in untouched.
+
+- A solid `bg-header` panel about 330 px tall, respecting the status-bar safe
+  area, holds the real SUST logo on a white 92 px square with a 26 px radius and
+  a soft shadow, then the screen's title in Nunito 800 at 26 px and its one-line
+  subtitle in `text-mist`. The sign-in screen titles it *SUST CSE Portal* with
+  *Classes, exams and attendance in one place*; every other screen passes its
+  own title through `appTitle` and `appSubtitle`.
+- A white sheet overlaps the panel by 40 px with 28 px rounded top corners and
+  26 px / 22 px padding. It carries the Student | Teacher segmented control, the
+  labelled inputs, the full-width 52 px *Sign in* button, the centred
+  *Forgot password?* link, *New student? Create an account* at the bottom and
+  the line *Department of CSE, SUST · Version <current>*.
+- Inputs are 50 px high with a 14 px radius on `bg-input` inside
+  `border-input-line`, and on focus they take a 2 px primary border with a soft
+  `--color-mist` ring. The form scrolls inside the sheet, the keyboard-aware
+  focus hook keeps the focused input visible, touch targets stay at least 44 px
+  and dark mode reads the dark tokens.
+
+`appPanel` and `appFooter` in `src/lib/authpanel.js` hold that copy, so the
+fallback title, the per-screen title and the footer line are unit tested. No
+sign-in logic, API call or website route changed.
 
 #### Dark theme
 
@@ -856,6 +905,26 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/admin/users/{id}/restore` | admin | `removed` becomes `active` and `rejected` becomes `pending`; `409` for any other status |
 | `DELETE` | `/api/admin/users/{id}/permanent` | admin | `{confirm}` deletes a `removed` or `rejected` account for good; `400` on a wrong confirmation, `403` for an admin or the caller, `409` otherwise |
 | `GET` | `/api/admin/audit` | admin | The latest 100 removals, restores and permanent deletions |
+| `GET` | `/api/admin/activity` | admin | The activity log with the `person`, `role`, `action`, `client`, `from`, `to`, `search`, `limit` and `before` filters; answers `{items, cursor}` |
+| `GET` | `/api/admin/activity/people` | admin | The people who appear in the activity log, with their action counts, for the filter |
+| `GET` | `/api/admin/activity/export` | admin | The same filter as a CSV download |
+| `GET` | `/api/super-admin/admins` | super admin | Every office account and every teacher with office access, with status, last sign-in and action count |
+| `POST` | `/api/super-admin/admins/invite` | super admin | `{email}` invites an office admin; the link lives 72 hours, `409` when the email is already taken |
+| `POST` | `/api/super-admin/admins/{id}/resend-invite` | super admin | A fresh link, the old one dies; `404` when no invitation is waiting |
+| `DELETE` | `/api/super-admin/admins/{id}/invite` | super admin | Cancels a waiting invitation |
+| `POST` | `/api/super-admin/admins/{id}/suspend` | super admin | Suspends an active office admin and invalidates its tokens |
+| `POST` | `/api/super-admin/admins/{id}/restore` | super admin | Brings a suspended office admin back |
+| `DELETE` | `/api/super-admin/admins/{id}` | super admin | `{confirm}` must be the username; `403` on the super admin itself |
+| `GET` | `/api/super-admin/teachers` | super admin | Active teachers with their office access, `search` filters by name, email or User ID |
+| `POST` | `/api/super-admin/teachers/{id}/office-access` | super admin | Grants office access; `409` unless the account is an active teacher |
+| `DELETE` | `/api/super-admin/teachers/{id}/office-access` | super admin | Revokes office access, leaving the teacher account untouched |
+| `GET` | `/api/super-admin/activity/{id}` | super admin | One account's timeline with its counts per action type |
+| `GET` | `/api/super-admin/dashboard` | super admin | The dashboard numbers for `range` of `today`, `7d`, `30d`, `semester` or `custom` with `from` and `to` |
+| `GET` | `/api/auth/admin-invite` | public | `?token=` describes a waiting office invitation with the masked email |
+| `POST` | `/api/auth/admin-invite/accept` | public | `{token, username, password, confirm_password}` activates the office admin |
+| `POST` | `/api/auth/control-room/login` | public | The control room entrance; super admin only, refused from the app |
+| `POST` | `/api/analytics/view` | public | A batch of page views, 20 a minute per address, answers `202` |
+| `POST` | `/api/system/backup-status` | secret | Records a successful backup; needs the `X-Backup-Secret` header |
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
 | `POST` | `/api/admin/courses` | admin | Adds a course with `code`, `title` and a required `credit` of 0.5 to 6.0 in steps of 0.25; the code is stored in upper case, `409` on a duplicate |
 | `GET` | `/api/admin/courses` | admin | Every course with its credit, sorted by code |
@@ -1108,12 +1177,20 @@ name in the title.
 - **Nobody ever sets a password for somebody else.** A student picks their own
   password while registering and a teacher picks theirs from the invitation link,
   so no endpoint accepts a password for another account.
-- A token carries the **effective role**: `student`, `cr`, `teacher` or `admin`. A
-  route refuses every other role with `403` and
+- A token carries the **effective role**: `student`, `cr`, `teacher`, `admin` or
+  `super_admin`. A route refuses every other role with `403` and
   `{"error":"403 Access Denied / Unauthorized Access"}`.
-- `/api/admin/...` is admin only, `/api/cr/...` is CR only, `/api/teacher/...` is
-  teacher only, `/api/students/...` is student and CR, and `/api/notifications`,
-  `/api/teachers-info` and `/api/lookups/...` are open to the signed-in panels.
+- `/api/admin/...` is admin and super admin, `/api/cr/...` is CR only,
+  `/api/teacher/...` is teacher only, `/api/students/...` is student and CR, and
+  `/api/notifications`, `/api/teachers-info` and `/api/lookups/...` are open to
+  the signed-in panels.
+- `/api/super-admin/...` is the super admin alone. On `/api/admin/...` the super
+  admin may only read: any other method answers `403` with
+  `{"error":"The control room opens the office pages read-only."}`.
+- A teacher who holds office access may sign in at the office portal, and the
+  token that entrance issues carries the role `admin` for that session only. The
+  same teacher account keeps its teacher token, its teacher pages and its app
+  access.
 - **Every role messages people.** A student, CR, teacher or admin can open a
   direct conversation with any other active account. Groups are limited by role:
   a teacher reaches a batch or one section, a CR reaches any batch or a section,
@@ -1126,7 +1203,13 @@ name in the title.
 
 Rate limited routes allow **10 requests per minute per IP address**; the
 eleventh gets `429` with `{"error":"Too many attempts. Please try again in a
-minute."}`.
+minute."}`. The page-view beacon and the client log allow 20 a minute instead.
+
+Every create, update, delete and publish that answers in the 2xx range is
+written to `audit_events` by one middleware behind the token check, and the
+sign-in handlers write every sign-in, sign-out and failed sign-in themselves.
+Each row carries the actor and role, the action, the target, a summary, the
+hashed address, the user agent and whether it came from the website or the app.
 
 ### Request and response shapes
 
@@ -1348,6 +1431,18 @@ its slot and shows `Deleted user` as the teacher.
 Every removal, restore and permanent deletion writes a row into `admin_audit`
 (`id`, `admin_id`, `action`, `target_summary`, `created_at`), which
 `GET /api/admin/audit` returns newest first, at most 100 rows.
+
+`GET /api/admin/activity` returns newest first and pages with a cursor: it
+answers `{"items": [...], "cursor": 4812}`, and the next call passes
+`before=4812`. `limit` defaults to 50 and may not exceed 200. Every filter is
+optional and they combine. The export walks the same filter and writes the
+columns *When, Person, Role, Action, Target, Client, Summary*.
+
+`POST /api/analytics/view` takes
+`{visitor_id, session_id, client, device, app_version, items: [{path}]}` with at
+most 20 items, stores no account id and hashes the address with
+`ANALYTICS_SALT`. An hourly job rolls the rows into `analytics_daily` and
+deletes raw rows older than 90 days.
 
 ### Courses, routines and notifications
 

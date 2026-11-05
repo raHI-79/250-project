@@ -7,6 +7,7 @@ import CampusBackdrop from './CampusBackdrop'
 import AppAuthScreen from './AppAuthScreen'
 import { useCampusSlideshow } from '../../lib/campus'
 import { isNative } from '../../lib/native'
+import { appPanel } from '../../lib/authpanel'
 
 const TONES = {
   brand: {
@@ -18,10 +19,6 @@ const TONES = {
     card: 'glass-auth',
   },
 }
-
-const APP_TITLE = 'SUST CSE Portal'
-
-const APP_SUBTITLE = 'Classes, exams and attendance in one place'
 
 export default function AuthScreen({
   images,
@@ -38,10 +35,11 @@ export default function AuthScreen({
   const onWeb = !isNative()
   const slideshow = useCampusSlideshow(images, rotateAfter)
   if (!onWeb) {
+    const panel = appPanel(appTitle, appSubtitle)
     return (
       <AppAuthScreen
-        title={appTitle || APP_TITLE}
-        subtitle={appTitle ? appSubtitle : APP_SUBTITLE}
+        title={panel.title}
+        subtitle={panel.subtitle}
         wide={wide}
         className={className}
       >
