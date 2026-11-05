@@ -34,10 +34,14 @@ const (
 	MessageOfficeRevoked    = "Office access revoked."
 	AdminInviteEmailSubject = "Your office admin invitation"
 	adminInvitePath         = "/office-portal/accept-invite?token="
+	MessagePermissionsSaved = "Permissions saved."
 )
 
 type OfficeStore interface {
 	ListOfficeAdmins(ctx context.Context) ([]store.OfficeAdmin, error)
+	Permissions(ctx context.Context, userID int64) ([]string, error)
+	SetPermissions(ctx context.Context, userID int64, names []string, grantedBy int64) error
+	AllPermissions(ctx context.Context) (map[int64][]string, error)
 	CreateAdminInvite(ctx context.Context, email, inviteHash string, expiresAt time.Time,
 		invitedBy int64) (int64, error)
 	ResendAdminInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (string, error)
@@ -62,18 +66,19 @@ func NewSuperAdmin(cfg *config.Config, office OfficeStore, mail mailer.Sender, e
 }
 
 type officeAdminItem struct {
-	ID          int64  `json:"id"`
-	Username    string `json:"username"`
-	Name        string `json:"name,omitempty"`
-	Email       string `json:"email,omitempty"`
-	Role        string `json:"role"`
-	Status      string `json:"status"`
-	Source      string `json:"source"`
-	LastSignIn  string `json:"last_sign_in,omitempty"`
-	InviteEnds  string `json:"invite_expires_at,omitempty"`
-	InvitedBy   string `json:"invited_by,omitempty"`
-	ActionCount int    `json:"action_count"`
-	CreatedAt   string `json:"created_at"`
+	ID          int64    `json:"id"`
+	Username    string   `json:"username"`
+	Name        string   `json:"name,omitempty"`
+	Email       string   `json:"email,omitempty"`
+	Role        string   `json:"role"`
+	Status      string   `json:"status"`
+	Source      string   `json:"source"`
+	LastSignIn  string   `json:"last_sign_in,omitempty"`
+	InviteEnds  string   `json:"invite_expires_at,omitempty"`
+	InvitedBy   string   `json:"invited_by,omitempty"`
+	ActionCount int      `json:"action_count"`
+	CreatedAt   string   `json:"created_at"`
+	Permissions []string `json:"permissions"`
 }
 
 type officeAdminsResponse struct {
@@ -110,6 +115,12 @@ func (s *SuperAdmin) Admins() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		granted, err := s.office.AllPermissions(r.Context())
+		if err != nil {
+			log.Printf("handler: could not list the office permissions: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
 		items := make([]officeAdminItem, 0, len(admins))
 		for _, admin := range admins {
 			items = append(items, officeAdminItem{
@@ -125,6 +136,7 @@ func (s *SuperAdmin) Admins() http.HandlerFunc {
 				InvitedBy:   admin.InvitedBy,
 				ActionCount: admin.ActionCount,
 				CreatedAt:   timestamp(admin.CreatedAt),
+				Permissions: auth.CleanPermissions(granted[admin.ID]),
 			})
 		}
 		httpx.WriteJSON(w, http.StatusOK, officeAdminsResponse{Items: items})
@@ -348,6 +360,14 @@ func (s *SuperAdmin) SetOfficeAccess(granted bool) http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		names := auth.DefaultPermissions()
+		if !granted {
+			names = nil
+		}
+		current, _ := middleware.CurrentUser(r.Context())
+		if err := s.office.SetPermissions(r.Context(), userID, names, current.ID); err != nil {
+			log.Printf("handler: could not set the permissions of a teacher: %v", err)
+		}
 		action := store.ActionRevokeOffice
 		message := MessageOfficeRevoked
 		if granted {
@@ -382,4 +402,69 @@ func optionalTime(at *time.Time) string {
 		return ""
 	}
 	return at.Format(time.RFC3339)
+}
+
+type permissionsRequest struct {
+	Permissions []string `json:"permissions"`
+}
+
+type permissionChoice struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+type permissionChoicesResponse struct {
+	Items   []permissionChoice `json:"items"`
+	Default []string           `json:"default"`
+}
+
+func (s *SuperAdmin) PermissionChoices() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		names := auth.Permissions()
+		items := make([]permissionChoice, 0, len(names))
+		for _, name := range names {
+			items = append(items, permissionChoice{Value: name, Label: auth.PermissionLabel(name)})
+		}
+		httpx.WriteJSON(w, http.StatusOK, permissionChoicesResponse{
+			Items:   items,
+			Default: auth.DefaultPermissions(),
+		})
+	}
+}
+
+func (s *SuperAdmin) SetPermissions() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		var request permissionsRequest
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		username, role, _, err := s.office.OfficeAccount(r.Context(), userID)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageAdminNotFound)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not load an office account: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		if role == auth.RoleSuperAdmin {
+			httpx.WriteError(w, http.StatusForbidden, MessageAdminProtected)
+			return
+		}
+		names := auth.CleanPermissions(request.Permissions)
+		current, _ := middleware.CurrentUser(r.Context())
+		if err := s.office.SetPermissions(r.Context(), userID, names, current.ID); err != nil {
+			log.Printf("handler: could not store the permissions: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		s.events.Record(r, store.ActionPermissions, "office_admin", idText(userID),
+			"Permissions of "+username+" set to "+strings.Join(names, ", "))
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessagePermissionsSaved})
+	}
 }

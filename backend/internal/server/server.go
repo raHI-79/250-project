@@ -70,14 +70,21 @@ type Dependencies struct {
 	Guards    handler.SecurityStore
 	Watch     handler.DeviceWatch
 	Live      middleware.SessionStore
+	Granted   middleware.PermissionStore
+	Needs     *RouteNeeds
+	Folks     handler.PeopleStore
 }
 
 type RouteGroup struct {
 	mux        *http.ServeMux
 	middleware []func(http.Handler) http.Handler
+	needs      *RouteNeeds
 }
 
 func (g RouteGroup) Handle(pattern string, handlerFunc http.HandlerFunc) {
+	if g.needs != nil {
+		g.needs.Seen(pattern)
+	}
 	var wrapped http.Handler = handlerFunc
 	for i := len(g.middleware) - 1; i >= 0; i-- {
 		wrapped = g.middleware[i](wrapped)
@@ -87,6 +94,9 @@ func (g RouteGroup) Handle(pattern string, handlerFunc http.HandlerFunc) {
 
 func NewRouter(deps Dependencies) http.Handler {
 	mux := http.NewServeMux()
+	if deps.Needs == nil {
+		deps.Needs = OfficeNeeds()
+	}
 	mail := deps.Mailer
 	if mail == nil {
 		mail = mailer.New(deps.Config.MailProvider, mailer.Options{})
@@ -166,6 +176,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	security := handler.NewSecurity(deps.Config, deps.Guards, mail, events)
 	keepers := OfficeAccountGroup(mux, deps)
 	keepers.Handle("GET /api/office/security", security.State())
+	keepers.Handle("GET /api/office/permissions", security.Granted())
 	keepers.Handle("POST /api/office/security/confirm", security.Confirm())
 	keepers.Handle("POST /api/office/security/password", security.ChangePassword())
 	keepers.Handle("PATCH /api/office/security/contact", security.ChangeContact())
@@ -178,6 +189,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	officeTrail.Handle("GET /api/admin/activity", activity.List())
 	officeTrail.Handle("GET /api/admin/activity/people", activity.People())
 	officeTrail.Handle("GET /api/admin/activity/export", activity.Export())
+	registerPeopleRoutes(SuperAdminGroup(mux, deps), handler.NewPeople(deps.Config, deps.Folks, events))
 	chiefOnly := SuperAdminGroup(mux, deps)
 	chiefOnly.Handle("GET /api/super-admin/activity/{id}", activity.Monitor())
 	chiefOnly.Handle("GET /api/super-admin/dashboard",
@@ -266,12 +278,14 @@ func AuthenticatedGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 
 func AdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 	return RouteGroup{
-		mux: mux,
+		mux:   mux,
+		needs: deps.Needs,
 		middleware: []func(http.Handler) http.Handler{
 			Tokens(deps),
 			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleAdmin, auth.RoleSuperAdmin),
 			middleware.ReadOnly(auth.RoleSuperAdmin),
+			middleware.RequirePermission(deps.Needs, deps.Granted),
 		},
 	}
 }
@@ -283,8 +297,21 @@ func SuperAdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 			Tokens(deps),
 			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleSuperAdmin),
+			handler.RequireSudo(deps.Config),
 		},
 	}
+}
+
+func registerPeopleRoutes(group RouteGroup, folks *handler.People) {
+	group.Handle("GET /api/super-admin/users", folks.List())
+	group.Handle("GET /api/super-admin/users/export", folks.Export())
+	group.Handle("GET /api/super-admin/users/{id}", folks.Detail())
+	group.Handle("POST /api/super-admin/users/{id}/suspend", folks.Suspend())
+	group.Handle("POST /api/super-admin/users/{id}/restore", folks.Restore())
+	group.Handle("POST /api/super-admin/users/{id}/sign-out", folks.SignOut())
+	group.Handle("POST /api/super-admin/users/{id}/reset-phone", folks.ResetPhone())
+	group.Handle("PUT /api/super-admin/users/{id}/role", folks.SetRole())
+	group.Handle("POST /api/super-admin/users/bulk", folks.Bulk())
 }
 
 func registerSuperAdminRoutes(group RouteGroup, chief *handler.SuperAdmin) {
@@ -295,6 +322,8 @@ func registerSuperAdminRoutes(group RouteGroup, chief *handler.SuperAdmin) {
 	group.Handle("POST /api/super-admin/admins/{id}/suspend", chief.Suspend())
 	group.Handle("POST /api/super-admin/admins/{id}/restore", chief.Restore())
 	group.Handle("DELETE /api/super-admin/admins/{id}", chief.Remove())
+	group.Handle("GET /api/super-admin/permissions", chief.PermissionChoices())
+	group.Handle("PUT /api/super-admin/admins/{id}/permissions", chief.SetPermissions())
 	group.Handle("GET /api/super-admin/teachers", chief.Teachers())
 	group.Handle("POST /api/super-admin/teachers/{id}/office-access", chief.SetOfficeAccess(true))
 	group.Handle("DELETE /api/super-admin/teachers/{id}/office-access", chief.SetOfficeAccess(false))

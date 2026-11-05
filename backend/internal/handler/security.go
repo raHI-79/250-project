@@ -41,6 +41,7 @@ type SecurityStore interface {
 	SetTwoStep(ctx context.Context, userID int64, enabled bool) error
 	UpdateOfficeContact(ctx context.Context, userID int64, email, phone string) error
 	TwoStepChallenge(ctx context.Context, identifier string) (store.TwoStepChallenge, error)
+	Permissions(ctx context.Context, userID int64) ([]string, error)
 }
 
 type Security struct {
@@ -100,6 +101,38 @@ type securityStateResponse struct {
 	Role       string `json:"role"`
 	TwoStep    bool   `json:"two_step"`
 	SudoUntil  string `json:"sudo_until,omitempty"`
+}
+
+type officePermissionsResponse struct {
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions"`
+}
+
+func (s *Security) Granted() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		if current.Role == auth.RoleSuperAdmin {
+			httpx.WriteJSON(w, http.StatusOK, officePermissionsResponse{
+				Role:        current.Role,
+				Permissions: auth.Permissions(),
+			})
+			return
+		}
+		names, err := s.people.Permissions(r.Context(), current.ID)
+		if err != nil {
+			log.Printf("handler: could not read the permissions: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, officePermissionsResponse{
+			Role:        current.Role,
+			Permissions: auth.CleanPermissions(names),
+		})
+	}
 }
 
 func (s *Security) checkPassword(w http.ResponseWriter, r *http.Request, userID int64,

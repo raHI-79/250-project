@@ -98,6 +98,7 @@ export const paths = {
     monitor: (adminId) => build('control-room', 'activity', String(adminId)),
     monitorPattern: () => routePattern('control-room', 'activity', ':adminId'),
     security: () => build('control-room', 'settings', 'security'),
+    users: (params) => query(build('control-room', 'users'), params),
     office: () => build('office-portal', 'overview'),
   },
 }

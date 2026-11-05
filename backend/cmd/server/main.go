@@ -154,6 +154,8 @@ func run() error {
 			Guards:    userStore,
 			Watch:     userStore,
 			Live:      userStore,
+			Granted:   userStore,
+			Folks:     userStore,
 			Invites:   userStore,
 			Events:    userStore,
 			Files:     upload.NewSaverIn(fileStore, cfg.MaxUploadMB),

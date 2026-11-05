@@ -85,6 +85,28 @@ func (stubOfficeStore) ListOfficeTeachers(ctx context.Context, search string,
 	return []store.OfficeTeacher{}, nil
 }
 
+func (stubOfficeStore) Permissions(ctx context.Context, userID int64) ([]string, error) {
+	return auth.DefaultPermissions(), nil
+}
+
+func (stubOfficeStore) SetPermissions(ctx context.Context, userID int64, names []string,
+	grantedBy int64) error {
+	return nil
+}
+
+func (stubOfficeStore) AllPermissions(ctx context.Context) (map[int64][]string, error) {
+	return map[int64][]string{}, nil
+}
+
+func (s *stubViewStore) LoadSession(ctx context.Context, sessionID int64) (store.Session, error) {
+	return store.Session{}, store.ErrNotFound
+}
+
+func (s *stubViewStore) TouchSession(ctx context.Context, sessionID int64, ipHash,
+	country string) error {
+	return nil
+}
+
 type stubTrailStore struct{}
 
 func (stubTrailStore) ListEvents(ctx context.Context, filter store.AuditFilter) ([]store.AuditEntry, error) {
@@ -243,8 +265,18 @@ func TestSuperAdminRoutesNeedTheControlRoomToken(t *testing.T) {
 		}
 		t.Run("super admin on "+route.path, func(t *testing.T) {
 			rec := serve(t, router, route.method, route.path, route.body, tokens[auth.RoleSuperAdmin])
-			if rec.Code >= http.StatusBadRequest {
-				t.Fatalf("status = %d, want a success (body = %q)", rec.Code, rec.Body.String())
+			if route.method == http.MethodGet {
+				if rec.Code >= http.StatusBadRequest {
+					t.Fatalf("status = %d, want a success (body = %q)", rec.Code, rec.Body.String())
+				}
+				return
+			}
+			if rec.Code != http.StatusPreconditionRequired {
+				t.Fatalf("status = %d, want 428 without a password confirmation (body = %q)",
+					rec.Code, rec.Body.String())
+			}
+			if got := errorField(t, rec); got != handler.MessageConfirmNeeded {
+				t.Errorf("error = %q, want %q", got, handler.MessageConfirmNeeded)
 			}
 		})
 	}
@@ -367,4 +399,114 @@ func TestTheAnalyticsBeaconIsRateLimited(t *testing.T) {
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("beacon past the limit = %d, want 429 (body = %q)", rec.Code, rec.Body.String())
 	}
+}
+
+type sudoSessionStore struct {
+	sudo bool
+}
+
+func (s sudoSessionStore) LoadSession(ctx context.Context, sessionID int64) (store.Session, error) {
+	session := store.Session{
+		ID:         sessionID,
+		UserID:     chiefID,
+		Device:     "Windows",
+		Client:     store.ClientWeb,
+		LastSeenAt: time.Now(),
+		ExpiresAt:  time.Now().Add(time.Hour),
+	}
+	if s.sudo {
+		until := time.Now().Add(5 * time.Minute)
+		session.SudoUntil = &until
+	}
+	return session, nil
+}
+
+func (s sudoSessionStore) TouchSession(ctx context.Context, sessionID int64, ipHash,
+	country string) error {
+	return nil
+}
+
+func issueWithSession(t *testing.T, deps Dependencies, userID int64, role string,
+	sessionID int64) string {
+	t.Helper()
+	tokens, err := auth.NewTokens(deps.Config.JWTSecret, deps.Config.JWTTTL)
+	if err != nil {
+		t.Fatalf("auth.NewTokens() returned an unexpected error: %v", err)
+	}
+	token, err := tokens.IssueSessionToken(userID, role, 0, sessionID)
+	if err != nil {
+		t.Fatalf("IssueSessionToken() returned an unexpected error: %v", err)
+	}
+	return token
+}
+
+func TestTheControlRoomWritesNeedAPasswordConfirmation(t *testing.T) {
+	deps, _, _ := newControlRouter(t)
+	deps.Live = sudoSessionStore{sudo: false}
+	router := NewRouter(deps)
+	token := issueWithSession(t, deps, chiefID, auth.RoleSuperAdmin, 7)
+	rec := serve(t, router, http.MethodPost, "/api/super-admin/admins/invite",
+		`{"email":"new@sust.edu"}`, token)
+	if rec.Code != http.StatusPreconditionRequired {
+		t.Fatalf("status = %d, want 428 (body = %q)", rec.Code, rec.Body.String())
+	}
+	deps.Live = sudoSessionStore{sudo: true}
+	router = NewRouter(deps)
+	token = issueWithSession(t, deps, chiefID, auth.RoleSuperAdmin, 7)
+	rec = serve(t, router, http.MethodPost, "/api/super-admin/admins/invite",
+		`{"email":"new@sust.edu"}`, token)
+	if rec.Code >= http.StatusBadRequest {
+		t.Fatalf("status = %d, want a success after the confirmation (body = %q)",
+			rec.Code, rec.Body.String())
+	}
+}
+
+func TestEveryOfficeRouteDeclaresAPermission(t *testing.T) {
+	deps, _, _ := newControlRouter(t)
+	needs := OfficeNeeds()
+	deps.Needs = needs
+	NewRouter(deps)
+	if missing := needs.Undeclared(); len(missing) > 0 {
+		t.Errorf("office routes without a permission: %v", missing)
+	}
+	if extra := needs.Unused(); len(extra) > 0 {
+		t.Errorf("the permission table names routes that do not exist: %v", extra)
+	}
+	for pattern, permission := range needs.Table() {
+		if permission != "" && !auth.IsPermission(permission) {
+			t.Errorf("route %q needs the unknown permission %q", pattern, permission)
+		}
+	}
+}
+
+func TestOfficeRoutesCheckThePermission(t *testing.T) {
+	deps, _, _ := newControlRouter(t)
+	deps.Granted = limitedPermissions{allowed: auth.PermStudents}
+	router := NewRouter(deps)
+	tokens := controlTokens(t, deps)
+	allowed := serve(t, router, http.MethodGet, "/api/admin/students", "", tokens[auth.RoleAdmin])
+	if allowed.Code != http.StatusOK {
+		t.Fatalf("status on the allowed route = %d, want 200 (body = %q)",
+			allowed.Code, allowed.Body.String())
+	}
+	refused := serve(t, router, http.MethodGet, "/api/admin/teachers", "", tokens[auth.RoleAdmin])
+	if refused.Code != http.StatusForbidden {
+		t.Fatalf("status on the refused route = %d, want 403 (body = %q)",
+			refused.Code, refused.Body.String())
+	}
+	if got := errorField(t, refused); got != middleware.MessageNoPermission {
+		t.Errorf("error = %q, want %q", got, middleware.MessageNoPermission)
+	}
+	chief := serve(t, router, http.MethodGet, "/api/admin/teachers", "", tokens[auth.RoleSuperAdmin])
+	if chief.Code != http.StatusOK {
+		t.Errorf("the super admin was refused a read: %d (body = %q)", chief.Code, chief.Body.String())
+	}
+}
+
+type limitedPermissions struct {
+	allowed string
+}
+
+func (l limitedPermissions) Permissions(ctx context.Context, userID int64) ([]string, error) {
+	return []string{l.allowed}, nil
 }

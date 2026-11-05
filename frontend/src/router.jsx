@@ -10,6 +10,7 @@ import AdminInvitePage from './pages/auth/AdminInvitePage'
 import ControlLoginPage from './pages/control/ControlLoginPage'
 import ControlAdminsPage from './pages/control/ControlAdminsPage'
 import ControlMonitorPage from './pages/control/ControlMonitorPage'
+import ControlUsersPage from './pages/control/ControlUsersPage'
 import SecurityPage from './pages/office/SecurityPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
@@ -196,6 +197,7 @@ export default function Router() {
           }
         />
         <Route path="admins" element={<ControlAdminsPage />} />
+        <Route path="users" element={<ControlUsersPage />} />
         <Route path="activity" element={<ActivityLogPage />} />
         <Route path="activity/:adminId" element={<ControlMonitorPage />} />
         <Route path="settings/security" element={<SecurityPage eyebrow="Control room" />} />

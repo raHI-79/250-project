@@ -94,6 +94,7 @@ type OfficeInvites interface {
 	TwoStepChallenge(ctx context.Context, identifier string) (store.TwoStepChallenge, error)
 	CountTwoStepAttempt(ctx context.Context, userID int64) (int, error)
 	ClearTwoStep(ctx context.Context, userID int64) error
+	SetPermissions(ctx context.Context, userID int64, names []string, grantedBy int64) error
 }
 
 type TokenIssuer interface {

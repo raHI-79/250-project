@@ -112,6 +112,10 @@ func (a *Auth) AcceptAdminInvite() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		if err := a.office.SetPermissions(r.Context(), invite.UserID,
+			auth.DefaultPermissions(), 0); err != nil {
+			log.Printf("handler: could not grant the default permissions: %v", err)
+		}
 		a.events.RecordAs(r, invite.UserID, auth.RoleAdmin, username, store.ActionActivateAdmin,
 			"office_admin", idText(invite.UserID), username+" accepted the office admin invitation")
 		a.sendUserID(r, invite.Email, username)

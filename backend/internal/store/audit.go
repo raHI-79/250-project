@@ -39,6 +39,11 @@ const (
 	ActionTwoStepFailed   = "two_step_failed"
 	ActionTwoStepSent     = "two_step_sent"
 	ActionNewDevice       = "new_device"
+	ActionSuspendUser     = "suspend_user"
+	ActionRestoreUser     = "restore_user"
+	ActionResetPhone      = "reset_phone"
+	ActionRoleChange      = "role_change"
+	ActionPermissions     = "permissions"
 )
 
 type AuditEvent struct {
