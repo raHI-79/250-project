@@ -44,8 +44,14 @@ type ReleaseAnnouncer interface {
 	Announce(ctx context.Context, version string) (int, error)
 }
 
+type DataStore interface {
+	DataCounts(ctx context.Context) (store.DataCounts, error)
+	BackupStatus(ctx context.Context) (store.BackupState, error)
+}
+
 type Control struct {
 	cfg     *config.Config
+	data    DataStore
 	values  *settings.Cache
 	guards  ControlStore
 	blocks  *Blocks
@@ -58,6 +64,11 @@ func NewControl(cfg *config.Config, values *settings.Cache, guards ControlStore,
 	apps ReleaseLookup, notices ReleaseAnnouncer, events *Recorder) *Control {
 	return &Control{cfg: cfg, values: values, guards: guards, blocks: blocks, apps: apps,
 		notices: notices, events: events}
+}
+
+func (c *Control) WithData(data DataStore) *Control {
+	c.data = data
+	return c
 }
 
 type settingsResponse struct {
@@ -397,3 +408,54 @@ func announcementFor(ctx context.Context, values *settings.Cache, role string) (
 var _ = auth.RoleAdmin
 
 var _ = release.Details{}
+
+type dataCountsResponse struct {
+	Views         int64          `json:"views"`
+	Events        int64          `json:"events"`
+	Notifications int64          `json:"notifications"`
+	Sessions      int64          `json:"sessions"`
+	BackupAt      string         `json:"backup_at,omitempty"`
+	BackupNote    string         `json:"backup_note,omitempty"`
+	Backups       []activityItem `json:"backups"`
+	Retention     map[string]int `json:"retention"`
+}
+
+func (c *Control) Data() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		counts, err := c.data.DataCounts(r.Context())
+		if err != nil {
+			c.fail(w, err)
+			return
+		}
+		state, err := c.data.BackupStatus(r.Context())
+		if err != nil {
+			c.fail(w, err)
+			return
+		}
+		events, err := c.guards.ListEvents(r.Context(), store.AuditFilter{
+			Action: store.ActionBackup,
+			Limit:  10,
+		})
+		if err != nil {
+			c.fail(w, err)
+			return
+		}
+		body := dataCountsResponse{
+			Views:         counts.Views,
+			Events:        counts.Events,
+			Notifications: counts.Notifications,
+			Sessions:      counts.Sessions,
+			Backups:       activityItems(events),
+			Retention: map[string]int{
+				"analytics":     c.values.Number(r.Context(), settings.KeyRetainViews, 90),
+				"audit":         c.values.Number(r.Context(), settings.KeyRetainEvents, 365),
+				"notifications": c.values.Number(r.Context(), settings.KeyRetainNotices, 120),
+			},
+		}
+		if state.LastSuccessAt != nil {
+			body.BackupAt = state.LastSuccessAt.Format(time.RFC3339)
+			body.BackupNote = state.Note
+		}
+		httpx.WriteJSON(w, http.StatusOK, body)
+	}
+}

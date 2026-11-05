@@ -4,6 +4,71 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.6.0
+
+- **Sessions you can see and close.** Every sign-in now opens a row in
+  `user_sessions` and the token carries its id, so the server can end a session
+  on the spot. **Security** in the control room and in the office portal lists
+  every device with its client, the country the address resolves to or
+  *Unknown*, and when it was last seen, with *Sign out* per row and *Sign out
+  everywhere else*. Changing a password signs every other session out.
+- **Stronger office passwords and a second step.** An office password must be at
+  least 10 characters with a letter and a digit. Optional two-step sign-in sends
+  a 6-digit code to the address on the account, good for 10 minutes and five
+  tries. Contact email and phone change only after the password is given again.
+  `/control-room/forgot-password` resets the super admin password against the
+  registered phone number, rate limited and recorded.
+- **An emergency reset from the server.** `go run ./cmd/admin -reset-super`
+  reads `NEW_SUPER_ADMIN_PASSWORD` from the environment — never from an
+  argument — refuses anything weak, replaces the hash, closes every session and
+  prints only *Password updated*.
+- **Five wrong passwords lock an account.** The lock lasts 15 minutes, the
+  control room lists the locked accounts and can unlock any of them, and an
+  office sign-in from a device the account has not used before emails its owner.
+- **Admins only see what they may use.** Each office admin, and each teacher
+  with office access, carries a set of permissions: registrations, students and
+  CRs, teachers, courses and semesters, class periods, routines, notices,
+  attendance and phone changes, and exports. A new admin gets everything except
+  exports. One middleware checks the permission of every office route against a
+  table, answering *You do not have permission for this*, the office navigation
+  hides what the admin may not open, and a test proves every office route is in
+  the table.
+- **A users page in the control room.** Search any account by name, registration
+  number, User ID or email, filter by role, status and batch, and open a profile
+  with its role, status, creation, last sign-in, sessions, phone binding and
+  recent activity. Suspend or restore, sign out everywhere, reset the attendance
+  phone, switch a student between student and CR, act on a selection in bulk,
+  and export the filtered list as CSV.
+- **Site settings without a redeploy.** Maintenance mode with its own message
+  closes the portal for everybody except the office and the control room — the
+  API answers `503` and the pages show a calm curtain. Registration can be
+  closed with a message, an announcement banner can be aimed at chosen roles
+  with an end date and a severity, attendance, polls, messages, group chats and
+  attendance from the website each have a switch, and the reminder times, the
+  morning reminder and the number of days the routine is generated ahead now
+  live in the settings with the environment as their default.
+- **App release control.** A minimum supported Android version makes older apps
+  show a blocking *Update required* screen with an Update button. The control
+  room shows the current release, its download count from GitHub and the share
+  link, and can send the update notification again.
+- **A security monitor.** Failed sign-ins by hashed address and by account over
+  the last week, the locked accounts, and blocking or unblocking an address or a
+  range for a chosen number of hours; a blocked request is refused with `403`
+  and recorded.
+- **Two heads for the dangerous things.** While another active office admin
+  exists, deleting an account for good, deleting a whole attendance sheet and
+  removing an office admin become requests that another admin must approve
+  within 24 hours. The super admin goes ahead after confirming its password, and
+  the override is recorded.
+- **Every sensitive action asks for the password again.** A confirmation opens a
+  five-minute window on the current session; without it the control room answers
+  `428` with *Please confirm your password first.*
+- **A data page and real retention.** The last backups, CSV exports of the
+  users, the attendance summary and the activity log, the number of rows the
+  portal holds, and how long page views, activity events and notifications are
+  kept — swept every hour by the cleanup job, with closed sessions dropped after
+  30 days.
+
 ## 2.5.0
 
 - **A sign-in screen built for the phone.** Inside the Android app only, the

@@ -84,6 +84,7 @@ type Dependencies struct {
 	Asks      handler.ApprovalStore
 	Walls     handler.BlockStore
 	Announcer handler.ReleaseAnnouncer
+	Figures2  handler.DataStore
 }
 
 type RouteGroup struct {
@@ -223,7 +224,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	chiefOnly.Handle("GET /api/super-admin/dashboard",
 		handler.NewDashboard(deps.Config, deps.Figures).Numbers())
 	beacons := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
-	views := handler.NewAnalytics(deps.Config, deps.Views)
+	views := handler.NewAnalytics(deps.Config, deps.Views).WithEvents(events)
 	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{beacons.Middleware}}.
 		Handle("POST /api/analytics/view", views.View())
 	throttled.Handle("POST /api/system/backup-status", views.BackupStatus())
@@ -257,13 +258,14 @@ func NewRouter(deps Dependencies) http.Handler {
 	keepers.Handle("POST /api/office/approvals/{id}/approve", asks.Decide(true))
 	keepers.Handle("POST /api/office/approvals/{id}/decline", asks.Decide(false))
 	control := handler.NewControl(deps.Config, deps.Values, deps.Guardians, blocks, releases,
-		deps.Announcer, events)
+		deps.Announcer, events).WithData(deps.Figures2)
 	chiefOnly.Handle("GET /api/super-admin/settings", control.Settings())
 	chiefOnly.Handle("PUT /api/super-admin/settings", control.SaveSettings())
 	chiefOnly.Handle("GET /api/super-admin/security", control.Security())
 	chiefOnly.Handle("POST /api/super-admin/security/blocks", control.Block())
 	chiefOnly.Handle("DELETE /api/super-admin/security/blocks/{id}", control.Unblock())
 	chiefOnly.Handle("POST /api/super-admin/security/unlock/{id}", control.Unlock())
+	chiefOnly.Handle("GET /api/super-admin/data", control.Data())
 	chiefOnly.Handle("GET /api/super-admin/release", control.Release())
 	chiefOnly.Handle("POST /api/super-admin/release/announce", control.AnnounceRelease())
 	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))

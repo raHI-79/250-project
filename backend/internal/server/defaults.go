@@ -23,6 +23,9 @@ func SettingDefaults(cfg *config.Config) map[string]string {
 		settings.KeyGroups:             settings.On,
 		settings.KeyWebAttendance:      settings.On,
 		settings.KeyMinAppVersion:      "",
+		settings.KeyRetainViews:        "90",
+		settings.KeyRetainEvents:       "365",
+		settings.KeyRetainNotices:      "120",
 	}
 	if cfg == nil {
 		return values

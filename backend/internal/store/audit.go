@@ -55,6 +55,7 @@ const (
 	ActionOverride        = "override"
 	ActionLocked          = "account_locked"
 	ActionRetention       = "retention"
+	ActionBackup          = "backup"
 )
 
 type AuditEvent struct {

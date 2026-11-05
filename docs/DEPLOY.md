@@ -98,6 +98,12 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 - **Backup status secret** — `BACKUP_STATUS_SECRET`, one more long random
   string. Step 8 puts the same value in GitHub.
 
+Nothing else moves to Render: from 2.6.0 the maintenance mode, the registration
+switch, the announcement banner, the feature switches, the reminder times, the
+number of days the routine is generated ahead, the minimum app version and the
+retention windows all live in **Control room → Site settings** and take effect
+within half a minute. The environment values are only their defaults.
+
 ## 4. The web service on Render
 
 1. Sign up at [render.com](https://render.com) with GitHub and allow it to read
@@ -269,7 +275,26 @@ Restore into an empty database. In Neon, the simplest way to get one is
 **Branches → New branch**, which gives a fresh connection string you can point
 the command at, test, and then promote.
 
-## 10. Rebuilding the Android app
+## 10. The emergency password reset
+
+If the super admin password is lost, reset it from the server — never from an
+argument on the command line, which would land in the shell history.
+
+1. In Render, open the service and choose **Shell**.
+2. Set the new password in the environment of that shell and run the command:
+
+```bash
+export NEW_SUPER_ADMIN_PASSWORD='a long new password with 1 digit'
+cd backend && go run ./cmd/admin -reset-super
+unset NEW_SUPER_ADMIN_PASSWORD
+```
+
+It refuses anything under 10 characters or without a letter and a digit, replaces
+the hash, closes every session of that account, prints only `Password updated`
+and records the reset in the activity log. Sign in again at `/control-room` and
+change the password from **Security** if you want a different one.
+
+## 11. Rebuilding the Android app
 
 The installed Android app is a Trusted Web Activity wrapper around the same
 site, package `edu.sust.cse.portal`. The web part updates itself on the next
@@ -293,7 +318,7 @@ example after the status bar colour changed.
 The digital asset link is unchanged as long as the signing key is the same, so
 `frontend/public/.well-known/assetlinks.json` needs no edit on a rebuild.
 
-## 11. The Android app
+## 12. The Android app
 
 The installed Android app is now a Capacitor build, not a web wrapper, and its
 notifications come through Firebase. `docs/ANDROID.md` covers the Firebase

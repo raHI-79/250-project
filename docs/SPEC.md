@@ -805,7 +805,101 @@ It is protected by the `X-Backup-Secret` header, compared against
 `BACKUP_STATUS_SECRET`; anything else is refused with `403`. The nightly backup
 workflow calls it after it uploads the dump.
 
-## 15. Interface
+## 15. The control centre
+
+### 15.1 Sessions and the confirmation window
+
+Every sign-in opens a row in `user_sessions` holding the device, the client, the
+hashed address, the country the address resolves to, when it started and when it
+was last seen, and the token carries its id. The token check refuses a revoked or
+expired session, so signing a device out ends it at once. **Security** lists
+every session of the signed-in account with *Sign out* per row and *Sign out
+everywhere else*; changing a password signs every other session out.
+
+Every sensitive action in the control room asks for the password again. The
+confirmation opens a five-minute window on that one session; a write without it
+answers `428` with *Please confirm your password first.* Each confirmed action
+also shows a dialog naming its target and is written to `audit_events`.
+
+### 15.2 Office account security
+
+- An office password is at least 10 characters with a letter and a digit.
+- Two-step sign-in is optional per account: after the password the portal mails a
+  6-digit code that lives 10 minutes and allows five tries.
+- The contact email and phone change only after the password is given again.
+- `/control-room/forgot-password` resets the super admin password against the
+  phone number on the account, rate limited and recorded.
+- `go run ./cmd/admin -reset-super` replaces the super admin password from
+  `NEW_SUPER_ADMIN_PASSWORD` in the environment, closes every session and prints
+  only *Password updated*.
+- Five wrong passwords lock an account for 15 minutes. The control room lists the
+  locked accounts and unlocks them, and an office sign-in from an unknown device
+  emails the account owner.
+
+### 15.3 Permissions
+
+Each office admin and each teacher with office access holds a set of
+permissions: `registrations`, `students`, `teachers`, `catalog`, `periods`,
+`routines`, `notices`, `attendance` and `exports`. A new admin receives
+everything except `exports`. One middleware looks the matched route up in a
+table and answers `You do not have permission for this` when the permission is
+missing; the office navigation hides what the admin cannot open, and a test
+proves every office route appears in that table. The super admin bypasses the
+table and stays read-only on the office pages.
+
+### 15.4 Users
+
+The control room searches every account by name, registration number, User ID or
+email and filters by role, status and batch. A profile shows the role, status,
+creation, last sign-in, open sessions, phone binding and recent activity, and
+offers suspend and restore, sign out everywhere, reset the attendance phone, a
+password reset email and switching a student between `student` and `cr`. A
+selection can be suspended or signed out together, and the filtered list exports
+as CSV.
+
+### 15.5 Site settings
+
+Settings live in a `settings` table, are cached for half a minute and need no
+redeploy:
+
+- **Maintenance mode** with a message. Everybody except the office and the
+  control room sees a calm page, and the API answers `503` with that message.
+- **Registration** open or closed with a message.
+- **Announcement banner** for chosen roles with an end date and a severity.
+- **Feature switches** for attendance, polls, messages, group chats and
+  attendance from the website.
+- **Reminder times**, the **morning reminder** and the **days ahead** the routine
+  is generated, with the environment value as the default.
+- **Minimum supported app version**, below which the app shows a blocking
+  *Update required* screen.
+- **Retention windows** for the page views, the activity events and the
+  notifications.
+
+### 15.6 Security monitor
+
+Failed sign-ins by hashed address and by account over the last week, the accounts
+locked by too many failures, and blocking or unblocking a single address or a
+range for a chosen number of hours. A request from a blocked address is refused
+with `403` and recorded.
+
+### 15.7 The two-person rule
+
+While at least one other active office admin exists, deleting an account for
+good, deleting a whole attendance sheet and removing an office admin create a
+request that another admin must approve within 24 hours; the request carries what
+it will do and expires on its own. Nobody may approve their own request. The
+super admin goes ahead immediately after confirming its password, and that
+override is recorded.
+
+### 15.8 Data
+
+The data page shows the last backups reported by the nightly workflow, CSV
+exports of the users, the attendance summary and the activity log, how many rows
+the portal holds, and the retention windows. An hourly job deletes page views,
+activity events and notifications past their window and drops closed sessions
+after 30 days.
+
+## 16. Interface
 
 - A frosted glass look on the department's own colours: maroon `#7A1F2B`, paper
   `#FAF9F6` and a muted gold for highlights. A soft background of blurred maroon
@@ -843,7 +937,7 @@ workflow calls it after it uploads the dump.
   fallback. `npm run icons` generates the app icons, the maskable icons, the
   monochrome badge, the apple-touch icon and the favicon from it.
 
-## 16. Demo data
+## 17. Demo data
 
 `go run ./cmd/seed -demo` loads a demonstration department: batches CSE-21 to
 CSE-24 with sections A and B, each on its own running semester with an older one

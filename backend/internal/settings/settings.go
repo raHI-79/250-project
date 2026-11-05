@@ -26,6 +26,9 @@ const (
 	KeyMorningReminder    = "morning_reminder"
 	KeyDaysAhead          = "schedule_days_ahead"
 	KeyMinAppVersion      = "min_app_version"
+	KeyRetainViews        = "retain_analytics_days"
+	KeyRetainEvents       = "retain_audit_days"
+	KeyRetainNotices      = "retain_notifications_days"
 
 	On          = "on"
 	Off         = "off"
@@ -50,6 +53,9 @@ var editable = []string{
 	KeyMorningReminder,
 	KeyDaysAhead,
 	KeyMinAppVersion,
+	KeyRetainViews,
+	KeyRetainEvents,
+	KeyRetainNotices,
 }
 
 var features = []string{KeyAttendance, KeyPolls, KeyMessages, KeyGroups, KeyWebAttendance}

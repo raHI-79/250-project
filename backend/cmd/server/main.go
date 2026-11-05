@@ -165,6 +165,7 @@ func run() error {
 			Asks:      userStore,
 			Walls:     userStore,
 			Announcer: announcer,
+			Figures2:  userStore,
 			Values:    values,
 			Invites:   userStore,
 			Events:    userStore,
@@ -188,7 +189,8 @@ func run() error {
 	jobContext, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
 	go jobs.NewScheduler(cfg, userStore, alerts).WithSettings(values).Run(jobContext, jobs.Interval)
-	go jobs.NewAnalytics(cfg, userStore).Run(jobContext, jobs.AnalyticsInterval)
+	go jobs.NewAnalytics(cfg, userStore).WithSettings(values).
+		Run(jobContext, jobs.AnalyticsInterval)
 	if pushWorker != nil || devices.Ready() {
 		watcher := jobs.NewReleaseWatcher(userStore, pushWorker, devices, releases, cfg.FrontendOrigin)
 		go watcher.Run(jobContext, jobs.ReleaseInterval)

@@ -104,6 +104,7 @@ export const paths = {
     watch: () => build('control-room', 'settings', 'monitor'),
     release: () => build('control-room', 'settings', 'app'),
     approvals: () => build('control-room', 'approvals'),
+    data: () => build('control-room', 'data'),
     office: () => build('office-portal', 'overview'),
   },
 }

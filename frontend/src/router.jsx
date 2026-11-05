@@ -16,6 +16,7 @@ import ApprovalsPage from './pages/office/ApprovalsPage'
 import ControlSettingsPage from './pages/control/ControlSettingsPage'
 import ControlSecurityMonitorPage from './pages/control/ControlSecurityMonitorPage'
 import ControlReleasePage from './pages/control/ControlReleasePage'
+import ControlDataPage from './pages/control/ControlDataPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ActivatePage from './pages/auth/ActivatePage'
@@ -209,6 +210,7 @@ export default function Router() {
         <Route path="settings/monitor" element={<ControlSecurityMonitorPage />} />
         <Route path="settings/app" element={<ControlReleasePage />} />
         <Route path="approvals" element={<ApprovalsPage eyebrow="Control room" />} />
+        <Route path="data" element={<ControlDataPage />} />
       </Route>
       )}
       {office && (
