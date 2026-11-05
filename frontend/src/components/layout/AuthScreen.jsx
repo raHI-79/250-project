@@ -7,6 +7,7 @@ import CampusBackdrop from './CampusBackdrop'
 import AppAuthScreen from './AppAuthScreen'
 import { useCampusSlideshow } from '../../lib/campus'
 import { isNative } from '../../lib/native'
+import { appPanel } from '../../lib/authpanel'
 
 const TONES = {
   brand: {
@@ -25,6 +26,8 @@ export default function AuthScreen({
   overlay,
   tone = 'brand',
   note,
+  appTitle,
+  appSubtitle,
   wide = false,
   className,
   children,
@@ -32,8 +35,14 @@ export default function AuthScreen({
   const onWeb = !isNative()
   const slideshow = useCampusSlideshow(images, rotateAfter)
   if (!onWeb) {
+    const panel = appPanel(appTitle, appSubtitle)
     return (
-      <AppAuthScreen wide={wide} className={className}>
+      <AppAuthScreen
+        title={panel.title}
+        subtitle={panel.subtitle}
+        wide={wide}
+        className={className}
+      >
         {children}
       </AppAuthScreen>
     )

@@ -7,6 +7,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
+	"github.com/raHI-79/250-project/backend/internal/metrics"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/release"
 	"github.com/raHI-79/250-project/backend/internal/turnstile"
@@ -60,6 +61,12 @@ type Dependencies struct {
 	Marks     handler.AttendanceStore
 	Presence  handler.StudentAttendanceStore
 	Phones    handler.PhoneStore
+	Office    handler.OfficeStore
+	Invites   handler.OfficeInvites
+	Events    handler.EventSink
+	Trail     handler.AuditStore
+	Views     handler.AnalyticsStore
+	Figures   handler.DashboardStore
 }
 
 type RouteGroup struct {
@@ -90,7 +97,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	if google == nil && deps.Config.GoogleEnabled() {
 		google = googleauth.New()
 	}
-	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail, proofs, google, photos)
+	events := handler.NewRecorder(deps.Config, deps.Events)
+	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail, proofs, google, photos).
+		WithOffice(deps.Invites, events)
 	rateLimit := deps.RateLimit
 	if rateLimit <= 0 {
 		rateLimit = middleware.DefaultRateLimit
@@ -131,6 +140,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	guarded.Handle("POST /api/auth/activate", authHandler.Activate())
 	guarded.Handle("POST /api/auth/login", authHandler.Login())
 	guarded.Handle("POST /api/auth/admin/login", authHandler.AdminLogin())
+	guarded.Handle("POST /api/auth/control-room/login", authHandler.ControlLogin())
+	mux.HandleFunc("GET /api/auth/admin-invite", authHandler.AdminInvite())
+	guarded.Handle("POST /api/auth/admin-invite/accept", authHandler.AcceptAdminInvite())
 	guarded.Handle("POST /api/auth/forgot-password", authHandler.ForgotPassword())
 	guarded.Handle("POST /api/auth/verify-reset-code", authHandler.VerifyResetCode())
 	guarded.Handle("POST /api/auth/reset-password", authHandler.ResetPassword())
@@ -140,10 +152,26 @@ func NewRouter(deps Dependencies) http.Handler {
 	authenticated.Handle("GET /api/me/badges", badges.List())
 	authenticated.Handle("POST /api/me/badges/{section}/seen", badges.Seen())
 	registerProfileRoutes(authenticated, handler.NewProfile(deps.Config, deps.Accounts, photos))
-	admin := handler.NewAdmin(deps.Config, deps.People, deps.Notifier, mail, photos)
+	admin := handler.NewAdmin(deps.Config, deps.People, deps.Notifier, mail, photos).WithEvents(events)
 	periods := handler.NewPeriods(deps.Periods)
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerPeriodRoutes(AdminGroup(mux, deps), periods)
+	registerSuperAdminRoutes(SuperAdminGroup(mux, deps),
+		handler.NewSuperAdmin(deps.Config, deps.Office, mail, events))
+	activity := handler.NewActivity(deps.Config, deps.Trail)
+	officeTrail := AdminGroup(mux, deps)
+	officeTrail.Handle("GET /api/admin/activity", activity.List())
+	officeTrail.Handle("GET /api/admin/activity/people", activity.People())
+	officeTrail.Handle("GET /api/admin/activity/export", activity.Export())
+	chiefOnly := SuperAdminGroup(mux, deps)
+	chiefOnly.Handle("GET /api/super-admin/activity/{id}", activity.Monitor())
+	chiefOnly.Handle("GET /api/super-admin/dashboard",
+		handler.NewDashboard(deps.Config, deps.Figures).Numbers())
+	beacons := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
+	views := handler.NewAnalytics(deps.Config, deps.Views)
+	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{beacons.Middleware}}.
+		Handle("POST /api/analytics/view", views.View())
+	throttled.Handle("POST /api/system/backup-status", views.BackupStatus())
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	authenticated.Handle("GET /api/lookups/periods", periods.List())
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
@@ -185,13 +213,20 @@ func NewRouter(deps Dependencies) http.Handler {
 	} else {
 		mux.HandleFunc("/", notFound)
 	}
-	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(mux)))
+	var root http.Handler = mux
+	if sink, ok := deps.Events.(metrics.Sink); ok {
+		root = metrics.Responses(sink)(root)
+	}
+	return middleware.Recoverer(middleware.Logger(middleware.CORS(deps.Config.FrontendOrigin)(root)))
 }
 
 func AuthenticatedGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 	return RouteGroup{
-		mux:        mux,
-		middleware: []func(http.Handler) http.Handler{middleware.VerifyToken(deps.Tokens, deps.Users)},
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
+		},
 	}
 }
 
@@ -200,9 +235,35 @@ func AdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
 			middleware.VerifyToken(deps.Tokens, deps.Users),
-			middleware.RequireRole(auth.RoleAdmin),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
+			middleware.RequireRole(auth.RoleAdmin, auth.RoleSuperAdmin),
+			middleware.ReadOnly(auth.RoleSuperAdmin),
 		},
 	}
+}
+
+func SuperAdminGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
+	return RouteGroup{
+		mux: mux,
+		middleware: []func(http.Handler) http.Handler{
+			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
+			middleware.RequireRole(auth.RoleSuperAdmin),
+		},
+	}
+}
+
+func registerSuperAdminRoutes(group RouteGroup, chief *handler.SuperAdmin) {
+	group.Handle("GET /api/super-admin/admins", chief.Admins())
+	group.Handle("POST /api/super-admin/admins/invite", chief.Invite())
+	group.Handle("POST /api/super-admin/admins/{id}/resend-invite", chief.ResendInvite())
+	group.Handle("DELETE /api/super-admin/admins/{id}/invite", chief.CancelInvite())
+	group.Handle("POST /api/super-admin/admins/{id}/suspend", chief.Suspend())
+	group.Handle("POST /api/super-admin/admins/{id}/restore", chief.Restore())
+	group.Handle("DELETE /api/super-admin/admins/{id}", chief.Remove())
+	group.Handle("GET /api/super-admin/teachers", chief.Teachers())
+	group.Handle("POST /api/super-admin/teachers/{id}/office-access", chief.SetOfficeAccess(true))
+	group.Handle("DELETE /api/super-admin/teachers/{id}/office-access", chief.SetOfficeAccess(false))
 }
 
 func NotificationGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
@@ -210,6 +271,7 @@ func NotificationGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
 			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
 		},
 	}
@@ -220,6 +282,7 @@ func ContactGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
 			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
 		},
 	}
@@ -230,6 +293,7 @@ func CRGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
 			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleCR),
 		},
 	}
@@ -240,6 +304,7 @@ func TeacherGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
 			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleTeacher),
 		},
 	}
@@ -250,6 +315,7 @@ func StudentGroup(mux *http.ServeMux, deps Dependencies) RouteGroup {
 		mux: mux,
 		middleware: []func(http.Handler) http.Handler{
 			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleStudent, auth.RoleCR),
 		},
 	}
@@ -441,6 +507,7 @@ func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.P
 		middleware: []func(http.Handler) http.Handler{
 			reports.Middleware,
 			middleware.VerifyToken(deps.Tokens, deps.Users),
+			handler.Trail(handler.NewRecorder(deps.Config, deps.Events)),
 			middleware.RequireRole(auth.RoleStudent, auth.RoleCR, auth.RoleTeacher),
 		},
 	}

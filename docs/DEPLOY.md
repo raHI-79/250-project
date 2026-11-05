@@ -85,7 +85,18 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 - **Admin values** — choose `ADMIN_IDENTIFIER`, a long `ADMIN_PASSWORD`,
   `ADMIN_EMAIL` and `ADMIN_PHONE`. The office account is created from them on
   the first start.
+- **The super admin** — leave `SUPER_ADMIN_IDENTIFIER` empty to turn the
+  `ADMIN_IDENTIFIER` account into the super admin, or set it to another login
+  id and that account is seeded with the same password and promoted instead.
+  There is exactly one super admin and it is the only account that opens
+  `/control-room`.
 - **JWT secret** — any random string of at least 32 characters.
+- **Analytics salt** — `ANALYTICS_SALT`, another long random string. Every IP
+  address in the activity log and the page-view rows is hashed with it, so the
+  portal never keeps an address it can read back. Changing it later makes the
+  old hashes unmatchable, which is harmless.
+- **Backup status secret** — `BACKUP_STATUS_SECRET`, one more long random
+  string. Step 8 puts the same value in GitHub.
 
 ## 4. The web service on Render
 
@@ -115,6 +126,9 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 | `MAIL_FROM` | the sender address you verified in step 2 |
 | `MAIL_FROM_NAME` | `SUST CSE Portal` |
 | `ADMIN_IDENTIFIER` | the office login id |
+| `SUPER_ADMIN_IDENTIFIER` | empty, or another login id for the super admin |
+| `ANALYTICS_SALT` | *secret*, a long random string that hashes the IP addresses |
+| `BACKUP_STATUS_SECRET` | *secret*, the same value you add to GitHub in step 8 |
 | `ADMIN_PASSWORD` | a long password |
 | `ADMIN_EMAIL` | the office email |
 | `ADMIN_PHONE` | the office phone, 11 digits |
@@ -131,7 +145,7 @@ Render hostname, and copy the two keys into `TURNSTILE_SITE_KEY` and
 | `APPS_SCRIPT_SECRET` | the shared secret the script checks |
 | `TURNSTILE_SITE_KEY` | the Cloudflare Turnstile site key |
 | `TURNSTILE_SECRET_KEY` | the Cloudflare Turnstile secret key |
-| `APP_VERSION` | `2.0.0` |
+| `APP_VERSION` | `2.5.0` |
 | `FIREBASE_SERVICE_ACCOUNT` | the Firebase service account JSON, base64 |
 | `GITHUB_RELEASES_REPO` | `raHI-79/250-project` |
 | `GITHUB_TOKEN` | *secret*, optional: a fine-grained token with read-only **Contents** on this one repository |
@@ -198,11 +212,46 @@ Postgres with everything else, so one dump holds the whole portal.
 1. In GitHub, open **Settings → Secrets and variables → Actions**.
 2. **New repository secret**, name it `BACKUP_DATABASE_URL`, and paste the same
    Neon connection string.
-3. The workflow `.github/workflows/backup.yml` then runs every night at 21:30
+3. **New repository secret** again, name it `BACKUP_STATUS_SECRET`, and paste
+   the same value you put in the Render environment in step 4.
+4. **New repository secret** once more, name it `BACKUP_STATUS_URL`, and set it
+   to `https://<your address>/api/system/backup-status`.
+5. The workflow `.github/workflows/backup.yml` then runs every night at 21:30
    UTC, which is 03:30 in Dhaka, and you can also start it by hand from the
    **Actions** tab with **Run workflow**. It installs the PostgreSQL 18 client
    from the PostgreSQL apt repository, because Neon runs PostgreSQL 18 and
    `pg_dump` refuses a server newer than itself.
+
+### Telling the portal the backup worked
+
+After the dump is uploaded, the workflow posts the name of the file to
+`POST /api/system/backup-status` with the header `X-Backup-Secret`. The server
+compares that header with `BACKUP_STATUS_SECRET` and refuses anything else with
+`403`, so the endpoint is not a way in. The control-room dashboard shows the
+time of the last successful backup and raises an alert when it is older than 36
+hours; if both secrets are missing the workflow skips the report and the
+dashboard keeps saying *Never*, which is the honest answer. The secret is never
+logged and never reaches the pages.
+
+## 9. The control room
+
+The super admin signs in at `https://<your address>/control-room`. Nothing links
+to it, the page carries `noindex,nofollow`, the Android app redirects away from
+it, and only the one account whose role is `super_admin` can get in — an office
+admin there is refused like anybody else. The office admins keep using
+`/office-portal`.
+
+From the control room the super admin opens the dashboard, the office admins
+page and the activity log, and can open every office page read-only: the server
+refuses any write from that role with
+*The control room opens the office pages read-only.*
+
+Office admins are invited by email from **Control room → Office admins**. The
+link is valid for 72 hours and lands on `/office-portal/accept-invite`, where
+the invitee picks a username (the teacher User ID rules) and a password. The
+same page grants or revokes office access for any active teacher; that teacher
+then signs in at `/office-portal` with their own credentials and keeps their
+teacher account and their app access untouched.
 
 ### Downloading a backup
 
@@ -220,7 +269,7 @@ Restore into an empty database. In Neon, the simplest way to get one is
 **Branches → New branch**, which gives a fresh connection string you can point
 the command at, test, and then promote.
 
-## 9. Rebuilding the Android app
+## 10. Rebuilding the Android app
 
 The installed Android app is a Trusted Web Activity wrapper around the same
 site, package `edu.sust.cse.portal`. The web part updates itself on the next
@@ -244,7 +293,7 @@ example after the status bar colour changed.
 The digital asset link is unchanged as long as the signing key is the same, so
 `frontend/public/.well-known/assetlinks.json` needs no edit on a rebuild.
 
-## 10. The Android app
+## 11. The Android app
 
 The installed Android app is now a Capacitor build, not a web wrapper, and its
 notifications come through Firebase. `docs/ANDROID.md` covers the Firebase

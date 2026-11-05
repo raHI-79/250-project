@@ -82,6 +82,12 @@ type Admin struct {
 	alerts Notifier
 	mail   mailer.Sender
 	photos PhotoStore
+	events *Recorder
+}
+
+func (a *Admin) WithEvents(events *Recorder) *Admin {
+	a.events = events
+	return a
 }
 
 func NewAdmin(cfg *config.Config, people AdminStore, alerts Notifier, mail mailer.Sender, photos PhotoStore) *Admin {

@@ -5,7 +5,8 @@ import { isNative } from '../../lib/native'
 
 const shell = (invalid, tone, focused) =>
   cx(
-    'relative rounded-input border transition-all duration-200',
+    'relative rounded-input transition-all duration-200',
+    isNative() && focused ? 'border-2' : 'border',
     tone === 'dark' ? 'bg-white/5' : 'bg-input',
     invalid
       ? 'border-danger-500'
@@ -16,7 +17,10 @@ const shell = (invalid, tone, focused) =>
         : tone === 'dark'
           ? 'border-white/20'
           : 'border-input-line',
-    focused && !invalid && 'shadow-[0_0_0_3px_var(--color-brand-100)]',
+    focused && !invalid &&
+      (isNative()
+        ? 'shadow-[0_0_0_4px_var(--color-mist)]'
+        : 'shadow-[0_0_0_3px_var(--color-brand-100)]'),
     focused && invalid && 'shadow-[0_0_0_3px_var(--color-danger-100)]',
   )
 
@@ -25,8 +29,8 @@ const control = (tone, floating, tall, leading) =>
     'w-full bg-transparent text-base outline-none',
     leading ? 'pr-3.5 pl-11' : 'px-3.5',
     tone === 'dark' ? 'text-white placeholder:text-white/35' : 'text-ink placeholder:text-faint',
-    tall ? 'h-13' : 'h-12',
-    floating && (tall ? 'pt-6 pb-1.5' : 'pt-5 pb-1.5'),
+    tall ? 'h-[3.125rem]' : 'h-12',
+    floating && (tall ? 'pt-5.5 pb-1.5' : 'pt-5 pb-1.5'),
   )
 
 const labelClass = (tone, floated, invalid, leading) =>
@@ -171,7 +175,7 @@ export function PasswordInput({ className, ...rest }) {
         title={shown ? 'Hide password' : 'Show password'}
         className={cx(
           'absolute top-0 right-0 grid w-12 place-items-center rounded-input transition-colors',
-          tall ? 'h-13' : 'h-12',
+          tall ? 'h-[3.125rem]' : 'h-12',
           dark ? 'text-white/60 hover:text-white' : 'text-muted hover:text-ink',
         )}
       >

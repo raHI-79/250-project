@@ -40,7 +40,7 @@ export function AppPortalSwitch({ className }) {
     <div
       role="tablist"
       aria-label="Portal"
-      className={cx('flex gap-1 rounded-xl bg-wash p-1 ring-1 ring-line', className)}
+      className={cx('flex h-[2.625rem] gap-1 rounded-input bg-wash p-1 ring-1 ring-line', className)}
     >
       {PORTALS.map((portal) => (
         <NavLink
@@ -50,10 +50,8 @@ export function AppPortalSwitch({ className }) {
           replace
           className={({ isActive }) =>
             cx(
-              'flex-1 rounded-[0.6rem] px-3 py-2.5 text-center text-sm whitespace-nowrap transition-colors',
-              isActive
-                ? 'bg-surface font-semibold text-brand-700 shadow-sm'
-                : 'font-medium text-muted',
+              'grid flex-1 place-items-center rounded-[0.625rem] px-3 text-sm whitespace-nowrap transition-colors',
+              isActive ? 'bg-brand-600 font-bold text-white' : 'font-semibold text-muted',
             )
           }
         >

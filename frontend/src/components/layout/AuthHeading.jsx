@@ -6,7 +6,7 @@ import { isNative } from '../../lib/native'
 export { PortalSwitch }
 
 export default function AuthHeading({ eyebrow, title, subtitle, switcher = false }) {
-  if (isNative()) return <AppAuthHeading title={title} subtitle={subtitle} switcher={switcher} />
+  if (isNative()) return <AppAuthHeading switcher={switcher} />
   return (
     <div className="flex flex-col items-center text-center">
       <LogoBadge size="lg" tone="glass" />

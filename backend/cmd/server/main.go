@@ -11,6 +11,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/handler"
 	"github.com/raHI-79/250-project/backend/internal/jobs"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
+	"github.com/raHI-79/250-project/backend/internal/metrics"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/push"
 	"github.com/raHI-79/250-project/backend/internal/release"
@@ -84,7 +85,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		devices = fcm.NewWorker(userStore, sender)
+		devices = fcm.NewWorker(userStore, metrics.FCM(sender, userStore))
 		alerts = alerts.WithDevices(devices)
 		log.Println("fcm: app notifications are on")
 	} else {
@@ -92,7 +93,7 @@ func run() error {
 	}
 	if cfg.PushEnabled() {
 		sender := push.NewSender(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
-		pushWorker = push.NewWorker(userStore, sender, push.QueueSize)
+		pushWorker = push.NewWorker(userStore, metrics.Push(sender, userStore), push.QueueSize)
 		pushTests = pushWorker
 		alerts = alerts.WithPush(pushWorker, cfg.FrontendOrigin)
 		log.Println("push: web push notifications are on")
@@ -146,8 +147,14 @@ func run() error {
 			Marks:     userStore,
 			Presence:  userStore,
 			Phones:    userStore,
+			Office:    userStore,
+			Trail:     userStore,
+			Views:     userStore,
+			Figures:   userStore,
+			Invites:   userStore,
+			Events:    userStore,
 			Files:     upload.NewSaverIn(fileStore, cfg.MaxUploadMB),
-			Mailer: mailer.New(cfg.MailProvider, mailer.Options{
+			Mailer: metrics.Mailer(mailer.New(cfg.MailProvider, mailer.Options{
 				Host:     cfg.SMTPHost,
 				Port:     cfg.SMTPPort,
 				Username: cfg.SMTPUsername,
@@ -157,7 +164,7 @@ func run() error {
 				APIKey:   cfg.BrevoAPIKey,
 				Endpoint: cfg.AppsScriptURL,
 				Secret:   cfg.AppsScriptSecret,
-			}),
+			}), userStore),
 		}),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
@@ -166,6 +173,7 @@ func run() error {
 	jobContext, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
 	go jobs.NewScheduler(cfg, userStore, alerts).Run(jobContext, jobs.Interval)
+	go jobs.NewAnalytics(cfg, userStore).Run(jobContext, jobs.AnalyticsInterval)
 	if pushWorker != nil || devices.Ready() {
 		watcher := jobs.NewReleaseWatcher(userStore, pushWorker, devices, releases, cfg.FrontendOrigin)
 		go watcher.Run(jobContext, jobs.ReleaseInterval)
@@ -206,6 +214,19 @@ func seedAdmin(ctx context.Context, userStore *store.Store, cfg *config.Config) 
 	}
 	if _, err := userStore.EnsureAdmin(ctx, cfg.AdminIdentifier, hash, cfg.AdminEmail, cfg.AdminPhone); err != nil {
 		return err
+	}
+	chief := cfg.SuperAdminIdentifier()
+	if chief != cfg.AdminIdentifier {
+		if _, err := userStore.EnsureAdmin(ctx, chief, hash, cfg.AdminEmail, cfg.AdminPhone); err != nil {
+			return err
+		}
+	}
+	promoted, err := userStore.EnsureSuperAdmin(ctx, chief)
+	if err != nil {
+		return err
+	}
+	if promoted {
+		log.Println("auth: the seeded office account is now the super admin")
 	}
 	log.Println("auth: admin account ready")
 	return nil

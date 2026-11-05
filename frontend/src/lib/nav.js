@@ -17,6 +17,7 @@ import {
   Radio,
   ScrollText,
   Send,
+  ShieldCheck,
   Sunrise,
   UserCircle,
   Users,
@@ -117,7 +118,33 @@ export const adminNav = [
   },
 ]
 
+export const controlNav = [
+  {
+    items: [
+      { label: 'Dashboard', to: paths.control.home, icon: GaugeCircle },
+      { label: 'Office admins', to: paths.control.admins, icon: ShieldCheck },
+      { label: 'Activity log', to: paths.control.activity, icon: ScrollText },
+    ],
+  },
+  {
+    label: 'Office pages (read-only)',
+    items: [
+      { label: 'Overview', to: paths.admin.overview, icon: PieChart },
+      { label: 'Registrations', to: paths.admin.registrations, icon: UserCheck },
+      { label: 'Students', to: paths.admin.students, icon: Users },
+      { label: 'CRs', to: paths.admin.crs, icon: UserCog },
+      { label: 'Teachers', to: paths.admin.teachers, icon: GraduationCap },
+      { label: 'Courses', to: paths.admin.courses, icon: BookOpen },
+      { label: 'Class periods', to: paths.admin.periods, icon: Clock },
+      { label: 'Routines', to: paths.admin.routines, icon: CalendarDays },
+      { label: 'Attendance', to: paths.admin.attendance, icon: CheckCircle2 },
+      { label: 'Notices', to: paths.admin.notices, icon: Megaphone },
+    ],
+  },
+]
+
 export const navForRole = (role) => {
+  if (role === 'super_admin') return controlNav
   if (role === 'admin') return adminNav
   if (role === 'teacher') return teacherNav
   if (role === 'cr') return crNav
@@ -125,6 +152,7 @@ export const navForRole = (role) => {
 }
 
 export const roleLabel = (role) => {
+  if (role === 'super_admin') return 'Control room'
   if (role === 'admin') return 'Administration'
   if (role === 'teacher') return 'Teacher'
   if (role === 'cr') return 'Class Representative'

@@ -4,6 +4,75 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.5.0
+
+- **A sign-in screen built for the phone.** Inside the Android app only, the
+  sign-in, register, verify, forgot-password and teacher-activation screens share
+  one shape: a solid #0A6FAF panel about 330 px tall that respects the status bar,
+  with the real SUST logo on a white 92 px square at a 26 px radius, the screen
+  title in Nunito 800 at 26 px and a one-line subtitle, and a white sheet that
+  overlaps it by 40 px with 28 px rounded top corners. The sheet carries the
+  Student | Teacher segmented control, 50 px labelled inputs that take a 2 px
+  primary border and a soft #E3F0FA ring on focus, a full-width 52 px *Sign in*
+  button, a centred *Forgot password?*, *New student? Create an account* and the
+  line *Department of CSE, SUST · Version <current>*. The form scrolls inside the
+  sheet, the keyboard never hides the focused input, touch targets stay at least
+  44 px and dark mode reads the dark tokens. The website keeps its own campus
+  sign-in, and no sign-in logic or API call changed.
+- **A super admin above the office.** The account seeded from
+  `ADMIN_IDENTIFIER`, or from `SUPER_ADMIN_IDENTIFIER` when that is set, becomes
+  `super_admin` on start. It signs in only at the hidden website route
+  `/control-room` — never linked, `noindex`, the same human check as the other
+  forms — while `/office-portal` stays for the office admins and each entrance
+  refuses the other's accounts. The app reaches neither. From the control room
+  the super admin opens every office page read-only: the backend answers any
+  write from that role with *The control room opens the office pages read-only.*
+- **Office admins are managed, not hard-coded.** The control room invites an
+  office admin by email through the existing mailer; the link lives 72 hours and
+  lands on a page where the invitee picks a username under the teacher User ID
+  rules and a password. The list shows status, last sign-in and action count, and
+  an admin can be suspended, restored or removed by typing their username. Any
+  active teacher can be given or refused office access at any time: that teacher
+  then signs in at `/office-portal` with their own credentials while their
+  teacher account, teacher pages and app access stay untouched. Every one of
+  those actions is audited.
+- **Everything is on the record.** `audit_events` keeps the actor and role, the
+  action, the target, a summary, the IP address hashed with `ANALYTICS_SALT`, the
+  user agent, whether it came from the website or the app, and the time. One
+  middleware behind the token check records every create, update, delete and
+  publish of every role that answers 2xx, and the sign-in handlers record every
+  sign-in, sign-out and failed sign-in. The activity log filters by person, role,
+  action, client and date range, searches, loads more as you scroll and exports
+  CSV; *Monitor this admin* opens that account's own timeline with counts per
+  action type, and the office keeps its own log.
+- **Privacy-friendly analytics.** Every page open sends a beacon with a visitor
+  id from `localStorage`, a session id, the path, the client, the device kind and
+  the app version — no account id, no readable address — batched to
+  `POST /api/analytics/view` at 20 a minute per address. An hourly job rolls the
+  rows into daily aggregates and deletes raw rows after 90 days.
+- **A dashboard at /control-room.** Desktop-first and responsive, drawn with
+  recharts in the Ocean Blue tokens, with skeletons, a Today / 7 days / 30 days /
+  Semester / custom range picker, a refresh every 60 seconds and the time it was
+  last read. *Overview* has KPI cards with sparklines and the change against the
+  previous period, visitors and sign-ins per day, sign-ins by role, a donut of
+  website against app, the app versions in use, the top pages and the devices.
+  *Academic* has the attendance average per batch and section, how many students
+  sit below 50 %, classes held against cancelled against rescheduled per course,
+  tomorrow's undecided classes per teacher, pending phone change requests and the
+  notices, polls and messages of the period. *System health* has uptime, version
+  and commit, database size, uploaded file storage, 4xx and 5xx counts with the
+  latest five 5xx paths, push and FCM sends with their failure share and token
+  counts, emails sent and failed, and the last successful database backup. An
+  alerts banner covers a 5xx spike, an email or push failure share above a fifth,
+  a backup older than 36 hours, a failed sign-in spike from one address and a
+  deleted attendance sheet. Every number has a label and a tooltip, and each
+  panel has an empty state. The dashboard loads as its own chunk, so the app
+  bundle is unchanged.
+- **The backup reports itself.** The nightly workflow posts the dump name to
+  `POST /api/system/backup-status` with `X-Backup-Secret`, checked against
+  `BACKUP_STATUS_SECRET`; anything else is refused with `403`. Without the
+  secrets the workflow skips the report and the dashboard honestly says *Never*.
+
 ## 2.4.0
 
 - **Nothing is cut off any more.** The desktop sidebar is its own fixed 18 rem

@@ -37,3 +37,16 @@ jobs:
           path: ${{ steps.name.outputs.file }}
           retention-days: 30
           if-no-files-found: error
+      - name: Tell the portal the backup worked
+        env:
+          BACKUP_STATUS_URL: ${{ secrets.BACKUP_STATUS_URL }}
+          BACKUP_STATUS_SECRET: ${{ secrets.BACKUP_STATUS_SECRET }}
+        run: |
+          if [ -z "$BACKUP_STATUS_URL" ] || [ -z "$BACKUP_STATUS_SECRET" ]; then
+            echo "BACKUP_STATUS_URL or BACKUP_STATUS_SECRET is not set, skipping the report"
+            exit 0
+          fi
+          curl -fsS -X POST "$BACKUP_STATUS_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Backup-Secret: $BACKUP_STATUS_SECRET" \
+            -d "{\"note\":\"${{ steps.name.outputs.file }}\"}" > /dev/null

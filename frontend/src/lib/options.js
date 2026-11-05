@@ -41,6 +41,57 @@ export const AUDIT_ACTION_LABELS = {
   permanent_delete: 'Deleted permanently',
 }
 
+export const ACTIVITY_LABELS = {
+  ...AUDIT_ACTION_LABELS,
+  create: 'Created',
+  update: 'Updated',
+  delete: 'Deleted',
+  publish: 'Published',
+  sign_in: 'Signed in',
+  sign_out: 'Signed out',
+  sign_in_failed: 'Failed sign-in',
+  invite_admin: 'Invited an admin',
+  resend_invite: 'Resent an invite',
+  cancel_invite: 'Cancelled an invite',
+  suspend_admin: 'Suspended an admin',
+  restore_admin: 'Restored an admin',
+  remove_admin: 'Removed an admin',
+  grant_office_access: 'Granted office access',
+  revoke_office_access: 'Revoked office access',
+  activate_admin: 'Accepted an invitation',
+  student: 'Student',
+  cr: 'Class representative',
+  teacher: 'Teacher',
+  admin: 'Office admin',
+  super_admin: 'Control room',
+}
+
+export const activityLabel = (key) => ACTIVITY_LABELS[key] || key || '—'
+
+export const ACTIVITY_ROLES = [
+  { value: 'student', label: 'Students' },
+  { value: 'cr', label: 'CRs' },
+  { value: 'teacher', label: 'Teachers' },
+  { value: 'admin', label: 'Office admins' },
+  { value: 'super_admin', label: 'Control room' },
+]
+
+export const ACTIVITY_ACTIONS = [
+  { value: 'sign_in', label: 'Signed in' },
+  { value: 'sign_out', label: 'Signed out' },
+  { value: 'sign_in_failed', label: 'Failed sign-in' },
+  { value: 'create', label: 'Created' },
+  { value: 'update', label: 'Updated' },
+  { value: 'delete', label: 'Deleted' },
+  { value: 'publish', label: 'Published' },
+  { value: 'remove', label: 'Removed an account' },
+  { value: 'restore', label: 'Restored an account' },
+  { value: 'permanent_delete', label: 'Deleted an account' },
+  { value: 'invite_admin', label: 'Invited an admin' },
+  { value: 'grant_office_access', label: 'Granted office access' },
+  { value: 'revoke_office_access', label: 'Revoked office access' },
+]
+
 export const MAX_NOTE = 500
 
 export const NOTE_AUDIENCES = [

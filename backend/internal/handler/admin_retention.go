@@ -153,6 +153,7 @@ func (a *Admin) audit(r *http.Request, action, targetSummary string) {
 	if err := a.people.WriteAudit(r.Context(), current.ID, action, targetSummary); err != nil {
 		log.Printf("handler: could not write an audit entry: %v", err)
 	}
+	a.events.Record(r, action, "account", "", targetSummary)
 }
 
 func (a *Admin) auditRemoval(r *http.Request, userID int64) {

@@ -71,6 +71,9 @@ type Config struct {
 	AppsScriptSecret   string
 	DBMaxConns         int
 	AdminIdentifier    string
+	SuperAdminID       string
+	AnalyticsSalt      string
+	BackupSecret       string
 	AdminPassword      string
 	AdminEmail         string
 	AdminPhone         string
@@ -128,6 +131,9 @@ func Load() (*Config, error) {
 		AppsScriptURL:      strings.TrimSpace(os.Getenv("APPS_SCRIPT_URL")),
 		AppsScriptSecret:   strings.TrimSpace(os.Getenv("APPS_SCRIPT_SECRET")),
 		AdminIdentifier:    os.Getenv("ADMIN_IDENTIFIER"),
+		SuperAdminID:       strings.TrimSpace(os.Getenv("SUPER_ADMIN_IDENTIFIER")),
+		AnalyticsSalt:      strings.TrimSpace(os.Getenv("ANALYTICS_SALT")),
+		BackupSecret:       strings.TrimSpace(os.Getenv("BACKUP_STATUS_SECRET")),
 		AdminPassword:      os.Getenv("ADMIN_PASSWORD"),
 		AdminEmail:         os.Getenv("ADMIN_EMAIL"),
 		AdminPhone:         os.Getenv("ADMIN_PHONE"),
@@ -267,6 +273,13 @@ func clockMinutes(key, value string) (int, error) {
 
 func (c *Config) HasAdminSeed() bool {
 	return c.AdminIdentifier != "" && c.AdminPassword != ""
+}
+
+func (c *Config) SuperAdminIdentifier() string {
+	if c.SuperAdminID != "" {
+		return c.SuperAdminID
+	}
+	return c.AdminIdentifier
 }
 
 func (c *Config) HasMailer() bool {

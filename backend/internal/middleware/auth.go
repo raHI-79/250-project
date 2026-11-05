@@ -18,6 +18,7 @@ const (
 	MessageSessionExpired = "Session expired. Please log in again."
 	MessageAccessDenied   = "403 Access Denied / Unauthorized Access"
 	MessageServerError    = "Internal server error"
+	MessageReadOnly       = "The control room opens the office pages read-only."
 )
 
 type UserStore interface {
@@ -33,6 +34,7 @@ type User struct {
 	Identifier string
 	Role       string
 	PhotoPath  string
+	ReadOnly   bool
 }
 
 type contextKey struct{}
@@ -75,8 +77,8 @@ func VerifyToken(tokens TokenParser, users UserStore) func(http.Handler) http.Ha
 				httpx.WriteError(w, http.StatusUnauthorized, MessageSessionExpired)
 				return
 			}
-			effectiveRole := auth.EffectiveRole(user.Role, user.IsCR)
-			if effectiveRole != claims.Role {
+			effectiveRole, ok := auth.SessionRole(user.Role, user.IsCR, user.OfficeAccess, claims.Role)
+			if !ok {
 				httpx.WriteError(w, http.StatusUnauthorized, MessageSessionExpired)
 				return
 			}
@@ -89,6 +91,7 @@ func VerifyToken(tokens TokenParser, users UserStore) func(http.Handler) http.Ha
 				Identifier: user.Identifier,
 				Role:       effectiveRole,
 				PhotoPath:  user.PhotoPath,
+				ReadOnly:   effectiveRole == auth.RoleSuperAdmin,
 			}
 			next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), current)))
 		})
@@ -109,6 +112,27 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 			}
 			if !allowed[user.Role] {
 				httpx.WriteError(w, http.StatusForbidden, MessageAccessDenied)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func ReadOnly(roles ...string) func(http.Handler) http.Handler {
+	watched := make(map[string]bool, len(roles))
+	for _, role := range roles {
+		watched[role] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := CurrentUser(r.Context())
+			if !ok {
+				httpx.WriteError(w, http.StatusUnauthorized, MessageUnauthorized)
+				return
+			}
+			if watched[user.Role] && r.Method != http.MethodGet && r.Method != http.MethodHead {
+				httpx.WriteError(w, http.StatusForbidden, MessageReadOnly)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -137,7 +161,7 @@ const (
 )
 
 func OfficeRole(role string) bool {
-	return role == auth.RoleAdmin || role == auth.RoleSuperAdmin
+	return auth.IsOfficeRole(role)
 }
 
 func FromAndroidApp(r *http.Request) bool {
