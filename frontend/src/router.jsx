@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import AdminLayout from './components/layout/AdminLayout'
@@ -8,6 +9,7 @@ import AdminLoginPage from './pages/auth/AdminLoginPage'
 import AdminInvitePage from './pages/auth/AdminInvitePage'
 import ControlLoginPage from './pages/control/ControlLoginPage'
 import ControlAdminsPage from './pages/control/ControlAdminsPage'
+import ControlMonitorPage from './pages/control/ControlMonitorPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ActivatePage from './pages/auth/ActivatePage'
@@ -50,9 +52,11 @@ import ActivityLogPage from './pages/admin/ActivityLogPage'
 import AdminAttendancePage from './pages/admin/AdminAttendancePage'
 import AdminPhoneChangesPage from './pages/admin/AdminPhoneChangesPage'
 import NotFoundPage from './pages/NotFoundPage'
+import { SkeletonCard } from './components/ui'
 import { useAuth } from './context/auth'
 import { isNative } from './lib/native'
 import { useNativeBackButton } from './lib/shell'
+import { usePageViews } from './lib/views'
 import {
   PORTAL_ADMIN,
   PORTAL_STUDENT,
@@ -65,6 +69,8 @@ import {
 const STUDENT_ROLES = ['student', 'cr']
 
 const OFFICE_ROLES = ['admin', ROLE_SUPER_ADMIN]
+
+const ControlDashboardPage = lazy(() => import('./pages/control/ControlDashboardPage'))
 
 function ControlGate() {
   const { isAuthenticated, role } = useAuth()
@@ -81,6 +87,7 @@ function Root() {
 
 export default function Router() {
   useNativeBackButton()
+  usePageViews()
   const office = !isNative()
   return (
     <Routes>
@@ -174,8 +181,17 @@ export default function Router() {
       </Route>
       {office && (
       <Route path={paths.control.home()} element={<ControlGate />}>
-        <Route index element={<Navigate to={paths.control.admins()} replace />} />
+        <Route
+          index
+          element={
+            <Suspense fallback={<SkeletonCard />}>
+              <ControlDashboardPage />
+            </Suspense>
+          }
+        />
         <Route path="admins" element={<ControlAdminsPage />} />
+        <Route path="activity" element={<ActivityLogPage />} />
+        <Route path="activity/:adminId" element={<ControlMonitorPage />} />
       </Route>
       )}
       {office && (
