@@ -21,6 +21,7 @@ const PUBLIC_ENDPOINTS = [
   '/api/auth/login',
   '/api/auth/admin/login',
   '/api/auth/control-room/login',
+  '/api/auth/two-step',
   '/api/auth/admin-invite',
   '/api/analytics/view',
   '/api/auth/register',

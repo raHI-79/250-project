@@ -42,6 +42,7 @@ export default function AuthProvider({ children }) {
         { identifier, password },
         { auth: false },
       )
+      if (data.two_step) return { two_step: true, ...data }
       const next = { token: data.token, user: { ...data.user, role: 'admin' } }
       persist(next)
       return next.user
@@ -55,7 +56,21 @@ export default function AuthProvider({ children }) {
         { identifier, password },
         { auth: false },
       )
+      if (data.two_step) return { two_step: true, ...data }
       const next = { token: data.token, user: { ...data.user, role: 'super_admin' } }
+      persist(next)
+      return next.user
+    },
+    [persist],
+  )
+  const twoStepLogin = useCallback(
+    async (identifier, code, pending) => {
+      const data = await api.post(
+        '/api/auth/two-step',
+        { identifier, code, pending },
+        { auth: false },
+      )
+      const next = { token: data.token, user: data.user }
       persist(next)
       return next.user
     },
@@ -87,10 +102,11 @@ export default function AuthProvider({ children }) {
       login,
       adminLogin,
       controlLogin,
+      twoStepLogin,
       updateUser,
       logout,
     }),
-    [session, login, adminLogin, controlLogin, updateUser, logout],
+    [session, login, adminLogin, controlLogin, twoStepLogin, updateUser, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

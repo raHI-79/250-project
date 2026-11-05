@@ -114,6 +114,7 @@ export const adminNav = [
       { label: 'Notices', to: paths.admin.notices, icon: Megaphone },
       { label: 'Messages', to: paths.admin.messages, icon: Mail, badge: MESSAGES_BADGE },
       { label: 'Activity log', to: paths.admin.activity, icon: ScrollText },
+      { label: 'Security', to: paths.admin.security, icon: ShieldCheck },
     ],
   },
 ]
@@ -124,6 +125,7 @@ export const controlNav = [
       { label: 'Dashboard', to: paths.control.home, icon: GaugeCircle },
       { label: 'Office admins', to: paths.control.admins, icon: ShieldCheck },
       { label: 'Activity log', to: paths.control.activity, icon: ScrollText },
+      { label: 'Security', to: paths.control.security, icon: ShieldCheck },
     ],
   },
   {

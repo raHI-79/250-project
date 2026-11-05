@@ -11,7 +11,7 @@ import api from '../../lib/api'
 import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
 import { useCountdown } from '../../lib/hooks'
-import { PORTAL_ADMIN, loginForPortal } from '../../lib/paths'
+import { PORTAL_ADMIN, PORTAL_CONTROL, loginForPortal } from '../../lib/paths'
 import { resetErrors } from '../../lib/account'
 
 const RESEND_SECONDS = 60
@@ -32,6 +32,11 @@ const copy = {
     subtitle: 'We check your ID against the phone number registered with your account.',
     identifier: 'Admin ID',
   },
+  control: {
+    heading: 'Control room password reset',
+    subtitle: 'We check your username against the phone number registered with your account.',
+    identifier: 'Username',
+  },
 }
 
 const EMPTY = {
@@ -45,7 +50,7 @@ const EMPTY = {
 
 export default function ForgotPasswordPage({ portal }) {
   const page = copy[portal] || copy.student
-  const byPhone = portal === PORTAL_ADMIN
+  const byPhone = portal === PORTAL_ADMIN || portal === PORTAL_CONTROL
   const loginPath = loginForPortal(portal)
   const human = useHumanCheck()
   const [form, setForm] = useState(EMPTY)

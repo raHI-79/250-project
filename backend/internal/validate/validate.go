@@ -7,23 +7,25 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
-	MaxFieldLength    = 120
-	MaxEmailLength    = 254
-	MinPasswordLength = 8
-	MinCourseCode     = 3
-	MaxCourseCode     = 25
-	MinCredit         = 0.5
-	MaxCredit         = 6.0
-	CreditStep        = 0.25
-	MinUserIDLength   = 4
-	MaxUserIDLength   = 20
-	MinAge            = 15
-	MaxAge            = 60
-	MessagePhone      = "Phone number must be 11 digits, for example 01712345678."
-	MessageCourseCode = "Course code may only use letters, digits, spaces and hyphens, for example CSE 2243 7637D."
+	MaxFieldLength          = 120
+	MaxEmailLength          = 254
+	MinPasswordLength       = 8
+	MinOfficePasswordLength = 10
+	MinCourseCode           = 3
+	MaxCourseCode           = 25
+	MinCredit               = 0.5
+	MaxCredit               = 6.0
+	CreditStep              = 0.25
+	MinUserIDLength         = 4
+	MaxUserIDLength         = 20
+	MinAge                  = 15
+	MaxAge                  = 60
+	MessagePhone            = "Phone number must be 11 digits, for example 01712345678."
+	MessageCourseCode       = "Course code may only use letters, digits, spaces and hyphens, for example CSE 2243 7637D."
 
 	MessageUserIDRequired   = "User ID is required."
 	MessageUserIDLength     = "User ID must be 4 to 20 characters long."
@@ -253,6 +255,35 @@ func UserID(value string) (string, error) {
 
 func ReservedUserIDs() []string {
 	return append([]string(nil), reservedUserIDs...)
+}
+
+func OfficePassword(label, password, confirm string) error {
+	if password == "" {
+		return fmt.Errorf("%s is required.", label)
+	}
+	if len([]rune(password)) < MinOfficePasswordLength {
+		return fmt.Errorf("%s must be at least %d characters long.", label, MinOfficePasswordLength)
+	}
+	if len(password) > MaxFieldLength {
+		return fmt.Errorf("%s must be at most %d characters long.", label, MaxFieldLength)
+	}
+	letter := false
+	digit := false
+	for _, symbol := range password {
+		switch {
+		case symbol >= '0' && symbol <= '9':
+			digit = true
+		case unicode.IsLetter(symbol):
+			letter = true
+		}
+	}
+	if !letter || !digit {
+		return fmt.Errorf("%s must contain a letter and a digit.", label)
+	}
+	if password != confirm {
+		return fmt.Errorf("%s and the confirmation do not match.", label)
+	}
+	return nil
 }
 
 func Password(label, password, confirm string) error {

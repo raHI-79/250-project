@@ -8,26 +8,37 @@ import (
 )
 
 const (
-	ClientWeb           = "web"
-	ClientAndroid       = "android"
-	DefaultEventPage    = 50
-	MaxEventPage        = 200
-	ActionSignIn        = "sign_in"
-	ActionSignOut       = "sign_out"
-	ActionSignInFailed  = "sign_in_failed"
-	ActionCreated       = "create"
-	ActionUpdated       = "update"
-	ActionDeleted       = "delete"
-	ActionPublished     = "publish"
-	ActionInviteAdmin   = "invite_admin"
-	ActionResendInvite  = "resend_invite"
-	ActionCancelInvite  = "cancel_invite"
-	ActionSuspendAdmin  = "suspend_admin"
-	ActionRestoreAdmin  = "restore_admin"
-	ActionRemoveAdmin   = "remove_admin"
-	ActionGrantOffice   = "grant_office_access"
-	ActionRevokeOffice  = "revoke_office_access"
-	ActionActivateAdmin = "activate_admin"
+	ClientWeb             = "web"
+	ClientAndroid         = "android"
+	DefaultEventPage      = 50
+	MaxEventPage          = 200
+	ActionSignIn          = "sign_in"
+	ActionSignOut         = "sign_out"
+	ActionSignInFailed    = "sign_in_failed"
+	ActionCreated         = "create"
+	ActionUpdated         = "update"
+	ActionDeleted         = "delete"
+	ActionPublished       = "publish"
+	ActionInviteAdmin     = "invite_admin"
+	ActionResendInvite    = "resend_invite"
+	ActionCancelInvite    = "cancel_invite"
+	ActionSuspendAdmin    = "suspend_admin"
+	ActionRestoreAdmin    = "restore_admin"
+	ActionRemoveAdmin     = "remove_admin"
+	ActionGrantOffice     = "grant_office_access"
+	ActionRevokeOffice    = "revoke_office_access"
+	ActionActivateAdmin   = "activate_admin"
+	ActionConfirmPassword = "confirm_password"
+	ActionPasswordChange  = "password_change"
+	ActionPasswordReset   = "password_reset"
+	ActionContactChange   = "contact_change"
+	ActionTwoStepOn       = "two_step_on"
+	ActionTwoStepOff      = "two_step_off"
+	ActionSessionOut      = "session_out"
+	ActionSessionOutAll   = "session_out_all"
+	ActionTwoStepFailed   = "two_step_failed"
+	ActionTwoStepSent     = "two_step_sent"
+	ActionNewDevice       = "new_device"
 )
 
 type AuditEvent struct {
