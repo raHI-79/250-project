@@ -20,10 +20,10 @@ export default function ControlReleasePage() {
     setBusy(true)
     try {
       const result = await api.post('/api/super-admin/release/announce')
-      toast(result.message)
+      toast.success(result.message)
       await reload()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy(false)
     }
@@ -81,7 +81,7 @@ export default function ControlReleasePage() {
               className="mt-3"
               onClick={() => {
                 navigator.clipboard?.writeText(data?.share_link || '')
-                toast('Link copied.')
+                toast.success('Link copied.')
               }}
             >
               <Smartphone size={16} aria-hidden="true" />

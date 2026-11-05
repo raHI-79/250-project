@@ -71,11 +71,11 @@ export default function ControlSettingsPage() {
     setSaving(true)
     try {
       const result = await api.put('/api/super-admin/settings', { values })
-      toast(result.message)
+      toast.success(result.message)
       await reload()
       await readSite()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setSaving(false)
     }

@@ -39,10 +39,10 @@ export default function ApprovalsPage({ eyebrow = 'Department office' }) {
       const result = await api.post(
         `/api/office/approvals/${item.id}/${approve ? 'approve' : 'decline'}`,
       )
-      toast(result.message)
+      toast.success(result.message)
       await reload()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy('')
     }

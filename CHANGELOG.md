@@ -69,6 +69,32 @@ and the one the Android release is tagged with.
   kept — swept every hour by the cleanup job, with closed sessions dropped after
   30 days.
 
+- **The human check is back on every website form.** The invite-acceptance page
+  never had the widget although its route sits behind the human gate, so
+  accepting an office invitation always answered *human verification needed*; it
+  now carries the same check as the other forms. The loader no longer waits for a
+  `load` event that may already have fired: one shared promise resolves as soon
+  as `window.turnstile` exists and gives up with a readable message after twelve
+  seconds, so a remounted form always draws its widget. Sign-in, register, forgot
+  password, teacher activation, the office portal, the control room and its
+  forgot password and the invite acceptance all keep the submit button disabled
+  until a token exists, send the pass with the request, reset the widget after a
+  failed attempt, follow light and dark mode, and show nothing inside the Android
+  app, which needs no pass. With no site key the widget and the server check are
+  both skipped.
+- **The invite button works again.** `useToast()` hands back `{toast, success,
+  error, info, dismiss}`, but the newer control-room and office pages called the
+  object itself, which is the minified *n is not a function*. Every one of those
+  calls now goes through `toast.success` or `toast.error`, so inviting an office
+  admin creates the invitation, sends the email and shows the server's own text
+  when sending fails.
+- **Autofilled fields keep their shape.** The border, radius and background sit
+  on the input, select and textarea themselves instead of on a wrapper, and
+  `:-webkit-autofill` (with hover, focus and active) repaints Chrome's light-blue
+  rectangle with a 1000px inset shadow in the field background, keeps the text
+  colour and caret, and parks the background transition far in the future. The
+  floating label, the show-password eye and the focus ring stay where they were.
+
 ## 2.5.0
 
 - **A sign-in screen built for the phone.** Inside the Android app only, the

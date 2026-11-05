@@ -3,6 +3,7 @@ import api from './api'
 import { readJson, remove, writeJson } from './storage'
 import { isNative } from './native'
 import { isStandalone } from './standalone'
+import { humanBlocked, showsHumanCheck } from './humancheck'
 
 const PASS_KEY = 'sustcse.human'
 
@@ -60,7 +61,8 @@ export const useHumanCheck = () => {
     setPassed(Boolean(humanPass()))
     setRound((current) => current + 1)
   }, [])
-  const needed = !isNative() && Boolean(siteKey)
+  const native = isNative()
+  const needed = showsHumanCheck({ siteKey, native, passed: false })
   const confirm = useCallback(async () => {
     if (!needed || humanPass()) return
     if (!token) throw new Error('Please complete the check below.')
@@ -75,7 +77,7 @@ export const useHumanCheck = () => {
     reset,
     round,
     confirm,
-    needed: needed && !passed,
-    blocked: !ready || (needed && !passed && !token),
+    needed: showsHumanCheck({ siteKey, native, passed }),
+    blocked: humanBlocked({ ready, siteKey, native, passed, token }),
   }
 }

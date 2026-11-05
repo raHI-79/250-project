@@ -52,7 +52,7 @@ export default function ControlAdminsPage() {
     setInviting(true)
     try {
       const data = await api.post('/api/super-admin/admins/invite', { email: email.trim() })
-      toast(data.message)
+      toast.success(data.message)
       setEmail('')
       await admins.reload()
     } catch (failure) {
@@ -65,11 +65,11 @@ export default function ControlAdminsPage() {
     setBusy(true)
     try {
       const data = await call()
-      toast(data.message)
+      toast.success(data.message)
       await admins.reload()
       await teachers.reload()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy(false)
     }

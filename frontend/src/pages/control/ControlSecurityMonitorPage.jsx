@@ -28,10 +28,10 @@ export default function ControlSecurityMonitorPage() {
     setBusy(key)
     try {
       const result = await call()
-      toast(result.message)
+      toast.success(result.message)
       await reload()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy('')
     }

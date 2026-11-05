@@ -57,11 +57,11 @@ function PersonSheet({ userId, onClose, onChanged }) {
     setBusy(key)
     try {
       const result = await call()
-      toast(result.message)
+      toast.success(result.message)
       await reload()
       await onChanged()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy('')
     }
@@ -256,11 +256,11 @@ export default function ControlUsersPage() {
     setBusy(true)
     try {
       const data = await api.post('/api/super-admin/users/bulk', { ids: chosen, action })
-      toast(data.message)
+      toast.success(data.message)
       setChosen([])
       await load()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy(false)
     }
@@ -278,7 +278,7 @@ export default function ControlUsersPage() {
       link.click()
       URL.revokeObjectURL(url)
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     }
   }
   return (

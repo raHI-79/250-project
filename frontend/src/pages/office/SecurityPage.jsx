@@ -55,11 +55,11 @@ export default function SecurityPage({ eyebrow = 'Department office' }) {
     setBusy(key)
     try {
       const data = await call()
-      toast(data.message)
+      toast.success(data.message)
       if (after) await after()
       else await load()
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     } finally {
       setBusy('')
     }

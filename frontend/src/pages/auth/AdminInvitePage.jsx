@@ -7,11 +7,14 @@ import { Input, PasswordInput } from '../../components/ui/Field'
 import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
 import NoIndex from '../../components/layout/NoIndex'
+import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
+import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
 import { paths } from '../../lib/paths'
 
 export default function AdminInvitePage() {
+  const human = useHumanCheck()
   const [params] = useSearchParams()
   const token = params.get('token') || ''
   const [invite, setInvite] = useState(null)
@@ -39,6 +42,7 @@ export default function AdminInvitePage() {
     setError('')
     setLoading(true)
     try {
+      await human.confirm()
       await api.post(
         '/api/auth/admin-invite/accept',
         {
@@ -52,6 +56,7 @@ export default function AdminInvitePage() {
       setDone(true)
     } catch (failure) {
       setError(failure.message)
+      human.reset()
     } finally {
       setLoading(false)
     }
@@ -113,7 +118,19 @@ export default function AdminInvitePage() {
                   autoComplete="new-password"
                   required
                 />
-                <Button type="submit" loading={loading} className="w-full">
+                {human.needed && (
+                  <HumanCheck
+                    siteKey={human.siteKey}
+                    round={human.round}
+                    onToken={human.setToken}
+                  />
+                )}
+                <Button
+                  type="submit"
+                  loading={loading}
+                  disabled={human.blocked}
+                  className="w-full"
+                >
                   Create my account
                 </Button>
               </form>

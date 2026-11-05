@@ -37,7 +37,7 @@ export default function ControlDataPage() {
       link.click()
       URL.revokeObjectURL(url)
     } catch (failure) {
-      toast(failure.message, 'error')
+      toast.error(failure.message)
     }
   }
   return (
