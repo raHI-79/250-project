@@ -15,6 +15,10 @@ const (
 	defaultEventDays  = 365
 	defaultNoticeDays = 120
 	closedSessionDays = 30
+	// pushUnusedDays is how long a web push subscription may sit unused. A browser that
+	// has not taken a notification in two months has thrown the subscription away, and a
+	// dead row fails every send after that.
+	pushUnusedDays = 60
 )
 
 type AnalyticsStore interface {
@@ -23,6 +27,7 @@ type AnalyticsStore interface {
 	DeleteOldEvents(ctx context.Context, before time.Time) (int64, error)
 	DeleteOldNotifications(ctx context.Context, before time.Time) (int64, error)
 	DeleteClosedSessions(ctx context.Context, before time.Time) (int64, error)
+	CleanPushSubscriptions(ctx context.Context, before time.Time) (int, error)
 }
 
 type Analytics struct {
@@ -94,5 +99,11 @@ func (a *Analytics) sweep(ctx context.Context, now time.Time) {
 		log.Printf("jobs: could not delete the closed sessions: %v", err)
 	} else if dropped > 0 {
 		log.Printf("jobs: deleted %d closed sessions", dropped)
+	}
+	if dropped, err := a.views.CleanPushSubscriptions(ctx,
+		now.AddDate(0, 0, -pushUnusedDays)); err != nil {
+		log.Printf("jobs: could not clean the push subscriptions: %v", err)
+	} else if dropped > 0 {
+		log.Printf("jobs: dropped %d push subscriptions unused for %d days", dropped, pushUnusedDays)
 	}
 }

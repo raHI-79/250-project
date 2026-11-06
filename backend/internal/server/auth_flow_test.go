@@ -129,8 +129,10 @@ func newFlowRouterWith(t *testing.T, rateLimit int,
 	if err != nil {
 		t.Fatalf("auth.NewProofs() returned an unexpected error: %v", err)
 	}
-	log.SetOutput(io.Discard)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	if os.Getenv("FLOW_LOGS") == "" {
+		log.SetOutput(io.Discard)
+		t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	}
 	return ctx, pool, NewRouter(Dependencies{
 		RateLimit: rateLimit,
 		Config:    cfg,
@@ -162,6 +164,11 @@ func newFlowRouterWith(t *testing.T, rateLimit int,
 		Chats:     userStore,
 		Votes:     userStore,
 		Calendar:  userStore,
+		Marks:     userStore,
+		Presence:  userStore,
+		Phones:    userStore,
+		Badges:    userStore,
+		Events:    userStore,
 	})
 }
 

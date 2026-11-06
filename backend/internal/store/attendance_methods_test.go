@@ -16,7 +16,7 @@ func newRollCall(t *testing.T, ctx context.Context, store *Store, class classFix
 		Batch:     batch,
 		Section:   section,
 		TeacherID: class.teacherID,
-		EndsAt:    time.Now().Add(10 * time.Minute),
+		Minutes:   10,
 		TokenKey:  "roll-call-key",
 		Method:    SessionRollCall,
 	})
@@ -145,7 +145,7 @@ func TestEveryMethodLandsInOneSheet(t *testing.T) {
 		Batch:     "CSE-23",
 		Section:   "A",
 		TeacherID: class.teacherID,
-		EndsAt:    time.Now().Add(10 * time.Minute),
+		Minutes:   10,
 		TokenKey:  "web-key",
 	})
 	if err != nil {

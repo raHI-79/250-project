@@ -139,6 +139,34 @@ func (s *stubViewStore) WriteEvent(ctx context.Context, event store.AuditEvent) 
 
 type stubFigureStore struct{}
 
+func (stubFigureStore) RequestVolume(ctx context.Context,
+	window store.Window) (store.RequestVolume, error) {
+	return store.RequestVolume{}, nil
+}
+
+func (stubFigureStore) PushVolume(ctx context.Context, window store.Window) (store.PushVolume, error) {
+	return store.PushVolume{}, nil
+}
+
+func (stubFigureStore) PushBreakdown(ctx context.Context,
+	window store.Window) ([]store.PushBreakdown, error) {
+	return nil, nil
+}
+
+func (stubFigureStore) FailingPaths(ctx context.Context, window store.Window,
+	limit int) ([]store.FailingPath, error) {
+	return nil, nil
+}
+
+func (stubFigureStore) QuietAlerts(ctx context.Context) (map[string]time.Time, error) {
+	return nil, nil
+}
+
+func (stubFigureStore) DismissAlert(ctx context.Context, key string, by int64,
+	quiet time.Duration) error {
+	return nil
+}
+
 func (stubFigureStore) OverviewTotals(ctx context.Context, window store.Window,
 	dayStart time.Time) (store.OverviewTotals, error) {
 	return store.OverviewTotals{}, nil

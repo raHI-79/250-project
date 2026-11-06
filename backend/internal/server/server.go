@@ -86,6 +86,7 @@ type Dependencies struct {
 	Announcer handler.ReleaseAnnouncer
 	Figures2  handler.DataStore
 	Calendar  handler.HolidayStore
+	Counter   *metrics.Counter
 }
 
 type RouteGroup struct {
@@ -230,8 +231,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerPeopleRoutes(SuperAdminGroup(mux, deps), handler.NewPeople(deps.Config, deps.Folks, events))
 	chiefOnly := SuperAdminGroup(mux, deps)
 	chiefOnly.Handle("GET /api/super-admin/activity/{id}", activity.Monitor())
-	chiefOnly.Handle("GET /api/super-admin/dashboard",
-		handler.NewDashboard(deps.Config, deps.Figures).Numbers())
+	figures := handler.NewDashboard(deps.Config, deps.Figures)
+	chiefOnly.Handle("GET /api/super-admin/dashboard", figures.Numbers())
+	chiefOnly.Handle("POST /api/super-admin/alerts/{key}/dismiss", figures.Dismiss())
 	beacons := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
 	views := handler.NewAnalytics(deps.Config, deps.Views).WithEvents(events)
 	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{beacons.Middleware}}.
@@ -315,8 +317,12 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	var root http.Handler = mux
 	if sink, ok := deps.Events.(metrics.Sink); ok {
-		root = metrics.Responses(sink)(root)
+		root = metrics.Responses(sink, deps.Counter)(root)
+	} else if deps.Counter != nil {
+		root = metrics.Responses(nil, deps.Counter)(root)
 	}
+	// The maintenance gate sits inside the counter, so that the 503 it writes on purpose
+	// carries its header before the counter decides whether it was a server error.
 	root = gates.Maintenance(root)
 	if deps.Walls != nil {
 		root = blocks.Middleware(root)

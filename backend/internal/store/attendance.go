@@ -41,7 +41,7 @@ type NewAttendanceSession struct {
 	Section        string
 	ScheduleItemID int64
 	TeacherID      int64
-	EndsAt         time.Time
+	Minutes        int
 	TokenKey       string
 	Method         string
 }
@@ -138,9 +138,13 @@ a.location_updated_at, a.token_key, a.closed_at, a.method,
 (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'present')`
 
 const (
+	// Both ends of the window are written by the database. started_at takes the default
+	// now() and ends_at counts from the same now(), so a clock skew between the server
+	// and the database can never put the end before the start, nor shorten a window the
+	// teacher asked ten minutes for.
 	openSessionSQL = `INSERT INTO attendance_sessions
 (course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key, method)
-VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7, $8)
+VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6), $7, $8)
 RETURNING id`
 	runningSessionSQL = `SELECT a.id FROM attendance_sessions a
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
@@ -411,7 +415,7 @@ func (s *Store) OpenAttendanceSession(ctx context.Context,
 		method = SessionBluetooth
 	}
 	err = s.pool.QueryRow(ctx, openSessionSQL, fresh.CourseID, fresh.Batch, fresh.Section,
-		fresh.ScheduleItemID, fresh.TeacherID, fresh.EndsAt, fresh.TokenKey, method).Scan(&id)
+		fresh.ScheduleItemID, fresh.TeacherID, fresh.Minutes, fresh.TokenKey, method).Scan(&id)
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not open an attendance session: %w", err)
 	}

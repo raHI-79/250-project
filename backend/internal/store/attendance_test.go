@@ -82,7 +82,7 @@ func newClass(t *testing.T, ctx context.Context, store *Store, pool *pgxpool.Poo
 		Batch:     batch,
 		Section:   section,
 		TeacherID: teacherID,
-		EndsAt:    time.Now().Add(10 * time.Minute),
+		Minutes:   10,
 		TokenKey:  "session-key",
 	})
 	if err != nil {
@@ -444,7 +444,7 @@ func TestStudentAttendanceCountsPresentOverHeld(t *testing.T) {
 				Batch:     "CSE-23",
 				Section:   "A",
 				TeacherID: class.teacherID,
-				EndsAt:    time.Now().Add(10 * time.Minute),
+				Minutes:   10,
 				TokenKey:  "later-key",
 			})
 			if err != nil {
@@ -459,7 +459,7 @@ func TestStudentAttendanceCountsPresentOverHeld(t *testing.T) {
 					Batch:     "CSE-23",
 					Section:   "A",
 					TeacherID: class.teacherID,
-					EndsAt:    time.Now().Add(10 * time.Minute),
+					Minutes:   10,
 					TokenKey:  "later-key",
 				})
 				if err != nil {
@@ -510,7 +510,7 @@ func TestLowAttendanceListsOnlyTheStudentsUnderFifty(t *testing.T) {
 				Batch:     "CSE-23",
 				Section:   "A",
 				TeacherID: class.teacherID,
-				EndsAt:    time.Now().Add(10 * time.Minute),
+				Minutes:   10,
 				TokenKey:  "round-key",
 			})
 			if err != nil {
@@ -634,7 +634,7 @@ func TestOpenAttendanceSessionReusesTheRunningOne(t *testing.T) {
 		Batch:     "CSE-23",
 		Section:   "A",
 		TeacherID: class.teacherID,
-		EndsAt:    time.Now().Add(20 * time.Minute),
+		Minutes:   20,
 		TokenKey:  "second-key",
 	})
 	if err != nil {

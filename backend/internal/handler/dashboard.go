@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
@@ -27,13 +28,31 @@ const (
 	AlertSignInSpike  = "sign_in_spike"
 	AlertSheetDeletes = "sheet_deletions"
 
-	serverErrorSpike  = 10
-	failureShare      = 0.2
-	backupStaleAfter  = 36 * time.Hour
-	signInSpikeLimit  = 10
-	spikeWindow       = time.Hour
-	semesterDays      = 180
-	minFailureVolume  = 5
+	MessageAlertDismissed = "The alert stays quiet for a day."
+	MessageAlertUnknown   = "No alert goes by that name."
+
+	// The System health sections each alert points at with its Details link.
+	SectionSystemErrors  = "server-errors"
+	SectionSystemEmail   = "email"
+	SectionSystemPush    = "notifications"
+	SectionSystemBackup  = "backup"
+	SectionSystemSignIns = "sign-ins"
+	SectionSystemSheets  = "attendance-sheets"
+
+	serverErrorSpike = 10
+	failureShare     = 0.2
+	backupStaleAfter = 36 * time.Hour
+	signInSpikeLimit = 10
+	spikeWindow      = time.Hour
+	semesterDays     = 180
+	minFailureVolume = 5
+	// minPushVolume is the number of sends a period needs before the failure share is
+	// worth an alert, so that one unlucky evening with three notifications stays quiet.
+	minPushVolume = 20
+	// minRequestVolume is the number of requests a period needs before a handful of
+	// server errors is worth an alert.
+	minRequestVolume  = 200
+	failingPathLimit  = 8
 	sheetDeleteWindow = 24 * time.Hour
 )
 
@@ -58,6 +77,12 @@ type DashboardStore interface {
 	LatestServerErrors(ctx context.Context) ([]store.ErrorPath, error)
 	FailedSignInSpike(ctx context.Context, since time.Time) (int, error)
 	SheetDeletions(ctx context.Context, since time.Time) (int, error)
+	RequestVolume(ctx context.Context, window store.Window) (store.RequestVolume, error)
+	PushVolume(ctx context.Context, window store.Window) (store.PushVolume, error)
+	PushBreakdown(ctx context.Context, window store.Window) ([]store.PushBreakdown, error)
+	FailingPaths(ctx context.Context, window store.Window, limit int) ([]store.FailingPath, error)
+	QuietAlerts(ctx context.Context) (map[string]time.Time, error)
+	DismissAlert(ctx context.Context, key string, by int64, quiet time.Duration) error
 	BackupStatus(ctx context.Context) (store.BackupState, error)
 }
 
@@ -141,31 +166,55 @@ type errorItem struct {
 	At   string `json:"at"`
 }
 
+// failingPathItem is one address that answered with a server error in this period, with
+// how often, the message of the last one and when that was.
+type failingPathItem struct {
+	Path    string `json:"path"`
+	Total   int    `json:"total"`
+	Message string `json:"message,omitempty"`
+	Last    string `json:"last"`
+}
+
+// pushReasonItem is one row of the notification breakdown: a channel, a reason and how
+// many sends ended that way.
+type pushReasonItem struct {
+	Channel string `json:"channel"`
+	Reason  string `json:"reason"`
+	Label   string `json:"label"`
+	Total   int    `json:"total"`
+}
+
 type systemPanel struct {
-	Version       string      `json:"version"`
-	Commit        string      `json:"commit"`
-	UptimeSeconds int         `json:"uptime_seconds"`
-	DatabaseBytes int64       `json:"database_bytes"`
-	FileBytes     int64       `json:"file_bytes"`
-	Client4xx     int         `json:"client_4xx"`
-	Server5xx     int         `json:"server_5xx"`
-	ServerErrors  []errorItem `json:"server_errors"`
-	EmailsSent    int         `json:"emails_sent"`
-	EmailsFailed  int         `json:"emails_failed"`
-	PushSent      int         `json:"push_sent"`
-	PushFailed    int         `json:"push_failed"`
-	FCMSent       int         `json:"fcm_sent"`
-	FCMFailed     int         `json:"fcm_failed"`
-	PushTokens    int         `json:"push_tokens"`
-	FCMTokens     int         `json:"fcm_tokens"`
-	BackupAt      string      `json:"backup_at,omitempty"`
-	BackupNote    string      `json:"backup_note,omitempty"`
+	Version       string            `json:"version"`
+	Commit        string            `json:"commit"`
+	UptimeSeconds int               `json:"uptime_seconds"`
+	DatabaseBytes int64             `json:"database_bytes"`
+	FileBytes     int64             `json:"file_bytes"`
+	Requests      int               `json:"requests"`
+	Client4xx     int               `json:"client_4xx"`
+	Server5xx     int               `json:"server_5xx"`
+	ServerErrors  []errorItem       `json:"server_errors"`
+	FailingPaths  []failingPathItem `json:"failing_paths"`
+	EmailsSent    int               `json:"emails_sent"`
+	EmailsFailed  int               `json:"emails_failed"`
+	PushSent      int               `json:"push_sent"`
+	PushFailed    int               `json:"push_failed"`
+	PushCleaned   int               `json:"push_cleaned"`
+	PushShare     float64           `json:"push_failure_share"`
+	PushReasons   []pushReasonItem  `json:"push_reasons"`
+	FCMSent       int               `json:"fcm_sent"`
+	FCMFailed     int               `json:"fcm_failed"`
+	PushTokens    int               `json:"push_tokens"`
+	FCMTokens     int               `json:"fcm_tokens"`
+	BackupAt      string            `json:"backup_at,omitempty"`
+	BackupNote    string            `json:"backup_note,omitempty"`
 }
 
 type alertItem struct {
 	Key     string `json:"key"`
 	Message string `json:"message"`
 	Tone    string `json:"tone"`
+	Section string `json:"section,omitempty"`
 }
 
 type dashboardResponse struct {
@@ -428,7 +477,62 @@ func (d *Dashboard) Numbers() http.HandlerFunc {
 			d.fail(w, err)
 			return
 		}
-		body.Alerts = alertsFor(health, backup, spike, deletions, now)
+		volume, err := d.numbers.RequestVolume(r.Context(), window)
+		if err != nil {
+			d.fail(w, err)
+			return
+		}
+		pushes, err := d.numbers.PushVolume(r.Context(), window)
+		if err != nil {
+			d.fail(w, err)
+			return
+		}
+		reasons, err := d.numbers.PushBreakdown(r.Context(), window)
+		if err != nil {
+			d.fail(w, err)
+			return
+		}
+		paths, err := d.numbers.FailingPaths(r.Context(), window, failingPathLimit)
+		if err != nil {
+			d.fail(w, err)
+			return
+		}
+		quiet, err := d.numbers.QuietAlerts(r.Context())
+		if err != nil {
+			d.fail(w, err)
+			return
+		}
+		body.System.Requests = volume.Requests
+		body.System.PushCleaned = pushes.Cleaned
+		body.System.PushShare = pushes.Share()
+		body.System.PushReasons = make([]pushReasonItem, 0, len(reasons))
+		for _, entry := range reasons {
+			body.System.PushReasons = append(body.System.PushReasons, pushReasonItem{
+				Channel: entry.Channel,
+				Reason:  entry.Reason,
+				Label:   pushReasonLabel(entry.Channel, entry.Reason),
+				Total:   entry.Total,
+			})
+		}
+		body.System.FailingPaths = make([]failingPathItem, 0, len(paths))
+		for _, entry := range paths {
+			body.System.FailingPaths = append(body.System.FailingPaths, failingPathItem{
+				Path:    entry.Path,
+				Total:   entry.Total,
+				Message: entry.Message,
+				Last:    entry.Last.Format(time.RFC3339),
+			})
+		}
+		body.Alerts = alertsFor(alertFacts{
+			Health:    health,
+			Requests:  volume,
+			Push:      pushes,
+			Backup:    backup,
+			Spike:     spike,
+			Deletions: deletions,
+			Quiet:     quiet,
+			Now:       now,
+		})
 		httpx.WriteJSON(w, http.StatusOK, body)
 	}
 }
@@ -460,50 +564,162 @@ func failing(sent, failed int) bool {
 	return float64(failed)/float64(total) > failureShare
 }
 
-func alertsFor(health store.SystemTotals, backup store.BackupState, spike, deletions int,
-	now time.Time) []alertItem {
+// pushAlerting answers whether the notification failures are worth an alert. It needs a
+// real number of sends behind it, and it leaves out the subscriptions the server dropped
+// on the spot: those fail once by definition and nobody can do anything about them.
+func pushAlerting(volume store.PushVolume) bool {
+	if volume.Attempts() < minPushVolume {
+		return false
+	}
+	return volume.Share() > failureShare
+}
+
+// serverErrorAlerting answers whether the server errors are worth an alert. A handful of
+// errors in a quiet hour says little, so the period needs a real number of requests
+// behind it first.
+func serverErrorAlerting(volume store.RequestVolume) bool {
+	if volume.Requests < minRequestVolume {
+		return false
+	}
+	return volume.Failures >= serverErrorSpike
+}
+
+var pushReasonLabels = map[string]string{
+	store.PushReasonExpired:     "Expired or unregistered",
+	store.PushReasonInvalidKey:  "Invalid key or refused",
+	store.PushReasonRateLimited: "Rate limited",
+	store.PushReasonNetwork:     "Could not be reached",
+	store.PushReasonPayload:     "Payload refused",
+	store.PushReasonOther:       "Something else",
+}
+
+var pushChannelLabels = map[string]string{
+	store.ChannelWebPush: "Web push",
+	store.ChannelFCM:     "App notifications",
+}
+
+func pushReasonLabel(channel, reason string) string {
+	where := pushChannelLabels[channel]
+	if where == "" {
+		where = channel
+	}
+	why := pushReasonLabels[reason]
+	if why == "" {
+		why = reason
+	}
+	return where + " · " + why
+}
+
+// alertFacts is everything the alerts are decided from, gathered in one place so that
+// the rules can be read and tested without a request.
+type alertFacts struct {
+	Health    store.SystemTotals
+	Requests  store.RequestVolume
+	Push      store.PushVolume
+	Backup    store.BackupState
+	Spike     int
+	Deletions int
+	Quiet     map[string]time.Time
+	Now       time.Time
+}
+
+func alertsFor(facts alertFacts) []alertItem {
 	alerts := make([]alertItem, 0)
-	if health.Server5xx >= serverErrorSpike {
-		alerts = append(alerts, alertItem{
+	add := func(alert alertItem) {
+		if until, ok := facts.Quiet[alert.Key]; ok && until.After(facts.Now) {
+			return
+		}
+		alerts = append(alerts, alert)
+	}
+	if serverErrorAlerting(facts.Requests) {
+		add(alertItem{
 			Key:     AlertServerErrors,
 			Tone:    "error",
-			Message: "The server answered with 5xx more than usual in this period.",
+			Section: SectionSystemErrors,
+			Message: fmt.Sprintf(
+				"%d of the %d requests in this period ended in a server error.",
+				facts.Requests.Failures, facts.Requests.Requests),
 		})
 	}
-	if failing(health.EmailsSent, health.EmailsFailed) {
-		alerts = append(alerts, alertItem{
+	if failing(facts.Health.EmailsSent, facts.Health.EmailsFailed) {
+		add(alertItem{
 			Key:     AlertEmailFailure,
 			Tone:    "error",
+			Section: SectionSystemEmail,
 			Message: "More than a fifth of the emails in this period failed.",
 		})
 	}
-	if failing(health.PushSent, health.PushFailed) || failing(health.FCMSent, health.FCMFailed) {
-		alerts = append(alerts, alertItem{
+	if pushAlerting(facts.Push) {
+		add(alertItem{
 			Key:     AlertPushFailure,
 			Tone:    "warning",
-			Message: "More than a fifth of the push notifications in this period failed.",
+			Section: SectionSystemPush,
+			Message: fmt.Sprintf(
+				"%d of the %d notifications in this period failed, beyond the expired ones the server cleaned up.",
+				facts.Push.Failed-facts.Push.Cleaned, facts.Push.Attempts()-facts.Push.Cleaned),
 		})
 	}
-	if backup.LastSuccessAt == nil || now.Sub(*backup.LastSuccessAt) > backupStaleAfter {
-		alerts = append(alerts, alertItem{
+	if facts.Backup.LastSuccessAt == nil ||
+		facts.Now.Sub(*facts.Backup.LastSuccessAt) > backupStaleAfter {
+		add(alertItem{
 			Key:     AlertBackupStale,
 			Tone:    "warning",
+			Section: SectionSystemBackup,
 			Message: "The last database backup is older than 36 hours.",
 		})
 	}
-	if spike >= signInSpikeLimit {
-		alerts = append(alerts, alertItem{
+	if facts.Spike >= signInSpikeLimit {
+		add(alertItem{
 			Key:     AlertSignInSpike,
 			Tone:    "warning",
+			Section: SectionSystemSignIns,
 			Message: "One address failed to sign in many times in the last hour.",
 		})
 	}
-	if deletions > 0 {
-		alerts = append(alerts, alertItem{
+	if facts.Deletions > 0 {
+		add(alertItem{
 			Key:     AlertSheetDeletes,
 			Tone:    "warning",
+			Section: SectionSystemSheets,
 			Message: "An attendance sheet was deleted in the last day.",
 		})
 	}
 	return alerts
+}
+
+// Dismiss sets one alert aside for a day. The window lives on the server, so the banner
+// stays quiet on every device the super admin signs in from, not only the one that
+// dismissed it.
+func (d *Dashboard) Dismiss() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		current, ok := middleware.CurrentUser(r.Context())
+		if !ok {
+			httpx.WriteError(w, http.StatusUnauthorized, middleware.MessageUnauthorized)
+			return
+		}
+		key := strings.TrimSpace(r.PathValue("key"))
+		if !KnownAlert(key) {
+			httpx.WriteError(w, http.StatusNotFound, MessageAlertUnknown)
+			return
+		}
+		err := d.numbers.DismissAlert(r.Context(), key, current.ID, store.AlertQuietWindow)
+		if err != nil {
+			log.Printf("handler: could not dismiss the alert %q: %v", key, err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, messageResponse{Message: MessageAlertDismissed})
+	}
+}
+
+// KnownAlert keeps the dismissal endpoint to the alerts the dashboard can raise, so that
+// the table cannot be filled with keys nobody reads.
+func KnownAlert(key string) bool {
+	switch key {
+	case AlertServerErrors, AlertEmailFailure, AlertPushFailure, AlertBackupStale,
+		AlertSignInSpike, AlertSheetDeletes:
+		return true
+	default:
+		return false
+	}
 }
