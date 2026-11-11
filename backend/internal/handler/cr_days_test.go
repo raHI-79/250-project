@@ -20,8 +20,6 @@ func crDayRequest(t *testing.T, handler *CR, query string) *httptest.ResponseRec
 	return serve(handler.Upcoming(), withCurrentUser(request, crUserID, auth.RoleCR))
 }
 
-// The hub asked for a date and the handler read only "from", so Tomorrow and Today came
-// back with the very same list: every item from today to the end of the horizon.
 func TestCRUpcomingAnswersTheDayThatWasAskedFor(t *testing.T) {
 	silenceLog(t)
 	items := newFakeScheduleStore()
@@ -67,7 +65,6 @@ func TestCRUpcomingRefusesADateInTheWrongOrder(t *testing.T) {
 func TestCRUpcomingShowsTheHolidayChipAndKeepsTheItemsBelowIt(t *testing.T) {
 	silenceLog(t)
 	items := newFakeScheduleStore()
-	// Friday is a weekly off day, and the class representative created an exam on it.
 	items.byDate = map[string][]store.ScheduleItem{
 		crFriday: {itemOn(crFriday, store.ItemScheduled, 7)},
 	}

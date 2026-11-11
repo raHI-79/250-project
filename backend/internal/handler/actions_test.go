@@ -28,9 +28,6 @@ func joinedActions(role string, item store.ScheduleItem) string {
 	return strings.Join(got, ",")
 }
 
-// The final buttons are the ones the bug report was about: a row that is not in a final
-// routine offered "Remove from final" while the final routine was empty. These two rules
-// hold for every status, every origin and both roles.
 func TestTheFinalButtonsFollowInFinalForEveryStatus(t *testing.T) {
 	for _, origin := range everyOrigin {
 		for _, status := range everyStatus {
@@ -252,9 +249,6 @@ func TestADayThatHasPassedOffersNothing(t *testing.T) {
 }
 
 func TestAllowedActionsNeverReturnsNil(t *testing.T) {
-	// The field is omitted from the JSON when it is empty, and the website treats a
-	// missing field as "nothing allowed", so an empty slice and nil behave alike. The
-	// tests below keep the promise that the call never panics for an unknown status.
 	item := store.ScheduleItem{Origin: "something new", Status: "something new"}
 	for _, role := range []string{ViewerRoleCR, ViewerRoleTeacher} {
 		if got := AllowedActions(role, item, false); got == nil {

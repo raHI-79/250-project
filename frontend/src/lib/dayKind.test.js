@@ -2,8 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { dayKindNote, holidayOn } from './dayKind.js'
 
-// Friday 13 and Saturday 14 November 2026 are weekly off days; Wednesday 11 is a named
-// holiday; Saturday 21 is a make-up working day that follows Sunday.
 const calendar = {
   off_days: [5, 6],
   holidays: [

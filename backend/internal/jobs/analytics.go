@@ -15,10 +15,7 @@ const (
 	defaultEventDays  = 365
 	defaultNoticeDays = 120
 	closedSessionDays = 30
-	// pushUnusedDays is how long a web push subscription may sit unused. A browser that
-	// has not taken a notification in two months has thrown the subscription away, and a
-	// dead row fails every send after that.
-	pushUnusedDays = 60
+	pushUnusedDays    = 60
 )
 
 type AnalyticsStore interface {

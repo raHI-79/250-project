@@ -44,9 +44,6 @@ func TestTheReasonNamesWhyANotificationDidNotArrive(t *testing.T) {
 	}
 }
 
-// A subscription the push service has thrown away has to go on the spot. Leaving it in
-// place means the same refusal on every later send, which keeps the failure share of the
-// whole portal above its alert threshold for good.
 func TestExpiredCoversEveryAnswerThatMeansTheSubscriptionIsGone(t *testing.T) {
 	for _, status := range []int{http.StatusNotFound, http.StatusGone, http.StatusForbidden} {
 		if !Expired(status) {
@@ -62,7 +59,6 @@ func TestExpiredCoversEveryAnswerThatMeansTheSubscriptionIsGone(t *testing.T) {
 }
 
 const (
-	// A real uncompressed P-256 point and scalar, in base64url, with no padding.
 	goodPublic  = "BFs6tKJYkDr4hGzEqhiJYQUNr3UcLDvZwLRt0wVyB6c0UNEGfp8Ow0U4m0brLZyD9AnBsYQTDsOyUJoyTeUkT6g"
 	goodPrivate = "Yk0kVxl3ZtK0kqzFk0TmcHAEaGlZ9wzLQmRTJ5dFYQk"
 )

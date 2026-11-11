@@ -28,9 +28,6 @@ func fileRequest(t *testing.T, field, name string, data []byte) *http.Request {
 	return request
 }
 
-// Both uploaders stand between a caller and the file store, so both have to turn away a
-// type nobody asked for and a file bigger than the server agreed to keep. The name a
-// caller chose is never trusted: the content decides.
 func TestAPhotoIsRefusedUnlessItsContentIsAPicture(t *testing.T) {
 	photos := NewPhotos(t.TempDir())
 	tests := []struct {
@@ -79,7 +76,6 @@ func TestAnAttachmentIsRefusedUnlessItsTypeIsOnTheList(t *testing.T) {
 }
 
 func TestEveryUploaderStopsAtItsSizeLimit(t *testing.T) {
-	// One megabyte of room, and a file of two.
 	attachments := NewAttachments(t.TempDir(), 1)
 	if attachments.MaxBytes() != 1<<20 {
 		t.Fatalf("the attachment limit = %d bytes, want one megabyte", attachments.MaxBytes())
@@ -89,7 +85,6 @@ func TestEveryUploaderStopsAtItsSizeLimit(t *testing.T) {
 	if _, err := attachments.Save(fileRequest(t, FieldName, "notes.pdf", big)); err == nil {
 		t.Error("an attachment twice the limit was kept")
 	}
-	// The photo limit is fixed, because a profile picture has one job.
 	if MaxPhotoBytes <= 0 {
 		t.Fatalf("the photo limit = %d bytes, which is not a limit", MaxPhotoBytes)
 	}

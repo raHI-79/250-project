@@ -49,8 +49,6 @@ const asDate = (value) => {
   return Number.isNaN(stamp.getTime()) ? null : stamp
 }
 
-// zoneParts reads a stamp in APP_TIMEZONE. Everything that has to agree with the server
-// goes through it, so that a phone set to another zone still sees the Dhaka day.
 const partFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: APP_TIMEZONE,
   year: 'numeric',
@@ -103,8 +101,6 @@ export const isValidDate = (value) => {
   )
 }
 
-// shiftDate walks whole days on the calendar. It never touches a zone, so a day never
-// gains or loses an hour on the way.
 export const shiftDate = (value, days) => {
   if (!isValidDate(value)) return value
   const stamp = new Date(`${value}T00:00:00Z`)
@@ -136,8 +132,6 @@ export const dateParts = (value) => {
   return { day: String(Number(day)), month: String(Number(month)), year }
 }
 
-// fromParts builds a date out of the three numbers a date field collects. It is the only
-// place that turns what somebody typed into a date, so no locale can reorder it.
 export const fromParts = ({ day, month, year } = {}) => {
   const dayNumber = Number(String(day ?? '').trim())
   const monthNumber = Number(String(month ?? '').trim())
@@ -155,8 +149,6 @@ const shortDay = (value) => {
   return name ? name.slice(0, 3) : ''
 }
 
-// formatDate writes "Fri 6 Nov 2026", the one shape every date wears in the portal and
-// in the app.
 export const formatDate = (value) => {
   const stamp = isValidDate(value) ? value : isoDate(value)
   if (!isValidDate(stamp)) return ''
@@ -241,8 +233,6 @@ export const formatDateTime = (value) => {
   return `${formatDate(stamp)}, ${zoneClock(value)}`
 }
 
-// monthName and longDate keep the month names out of the browser locale, so that a phone
-// set to another language still reads the same as the portal.
 export const monthName = (value) => {
   const stamp = isValidDate(value) ? value : isoDate(value)
   if (!isValidDate(stamp)) return ''
@@ -270,7 +260,6 @@ export const longMonth = (value) => {
   return LONG_MONTHS[Number(stamp.slice(5, 7)) - 1]
 }
 
-// monthHeading writes "November 2026" for a YYYY-MM key.
 export const monthHeading = (key) => {
   const [year, month] = String(key || '').split('-')
   const index = Number(month) - 1
@@ -278,7 +267,6 @@ export const monthHeading = (key) => {
   return `${LONG_MONTHS[index]} ${year}`
 }
 
-// longDate writes "Friday 6 November", the greeting line of the Today pages.
 export const longDate = (value) => {
   const stamp = isValidDate(value) ? value : isoDate(value)
   if (!isValidDate(stamp)) return ''
@@ -291,20 +279,17 @@ export const dayOfMonth = (value) => {
   return stamp.slice(8, 10)
 }
 
-// hourIn reads the hour of a stamp in APP_TIMEZONE, for the greeting of the Today pages.
 export const hourIn = (value = new Date()) => {
   const parts = zoneParts(value)
   return parts ? parts.hour : 0
 }
 
-// clockIn reads the wall clock of a stamp in APP_TIMEZONE as HH:MM.
 export const clockIn = (value = new Date()) => {
   const parts = zoneParts(value)
   if (!parts) return ''
   return `${pad(parts.hour)}:${pad(parts.minute)}`
 }
 
-// minutesOfDay turns an HH:MM clock into minutes since midnight.
 export const minutesOfDay = (clock) => {
   const [hour, minute] = String(clock || '')
     .split(':')

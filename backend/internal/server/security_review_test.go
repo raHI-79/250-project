@@ -17,13 +17,8 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 )
 
-// routePattern matches the way every route is registered: a method, a space and a path.
 var routePattern = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE) (/\S*)$`)
 
-// registeredRoutes reads every route the router registers straight out of the source, so
-// that the tables below cannot fall behind a route somebody adds. http.ServeMux keeps no
-// list of its own patterns, and a table nobody checks for holes is a table that grows
-// holes.
 func registeredRoutes(t *testing.T) []string {
 	t.Helper()
 	found := make(map[string]bool)
@@ -66,9 +61,6 @@ func registeredRoutes(t *testing.T) []string {
 	return routes
 }
 
-// publicRoutes are the addresses that answer without a token on purpose: the sign-in and
-// registration flows, the public numbers of the landing page, the beacon the website
-// posts its page views to, the health check and the app download.
 func publicRoutes() map[string]string {
 	return map[string]string{
 		"GET /api/health":                    "the platform health probe",
@@ -101,8 +93,6 @@ func publicRoutes() map[string]string {
 	}
 }
 
-// androidOnlyRoutes are the addresses that only answer the Android app, because they
-// bind or move a phone and a browser has no phone to bind.
 func androidOnlyRoutes() []string {
 	return []string{
 		"POST /api/students/attendance/phone",
@@ -110,8 +100,6 @@ func androidOnlyRoutes() []string {
 	}
 }
 
-// tableRows is every row of the role table, with its query string dropped: a query is
-// not part of the pattern the router registered.
 func tableRows() [][2]string {
 	rows := make([][2]string, 0, len(protectedRoutes()))
 	for _, route := range protectedRoutes() {
@@ -124,10 +112,6 @@ func tableRows() [][2]string {
 	return rows
 }
 
-// covers answers whether a registered pattern and a table row are the same route. A
-// wildcard in the pattern stands for whatever the table row put in its place, so
-// "/api/cr/items/{id}/final" is matched by "/api/cr/items/1/final" and
-// "/api/me/badges/{section}/seen" by "/api/me/badges/routine/seen".
 func covers(pattern, path string) bool {
 	left := strings.Split(pattern, "/")
 	right := strings.Split(path, "/")
@@ -157,14 +141,7 @@ func inTable(method, pattern string) bool {
 	return false
 }
 
-// TestEveryApiRouteIsAccountedFor is the completeness check behind the tables above. A
-// new route has to be either public on purpose, carried by the role table, or covered by
-// one of the portal suites named here, so that nothing reaches production without
-// somebody deciding who may call it.
 func TestEveryApiRouteIsAccountedFor(t *testing.T) {
-	// The office portal and control room routes carry their own permission table, which
-	// TestEveryOfficeRouteDeclaresAPermission proves complete, and their own access
-	// suites. They are listed by prefix rather than one by one.
 	coveredPrefixes := []string{
 		"GET /api/admin/", "POST /api/admin/", "PUT /api/admin/", "PATCH /api/admin/",
 		"DELETE /api/admin/",
@@ -214,9 +191,6 @@ func TestEveryApiRouteIsAccountedFor(t *testing.T) {
 	}
 }
 
-// TestThePublicRoutesStayPublic keeps the list above honest in the other direction: a
-// route somebody put on the public list has to actually answer without a token, or the
-// list is lying about the surface of the portal.
 func TestThePublicRoutesStayPublic(t *testing.T) {
 	_, router := newAccessRouter(t)
 	for route := range publicRoutes() {
@@ -233,8 +207,6 @@ func TestThePublicRoutesStayPublic(t *testing.T) {
 	}
 }
 
-// TestThePhoneRoutesOnlyAnswerTheApp covers the X-Client rule from the other side: a
-// phone is bound from the app, so the website is turned away even with a good token.
 func TestThePhoneRoutesOnlyAnswerTheApp(t *testing.T) {
 	deps, router := newAccessRouter(t)
 	token := issue(t, deps, accessStudentID, auth.RoleStudent)
@@ -250,12 +222,8 @@ func TestThePhoneRoutesOnlyAnswerTheApp(t *testing.T) {
 	}
 }
 
-// TestAnOfficeTokenIsRefusedFromTheApp states the other half of the X-Client rule in one
-// place: the office portal and the control room never answer the app, whatever the token.
 func TestAnOfficeTokenIsRefusedFromTheApp(t *testing.T) {
 	deps, router := newAccessRouter(t)
-	// The access router knows one office account, so the rule is stated with the role
-	// that account carries. The super admin follows the same path through the guard.
 	for _, role := range []string{auth.RoleAdmin} {
 		token := issue(t, deps, accessAdminID, role)
 		rec := serveAsApp(t, router, http.MethodGet, "/api/me", token)

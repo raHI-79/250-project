@@ -38,8 +38,6 @@ func TestSessionZoneMakesSqlDatesFollowDhaka(t *testing.T) {
 		t.Fatalf("Open() returned an unexpected error: %v", err)
 	}
 	defer pool.Close()
-	// 2026-11-05 18:03 UTC is already 2026-11-06 in Dhaka. Every date the server
-	// derives in SQL has to agree with that, or the day flips six hours early.
 	var date, truncated, cast string
 	query := `SELECT to_char(TIMESTAMPTZ '2026-11-05 18:03:00+00'::date, 'YYYY-MM-DD'),
 to_char(date_trunc('day', TIMESTAMPTZ '2026-11-05 18:03:00+00'), 'YYYY-MM-DD'),

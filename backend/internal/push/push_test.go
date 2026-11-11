@@ -278,9 +278,6 @@ func TestEndpointHostFallsBackWhenTheEndpointIsUnusable(t *testing.T) {
 	}
 }
 
-// A push service answers 403 for a subscription it no longer recognises as well as for a
-// key it refuses. Keeping such a row means the same refusal on every later send, which
-// is what kept the failure share of the whole portal above its alert threshold.
 func TestEveryAnswerThatMeansTheSubscriptionIsGoneDropsTheRow(t *testing.T) {
 	silence(t)
 	for _, status := range []int{http.StatusNotFound, http.StatusGone, http.StatusForbidden} {

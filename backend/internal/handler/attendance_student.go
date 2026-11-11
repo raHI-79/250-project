@@ -448,8 +448,6 @@ func (s *StudentAttendance) Mine() http.HandlerFunc {
 
 func (s *StudentAttendance) RegisterPhone() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// The client rule is checked before anything is read, so a request from the
-		// website is turned away without touching the database.
 		if !middleware.FromAndroidApp(r) {
 			httpx.WriteError(w, http.StatusForbidden, attendance.MessageWebsiteOnly)
 			return
@@ -490,8 +488,6 @@ func (s *StudentAttendance) RegisterPhone() http.HandlerFunc {
 
 func (s *StudentAttendance) RequestPhone() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// The client rule is checked before anything is read, so a request from the
-		// website is turned away without touching the database.
 		if !middleware.FromAndroidApp(r) {
 			httpx.WriteError(w, http.StatusForbidden, attendance.MessageWebsiteOnly)
 			return

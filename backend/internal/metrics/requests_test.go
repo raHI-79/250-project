@@ -92,7 +92,6 @@ func TestAServerErrorFromAHandlerIsCounted(t *testing.T) {
 	sink := &fakeSink{}
 	counts := &fakeCounterStore{}
 	counter := NewCounter(counts)
-	// The settle window hides the first minute, so the start has to be moved past it.
 	past := time.Now().Add(-2 * SettleWindow)
 	handler := responsesStartedAt(past, sink, counter)(answer(http.StatusInternalServerError,
 		`{"error":"Something went wrong. Please try again."}`))
@@ -300,7 +299,6 @@ func TestTheCounterWritesOneRowPerFlush(t *testing.T) {
 	if counts.requests != 5 || counts.failures != 1 {
 		t.Errorf("wrote %d requests and %d failures, want 5 and 1", counts.requests, counts.failures)
 	}
-	// A second flush with nothing new writes nothing at all.
 	if got := counter.Flush(context.Background()); got != 0 {
 		t.Errorf("an empty flush wrote %d requests, want none", got)
 	}

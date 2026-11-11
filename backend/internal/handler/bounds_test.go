@@ -10,8 +10,6 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/store"
 )
 
-// A caller that may name its own page size can ask for the whole table in one request, so
-// every such endpoint refuses a size outside its range instead of trusting the number.
 func TestAListRefusesAPageSizeOutsideItsRange(t *testing.T) {
 	silenceLog(t)
 	tests := []struct {
@@ -58,8 +56,6 @@ func TestAListRefusesAPageSizeOutsideItsRange(t *testing.T) {
 	}
 }
 
-// TestTheDefaultPageIsAlwaysBounded states the other half: a caller that names nothing
-// still gets a page, never the whole table.
 func TestTheDefaultPageIsAlwaysBounded(t *testing.T) {
 	silenceLog(t)
 	service := &fakeNotificationService{}
@@ -77,9 +73,6 @@ func TestTheDefaultPageIsAlwaysBounded(t *testing.T) {
 	}
 }
 
-// TestTheStoreBoundsTheListsACallerCannotNarrow names the lists whose size the caller
-// cannot influence, and the number each one stops at. A list that grows with the life of
-// the portal and has no bound is a slow outage waiting for the right week.
 func TestTheStoreBoundsTheListsACallerCannotNarrow(t *testing.T) {
 	bounds := map[string]int{
 		"the student directory":  store.DirectoryLimit,

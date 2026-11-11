@@ -16,15 +16,6 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/store"
 )
 
-// One week of November 2026, seen from Saturday the 7th at ten in the morning:
-//
-//	Sun  8 teaching day, the fixed routine carries two classes
-//	Mon  9 teaching day, one class the representative created and one cancelled class
-//	Tue 10 teaching day, one exam the teacher created
-//	Wed 11 a holiday the office added
-//	Thu 12 teaching day
-//	Fri 13 a weekly off day, with an exam by the representative and a makeup class by the teacher
-//	Sat 14 a weekly off day the office turned into a working day that follows Sunday
 const (
 	weekSunday    = "2026-11-08"
 	weekMonday    = "2026-11-09"
@@ -102,8 +93,6 @@ func seedWeek(t *testing.T) weekFixture {
 	}
 	fixture.teacherRowID = lookupTeacherID(t, router, fixture.adminToken,
 		int64(number(t, invited, "id")))
-	// A Sunday routine with two classes, so a working Saturday that follows Sunday has
-	// something to generate, and one class on the Monday.
 	routines := []string{
 		routineBody("A", fixture.firstCourse, fixture.teacherRowID, 0, "09:00", "10:30", "3001", "class"),
 		routineBody("A", fixture.secondCourse, fixture.teacherRowID, 0, "10:30", "12:00", "3002", "class"),
@@ -429,10 +418,6 @@ func TestOneWeekAgreesAcrossEveryView(t *testing.T) {
 		if counted != 2 {
 			t.Errorf("the student sees %d items on the published off day, want 2", counted)
 		}
-		// A drop course is one the student retakes with another batch, so it adds rows
-		// from that batch rather than taking rows away from this one. The student who
-		// carries a drop course therefore sees the same day as every other student of
-		// the batch.
 		dropper := dayOf(t, router, fixture.dropperToken, "/api/students/upcoming-routine", weekFriday)
 		var dropped struct {
 			Groups []struct {
@@ -469,7 +454,6 @@ func TestOneWeekAgreesAcrossEveryView(t *testing.T) {
 		if chip == nil || !chip.Holiday || chip.Name != "Called off" {
 			t.Errorf("the Saturday chip = %+v, want the new holiday", chip)
 		}
-		// The Friday items were created by hand, so the holiday there leaves them alone.
 		saveHoliday(t, router, admin, `{"date":"`+weekFriday+`","name":"Also called off"}`)
 		kept := listItems(t, dayOf(t, router, fixture.crToken, "/api/cr/upcoming", weekFriday))
 		if len(kept) != 2 {

@@ -1,7 +1,5 @@
 import { expect } from '@playwright/test'
 
-// Console messages that say nothing about the portal. A browser writes some of these on
-// every page, and a suite that fails on them fails on noise instead of on bugs.
 const IGNORED_CONSOLE = [
   /favicon/i,
   /Download the React DevTools/i,
@@ -11,9 +9,6 @@ const IGNORED_CONSOLE = [
   /ResizeObserver loop/i,
 ]
 
-// A connection to another site that drops on the way, such as a font file from Google on a
-// poor network, says nothing about the portal. The same failure on the portal's own address
-// still counts, and so does another site answering with an error status.
 const NETWORK_FAILURE = /^Failed to load resource: net::ERR_/
 
 const isOtherSite = (page, address) => {
@@ -24,8 +19,6 @@ const isOtherSite = (page, address) => {
   }
 }
 
-// Addresses whose failure is expected: the push key is absent on a server with no VAPID
-// pair, and the beacon is allowed to be refused by the rate limiter.
 const TOLERATED_API = [
   { path: '/api/push/public-key', statuses: [404, 503] },
   { path: '/api/analytics/view', statuses: [429] },
@@ -56,7 +49,6 @@ export function watch(page) {
     if (status < 400) return
     const tolerated = TOLERATED_API.find((entry) => url.includes(entry.path))
     if (tolerated && tolerated.statuses.includes(status)) return
-    // A 401 on a page the suite has not signed in for yet is the portal doing its job.
     if (status === 401 && !problems.signedIn) return
     problems.api.push(`${status} ${response.request().method()} ${new URL(url).pathname}`)
   })
@@ -75,8 +67,6 @@ export function expectNoProblems(problems, where) {
   expect(problems.api, `${where} made failing API calls`).toEqual([])
 }
 
-// measure reads the layout faults the brief asks about, in one pass in the page, so that
-// one round trip covers a whole page instead of one per element.
 export async function measure(page) {
   return page.evaluate(async () => {
     const viewport = window.innerWidth
@@ -104,8 +94,6 @@ export async function measure(page) {
       const box = node.getBoundingClientRect()
       return box.width > 0 && box.height > 0
     }
-    // A label only a screen reader reads is one pixel across with its painting clipped
-    // away. It is meant to be unreadable on screen, so it is never a cut-off name.
     const screenReaderOnly = (node) => {
       const style = window.getComputedStyle(node)
       if (style.clipPath && style.clipPath !== 'none') return true
@@ -113,9 +101,6 @@ export async function measure(page) {
       const box = node.getBoundingClientRect()
       return box.width <= 2 || box.height <= 2
     }
-    // Decoration cannot be a layout fault: a shape nobody can touch, that says nothing
-    // and that its own layer clips, is background art rather than content pushed off
-    // the screen.
     const decoration = (node) => {
       if ((node.innerText || '').trim() !== '') return false
       for (let walk = node; walk && walk !== document.body; walk = walk.parentElement) {
@@ -125,9 +110,6 @@ export async function measure(page) {
       }
       return false
     }
-    // A wide table or a week grid is meant to be read by scrolling the panel it sits in,
-    // not the page. Only content the reader cannot bring into view is a fault, which is
-    // what the page-level horizontal scroll above already catches.
     const insideHorizontalScroller = (node) => {
       for (let walk = node.parentElement; walk && walk !== document.body; walk = walk.parentElement) {
         const style = window.getComputedStyle(walk)
@@ -135,7 +117,6 @@ export async function measure(page) {
       }
       return false
     }
-    // Elements wider than the viewport.
     for (const node of document.querySelectorAll('body *')) {
       if (!visible(node) || screenReaderOnly(node) || decoration(node)) continue
       if (insideHorizontalScroller(node)) continue
@@ -145,7 +126,6 @@ export async function measure(page) {
         if (report.tooWide.length > 5) break
       }
     }
-    // Names, ids and titles cut off with an ellipsis.
     const clipCandidates = document.querySelectorAll(
       'h1, h2, h3, h4, td, th, a, button, label, p, span, li, dt, dd',
     )
@@ -159,10 +139,6 @@ export async function measure(page) {
         if (report.clipped.length > 5) break
       }
     }
-    // Controls a fixed bar sits on top of. A control that happens to lie behind the bar
-    // at this scroll position is not a fault: the reader scrolls it out. It is a fault
-    // only when the control stays behind the bar once it has been scrolled into the
-    // middle of the screen, which is what too little room at the bottom looks like.
     const bars = [...document.querySelectorAll('body *')].filter((node) => {
       if (!visible(node)) return false
       const style = window.getComputedStyle(node)
@@ -172,8 +148,6 @@ export async function measure(page) {
       new Promise((resolve) => {
         window.requestAnimationFrame(() => window.setTimeout(resolve, 40))
       })
-    // A control that lives inside the bar is not covered by it: the sidebar and the tab
-    // bar are sticky, so every link in them answers with one of their own nodes.
     const onTopOf = (node) => {
       const box = node.getBoundingClientRect()
       if (box.bottom < 0 || box.top > window.innerHeight) return null
@@ -184,10 +158,6 @@ export async function measure(page) {
       if (!bar || bar.contains(node)) return null
       return bar
     }
-    // While a dialog is open everything behind it is meant to be out of reach, so only
-    // the controls of the dialog itself are asked whether something covers them.
-    // A dialog that is still fading in counts as open: it is what the reader is about to
-    // look at, whatever its opacity this instant.
     const openDialog = [...document.querySelectorAll('[role="dialog"]')].find((node) => {
       const box = node.getBoundingClientRect()
       return box.width > 0 && box.height > 0 && window.getComputedStyle(node).display !== 'none'
@@ -211,7 +181,6 @@ export async function measure(page) {
     }
     window.scrollTo({ top: atStart, behavior: 'instant' })
     await settle()
-    // A dialog taller than the screen has to scroll inside itself.
     for (const dialog of document.querySelectorAll('[role="dialog"], dialog')) {
       if (!visible(dialog)) continue
       const box = dialog.getBoundingClientRect()
@@ -229,10 +198,6 @@ export async function measure(page) {
   })
 }
 
-// settleAnimations waits for the font and then for every running animation to finish. The
-// font stylesheet loads without holding the page back, so a reading taken before it lands
-// measures the fallback face; a dialog slides and fades in, and a reading taken
-// mid-animation sees buttons narrower than they end up.
 export async function settleAnimations(page) {
   await page
     .waitForFunction(
@@ -253,8 +218,6 @@ export async function settleAnimations(page) {
               const timing = animation.effect && animation.effect.getTiming()
               return timing && timing.iterations !== Infinity
             })
-            // A cancelled animation, such as the ripple of the button that opened a
-            // dialog, rejects its promise; on its own it must not end the wait early.
             .map((animation) => animation.finished.catch(() => undefined)),
         ),
         new Promise((resolve) => window.setTimeout(resolve, 2000)),
@@ -273,10 +236,6 @@ export async function expectGoodLayout(page, where) {
   expect(report.tallDialogs, `${where} has a dialog taller than the screen`).toEqual([])
 }
 
-// expectScrollsToTheBottom proves the page can be read to its end. A page whose body is
-// locked while its content overflows leaves the last rows unreachable. The question is
-// asked of the content rather than of scrollHeight, because a bar pinned below the fold
-// inflates scrollHeight without adding anything a reader can scroll to.
 export async function expectScrollsToTheBottom(page, where) {
   const report = await page.evaluate(async () => {
     const settle = () =>
@@ -291,7 +250,6 @@ export async function expectScrollsToTheBottom(page, where) {
       const box = node.getBoundingClientRect()
       return box.height > 0 && box.width > 0
     }
-    // The last thing in normal flow is the bottom of the page as a reader sees it.
     const candidates = [...root.querySelectorAll('*')].filter(inFlow)
     if (candidates.length === 0) return { reached: true, reason: 'nothing to read' }
     let last = candidates[0]
@@ -307,9 +265,6 @@ export async function expectScrollsToTheBottom(page, where) {
     await settle()
     await new Promise((resolve) => window.setTimeout(resolve, 400))
     const after = last.getBoundingClientRect().bottom
-    // An endless list, such as the activity log, loads the next page when the reader
-    // reaches its end, so the end moves away. A page that grew is a page that can still
-    // be read further, not a dead end.
     const grew = document.documentElement.scrollHeight > grownFrom + 4
     return {
       reached: grew || after <= window.innerHeight + 4,

@@ -191,8 +191,6 @@ export const periodRangeError = (periods, start, end) => {
   return ''
 }
 
-// itemStarted compares the item against the Dhaka wall clock, so that a phone set to
-// another zone still agrees with the server about what has already begun.
 export const itemStarted = (item, now = new Date()) => {
   if (!item?.item_date || !item?.start_time) return false
   return `${item.item_date} ${item.start_time}` < `${today(now)} ${clockIn(now)}`

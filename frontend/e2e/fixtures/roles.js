@@ -1,10 +1,3 @@
-// The five roles the suite signs in as, with the pages each one can reach and the main
-// dialogs worth opening. The identifiers come from the demo seed, which the suite expects
-// to be loaded with `go run ./cmd/seed -demo` against TEST_DATABASE_URL.
-//
-// A page is named by its address. The visit helper decides when a page has loaded, from
-// the content it shows rather than from a heading, because the shell moves the title into
-// a bar on a phone.
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'sust-250-project'
 const OFFICE_ID = process.env.E2E_OFFICE_ID || 'office'
@@ -85,8 +78,6 @@ export const CONTROL_PAGES = [
   { path: '/control-room/data' },
 ]
 
-// Each role signs in through the portal it belongs to. A class representative is a
-// student the office promoted, so it uses the student sign-in.
 export const ROLES = {
   student: {
     label: 'student',
@@ -130,9 +121,6 @@ export const ROLES = {
   },
 }
 
-// DIALOG_PAGES are the pages of each role that carry an action worth a dialog. The page
-// walk already visits every page; this shorter list keeps the dialog pass to the places
-// something opens.
 export const DIALOG_PAGES = {
   student: ['/student/polls', '/profile'],
   cr: ['/cr/create-class', '/cr/create-class?tab=final', '/cr/post-notices', '/cr/polls'],
@@ -147,7 +135,5 @@ export const DIALOG_PAGES = {
   control: ['/control-room/admins', '/control-room/settings'],
 }
 
-// DIALOG_OPENERS matches the controls that open a dialog. The suite presses them on every
-// page of a role and measures whatever appears, so no table of dialogs can go stale.
 export const DIALOG_OPENERS =
   /^(Invite|Add|New|Create|Post|Edit|Remove|Suspend|Delete|Cancel|Reschedule|Set |Confirm|Publish|Preview|Request|Change|Mark|Open|Close|Export|Block)/i

@@ -102,8 +102,6 @@ func (h *Holidays) offDays(ctx context.Context) []int {
 	return h.values.Numbers(ctx, settings.KeyOffDays, settings.OffDayNumbers())
 }
 
-// OffDays is the one place that reads the weekly off days for a request, so that the
-// generator, the views and the office portal never disagree.
 func (h *Holidays) OffDays(ctx context.Context) []int {
 	return h.offDays(ctx)
 }
@@ -248,8 +246,6 @@ func (h *Holidays) SaveOffDays() http.HandlerFunc {
 	}
 }
 
-// tellAboutRemovals lets the teacher and the class representatives of every removed item
-// know that the holiday took the generated class away.
 func (h *Holidays) tellAboutRemovals(r *http.Request, holiday store.Holiday,
 	removed []store.ScheduleItem) {
 	if h.alerts == nil || len(removed) == 0 {

@@ -11,9 +11,6 @@ import (
 
 var ErrNotAHoliday = errors.New("store: no holiday or working day is set for that date")
 
-// Holiday is one entry of the calendar the office keeps. A row with WorkingDay set
-// turns an off day or a holiday back into a teaching day that follows FollowsWeekday;
-// every other row stops the automatic generation of the fixed routine for its date.
 type Holiday struct {
 	Date       string
 	Name       string
@@ -29,7 +26,6 @@ func (h Holiday) FollowsName() string {
 	return daydate.DayName(h.Follows)
 }
 
-// DayKind tells the views what to show at the top of a day.
 type DayKind struct {
 	Date       string
 	Holiday    bool
@@ -67,9 +63,7 @@ SET name = EXCLUDED.name,
     working_day = EXCLUDED.working_day,
     follows_weekday = EXCLUDED.follows_weekday,
     updated_at = now()`
-	deleteHolidaySQL = `DELETE FROM holidays WHERE holiday_date = $1::date`
-	// An item counts as not yet decided while it still waits for its teacher and
-	// while no class representative has taken it into a final routine.
+	deleteHolidaySQL   = `DELETE FROM holidays WHERE holiday_date = $1::date`
 	undecidedOnDateSQL = selectItem + `
 WHERE i.item_date = $1::date AND i.origin = 'fixed'
   AND i.status IN ('awaiting_teacher', 'no_response')
@@ -125,9 +119,6 @@ func (s *Store) FindHoliday(ctx context.Context, date string) (Holiday, error) {
 	return holiday, nil
 }
 
-// SaveHoliday writes the entry and, for a holiday that stops the generation, takes the
-// automatically generated items of that date away again. It returns the items it
-// removed so that the caller can tell their teacher and class representatives.
 func (s *Store) SaveHoliday(ctx context.Context, holiday Holiday) ([]ScheduleItem, error) {
 	if !daydate.Valid(holiday.Date) {
 		return nil, fmt.Errorf("store: %q is not a date like 2026-11-06", holiday.Date)
@@ -180,9 +171,6 @@ func (s *Store) DeleteHoliday(ctx context.Context, date string) error {
 	return nil
 }
 
-// DayKinds answers, for every date in the range, whether it is an off day, a holiday or
-// a working day that follows another weekday. offDays holds the weekday numbers that are
-// weekly off days.
 func (s *Store) DayKinds(ctx context.Context, from, to string, offDays []int) (map[string]DayKind, error) {
 	entries, err := s.ListHolidaysBetween(ctx, from, to)
 	if err != nil {
@@ -202,8 +190,6 @@ func (s *Store) DayKinds(ctx context.Context, from, to string, offDays []int) (m
 	return kinds, nil
 }
 
-// DayKindOf decides what a single date is. It is the one place that combines the weekly
-// off days with the holiday calendar, so that every view agrees.
 func DayKindOf(date string, entry Holiday, offDays []int, known bool) (DayKind, bool) {
 	if known && entry.WorkingDay {
 		return DayKind{Date: date, WorkingDay: true, Name: entry.Name, Follows: entry.Follows}, true

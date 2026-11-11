@@ -23,9 +23,7 @@ import {
 
 test('reads every date in the Dhaka zone, never the browser zone', () => {
   assert.equal(APP_TIMEZONE, 'Asia/Dhaka')
-  // 2026-11-05 18:03 UTC is already 6 November in Dhaka.
   assert.equal(isoDate(new Date('2026-11-05T18:03:00Z')), '2026-11-06')
-  // 2026-11-05 17:57 UTC is still 5 November in Dhaka.
   assert.equal(isoDate(new Date('2026-11-05T17:57:00Z')), '2026-11-05')
 })
 
@@ -119,7 +117,6 @@ test('labels a past day by how far back it is', () => {
 
 test('stamps a time in the Dhaka zone', () => {
   const at = new Date('2026-11-06T06:00:00Z')
-  // 2026-11-06 05:30 UTC is 11:30 in Dhaka on the same day.
   assert.equal(stampLabel('2026-11-06T05:30:00Z', at), 'Today 11:30 AM')
   assert.equal(stampLabel('2026-11-05T05:30:00Z', at), 'Yesterday 11:30 AM')
   assert.equal(stampLabel('2026-10-20T05:30:00Z', at), '20 Oct, 11:30 AM')

@@ -16,7 +16,6 @@ func TestTheRequestCountersAddUpPerBucket(t *testing.T) {
 	if err := store.AddRequestCounts(ctx, bucket, 40, 2); err != nil {
 		t.Fatalf("AddRequestCounts() returned an unexpected error: %v", err)
 	}
-	// A second flush of the same minute adds to the row instead of replacing it.
 	if err := store.AddRequestCounts(ctx, bucket, 10, 1); err != nil {
 		t.Fatalf("AddRequestCounts() returned an unexpected error: %v", err)
 	}
@@ -82,7 +81,6 @@ func TestThePushBreakdownGroupsByChannelAndReason(t *testing.T) {
 			t.Errorf("%s = %d, want %d", key, totals[key], count)
 		}
 	}
-	// A delivered notification never appears in the breakdown.
 	for _, entry := range breakdown {
 		if entry.Reason == "" {
 			t.Errorf("a row with no reason reached the breakdown: %+v", entry)
@@ -159,7 +157,6 @@ func TestADismissedAlertComesBackAfterItsWindow(t *testing.T) {
 	if ahead := time.Until(until); ahead < 23*time.Hour || ahead > 25*time.Hour {
 		t.Errorf("the alert stays quiet for %v, want about a day", ahead)
 	}
-	// Dismissing it again moves the window instead of failing on the key.
 	if err := store.DismissAlert(ctx, "server_errors", chief, time.Minute); err != nil {
 		t.Fatalf("a second DismissAlert() returned an unexpected error: %v", err)
 	}
@@ -170,8 +167,6 @@ func TestADismissedAlertComesBackAfterItsWindow(t *testing.T) {
 	if ahead := time.Until(again["server_errors"]); ahead > 2*time.Minute {
 		t.Errorf("the window was not moved, it still runs for %v", ahead)
 	}
-	// A window of zero or less would silence an alert for ever or not at all, so it
-	// falls back to the standing day.
 	if err := store.DismissAlert(ctx, "email_failures", chief, 0); err != nil {
 		t.Fatalf("DismissAlert() returned an unexpected error: %v", err)
 	}
@@ -182,7 +177,6 @@ func TestADismissedAlertComesBackAfterItsWindow(t *testing.T) {
 	if ahead := time.Until(standing["email_failures"]); ahead < 23*time.Hour {
 		t.Errorf("a window of zero runs for %v, want the standing day", ahead)
 	}
-	// A window that has run out leaves nothing behind for the dashboard to hide.
 	expired := `INSERT INTO alert_dismissals (alert_key, dismissed_by, quiet_until)
 VALUES ('push_failures', $1, now() - INTERVAL '1 hour')`
 	if _, err := pool.Exec(ctx, expired, chief); err != nil {

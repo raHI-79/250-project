@@ -128,9 +128,6 @@ u.reset_attempts, u.reset_token_expires_at
 FROM users u
 LEFT JOIN teachers t ON t.user_id = u.id
 ` + identifierMatch
-	// The reset deadlines are checked against the database clock further down, so the
-	// database has to set them as well. A stamp from the server clock would expire early
-	// or late whenever the two clocks drift apart.
 	startPasswordResetSQL = `UPDATE users
 SET reset_token = $2,
     reset_token_expires_at = now() + make_interval(secs => $3::double precision),

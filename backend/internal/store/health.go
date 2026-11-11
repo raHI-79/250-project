@@ -10,8 +10,6 @@ const (
 	ChannelWebPush = "web"
 	ChannelFCM     = "fcm"
 
-	// The reasons a notification does not arrive. They are the groups System health
-	// shows, chosen so that each one points at a different thing to do about it.
 	PushReasonExpired     = "expired"
 	PushReasonInvalidKey  = "invalid_key"
 	PushReasonRateLimited = "rate_limited"
@@ -19,17 +17,10 @@ const (
 	PushReasonPayload     = "payload"
 	PushReasonOther       = "other"
 
-	// PushUnusedAfter is how long a web push subscription may sit unused before the
-	// nightly cleanup drops it. A browser that has not asked for a notification in two
-	// months has almost certainly thrown the subscription away already.
-	PushUnusedAfter = 60 * 24 * time.Hour
-	// AlertQuietWindow is how long a dismissed alert stays quiet.
+	PushUnusedAfter  = 60 * 24 * time.Hour
 	AlertQuietWindow = 24 * time.Hour
 )
 
-// SystemEvent is one line of the health log: an email, a notification or a failing
-// answer. Channel and Reason are filled in for the notifications, so that the failures
-// can be grouped by where they were going and by what went wrong.
 type SystemEvent struct {
 	Kind    string
 	OK      bool
@@ -39,15 +30,12 @@ type SystemEvent struct {
 	Message string
 }
 
-// PushBreakdown is the failure count of one channel for one reason.
 type PushBreakdown struct {
 	Channel string
 	Reason  string
 	Total   int
 }
 
-// FailingPath is one address that answered with a server error, with the message of the
-// last one and when it happened.
 type FailingPath struct {
 	Path    string
 	Total   int
@@ -55,17 +43,11 @@ type FailingPath struct {
 	Last    time.Time
 }
 
-// RequestVolume is how many requests the handlers answered in a period, and how many of
-// them were server errors. The alerts need the volume to tell a handful of errors in a
-// quiet hour from the same handful in a busy one.
 type RequestVolume struct {
 	Requests int
 	Failures int
 }
 
-// PushVolume counts the notifications of one period. Cleaned holds the ones that failed
-// because the subscription was gone and was dropped on the spot, so the alert can leave
-// them out: they are not a fault anybody can fix and they never happen twice.
 type PushVolume struct {
 	Sent    int
 	Failed  int
@@ -76,8 +58,6 @@ func (v PushVolume) Attempts() int {
 	return v.Sent + v.Failed
 }
 
-// Share is the failure share the alert compares against its threshold. The endpoints the
-// server has already cleaned up are left out of both the numerator and the denominator.
 func (v PushVolume) Share() float64 {
 	attempts := v.Attempts() - v.Cleaned
 	failed := v.Failed - v.Cleaned
@@ -111,8 +91,6 @@ COUNT(*) FILTER (WHERE NOT ok),
 COUNT(*) FILTER (WHERE NOT ok AND reason = 'expired')
 FROM system_events
 WHERE kind IN ('push', 'fcm') AND created_at >= $1 AND created_at < $2`
-	// The last message of each address comes from the newest row of that address, which
-	// DISTINCT ON picks without a second pass over the table.
 	failingPathsSQL = `WITH latest AS (
     SELECT DISTINCT ON (detail) detail, message, created_at
     FROM system_events
@@ -233,8 +211,6 @@ func (s *Store) DismissAlert(ctx context.Context, key string, by int64, quiet ti
 	return nil
 }
 
-// QuietAlerts lists the alerts the super admin has set aside and the moment each one
-// comes back.
 func (s *Store) QuietAlerts(ctx context.Context) (map[string]time.Time, error) {
 	rows, err := s.pool.Query(ctx, quietAlertsSQL)
 	if err != nil {
@@ -256,9 +232,6 @@ func (s *Store) QuietAlerts(ctx context.Context) (map[string]time.Time, error) {
 	return quiet, nil
 }
 
-// CleanPushSubscriptions drops the web push subscriptions nothing has used for a long
-// time. A subscription the browser threw away answers every send with the same refusal,
-// and leaving it in place keeps the failure share of the whole portal high.
 func (s *Store) CleanPushSubscriptions(ctx context.Context, before time.Time) (int, error) {
 	tag, err := s.pool.Exec(ctx, cleanPushSubscriptionsSQL, before)
 	if err != nil {

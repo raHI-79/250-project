@@ -88,9 +88,6 @@ type itemsResponse struct {
 	Items []itemBody `json:"items"`
 }
 
-// dayKindBody is the chip every routine view puts at the top of a day. A weekly off day
-// carries the name of its weekday, a holiday its own name, and a working day the weekday
-// whose routine the office told it to follow.
 type dayKindBody struct {
 	Holiday     bool   `json:"holiday"`
 	WorkingDay  bool   `json:"working_day"`
@@ -241,15 +238,10 @@ func newDayKindBody(kind store.DayKind) *dayKindBody {
 	return body
 }
 
-// DayCalendar answers what each date in a range is. Every routine view takes its chips
-// from it, so the chip a class representative sees is the chip the teacher and the
-// students see.
 type DayCalendar interface {
 	DayKinds(ctx context.Context, from, to string, offDays []int) (map[string]store.DayKind, error)
 }
 
-// dayKinds reads the calendar for a range and never fails a request over it: a view that
-// cannot read the calendar simply shows no chip.
 func dayKinds(r *http.Request, calendar DayCalendar, values *settings.Cache,
 	from, to string) map[string]store.DayKind {
 	if calendar == nil {

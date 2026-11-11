@@ -359,8 +359,6 @@ FROM users WHERE id = $1`
 	if attempts != 0 {
 		t.Errorf("stored attempts = %d, want 0", attempts)
 	}
-	// The database writes both stamps, so that they can be compared with the database
-	// clock later on without depending on the clock of the server that asked for them.
 	if ahead := storedExpiry.Sub(before); ahead < 9*time.Minute || ahead > 11*time.Minute {
 		t.Errorf("stored expiry is %v ahead, want about %v", ahead, lifetime)
 	}

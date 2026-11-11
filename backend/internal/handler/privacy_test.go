@@ -15,14 +15,8 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/store"
 )
 
-// privateFields are the ones that must never reach somebody who is not the owner and not
-// the office. They are named here once, and the tests below prove where each one may and
-// may not appear.
 var privateFields = []string{"date_of_birth", "token_key"}
 
-// officeBodies are the response shapes the office portal and the control room use. The
-// office keeps the student and teacher records, so it is the one place a date of birth
-// belongs, and the teacher's own session body is the one place the attendance key does.
 var officeBodies = map[string]bool{
 	"studentItem":      true,
 	"teacherItem":      true,
@@ -32,10 +26,6 @@ var officeBodies = map[string]bool{
 	"sessionBody":      true,
 }
 
-// TestAPrivateFieldOnlyAppearsWhereItBelongs reads the response shapes out of the source
-// and fails when a private field turns up in a body that is not one of the few the office
-// or the owner reads. A field added to a shared body would otherwise reach every role
-// that body is written for.
 func TestAPrivateFieldOnlyAppearsWhereItBelongs(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -74,8 +64,6 @@ func TestAPrivateFieldOnlyAppearsWhereItBelongs(t *testing.T) {
 					if officeBodies[spec.Name.Name] {
 						continue
 					}
-					// A request shape carries what the caller sent about itself, which
-					// is how somebody proves a date of birth in the first place.
 					if strings.HasSuffix(spec.Name.Name, "Request") {
 						continue
 					}
@@ -91,9 +79,6 @@ func TestAPrivateFieldOnlyAppearsWhereItBelongs(t *testing.T) {
 	}
 }
 
-// TestTheAttendanceKeyNeverReachesAStudent states the rule the Bluetooth attendance rests
-// on. The key is the secret a phone proves it was in the room with, so a student who held
-// it could mark a classmate present from anywhere.
 func TestTheAttendanceKeyNeverReachesAStudent(t *testing.T) {
 	now := time.Now()
 	session := store.AttendanceSession{
@@ -122,13 +107,11 @@ func TestTheAttendanceKeyNeverReachesAStudent(t *testing.T) {
 	if teacher.TokenKey != session.TokenKey {
 		t.Errorf("the teacher lost the key it needs to show the code: %q", teacher.TokenKey)
 	}
-	// A closed session is over, so even the teacher has no use for the key any more.
 	closed := session
 	closed.Status = attendance.StatusClosed
 	if body := newSessionBody(closed, now, true); body.TokenKey != "" {
 		t.Errorf("a closed session still carried the key %q", body.TokenKey)
 	}
-	// A roll call needs no phone, so it needs no key either.
 	roll := session
 	roll.Method = attendance.TakeRollCall
 	if body := newSessionBody(roll, now, true); body.TokenKey != "" {
@@ -136,10 +119,6 @@ func TestTheAttendanceKeyNeverReachesAStudent(t *testing.T) {
 	}
 }
 
-// TestNoErrorMessageCarriesASecret reads every message the handlers answer with and fails
-// on one that would hand a caller something it should not see. An error is the easiest
-// place for a secret to escape, because it is written in a hurry on a path nobody walks
-// twice.
 func TestNoErrorMessageCarriesASecret(t *testing.T) {
 	forbidden := []string{
 		"password_hash", "reset_token", "token_key", "JWT_SECRET", "DATABASE_URL",

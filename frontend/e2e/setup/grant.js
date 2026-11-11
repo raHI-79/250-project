@@ -1,9 +1,5 @@
 import { ROLES } from '../fixtures/roles.js'
 
-// A freshly seeded office admin holds no permission: the super admin hands them out in
-// the control room. The suite does the same, once, before any page is walked, so every
-// office page is exercised as an admin who is allowed to use it, instead of answering 403
-// to an admin nobody has trusted yet.
 const API = process.env.E2E_API_URL || 'http://localhost:8080'
 
 async function call(path, { method = 'GET', token, body } = {}) {
@@ -35,7 +31,6 @@ export default async function grantOfficePermissions() {
     method: 'POST',
     body: { identifier: chief.identifier, password: chief.password },
   })
-  // Changing permissions is a control room write, which asks for the password again.
   await call('/api/office/security/confirm', {
     method: 'POST',
     token,

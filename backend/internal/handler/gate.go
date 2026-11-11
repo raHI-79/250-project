@@ -47,8 +47,6 @@ func (g *Gates) Maintenance(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// The header tells the request counters that this answer was meant, so that a
-		// maintenance window does not look like a wave of server errors.
 		w.Header().Set(metrics.MaintenanceHeader, settings.On)
 		httpx.WriteError(w, http.StatusServiceUnavailable, message)
 	})

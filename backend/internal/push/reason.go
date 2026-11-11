@@ -11,10 +11,7 @@ import (
 )
 
 const (
-	// publicKeyBytes is the length of an uncompressed P-256 point, which is what the
-	// browser expects in applicationServerKey.
-	publicKeyBytes = 65
-	// privateKeyBytes is the length of a P-256 scalar.
+	publicKeyBytes  = 65
 	privateKeyBytes = 32
 )
 
@@ -25,10 +22,6 @@ var (
 	ErrBadPrivateKey = errors.New("push: VAPID_PRIVATE_KEY is not a 32 byte base64url key")
 )
 
-// Expired tells whether the push service has thrown the subscription away. A browser
-// that cleared its site data, a reinstalled app or an unsubscribed tab all end here, and
-// the row has to go: keeping it means every later send fails for good and drags the
-// failure share of the whole portal above the alert threshold.
 func Expired(status int) bool {
 	switch status {
 	case http.StatusNotFound, http.StatusGone, http.StatusForbidden:
@@ -38,8 +31,6 @@ func Expired(status int) bool {
 	}
 }
 
-// ReasonOf names why a send did not arrive, or returns an empty string when it did. The
-// names are the ones System health groups the failures by.
 func ReasonOf(status int, err error) string {
 	if err != nil {
 		return store.PushReasonNetwork
@@ -74,8 +65,6 @@ func decodeKey(value string, want int) bool {
 	return len(raw) == want
 }
 
-// ValidateKeys reads the VAPID pair once, at startup, so that a mistyped key is a clear
-// line in the log instead of a quiet stream of refusals hours later.
 func ValidateKeys(publicKey, privateKey, subject string) error {
 	public := strings.TrimSpace(publicKey)
 	private := strings.TrimSpace(privateKey)
@@ -94,7 +83,6 @@ func ValidateKeys(publicKey, privateKey, subject string) error {
 	return nil
 }
 
-// Describe writes the one startup line about web push. It never prints a key.
 func Describe(publicKey, privateKey, subject string) string {
 	if err := ValidateKeys(publicKey, privateKey, subject); err != nil {
 		return "web push is off: " + err.Error()

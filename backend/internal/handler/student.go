@@ -56,8 +56,6 @@ func NewStudent(cfg *config.Config, students StudentStore) *Student {
 	return &Student{cfg: cfg, students: students}
 }
 
-// WithSettings gives the student views the weekly off days, so that the holiday chip a
-// student sees is the chip the class representative and the teacher see.
 func (s *Student) WithSettings(values *settings.Cache) *Student {
 	s.values = values
 	return s

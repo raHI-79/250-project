@@ -304,14 +304,9 @@ VALUES ($1, $2, $3, NULLIF($4::text, ''), NULLIF($5::text, ''), NULLIF($6::text,
 NULLIF($7::text, ''), NULLIF($8::bigint, 0))
 RETURNING id, created_at`
 	touchConversationSQL = `UPDATE conversations SET last_message_at = $2 WHERE id = $1`
-	// The read and clear marks are compared against the stamps the database wrote on the
-	// messages, so the database has to write them too. Taking them from the server clock
-	// instead would hide or reveal messages whenever the two clocks drift apart.
-	markReadSQL = `INSERT INTO conversation_reads (user_id, conversation_id, last_read_at)
+	markReadSQL          = `INSERT INTO conversation_reads (user_id, conversation_id, last_read_at)
 VALUES ($1, $2, now())
 ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = now()`
-	// The sender's own mark carries the stamp the database gave the new message, so the
-	// message never counts as unread for the person who wrote it.
 	markReadAtSQL = `INSERT INTO conversation_reads (user_id, conversation_id, last_read_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = EXCLUDED.last_read_at`

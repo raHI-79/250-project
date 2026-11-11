@@ -78,16 +78,10 @@ func run() error {
 		log.Println("upload: files are kept in the database")
 	}
 	alerts := notify.New(userStore)
-	// The request counter keeps the volume of a period in memory and writes one row a
-	// minute, so the health alerts can tell a handful of errors in a quiet hour from the
-	// same handful in a busy one.
 	requestCounter := metrics.NewCounter(userStore)
 	var pushWorker *push.Worker
 	var pushTests handler.PushTester
 	var devices *fcm.Worker
-	// Both notification channels read and check their keys once, here, and say in one
-	// line what they found. A mistyped key used to show up only hours later as a quiet
-	// stream of refusals on the dashboard.
 	if cfg.FirebaseEnabled() {
 		sender, err := fcm.New(cfg.FirebaseAccount, "", cfg.FCMChannelID)
 		if err != nil {

@@ -31,7 +31,6 @@ const (
 	MessageAlertDismissed = "The alert stays quiet for a day."
 	MessageAlertUnknown   = "No alert goes by that name."
 
-	// The System health sections each alert points at with its Details link.
 	SectionSystemErrors  = "server-errors"
 	SectionSystemEmail   = "email"
 	SectionSystemPush    = "notifications"
@@ -39,18 +38,14 @@ const (
 	SectionSystemSignIns = "sign-ins"
 	SectionSystemSheets  = "attendance-sheets"
 
-	serverErrorSpike = 10
-	failureShare     = 0.2
-	backupStaleAfter = 36 * time.Hour
-	signInSpikeLimit = 10
-	spikeWindow      = time.Hour
-	semesterDays     = 180
-	minFailureVolume = 5
-	// minPushVolume is the number of sends a period needs before the failure share is
-	// worth an alert, so that one unlucky evening with three notifications stays quiet.
-	minPushVolume = 20
-	// minRequestVolume is the number of requests a period needs before a handful of
-	// server errors is worth an alert.
+	serverErrorSpike  = 10
+	failureShare      = 0.2
+	backupStaleAfter  = 36 * time.Hour
+	signInSpikeLimit  = 10
+	spikeWindow       = time.Hour
+	semesterDays      = 180
+	minFailureVolume  = 5
+	minPushVolume     = 20
 	minRequestVolume  = 200
 	failingPathLimit  = 8
 	sheetDeleteWindow = 24 * time.Hour
@@ -166,8 +161,6 @@ type errorItem struct {
 	At   string `json:"at"`
 }
 
-// failingPathItem is one address that answered with a server error in this period, with
-// how often, the message of the last one and when that was.
 type failingPathItem struct {
 	Path    string `json:"path"`
 	Total   int    `json:"total"`
@@ -175,8 +168,6 @@ type failingPathItem struct {
 	Last    string `json:"last"`
 }
 
-// pushReasonItem is one row of the notification breakdown: a channel, a reason and how
-// many sends ended that way.
 type pushReasonItem struct {
 	Channel string `json:"channel"`
 	Reason  string `json:"reason"`
@@ -564,9 +555,6 @@ func failing(sent, failed int) bool {
 	return float64(failed)/float64(total) > failureShare
 }
 
-// pushAlerting answers whether the notification failures are worth an alert. It needs a
-// real number of sends behind it, and it leaves out the subscriptions the server dropped
-// on the spot: those fail once by definition and nobody can do anything about them.
 func pushAlerting(volume store.PushVolume) bool {
 	if volume.Attempts() < minPushVolume {
 		return false
@@ -574,9 +562,6 @@ func pushAlerting(volume store.PushVolume) bool {
 	return volume.Share() > failureShare
 }
 
-// serverErrorAlerting answers whether the server errors are worth an alert. A handful of
-// errors in a quiet hour says little, so the period needs a real number of requests
-// behind it first.
 func serverErrorAlerting(volume store.RequestVolume) bool {
 	if volume.Requests < minRequestVolume {
 		return false
@@ -610,8 +595,6 @@ func pushReasonLabel(channel, reason string) string {
 	return where + " · " + why
 }
 
-// alertFacts is everything the alerts are decided from, gathered in one place so that
-// the rules can be read and tested without a request.
 type alertFacts struct {
 	Health    store.SystemTotals
 	Requests  store.RequestVolume
@@ -687,9 +670,6 @@ func alertsFor(facts alertFacts) []alertItem {
 	return alerts
 }
 
-// Dismiss sets one alert aside for a day. The window lives on the server, so the banner
-// stays quiet on every device the super admin signs in from, not only the one that
-// dismissed it.
 func (d *Dashboard) Dismiss() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		current, ok := middleware.CurrentUser(r.Context())
@@ -712,8 +692,6 @@ func (d *Dashboard) Dismiss() http.HandlerFunc {
 	}
 }
 
-// KnownAlert keeps the dismissal endpoint to the alerts the dashboard can raise, so that
-// the table cannot be filled with keys nobody reads.
 func KnownAlert(key string) bool {
 	switch key {
 	case AlertServerErrors, AlertEmailFailure, AlertPushFailure, AlertBackupStale,

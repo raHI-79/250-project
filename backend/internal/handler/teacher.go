@@ -85,8 +85,6 @@ func NewTeacher(cfg *config.Config, teachers TeacherStore, alerts BroadcastNotif
 	return &Teacher{cfg: cfg, teachers: teachers, alerts: alerts}
 }
 
-// WithSettings gives the views the weekly off days, so that the holiday chips agree with
-// the generator.
 func (t *Teacher) WithSettings(values *settings.Cache) *Teacher {
 	t.values = values
 	return t

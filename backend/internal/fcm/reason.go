@@ -8,8 +8,6 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/store"
 )
 
-// ReasonOf names why a message did not reach a device, so System health can group the
-// failures instead of showing one number nobody can act on.
 func ReasonOf(err error) string {
 	switch {
 	case err == nil:
@@ -38,8 +36,6 @@ func ReasonOf(err error) string {
 	}
 }
 
-// Describe writes the one startup line about the app notifications. It never prints the
-// service account.
 func Describe(client *Client, err error) string {
 	if errors.Is(err, ErrNotConfigured) {
 		return "app notifications are off: FIREBASE_SERVICE_ACCOUNT is not set"

@@ -20,9 +20,6 @@ const (
 	retryPause        = 3 * time.Second
 )
 
-// Open connects the pool and pins every session to timezone, so that CURRENT_DATE,
-// now() and every cast between a date and a stamp follow APP_TIMEZONE instead of the
-// zone the database server happens to run in.
 func Open(ctx context.Context, databaseURL string, maxConns int, timezone string) (*pgxpool.Pool, error) {
 	poolConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {

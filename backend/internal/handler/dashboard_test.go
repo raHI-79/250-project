@@ -51,8 +51,6 @@ func TestAlertRulesFireOnTheRightNumbers(t *testing.T) {
 			wants:    []string{AlertServerErrors},
 		},
 		{
-			// The same count in a period almost nobody used says nothing, so the alert
-			// waits for a real number of requests behind it.
 			name:     "the same run of server errors in a quiet period stays quiet",
 			requests: store.RequestVolume{Requests: minRequestVolume - 1, Failures: serverErrorSpike},
 			backup:   store.BackupState{LastSuccessAt: &fresh},
@@ -86,7 +84,6 @@ func TestAlertRulesFireOnTheRightNumbers(t *testing.T) {
 			wants:    []string{AlertPushFailure},
 		},
 		{
-			// Fewer than twenty sends is not enough to judge a channel on.
 			name:     "a handful of notification failures stays quiet",
 			requests: busyPeriod(0),
 			push:     store.PushVolume{Sent: 2, Failed: 3},
@@ -94,8 +91,6 @@ func TestAlertRulesFireOnTheRightNumbers(t *testing.T) {
 			missing:  []string{AlertPushFailure},
 		},
 		{
-			// Expired subscriptions are dropped the moment they refuse, so they fail
-			// exactly once and are not a fault anybody can act on.
 			name:     "failures the server already cleaned up stay quiet",
 			requests: busyPeriod(0),
 			push:     store.PushVolume{Sent: 10, Failed: 15, Cleaned: 15},
@@ -186,7 +181,6 @@ func TestADismissedAlertStaysQuietForADay(t *testing.T) {
 	if !hasAlert(quiet, AlertBackupStale) {
 		t.Errorf("dismissing one alert silenced another: %+v", quiet)
 	}
-	// A window that has run out lets the alert back.
 	facts.Quiet = map[string]time.Time{AlertServerErrors: now.Add(-time.Minute)}
 	back := alertsFor(facts)
 	if !hasAlert(back, AlertServerErrors) {

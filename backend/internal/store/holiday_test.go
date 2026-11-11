@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// Friday 6 and Saturday 7 November 2026 are the weekly off days, Sunday 8 November is a
-// teaching day and the fixed routine in the fixture carries a Sunday class.
 const (
 	offFriday     = "2026-11-06"
 	offSaturday   = "2026-11-07"
@@ -20,7 +18,6 @@ var weekendOff = []int{5, 6}
 func TestGenerateSkipsTheWeeklyOffDays(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	fixture := seedEngine(t, ctx, store, pool, 0)
-	// A routine entry on every other weekday too, so only the off days can keep a date out.
 	for day := 1; day < 7; day++ {
 		addRoutineDay(t, ctx, pool, fixture, day)
 	}
@@ -74,7 +71,6 @@ func TestGenerateSkipsAHolidayOnATeachingDay(t *testing.T) {
 func TestAWorkingDayOverrideGeneratesTheChosenWeekday(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	seedEngine(t, ctx, store, pool, 0)
-	// Saturday 14 November follows Sunday, so the Sunday routine has to appear on it.
 	override := Holiday{Date: "2026-11-14", Name: "Make-up Saturday", WorkingDay: true, Follows: 0}
 	if _, err := store.SaveHoliday(ctx, override); err != nil {
 		t.Fatalf("SaveHoliday() returned an unexpected error: %v", err)
@@ -112,7 +108,6 @@ func TestAddingAHolidayRemovesOnlyTheUndecidedGeneratedItems(t *testing.T) {
 	if len(generated) != 1 {
 		t.Fatalf("got %d generated items, want one to remove later", len(generated))
 	}
-	// A class the class representative created for the same day has to survive.
 	created, err := store.CreateCRItem(ctx, newItem(fixture, workingSunday, "10:00", "11:00", "A"))
 	if err != nil {
 		t.Fatalf("CreateCRItem() returned an unexpected error: %v", err)

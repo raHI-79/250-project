@@ -19,10 +19,6 @@ import { WEEKDAYS, formatDate, today } from '../lib/time'
 
 const EMPTY = { date: '', name: '', workingDay: false, follows: '0' }
 
-// CalendarSettings edits the weekly off days and the holiday list. Off days and holidays
-// only stop the automatic generation of the fixed routine: a class, lab, makeup class or
-// exam somebody creates for such a date is kept, published and notified as on any other
-// day.
 export default function CalendarSettings({ base = '/api/admin', title = 'Off days and holidays' }) {
   const toast = useToast()
   const confirm = useConfirm()

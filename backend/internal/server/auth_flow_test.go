@@ -49,10 +49,6 @@ func dhakaZone() *time.Location {
 	return loc
 }
 
-// flowClock freezes the flow tests at 10:00 Dhaka time on a day whose tomorrow is a
-// teaching day, so that the fixed routine the fixtures generate always lands and no
-// flow depends on the weekday the suite happens to run on. It stays within the current
-// week so that the frozen clock never drifts far from the stamps the database writes.
 func flowClock() time.Time {
 	zone := dhakaZone()
 	here := time.Now().In(zone)
@@ -100,8 +96,6 @@ func baseFlowConfig(t *testing.T) *config.Config {
 	}
 }
 
-// newFlowRouterAt builds a router whose clock stands still at a chosen instant, for the
-// flows that have to land on named weekdays.
 func newFlowRouterAt(t *testing.T, at time.Time) (context.Context, *pgxpool.Pool, http.Handler) {
 	t.Helper()
 	return newFlowRouterWith(t, flowRateLimit, flowConfigAt(t, at))

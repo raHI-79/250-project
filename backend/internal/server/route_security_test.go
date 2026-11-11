@@ -224,8 +224,6 @@ func teacherOnly() []string {
 func protectedRoutes() []protectedRoute {
 	return []protectedRoute{
 		{method: http.MethodPost, path: "/api/auth/logout", allowed: everyRole()},
-		// Added by the route completeness check: every one of these answered a caller
-		// without the table saying who that caller may be.
 		{method: http.MethodGet, path: "/api/profile", allowed: everyRole()},
 		{method: http.MethodPatch, path: "/api/profile", allowed: everyRole()},
 		{method: http.MethodPost, path: "/api/profile/password", allowed: everyRole()},

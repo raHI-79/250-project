@@ -83,8 +83,6 @@ func NewCR(cfg *config.Config, classes CRStore, alerts BroadcastNotifier) *CR {
 	return &CR{cfg: cfg, classes: classes, alerts: alerts}
 }
 
-// WithSettings gives the views the weekly off days, so that the holiday chips agree with
-// the generator.
 func (c *CR) WithSettings(values *settings.Cache) *CR {
 	c.values = values
 	return c
@@ -440,10 +438,6 @@ func (c *CR) itemFrom(request crItemRequest, profile store.StudentProfile,
 	}, nil
 }
 
-// Upcoming answers in two shapes. With a date it returns exactly that day, which is what
-// the Tomorrow and Today toggle and the date picker of the hub ask for; without one it
-// returns the days from "from" onwards, which is what Show more days asks for. Reading
-// only "from" was the bug that made Tomorrow and Today list the very same classes.
 func (c *CR) Upcoming() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		profile, ok := c.profile(w, r)

@@ -124,10 +124,6 @@ func (w *Worker) SendTest(ctx context.Context, userID int64, title, body, target
 	return sent, nil
 }
 
-// send delivers one notification and keeps the subscription list honest. A push service
-// that answers 404, 410 or 403 has thrown the subscription away, so the row goes at
-// once: leaving it in place means the same refusal on every later send, which is what
-// kept the failure share of the whole portal above its alert threshold.
 func (w *Worker) send(ctx context.Context, subscription store.PushSubscription, message []byte) bool {
 	sendContext, cancel := context.WithTimeout(ctx, SendTimeout)
 	status, err := w.sender.Send(sendContext, subscription, message)

@@ -217,9 +217,6 @@ const selectItem = `SELECT ` + itemColumns + `
 ` + itemJoins
 
 const (
-	// Weekly off days and holidays keep a date out of the automatic generation. A
-	// holiday row marked as a working day puts the date back in and makes it follow
-	// the weekday the office chose, so that a make-up Saturday carries a Sunday.
 	generateFixedItemsSQL = `WITH teaching AS (
     SELECT day::date AS day,
            CASE WHEN h.working_day THEN h.follows_weekday

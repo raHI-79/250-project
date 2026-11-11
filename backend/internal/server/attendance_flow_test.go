@@ -80,8 +80,6 @@ func seedAttendance(t *testing.T) markFixture {
 	}
 	fixture.teacherRowID = lookupTeacherID(t, router, fixture.adminToken,
 		int64(number(t, invited, "id")))
-	// A routine entry gives the teacher the course and the batch it may take attendance
-	// for, which the options endpoint reads.
 	routine := routineBody("A", fixture.courseID, fixture.teacherRowID, 0, "09:00", "10:30",
 		"2101", "class")
 	if rec := call(t, router, http.MethodPost, "/api/admin/routines", routine,
@@ -138,7 +136,6 @@ func TestAttendanceFromOpenToSheet(t *testing.T) {
 		if code, ok := session["code"].(string); !ok || len(code) != 4 {
 			t.Errorf("the teacher received the code %v, want four digits", session["code"])
 		}
-		// The same session read by a student carries neither.
 		listed := call(t, router, http.MethodGet, "/api/students/attendance/open", "",
 			fixture.presentToken)
 		if listed.Code != http.StatusOK {
@@ -160,8 +157,6 @@ func TestAttendanceFromOpenToSheet(t *testing.T) {
 			t.Fatalf("binding the phone status = %d, want 200 (body = %q)",
 				bound.Code, bound.Body.String())
 		}
-		// The teacher's phone reports where the class is, and the student's has to be
-		// close to it.
 		placed := call(t, router, http.MethodPost,
 			"/api/teacher/attendance/sessions/"+strconv.FormatInt(bluetoothID, 10)+"/location",
 			`{"lat":24.9165,"lng":91.8316,"accuracy_m":8}`, fixture.teacherToken)
@@ -191,7 +186,6 @@ func TestAttendanceFromOpenToSheet(t *testing.T) {
 			t.Fatalf("binding the phone status = %d, want 200 (body = %q)",
 				bound.Code, bound.Body.String())
 		}
-		// Half a degree of latitude is tens of kilometres away from the room.
 		body := `{"session_id":` + strconv.FormatInt(bluetoothID, 10) +
 			`,"token":"` + token + `","device_id":"device-absent",` +
 			`"lat":25.5000,"lng":91.8316,"accuracy_m":10}`
@@ -227,7 +221,6 @@ func TestAttendanceFromOpenToSheet(t *testing.T) {
 		if closed.Code != http.StatusOK {
 			t.Fatalf("close status = %d, want 200 (body = %q)", closed.Code, closed.Body.String())
 		}
-		// A closed session hands nobody the key any more.
 		if strings.Contains(closed.Body.String(), sessionKeyOf(t, fixture, bluetoothID)) {
 			t.Errorf("a closed session still carried its key: %s", closed.Body.String())
 		}
@@ -287,7 +280,6 @@ func TestAttendanceFromOpenToSheet(t *testing.T) {
 	})
 
 	t.Run("a teacher deletes its own sheet and nobody else's", func(t *testing.T) {
-		// A class the teacher does not take is refused before anything is removed.
 		other := call(t, router, http.MethodDelete, "/api/teacher/attendance/sheet",
 			`{"course_id":`+strconv.FormatInt(fixture.courseID, 10)+
 				`,"batch":"CSE-24","section":"A"}`, fixture.teacherToken)
@@ -302,7 +294,6 @@ func TestAttendanceFromOpenToSheet(t *testing.T) {
 			t.Fatalf("deleting its own sheet = %d, want 200 (body = %q)",
 				mine.Code, mine.Body.String())
 		}
-		// The deletion is on the record, which is what raises the control room alert.
 		var deletions int
 		query := `SELECT COUNT(*) FROM audit_events
 WHERE action = 'delete' AND target_type = 'attendance'`
@@ -324,8 +315,6 @@ WHERE action = 'delete' AND target_type = 'attendance'`
 	})
 }
 
-// sessionKeyOf reads the key out of the database, the way only the teacher's own view
-// would ever see it.
 func sessionKeyOf(t *testing.T, fixture markFixture, id int64) string {
 	t.Helper()
 	var key string
@@ -336,9 +325,6 @@ func sessionKeyOf(t *testing.T, fixture markFixture, id int64) string {
 	return key
 }
 
-// TestRemindersOnlyReachTheTeachersWithSomethingUndecided drives the three reminder slots
-// against the real database. A holiday or a day everybody already decided has to stay
-// silent, which is the whole point of the morning slot.
 func TestRemindersOnlyReachTheTeachersWithSomethingUndecided(t *testing.T) {
 	fixture := seedAttendance(t)
 	userStore := store.New(fixture.pool)
@@ -380,7 +366,6 @@ func TestRemindersOnlyReachTheTeachersWithSomethingUndecided(t *testing.T) {
 			t.Errorf("the evening slot sent %d reminders, want one per teacher (%d)",
 				sent, len(undecided))
 		}
-		// The same slot a minute later sends nothing: a slot is claimed once a day.
 		again, err := scheduler.RemindTeachers(fixture.ctx, at.Add(time.Minute))
 		if err != nil {
 			t.Fatalf("RemindTeachers() returned an unexpected error: %v", err)

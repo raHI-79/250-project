@@ -2,14 +2,10 @@ import { defineConfig, devices } from '@playwright/test'
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
 
-// The suite drives a real browser against a local backend with the demo seed, so it runs
-// on its own and never in the same job as the unit tests.
 export default defineConfig({
   testDir: './specs',
   globalSetup: './setup/grant.js',
   outputDir: './.artifacts',
-  // A role's walk opens a dozen pages and measures each one, so a case is minutes
-  // rather than seconds.
   timeout: 360_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

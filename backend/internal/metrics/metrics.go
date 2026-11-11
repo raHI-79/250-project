@@ -109,9 +109,6 @@ func Push(inner push.Sender, sink Sink) push.Sender {
 	return &watchedPush{inner: inner, sink: sink}
 }
 
-// Send records what the push service actually answered. Reading only the transport error
-// counted a subscription the browser had thrown away as a success, which is why the
-// failure share on System health never matched what the logs showed.
 func (p *watchedPush) Send(ctx context.Context, subscription store.PushSubscription,
 	message []byte) (int, error) {
 	status, err := p.inner.Send(ctx, subscription, message)
@@ -137,9 +134,6 @@ func (w *statusWriter) Write(body []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	// Only the first part of a failing answer is kept, and only to show the message on
-	// System health. Our error answers carry a sentence written for the reader, never a
-	// secret or a stack trace.
 	if w.status >= 400 && len(w.body) < maxDetail {
 		w.body = append(w.body, body...)
 	}
@@ -156,11 +150,6 @@ func (w *statusWriter) message() string {
 	return clip(payload.Error)
 }
 
-// Responses counts what the handlers answered. A server error only counts when it came
-// out of one of our own handlers while the server was running normally, so the count
-// leaves out the first minute after a start, the platform health probes, the 503 the
-// maintenance gate writes on purpose and a request the caller abandoned before the answer,
-// whose database call was cancelled under it.
 func Responses(sink Sink, counter *Counter) func(http.Handler) http.Handler {
 	return responsesStartedAt(time.Now(), sink, counter)
 }

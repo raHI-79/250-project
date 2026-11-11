@@ -175,7 +175,6 @@ func (c *Cache) Number(ctx context.Context, key string, fallback int) int {
 	return value
 }
 
-// Numbers reads a comma separated list of whole numbers, used for the weekly off days.
 func (c *Cache) Numbers(ctx context.Context, key string, fallback []int) []int {
 	entries := c.List(ctx, key)
 	if len(entries) == 0 {
@@ -247,7 +246,6 @@ func (c *Cache) Registration(ctx context.Context) (bool, string) {
 	return open, message
 }
 
-// DefaultOffDays names Friday and Saturday, the weekly off days of the department.
 const DefaultOffDays = "5,6"
 
 func OffDayNumbers() []int {

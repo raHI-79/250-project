@@ -10,9 +10,6 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/store"
 )
 
-// The jobs decide which day they work on from the wall clock in Asia/Dhaka. Between six
-// in the evening and midnight the UTC date is already the day before, so every one of
-// these windows would pick the wrong day if any of them read a UTC date.
 func dhakaAt(t *testing.T, year int, month time.Month, day, hour, minute int) time.Time {
 	t.Helper()
 	loc, err := time.LoadLocation("Asia/Dhaka")
@@ -98,8 +95,6 @@ func TestEveryJobReadsTheDhakaDayAcrossMidnight(t *testing.T) {
 
 func TestTheDecisionDeadlineClosesTomorrowOfTheDhakaDay(t *testing.T) {
 	silenceLog(t)
-	// The last reminder is at 21:00, so at 23:57 on Thursday the deadline has passed and
-	// the items of Friday are the ones that get no answer.
 	cfg := testConfig(t)
 	cfg.Freeze(dhakaAt(t, 2026, time.November, 5, 23, 57))
 	items := &fakeItems{}
@@ -110,8 +105,6 @@ func TestTheDecisionDeadlineClosesTomorrowOfTheDhakaDay(t *testing.T) {
 	if len(items.askedDates) != 1 || items.askedDates[0] != "2026-11-06" {
 		t.Fatalf("CloseDecisions() looked at %v, want 2026-11-06", items.askedDates)
 	}
-	// Three minutes later the day has turned over. The deadline of the new day is its own
-	// evening, so nothing closes yet.
 	after := testConfig(t)
 	after.Freeze(dhakaAt(t, 2026, time.November, 6, 0, 3))
 	later := &fakeItems{}
@@ -124,7 +117,6 @@ func TestTheDecisionDeadlineClosesTomorrowOfTheDhakaDay(t *testing.T) {
 		t.Errorf("CloseDecisions() at 00:03 touched %v, want nothing before the evening deadline",
 			later.askedDates)
 	}
-	// On the evening of the new day the deadline closes the items of Saturday.
 	evening := testConfig(t)
 	evening.Freeze(dhakaAt(t, 2026, time.November, 6, 21, 1))
 	tonight := &fakeItems{}
@@ -140,7 +132,6 @@ func TestTheDecisionDeadlineClosesTomorrowOfTheDhakaDay(t *testing.T) {
 func TestTheMorningReminderUsesTheDhakaClock(t *testing.T) {
 	silenceLog(t)
 	waiting := []store.UndecidedTeacher{{UserID: 7, Count: 2}}
-	// The morning reminder is set for 07:30, so 05:59 is too early and 07:31 is due.
 	early := testConfig(t)
 	early.Freeze(dhakaAt(t, 2026, time.November, 6, 5, 59))
 	quiet := &fakeItems{todays: waiting}
@@ -175,8 +166,6 @@ func TestRemindersOnlyFireForItemsThatExist(t *testing.T) {
 	silenceLog(t)
 	cfg := testConfig(t)
 	cfg.Freeze(dhakaAt(t, 2026, time.November, 6, 7, 31))
-	// A holiday leaves no undecided item behind, so no reminder goes out even though the
-	// morning slot is due.
 	quiet := &fakeItems{}
 	sent, err := NewScheduler(cfg, quiet, &fakeAlerts{}).
 		RemindTeachers(context.Background(), cfg.Now())

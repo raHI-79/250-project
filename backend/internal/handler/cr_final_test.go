@@ -26,9 +26,6 @@ func TestCRActionsPerOrigin(t *testing.T) {
 			without: []string{ActionDelete},
 		},
 		{
-			// A cancelled class keeps its place in the final routine until the class
-			// representative publishes again, so neither final button is offered on the
-			// row. The Final routine still removes a selection of rows in one go.
 			name:    "a cancelled item of the final routine",
 			item:    store.ScheduleItem{Origin: store.OriginFixed, Status: store.ItemCancelled, InFinal: true},
 			without: []string{ActionDelete, ActionAddToFinal, ActionRemoveFromFinal},

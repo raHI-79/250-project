@@ -12,8 +12,6 @@ import (
 )
 
 const (
-	// Timezone mirrors the APP_TIMEZONE the server pins its own pool to, so that the
-	// tests see the same day boundaries as production.
 	Timezone       = "Asia/Dhaka"
 	DatabaseSuffix = "_test"
 	Timeout        = 60 * time.Second

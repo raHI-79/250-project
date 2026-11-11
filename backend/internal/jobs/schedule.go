@@ -139,8 +139,6 @@ func (s *Scheduler) Generate(ctx context.Context, now time.Time) (int, error) {
 	return s.items.GenerateFixedItems(ctx, from, to, s.OffDays(ctx))
 }
 
-// OffDays reads the weekly off days, so that the generator and the views agree on which
-// weekdays carry no automatic fixed routine.
 func (s *Scheduler) OffDays(ctx context.Context) []int {
 	if s.values == nil {
 		return settings.OffDayNumbers()

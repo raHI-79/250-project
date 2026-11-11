@@ -30,10 +30,6 @@ const box = (dark) =>
     dark ? 'text-white placeholder:text-white/40' : 'text-ink placeholder:text-faint',
   )
 
-// DateField asks for the day, then the month, then the year, and hands back a
-// YYYY-MM-DD string. The browser's own date input shows whatever order its locale
-// prefers, which read 11/06/2026 for a date in November on an American locale, so the
-// portal and the app use this field everywhere instead.
 export default function DateField({
   label = 'Date',
   value,

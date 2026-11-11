@@ -138,10 +138,6 @@ a.location_updated_at, a.token_key, a.closed_at, a.method,
 (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'present')`
 
 const (
-	// Both ends of the window are written by the database. started_at takes the default
-	// now() and ends_at counts from the same now(), so a clock skew between the server
-	// and the database can never put the end before the start, nor shorten a window the
-	// teacher asked ten minutes for.
 	openSessionSQL = `INSERT INTO attendance_sessions
 (course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key, method)
 VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6), $7, $8)

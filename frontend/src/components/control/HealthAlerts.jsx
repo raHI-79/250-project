@@ -2,10 +2,6 @@ import { useState } from 'react'
 import { Alert, Button, useToast } from '../ui'
 import api from '../../lib/api'
 
-// HealthAlerts shows the banner above the control room dashboard. The Alert itself draws
-// the one icon the tone deserves, so nothing is added inside it, and each row carries a
-// Details link to the System health section it came from and a Dismiss button that keeps
-// it quiet for a day on the server, not only in this browser.
 export default function HealthAlerts({ alerts = [], onDismissed, className }) {
   const toast = useToast()
   const [busy, setBusy] = useState('')

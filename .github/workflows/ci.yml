@@ -44,8 +44,6 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
-        # The store and server suites talk to a real database and reset the schema for
-        # every test, so they need more than the ten minutes a package gets by default.
         run: go test -timeout 25m ./...
 
   frontend:

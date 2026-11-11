@@ -321,8 +321,6 @@ func NewRouter(deps Dependencies) http.Handler {
 	} else if deps.Counter != nil {
 		root = metrics.Responses(nil, deps.Counter)(root)
 	}
-	// The maintenance gate sits inside the counter, so that the 503 it writes on purpose
-	// carries its header before the counter decides whether it was a server error.
 	root = gates.Maintenance(root)
 	if deps.Walls != nil {
 		root = blocks.Middleware(root)
@@ -699,8 +697,6 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("PUT /api/admin/batches/{batch}/running-semester", catalog.SetRunningSemester())
 }
 
-// registerHolidayRoutes gives the office portal the calendar it edits and every signed in
-// account the read-only view the routine pages need for their holiday chips.
 func registerHolidayRoutes(office, everyone RouteGroup, calendar *handler.Holidays) {
 	office.Handle("GET /api/admin/calendar", calendar.Calendar())
 	office.Handle("PUT /api/admin/calendar/holidays", calendar.Save())
