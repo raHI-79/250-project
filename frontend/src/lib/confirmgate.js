@@ -1,10 +1,6 @@
 export const CONFIRM_STATUS = 428
 
-export const CONFIRM_MESSAGE = 'Please confirm your password first.'
-
 export const CONFIRM_WINDOW = 5 * 60 * 1000
-
-export const CANCELLED = 'confirm-cancelled'
 
 export class Cancelled extends Error {
   constructor() {

@@ -2,16 +2,42 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"github.com/raHI-79/250-project/backend/internal/fcm"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/push"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"log"
 	"net/http"
+	"time"
 )
 
 type Sink interface {
 	WriteSystemEvent(ctx context.Context, kind string, ok bool, detail string) error
+	WriteChannelEvent(ctx context.Context, event store.SystemEvent) error
+}
+
+func recordEvent(ctx context.Context, sink Sink, event store.SystemEvent) {
+	if sink == nil {
+		return
+	}
+	event.Detail = clip(event.Detail)
+	event.Message = clip(event.Message)
+	if err := sink.WriteChannelEvent(ctx, event); err != nil {
+		log.Printf("metrics: could not record a %s event: %v", event.Kind, err)
+	}
+}
+
+func recordChannel(ctx context.Context, sink Sink, kind string, ok bool, detail,
+	channel, reason string) {
+	recordEvent(ctx, sink, store.SystemEvent{
+		Kind:    kind,
+		OK:      ok,
+		Detail:  detail,
+		Channel: channel,
+		Reason:  reason,
+	})
 }
 
 func record(ctx context.Context, sink Sink, kind string, ok bool, detail string) {
@@ -63,7 +89,11 @@ func (f *watchedFCM) Configured() bool {
 
 func (f *watchedFCM) Send(ctx context.Context, message fcm.Message) error {
 	err := f.inner.Send(ctx, message)
-	record(ctx, f.sink, store.KindFCM, err == nil, message.Tag)
+	reason := ""
+	if err != nil {
+		reason = fcm.ReasonOf(err)
+	}
+	recordChannel(ctx, f.sink, store.KindFCM, err == nil, message.Tag, store.ChannelFCM, reason)
 	return err
 }
 
@@ -82,13 +112,15 @@ func Push(inner push.Sender, sink Sink) push.Sender {
 func (p *watchedPush) Send(ctx context.Context, subscription store.PushSubscription,
 	message []byte) (int, error) {
 	status, err := p.inner.Send(ctx, subscription, message)
-	record(ctx, p.sink, store.KindPush, err == nil, "")
+	reason := push.ReasonOf(status, err)
+	recordChannel(ctx, p.sink, store.KindPush, reason == "", "", store.ChannelWebPush, reason)
 	return status, err
 }
 
 type statusWriter struct {
 	http.ResponseWriter
 	status int
+	body   []byte
 }
 
 func (w *statusWriter) WriteHeader(status int) {
@@ -102,23 +134,56 @@ func (w *statusWriter) Write(body []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+	if w.status >= 400 && len(w.body) < maxDetail {
+		w.body = append(w.body, body...)
+	}
 	return w.ResponseWriter.Write(body)
 }
 
-func Responses(sink Sink) func(http.Handler) http.Handler {
+func (w *statusWriter) message() string {
+	var payload struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(w.body, &payload); err != nil {
+		return ""
+	}
+	return clip(payload.Error)
+}
+
+func Responses(sink Sink, counter *Counter) func(http.Handler) http.Handler {
+	return responsesStartedAt(time.Now(), sink, counter)
+}
+
+func responsesStartedAt(startedAt time.Time, sink Sink,
+	counter *Counter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			watched := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(watched, r)
+			probe := IsProbe(r)
+			settling := time.Since(startedAt) < SettleWindow
+			maintenance := watched.Header().Get(MaintenanceHeader) != ""
+			abandoned := errors.Is(r.Context().Err(), context.Canceled)
+			serverError := watched.status >= 500 && !probe && !settling && !maintenance && !abandoned
+			if !probe {
+				counter.Add(serverError)
+			}
 			if sink == nil {
 				return
 			}
 			ctx := context.WithoutCancel(r.Context())
 			switch {
-			case watched.status >= 500:
-				record(ctx, sink, store.KindClient5x, false, r.Method+" "+r.URL.Path)
-			case watched.status >= 400:
-				record(ctx, sink, store.KindClient4x, false, r.Method+" "+r.URL.Path)
+			case serverError:
+				recordEvent(ctx, sink, store.SystemEvent{
+					Kind:    store.KindClient5x,
+					Detail:  r.Method + " " + r.URL.Path,
+					Message: watched.message(),
+				})
+			case watched.status >= 400 && watched.status < 500 && !probe:
+				recordEvent(ctx, sink, store.SystemEvent{
+					Kind:   store.KindClient4x,
+					Detail: r.Method + " " + r.URL.Path,
+				})
 			}
 		})
 	}

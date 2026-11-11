@@ -275,6 +275,7 @@ export default function SecurityPage({ eyebrow = 'Department office' }) {
                   <Button
                     size="sm"
                     variant="secondary"
+                    className="shrink-0"
                     onClick={() => closeSession(session)}
                     loading={busy === `session-${session.id}`}
                   >

@@ -65,7 +65,7 @@ type AdminStore interface {
 	DeactivateCR(ctx context.Context, userID int64) error
 	CreateTeacher(ctx context.Context, teacher store.NewTeacher) (int64, error)
 	UpdateTeacher(ctx context.Context, userID int64, update store.TeacherUpdate) error
-	ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (store.TeacherInvite, error)
+	ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, lifetime time.Duration) (store.TeacherInvite, error)
 	ListTeachers(ctx context.Context, filter store.TeacherFilter) ([]store.TeacherRow, error)
 	DeactivateTeacher(ctx context.Context, userID int64) error
 	Stats(ctx context.Context) (store.Stats, error)

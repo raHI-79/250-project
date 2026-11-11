@@ -143,13 +143,6 @@ export const loginForPortal = (portal) => {
   return paths.studentLogin()
 }
 
-export const forgotPasswordForPortal = (portal) => {
-  if (portal === PORTAL_CONTROL) return paths.controlForgotPassword()
-  if (portal === PORTAL_ADMIN) return paths.adminForgotPassword()
-  if (portal === PORTAL_TEACHER) return paths.teacherForgotPassword()
-  return paths.studentForgotPassword()
-}
-
 export const messagesFor = (role, params) => {
   if (role === 'admin' || role === ROLE_SUPER_ADMIN) return paths.admin.messages(params)
   if (role === 'teacher') return paths.teacher.messages(params)

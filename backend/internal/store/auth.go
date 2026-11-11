@@ -130,10 +130,10 @@ LEFT JOIN teachers t ON t.user_id = u.id
 ` + identifierMatch
 	startPasswordResetSQL = `UPDATE users
 SET reset_token = $2,
-    reset_token_expires_at = $3,
+    reset_token_expires_at = now() + make_interval(secs => $3::double precision),
     reset_stage = 'code',
     reset_attempts = 0,
-    reset_sent_at = $4,
+    reset_sent_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'active'
 RETURNING id`
@@ -152,7 +152,7 @@ WHERE id = $1
 RETURNING id`
 	verifyResetCodeSQL = `UPDATE users
 SET reset_token = $2,
-    reset_token_expires_at = $3,
+    reset_token_expires_at = now() + make_interval(secs => $3::double precision),
     reset_stage = 'verified',
     reset_attempts = 0,
     updated_at = now()
@@ -355,9 +355,10 @@ func (s *Store) FindResetChallenge(ctx context.Context, identifier string) (Rese
 	return challenge, nil
 }
 
-func (s *Store) StartPasswordReset(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error {
+func (s *Store) StartPasswordReset(ctx context.Context, userID int64, codeHash string,
+	lifetime time.Duration) error {
 	var id int64
-	err := s.pool.QueryRow(ctx, startPasswordResetSQL, userID, codeHash, expiresAt, sentAt).Scan(&id)
+	err := s.pool.QueryRow(ctx, startPasswordResetSQL, userID, codeHash, lifetime.Seconds()).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -391,9 +392,10 @@ func (s *Store) ClearPasswordReset(ctx context.Context, userID int64) error {
 	return nil
 }
 
-func (s *Store) VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+func (s *Store) VerifyResetCode(ctx context.Context, userID int64, tokenHash string,
+	lifetime time.Duration) error {
 	var id int64
-	err := s.pool.QueryRow(ctx, verifyResetCodeSQL, userID, tokenHash, expiresAt).Scan(&id)
+	err := s.pool.QueryRow(ctx, verifyResetCodeSQL, userID, tokenHash, lifetime.Seconds()).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInvalidResetToken
 	}

@@ -50,7 +50,7 @@ func run() error {
 	defer stop()
 	startupContext, cancelStartup := context.WithTimeout(notifyContext, startupTimeout)
 	defer cancelStartup()
-	pool, err := db.Connect(startupContext, cfg.DatabaseURL, cfg.DBMaxConns, db.ConnectWindow)
+	pool, err := db.Connect(startupContext, cfg.DatabaseURL, cfg.DBMaxConns, cfg.Timezone, db.ConnectWindow)
 	if err != nil {
 		return err
 	}
@@ -78,28 +78,34 @@ func run() error {
 		log.Println("upload: files are kept in the database")
 	}
 	alerts := notify.New(userStore)
+	requestCounter := metrics.NewCounter(userStore)
 	var pushWorker *push.Worker
 	var pushTests handler.PushTester
 	var devices *fcm.Worker
 	if cfg.FirebaseEnabled() {
 		sender, err := fcm.New(cfg.FirebaseAccount, "", cfg.FCMChannelID)
 		if err != nil {
+			log.Printf("fcm: %s", fcm.Describe(nil, err))
 			return err
 		}
 		devices = fcm.NewWorker(userStore, metrics.FCM(sender, userStore))
 		alerts = alerts.WithDevices(devices)
-		log.Println("fcm: app notifications are on")
+		log.Printf("fcm: %s", fcm.Describe(sender, nil))
 	} else {
-		log.Println("fcm: FIREBASE_SERVICE_ACCOUNT is missing, app notifications stay off")
+		log.Println("fcm: app notifications are off: FIREBASE_SERVICE_ACCOUNT is not set")
 	}
 	if cfg.PushEnabled() {
+		if err := push.ValidateKeys(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject); err != nil {
+			log.Printf("push: %s", push.Describe(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject))
+			return err
+		}
 		sender := push.NewSender(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
 		pushWorker = push.NewWorker(userStore, metrics.Push(sender, userStore), push.QueueSize)
 		pushTests = pushWorker
 		alerts = alerts.WithPush(pushWorker, cfg.FrontendOrigin)
-		log.Println("push: web push notifications are on")
+		log.Printf("push: %s", push.Describe(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject))
 	} else {
-		log.Println("push: VAPID keys are missing, web push notifications stay off")
+		log.Printf("push: %s", push.Describe(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject))
 	}
 	if cfg.HasAdminSeed() {
 		if err := seedAdmin(startupContext, userStore, cfg); err != nil {
@@ -166,6 +172,8 @@ func run() error {
 			Walls:     userStore,
 			Announcer: announcer,
 			Figures2:  userStore,
+			Calendar:  userStore,
+			Counter:   requestCounter,
 			Values:    values,
 			Invites:   userStore,
 			Events:    userStore,
@@ -191,6 +199,7 @@ func run() error {
 	go jobs.NewScheduler(cfg, userStore, alerts).WithSettings(values).Run(jobContext, jobs.Interval)
 	go jobs.NewAnalytics(cfg, userStore).WithSettings(values).
 		Run(jobContext, jobs.AnalyticsInterval)
+	go requestCounter.Run(jobContext, metrics.FlushWindow)
 	if pushWorker != nil || devices.Ready() {
 		watcher := jobs.NewReleaseWatcher(userStore, pushWorker, devices, releases, cfg.FrontendOrigin)
 		go watcher.Run(jobContext, jobs.ReleaseInterval)

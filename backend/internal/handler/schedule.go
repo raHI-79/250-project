@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/daydate"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/notify"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -37,6 +39,7 @@ const (
 	ActionReschedule      = "request_reschedule"
 	ActionAddToFinal      = "add_to_final"
 	ActionRemoveFromFinal = "remove_from_final"
+	ActionEditLink        = "edit_link"
 )
 
 type proposedBody struct {
@@ -85,18 +88,29 @@ type itemsResponse struct {
 	Items []itemBody `json:"items"`
 }
 
+type dayKindBody struct {
+	Holiday     bool   `json:"holiday"`
+	WorkingDay  bool   `json:"working_day"`
+	Name        string `json:"name,omitempty"`
+	FollowsName string `json:"follows_weekday_name,omitempty"`
+	Label       string `json:"label"`
+}
+
 type dayBody struct {
-	Date    string     `json:"date"`
-	Weekday string     `json:"weekday"`
-	Items   []itemBody `json:"items"`
+	Date    string       `json:"date"`
+	Weekday string       `json:"weekday"`
+	Kind    *dayKindBody `json:"day_kind,omitempty"`
+	Items   []itemBody   `json:"items"`
 }
 
 type dateItemsResponse struct {
-	Date     string     `json:"date"`
-	Weekday  string     `json:"weekday"`
-	Past     bool       `json:"past"`
-	ReadOnly bool       `json:"read_only"`
-	Items    []itemBody `json:"items"`
+	Date      string       `json:"date"`
+	DateLabel string       `json:"date_label"`
+	Weekday   string       `json:"weekday"`
+	Kind      *dayKindBody `json:"day_kind,omitempty"`
+	Past      bool         `json:"past"`
+	ReadOnly  bool         `json:"read_only"`
+	Items     []itemBody   `json:"items"`
 }
 
 type finalItemsResponse struct {
@@ -162,8 +176,8 @@ func newItemBodies(items []store.ScheduleItem) []itemBody {
 	return bodies
 }
 
-func groupItemDays(items []store.ScheduleItem, cfg *config.Config,
-	actions func(store.ScheduleItem) []string) []dayBody {
+func groupItemDays(items []store.ScheduleItem, cfg *config.Config, role string,
+	kinds map[string]store.DayKind) []dayBody {
 	days := make([]dayBody, 0)
 	index := make(map[string]int)
 	for _, item := range items {
@@ -171,16 +185,15 @@ func groupItemDays(items []store.ScheduleItem, cfg *config.Config,
 		if !seen {
 			position = len(days)
 			index[item.ItemDate] = position
-			weekday := ""
-			if parsed, err := time.ParseInLocation(validate.DateLayout, item.ItemDate, cfg.Location); err == nil {
-				weekday = validate.DayName(int(parsed.Weekday()))
-			}
-			days = append(days, dayBody{Date: item.ItemDate, Weekday: weekday, Items: make([]itemBody, 0)})
+			days = append(days, dayBody{
+				Date:    item.ItemDate,
+				Weekday: weekdayOf(item.ItemDate, cfg),
+				Kind:    kindOf(kinds, item.ItemDate),
+				Items:   make([]itemBody, 0),
+			})
 		}
 		body := newItemBody(item)
-		if actions != nil {
-			body.AllowedActions = actions(item)
-		}
+		body.AllowedActions = AllowedActions(role, item, false)
 		days[position].Items = append(days[position].Items, body)
 	}
 	return days
@@ -206,6 +219,54 @@ func finalStatusOf(item store.ScheduleItem) string {
 	}
 }
 
+func newDayKindBody(kind store.DayKind) *dayKindBody {
+	body := &dayKindBody{
+		Holiday:    kind.Holiday,
+		WorkingDay: kind.WorkingDay,
+		Name:       kind.Name,
+	}
+	if kind.WorkingDay {
+		body.FollowsName = kind.FollowsName()
+		body.Label = "Working day · follows " + body.FollowsName
+		return body
+	}
+	name := kind.Name
+	if name == "" {
+		name = daydate.WeekdayName(kind.Date)
+	}
+	body.Label = "Holiday · " + name
+	return body
+}
+
+type DayCalendar interface {
+	DayKinds(ctx context.Context, from, to string, offDays []int) (map[string]store.DayKind, error)
+}
+
+func dayKinds(r *http.Request, calendar DayCalendar, values *settings.Cache,
+	from, to string) map[string]store.DayKind {
+	if calendar == nil {
+		return nil
+	}
+	offDays := settings.OffDayNumbers()
+	if values != nil {
+		offDays = values.Numbers(r.Context(), settings.KeyOffDays, offDays)
+	}
+	kinds, err := calendar.DayKinds(r.Context(), from, to, offDays)
+	if err != nil {
+		log.Printf("handler: could not read the day calendar from %s to %s: %v", from, to, err)
+		return nil
+	}
+	return kinds
+}
+
+func kindOf(kinds map[string]store.DayKind, date string) *dayKindBody {
+	kind, ok := kinds[date]
+	if !ok {
+		return nil
+	}
+	return newDayKindBody(kind)
+}
+
 func weekdayOf(date string, cfg *config.Config) string {
 	parsed, err := time.ParseInLocation(validate.DateLayout, date, cfg.Location)
 	if err != nil {
@@ -215,23 +276,24 @@ func weekdayOf(date string, cfg *config.Config) string {
 }
 
 func dateItems(items []store.ScheduleItem, date string, past bool, cfg *config.Config,
-	actions func(store.ScheduleItem) []string) dateItemsResponse {
+	role string, kind *dayKindBody) dateItemsResponse {
 	bodies := make([]itemBody, 0, len(items))
 	for _, item := range items {
 		body := newItemBody(item)
 		if past {
 			body.FinalStatus = finalStatusOf(item)
-		} else if actions != nil {
-			body.AllowedActions = actions(item)
 		}
+		body.AllowedActions = AllowedActions(role, item, past)
 		bodies = append(bodies, body)
 	}
 	return dateItemsResponse{
-		Date:     date,
-		Weekday:  weekdayOf(date, cfg),
-		Past:     past,
-		ReadOnly: past,
-		Items:    bodies,
+		Date:      date,
+		DateLabel: daydate.Readable(date),
+		Weekday:   weekdayOf(date, cfg),
+		Kind:      kind,
+		Past:      past,
+		ReadOnly:  past,
+		Items:     bodies,
 	}
 }
 
@@ -251,61 +313,6 @@ func liveItems(items []store.ScheduleItem) []store.ScheduleItem {
 		kept = append(kept, item)
 	}
 	return kept
-}
-
-func teacherActions(item store.ScheduleItem) []string {
-	if item.Status == store.ItemCancelled {
-		return []string{}
-	}
-	if item.Status == store.ItemCRAsk {
-		return []string{ActionAccept, ActionDecline}
-	}
-	if item.Kind == store.KindExam || item.Origin != store.OriginFixed {
-		return []string{ActionCancel}
-	}
-	switch item.Status {
-	case store.ItemAwaiting, store.ItemNoResponse:
-		return []string{ActionConfirm, ActionCancel, ActionReschedule}
-	case store.ItemTeacherAsk:
-		return []string{ActionConfirm, ActionCancel}
-	case store.ItemConfirmed, store.ItemRescheduled, store.ItemDeclined:
-		return []string{ActionCancel, ActionReschedule}
-	}
-	return []string{ActionCancel}
-}
-
-func crActions(item store.ScheduleItem) []string {
-	if item.Status == store.ItemCancelled {
-		if item.InFinal {
-			return []string{ActionRemoveFromFinal}
-		}
-		return []string{}
-	}
-	actions := make([]string, 0, 5)
-	switch {
-	case item.Origin == store.OriginCR:
-		actions = append(actions, ActionEdit, ActionCancel, ActionDelete)
-	case item.Status == store.ItemTeacherAsk:
-		actions = append(actions, ActionSetSlot, ActionCancel)
-	case item.Origin == store.OriginTeacherExam:
-		actions = append(actions, ActionSetTime)
-	}
-	if item.Origin == store.OriginFixed {
-		switch item.Status {
-		case store.ItemAwaiting, store.ItemNoResponse, store.ItemConfirmed, store.ItemDeclined:
-			actions = append(actions, ActionReschedule)
-		}
-		switch item.Status {
-		case store.ItemNoResponse, store.ItemDeclined:
-			actions = append(actions, ActionCancel)
-		}
-	}
-	if item.InFinal {
-		actions = append(actions, ActionRemoveFromFinal)
-	} else {
-		actions = append(actions, ActionAddToFinal)
-	}
-	return actions
 }
 
 func conflictMessage(conflict *store.SlotConflict) string {

@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"github.com/raHI-79/250-project/backend/internal/daydate"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"log"
@@ -48,8 +49,8 @@ func dueSlot(now time.Time, clock string) bool {
 
 func (s *Scheduler) RemindTeachers(ctx context.Context, now time.Time) (int, error) {
 	sent := 0
-	today := now.Format(dateLayout)
-	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
+	today := s.cfg.DateOf(now)
+	tomorrow := daydate.Shift(today, 1)
 	for index, clock := range s.reminderTimes(ctx) {
 		if !dueSlot(now, clock) {
 			continue
@@ -66,7 +67,7 @@ func (s *Scheduler) RemindTeachers(ctx context.Context, now time.Time) (int, err
 	}
 	morning := s.morningReminder(ctx)
 	if dueSlot(now, morning) {
-		teachers, err := s.items.ListUndecidedTeachersFrom(ctx, today, now.Format(clockLayout))
+		teachers, err := s.items.ListUndecidedTeachersFrom(ctx, today, daydate.Clock(now, s.cfg.Location))
 		if err != nil {
 			return sent, err
 		}

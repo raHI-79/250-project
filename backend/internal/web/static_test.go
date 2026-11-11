@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -17,7 +16,6 @@ func staticDir(t *testing.T) string {
 		filepath.Join("assets", "a.js"): "console.log(1)",
 		"manifest.webmanifest":          "{}",
 		"sw.js":                         "self.addEventListener('push', () => {})",
-		filepath.Join(".well-known", "assetlinks.json"): `[{"relation":["delegate_permission/common.handle_all_urls"]}]`,
 	}
 	for name, body := range files {
 		target := filepath.Join(dir, name)
@@ -155,23 +153,5 @@ func TestStaticServesTheServiceWorkerAndManifestForInstalling(t *testing.T) {
 				t.Errorf("service worker scope = %q, want %q", got, test.wantScope)
 			}
 		})
-	}
-}
-
-func TestStaticServesTheAndroidAssetLinks(t *testing.T) {
-	handler := Static(staticDir(t), fallbackHandler())
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, AssetLinkPath, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
-	}
-	if got := rec.Header().Get("Location"); got != "" {
-		t.Errorf("the handler redirected to %q, want the file itself", got)
-	}
-	if got := rec.Header().Get("Content-Type"); got != AssetLinkType {
-		t.Errorf("content type = %q, want %q", got, AssetLinkType)
-	}
-	if body := rec.Body.String(); !strings.Contains(body, "delegate_permission") {
-		t.Errorf("body = %q, want the asset link statement", body)
 	}
 }

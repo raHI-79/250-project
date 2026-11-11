@@ -5,7 +5,7 @@ import DayPicker from '../../components/schedule/DayPicker'
 import CreateTab from './tabs/CreateTab'
 import FinalTab from './tabs/FinalTab'
 import UpcomingTab from './tabs/UpcomingTab'
-import { Alert, Card, Input, PageHeader, SkeletonCard, StatusTabs } from '../../components/ui'
+import { Alert, Card, DateField, PageHeader, SkeletonCard, StatusTabs } from '../../components/ui'
 import { useAuth } from '../../context/auth'
 import { useHighlight, useMoreDays, useQueryTab, useResource } from '../../lib/hooks'
 import {
@@ -107,12 +107,11 @@ export default function CreateClassExamPage() {
       {tab === CR_TAB_ROOMS && (
         <>
           <Card hover={false} className="mb-5">
-            <Input
+            <DateField
               label="Week starting on"
-              type="date"
               value={from}
               min={today()}
-              onChange={(event) => setFrom(event.target.value)}
+              onChange={setFrom}
               className="max-w-xs"
               hint="Seven days of every room a fixed routine uses"
             />

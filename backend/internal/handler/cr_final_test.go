@@ -28,8 +28,7 @@ func TestCRActionsPerOrigin(t *testing.T) {
 		{
 			name:    "a cancelled item of the final routine",
 			item:    store.ScheduleItem{Origin: store.OriginFixed, Status: store.ItemCancelled, InFinal: true},
-			want:    []string{ActionRemoveFromFinal},
-			without: []string{ActionDelete, ActionAddToFinal},
+			without: []string{ActionDelete, ActionAddToFinal, ActionRemoveFromFinal},
 		},
 		{
 			name:    "a cancelled item outside the final routine",
@@ -39,7 +38,7 @@ func TestCRActionsPerOrigin(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			actions := crActions(test.item)
+			actions := AllowedActions(ViewerRoleCR, test.item, false)
 			has := make(map[string]bool, len(actions))
 			for _, action := range actions {
 				has[action] = true

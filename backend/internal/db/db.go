@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -19,10 +20,16 @@ const (
 	retryPause        = 3 * time.Second
 )
 
-func Open(ctx context.Context, databaseURL string, maxConns int) (*pgxpool.Pool, error) {
+func Open(ctx context.Context, databaseURL string, maxConns int, timezone string) (*pgxpool.Pool, error) {
 	poolConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("db: DATABASE_URL could not be parsed: %w", err)
+	}
+	if zone := strings.TrimSpace(timezone); zone != "" {
+		if poolConfig.ConnConfig.RuntimeParams == nil {
+			poolConfig.ConnConfig.RuntimeParams = make(map[string]string, 1)
+		}
+		poolConfig.ConnConfig.RuntimeParams["timezone"] = zone
 	}
 	if maxConns < minConns {
 		maxConns = DefaultMaxConns
@@ -45,7 +52,8 @@ func Open(ctx context.Context, databaseURL string, maxConns int) (*pgxpool.Pool,
 	return pool, nil
 }
 
-func Connect(ctx context.Context, databaseURL string, maxConns int, within time.Duration) (*pgxpool.Pool, error) {
+func Connect(ctx context.Context, databaseURL string, maxConns int, timezone string,
+	within time.Duration) (*pgxpool.Pool, error) {
 	if within <= 0 {
 		within = ConnectWindow
 	}
@@ -53,7 +61,7 @@ func Connect(ctx context.Context, databaseURL string, maxConns int, within time.
 	attempt := 0
 	for {
 		attempt++
-		pool, err := Open(ctx, databaseURL, maxConns)
+		pool, err := Open(ctx, databaseURL, maxConns, timezone)
 		if err == nil {
 			if attempt > 1 {
 				log.Printf("db: connected after %d attempts", attempt)

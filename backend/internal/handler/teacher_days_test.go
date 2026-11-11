@@ -105,86 +105,19 @@ func TestTeacherUpcomingCarriesEveryLiveItemOfTheHorizon(t *testing.T) {
 			}
 		}
 	}
-	if got := actionsOf(t, days[0].Items[0]); len(got) != 3 {
-		t.Errorf("the undecided class allows %v, want confirm, cancel and a reschedule request", got)
+	if got := actionsOf(t, days[0].Items[0]); len(got) != 4 {
+		t.Errorf("the undecided class allows %v, want confirm, cancel, a reschedule request and edit",
+			got)
 	}
-	if got := actionsOf(t, days[0].Items[1]); len(got) != 2 || got[0] != ActionCancel {
-		t.Errorf("the confirmed class allows %v, want cancel and a reschedule request", got)
+	if got := actionsOf(t, days[0].Items[1]); len(got) != 3 || got[0] != ActionCancel {
+		t.Errorf("the confirmed class allows %v, want cancel, a reschedule request and edit", got)
 	}
 	exams := days[len(days)-1]
 	if exams.Date != dayAfter(cfg, 3) {
 		t.Fatalf("the last day = %q, want the exam day", exams.Date)
 	}
-	if got := actionsOf(t, exams.Items[0]); len(got) != 1 || got[0] != ActionCancel {
-		t.Errorf("the exam allows %v, want cancel alone", got)
-	}
-}
-
-func TestTeacherActionsPerStatus(t *testing.T) {
-	tests := []struct {
-		name string
-		item store.ScheduleItem
-		want []string
-	}{
-		{
-			name: "an undecided class",
-			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemAwaiting},
-			want: []string{ActionConfirm, ActionCancel, ActionReschedule},
-		},
-		{
-			name: "a class without an answer",
-			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemNoResponse},
-			want: []string{ActionConfirm, ActionCancel, ActionReschedule},
-		},
-		{
-			name: "a confirmed class",
-			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemConfirmed},
-			want: []string{ActionCancel, ActionReschedule},
-		},
-		{
-			name: "a rescheduled class",
-			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "lab", Status: store.ItemRescheduled},
-			want: []string{ActionCancel, ActionReschedule},
-		},
-		{
-			name: "a proposal of the class representative",
-			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemCRAsk},
-			want: []string{ActionAccept, ActionDecline},
-		},
-		{
-			name: "a slot the teacher asked to move",
-			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemTeacherAsk},
-			want: []string{ActionConfirm, ActionCancel},
-		},
-		{
-			name: "an exam",
-			item: store.ScheduleItem{Origin: store.OriginTeacherExam, Kind: store.KindExam,
-				Status: store.ItemScheduled},
-			want: []string{ActionCancel},
-		},
-		{
-			name: "a class of the class representative",
-			item: store.ScheduleItem{Origin: store.OriginCR, Kind: "class", Status: store.ItemScheduled},
-			want: []string{ActionCancel},
-		},
-		{
-			name: "a cancelled class",
-			item: store.ScheduleItem{Origin: store.OriginFixed, Kind: "class", Status: store.ItemCancelled},
-			want: []string{},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := teacherActions(test.item)
-			if len(got) != len(test.want) {
-				t.Fatalf("actions = %v, want %v", got, test.want)
-			}
-			for index, action := range test.want {
-				if got[index] != action {
-					t.Errorf("actions = %v, want %v", got, test.want)
-				}
-			}
-		})
+	if got := actionsOf(t, exams.Items[0]); len(got) != 2 || got[0] != ActionCancel {
+		t.Errorf("the exam allows %v, want cancel and edit", got)
 	}
 }
 

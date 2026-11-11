@@ -2,7 +2,6 @@ import { registerPlugin } from '@capacitor/core'
 import { SESSION_KEY } from './api'
 import { API_BASE, isAndroidApp } from './native'
 import { readJson } from './storage'
-import { SERVICE_UUID } from './attendanceToken'
 
 export * from './attendanceView.js'
 
@@ -21,8 +20,6 @@ export const beaconStatus = () => AttendanceBeacon.status()
 export const askBeacon = () => AttendanceBeacon.ensure()
 
 export const turnBluetoothOn = () => AttendanceBeacon.enableBluetooth()
-
-export const ATTENDANCE_SERVICE_UUID = SERVICE_UUID
 
 export const startBeacon = (session) =>
   AttendanceBeacon.start({
@@ -82,8 +79,6 @@ export const bluetoothState = (status) => {
   if (status.advertising) return { label: 'Broadcasting', tone: 'good' }
   return { label: 'Not broadcasting', tone: 'warn', reason: status.error || '' }
 }
-
-export const markSupported = () => isAndroidApp()
 
 export const phoneId = async () => {
   if (!isAndroidApp()) return ''

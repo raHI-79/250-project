@@ -36,8 +36,7 @@ func TestSettingsAreSavedAndRead(t *testing.T) {
 func TestAddressesAreBlockedAndFreed(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	chief := insertUser(t, ctx, pool, RoleSuperAdmin, "chief", StatusActive, 0)
-	until := time.Now().Add(time.Hour)
-	id, err := store.BlockIP(ctx, "203.0.113.0/24", "A flood", chief, &until)
+	id, err := store.BlockIP(ctx, "203.0.113.0/24", "A flood", chief, time.Hour)
 	if err != nil {
 		t.Fatalf("BlockIP() returned an unexpected error: %v", err)
 	}
@@ -73,8 +72,7 @@ func TestAddressesAreBlockedAndFreed(t *testing.T) {
 func TestAnExpiredBlockIsIgnored(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	chief := insertUser(t, ctx, pool, RoleSuperAdmin, "chief", StatusActive, 0)
-	past := time.Now().Add(-time.Hour)
-	if _, err := store.BlockIP(ctx, "198.51.100.7", "Old", chief, &past); err != nil {
+	if _, err := store.BlockIP(ctx, "198.51.100.7", "Old", chief, -time.Hour); err != nil {
 		t.Fatalf("BlockIP() returned an unexpected error: %v", err)
 	}
 	ranges, err := store.ActiveIPBlocks(ctx)
@@ -141,8 +139,7 @@ func TestTwoPersonRequestsWaitForSomebodyElse(t *testing.T) {
 		TargetID:    "7",
 		Summary:     "Delete a student for good",
 		RequestedBy: asker,
-		ExpiresAt:   time.Now().Add(24 * time.Hour),
-	})
+	}, 24*time.Hour)
 	if err != nil {
 		t.Fatalf("CreateApproval() returned an unexpected error: %v", err)
 	}
@@ -169,8 +166,7 @@ func TestAnOldRequestExpires(t *testing.T) {
 		Action:      "delete_sheet",
 		Summary:     "Delete a sheet",
 		RequestedBy: asker,
-		ExpiresAt:   time.Now().Add(-time.Minute),
-	})
+	}, -time.Minute)
 	if err != nil {
 		t.Fatalf("CreateApproval() returned an unexpected error: %v", err)
 	}

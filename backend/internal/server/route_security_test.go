@@ -65,8 +65,7 @@ func (emptyChatStore) GetOrCreateDirect(ctx context.Context, viewerID int64, vie
 	return store.Conversation{}, store.ErrInactiveTarget
 }
 
-func (emptyChatStore) ClearConversation(ctx context.Context, userID, conversationID int64,
-	at time.Time) error {
+func (emptyChatStore) ClearConversation(ctx context.Context, userID, conversationID int64) error {
 	return nil
 }
 
@@ -139,7 +138,7 @@ func (emptyChatStore) CreateChatMessage(ctx context.Context, message store.NewCh
 	return store.ChatMessageRow{}, store.ErrNotFound
 }
 
-func (emptyChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error {
+func (emptyChatStore) MarkConversationRead(ctx context.Context, userID, conversationID int64) error {
 	return nil
 }
 
@@ -225,6 +224,35 @@ func teacherOnly() []string {
 func protectedRoutes() []protectedRoute {
 	return []protectedRoute{
 		{method: http.MethodPost, path: "/api/auth/logout", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/profile", allowed: everyRole()},
+		{method: http.MethodPatch, path: "/api/profile", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/profile/password", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/people/1", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/me/badges", allowed: everyRole()},
+		{method: http.MethodPost, path: "/api/me/badges/routine/seen", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/lookups/periods", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/calendar", allowed: everyRole()},
+		{method: http.MethodPatch, path: "/api/messages/conversations/1", allowed: everyRole()},
+		{method: http.MethodDelete, path: "/api/messages/conversations/1", allowed: everyRole()},
+		{method: http.MethodPatch, path: "/api/messages/1", allowed: everyRole()},
+		{method: http.MethodDelete, path: "/api/messages/1", allowed: everyRole()},
+		{method: http.MethodGet, path: "/api/students/courses", allowed: studentRoles()},
+		{method: http.MethodGet, path: "/api/students/drop-course-options", allowed: studentRoles()},
+		{method: http.MethodGet, path: "/api/cr/course-teachers", allowed: crOnly()},
+		{method: http.MethodPost, path: "/api/cr/final/remove", allowed: crOnly()},
+		{method: http.MethodGet, path: "/api/teacher/upcoming", allowed: teacherOnly()},
+		{method: http.MethodPatch, path: "/api/teacher/items/1", allowed: teacherOnly()},
+		{method: http.MethodGet, path: "/api/teacher/notices", allowed: teacherOnly()},
+		{method: http.MethodDelete, path: "/api/teacher/notices/1", allowed: teacherOnly()},
+		{method: http.MethodGet, path: "/api/teacher/attendance/sessions/1", allowed: teacherOnly()},
+		{method: http.MethodDelete, path: "/api/teacher/attendance/sessions/1", allowed: teacherOnly()},
+		{method: http.MethodPost, path: "/api/teacher/attendance/sessions/1/mark-all", allowed: teacherOnly()},
+		{
+			method:  http.MethodPatch,
+			path:    "/api/teacher/attendance/sessions/1/students/2/note",
+			allowed: teacherOnly(),
+		},
+		{method: http.MethodDelete, path: "/api/teacher/attendance/sheet", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/me", allowed: everyRole()},
 		{method: http.MethodGet, path: "/api/lookups/batches", allowed: everyRole()},
 		{method: http.MethodGet, path: "/api/lookups/sections?batch=CSE-23", allowed: everyRole()},

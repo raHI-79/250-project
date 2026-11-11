@@ -85,6 +85,8 @@ type Dependencies struct {
 	Walls     handler.BlockStore
 	Announcer handler.ReleaseAnnouncer
 	Figures2  handler.DataStore
+	Calendar  handler.HolidayStore
+	Counter   *metrics.Counter
 }
 
 type RouteGroup struct {
@@ -135,7 +137,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	events := handler.NewRecorder(deps.Config, deps.Events)
 	gates := handler.NewGates(deps.Values)
 	blocks := handler.NewBlocks(deps.Walls, events)
-	asks := handler.NewApprovals(deps.Config, deps.Asks, events)
+	asks := handler.NewApprovals(deps.Asks, events)
 	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail, proofs, google, photos).
 		WithOffice(deps.Invites, events).
 		WithWatch(deps.Watch).
@@ -206,6 +208,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	periods := handler.NewPeriods(deps.Periods)
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerPeriodRoutes(AdminGroup(mux, deps), periods)
+	calendar := handler.NewHolidays(deps.Config, deps.Calendar, deps.Values, deps.Alarms)
+	registerHolidayRoutes(AdminGroup(mux, deps), authenticated, calendar)
 	registerSuperAdminRoutes(SuperAdminGroup(mux, deps),
 		handler.NewSuperAdmin(deps.Config, deps.Office, mail, events))
 	security := handler.NewSecurity(deps.Config, deps.Guards, mail, events)
@@ -227,8 +231,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerPeopleRoutes(SuperAdminGroup(mux, deps), handler.NewPeople(deps.Config, deps.Folks, events))
 	chiefOnly := SuperAdminGroup(mux, deps)
 	chiefOnly.Handle("GET /api/super-admin/activity/{id}", activity.Monitor())
-	chiefOnly.Handle("GET /api/super-admin/dashboard",
-		handler.NewDashboard(deps.Config, deps.Figures).Numbers())
+	figures := handler.NewDashboard(deps.Config, deps.Figures)
+	chiefOnly.Handle("GET /api/super-admin/dashboard", figures.Numbers())
+	chiefOnly.Handle("POST /api/super-admin/alerts/{key}/dismiss", figures.Dismiss())
 	beacons := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
 	views := handler.NewAnalytics(deps.Config, deps.Views).WithEvents(events)
 	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{beacons.Middleware}}.
@@ -238,10 +243,12 @@ func NewRouter(deps Dependencies) http.Handler {
 	authenticated.Handle("GET /api/lookups/periods", periods.List())
 	registerNotificationRoutes(NotificationGroup(mux, deps), handler.NewNotifications(deps.Alerts))
 	registerPushRoutes(mux, deps, handler.NewPush(deps.Config, deps.Devices, deps.PushTests))
-	registerCRRoutes(CRGroup(mux, deps), handler.NewCR(deps.Config, deps.Classes, deps.Alarms))
+	registerCRRoutes(CRGroup(mux, deps),
+		handler.NewCR(deps.Config, deps.Classes, deps.Alarms).WithSettings(deps.Values))
 	authenticated.Handle("PATCH /api/schedule/items/{id}/link",
 		handler.NewSchedule(deps.Config, deps.Items, deps.Alarms).Link())
-	registerTeacherRoutes(TeacherGroup(mux, deps), handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms))
+	registerTeacherRoutes(TeacherGroup(mux, deps),
+		handler.NewTeacher(deps.Config, deps.Teachers, deps.Alarms).WithSettings(deps.Values))
 	marks := handler.NewAttendance(deps.Config, deps.Marks, deps.Alarms)
 	attendanceOn := gates.Feature(settings.KeyAttendance)
 	registerAttendanceTeacherRoutes(TeacherGroup(mux, deps).With(attendanceOn), marks)
@@ -274,7 +281,12 @@ func NewRouter(deps Dependencies) http.Handler {
 	chiefOnly.Handle("GET /api/super-admin/data", control.Data())
 	chiefOnly.Handle("GET /api/super-admin/release", control.Release())
 	chiefOnly.Handle("POST /api/super-admin/release/announce", control.AnnounceRelease())
-	registerStudentRoutes(StudentGroup(mux, deps), handler.NewStudent(deps.Config, deps.Students))
+	chiefOnly.Handle("GET /api/super-admin/calendar", calendar.Calendar())
+	chiefOnly.Handle("PUT /api/super-admin/calendar/holidays", calendar.Save())
+	chiefOnly.Handle("DELETE /api/super-admin/calendar/holidays/{date}", calendar.Delete())
+	chiefOnly.Handle("PUT /api/super-admin/calendar/off-days", calendar.SaveOffDays())
+	registerStudentRoutes(StudentGroup(mux, deps),
+		handler.NewStudent(deps.Config, deps.Students).WithSettings(deps.Values))
 	files := deps.Files
 	if files == nil {
 		files = upload.NewSaver(deps.Config.UploadDir, deps.Config.MaxUploadMB)
@@ -305,7 +317,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	var root http.Handler = mux
 	if sink, ok := deps.Events.(metrics.Sink); ok {
-		root = metrics.Responses(sink)(root)
+		root = metrics.Responses(sink, deps.Counter)(root)
+	} else if deps.Counter != nil {
+		root = metrics.Responses(nil, deps.Counter)(root)
 	}
 	root = gates.Maintenance(root)
 	if deps.Walls != nil {
@@ -681,6 +695,14 @@ func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handle
 	group.Handle("DELETE /api/admin/routines/{id}", catalog.DeleteRoutine())
 	group.Handle("GET /api/admin/batches/running-semester", catalog.RunningSemesters())
 	group.Handle("PUT /api/admin/batches/{batch}/running-semester", catalog.SetRunningSemester())
+}
+
+func registerHolidayRoutes(office, everyone RouteGroup, calendar *handler.Holidays) {
+	office.Handle("GET /api/admin/calendar", calendar.Calendar())
+	office.Handle("PUT /api/admin/calendar/holidays", calendar.Save())
+	office.Handle("DELETE /api/admin/calendar/holidays/{date}", calendar.Delete())
+	office.Handle("PUT /api/admin/calendar/off-days", calendar.SaveOffDays())
+	everyone.Handle("GET /api/calendar", calendar.Calendar())
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {

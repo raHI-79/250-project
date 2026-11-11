@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BadgeCheck, IdCard, KeyRound, Lock, Mail } from 'lucide-react'
-import { Alert, Button, Field, Input, PasswordInput, Select } from '../../components/ui'
+import { Alert, Button, DateField, Field, Input, PasswordInput, Select } from '../../components/ui'
 import FormSection from '../../components/forms/FormSection'
 import GoogleVerifyButton from '../../components/forms/GoogleVerifyButton'
 import PhoneInput from '../../components/forms/PhoneInput'
@@ -404,11 +404,10 @@ export default function RegisterPage() {
                   </FormSection>
                   <FormSection title="Personal">
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <Input
+                      <DateField
                         label="Date of birth"
-                        type="date"
                         value={form.dateOfBirth}
-                        onChange={set('dateOfBirth')}
+                        onChange={(next) => set('dateOfBirth')({ target: { value: next } })}
                         error={errors.dateOfBirth}
                         hint="Between 15 and 60 years ago"
                         required

@@ -176,7 +176,7 @@ type accountStore struct {
 	chosenIDs     []string
 	takenIDs      map[string]bool
 	takenErr      error
-	startedCodes  []startResetCall
+	startedCodes  []startedCode
 	emailAttempts int
 	inviteTries   int
 	activateErr   error
@@ -222,7 +222,8 @@ func (f *accountStore) FindResetChallenge(ctx context.Context, identifier string
 	return store.ResetChallenge{}, store.ErrNotFound
 }
 
-func (f *accountStore) StartPasswordReset(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error {
+func (f *accountStore) StartPasswordReset(ctx context.Context, userID int64, codeHash string,
+	lifetime time.Duration) error {
 	return nil
 }
 
@@ -234,7 +235,8 @@ func (f *accountStore) ClearPasswordReset(ctx context.Context, userID int64) err
 	return nil
 }
 
-func (f *accountStore) VerifyResetCode(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+func (f *accountStore) VerifyResetCode(ctx context.Context, userID int64, tokenHash string,
+	lifetime time.Duration) error {
 	return nil
 }
 
@@ -250,8 +252,15 @@ func (f *accountStore) FindEmailChallenge(ctx context.Context, regNo string) (st
 	return challenge, nil
 }
 
+type startedCode struct {
+	userID    int64
+	codeHash  string
+	expiresAt time.Time
+	sentAt    time.Time
+}
+
 func (f *accountStore) StartEmailVerification(ctx context.Context, userID int64, codeHash string, expiresAt, sentAt time.Time) error {
-	f.startedCodes = append(f.startedCodes, startResetCall{
+	f.startedCodes = append(f.startedCodes, startedCode{
 		userID:    userID,
 		codeHash:  codeHash,
 		expiresAt: expiresAt,

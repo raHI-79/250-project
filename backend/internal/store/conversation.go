@@ -281,8 +281,8 @@ WHERE m.conversation_id = $1 AND ($2::timestamptz IS NULL OR m.created_at < $2::
 ORDER BY m.created_at DESC, m.id DESC
 LIMIT $3`
 	clearConversationSQL = `INSERT INTO conversation_clears (user_id, conversation_id, cleared_at)
-VALUES ($1, $2, $3)
-ON CONFLICT (user_id, conversation_id) DO UPDATE SET cleared_at = EXCLUDED.cleared_at`
+VALUES ($1, $2, now())
+ON CONFLICT (user_id, conversation_id) DO UPDATE SET cleared_at = now()`
 	getChatMessageSQL = `SELECT ` + chatMessageColumns + `
 ` + chatMessageJoins + `
 WHERE m.id = $1`
@@ -305,6 +305,9 @@ NULLIF($7::text, ''), NULLIF($8::bigint, 0))
 RETURNING id, created_at`
 	touchConversationSQL = `UPDATE conversations SET last_message_at = $2 WHERE id = $1`
 	markReadSQL          = `INSERT INTO conversation_reads (user_id, conversation_id, last_read_at)
+VALUES ($1, $2, now())
+ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = now()`
+	markReadAtSQL = `INSERT INTO conversation_reads (user_id, conversation_id, last_read_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = EXCLUDED.last_read_at`
 	unreadCountSQL = `SELECT COUNT(*)
@@ -753,7 +756,7 @@ func (s *Store) CreateChatMessage(ctx context.Context, message NewChatMessage) (
 	if _, err := tx.Exec(ctx, touchConversationSQL, message.ConversationID, createdAt); err != nil {
 		return ChatMessageRow{}, fmt.Errorf("store: could not update the conversation activity: %w", err)
 	}
-	if _, err := tx.Exec(ctx, markReadSQL, message.SenderID, message.ConversationID, createdAt); err != nil {
+	if _, err := tx.Exec(ctx, markReadAtSQL, message.SenderID, message.ConversationID, createdAt); err != nil {
 		return ChatMessageRow{}, fmt.Errorf("store: could not mark the conversation read: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -844,16 +847,16 @@ func (s *Store) chatMessage(ctx context.Context, messageID int64) (ChatMessageRo
 	return row, nil
 }
 
-func (s *Store) ClearConversation(ctx context.Context, userID, conversationID int64, at time.Time) error {
-	_, err := s.pool.Exec(ctx, clearConversationSQL, userID, conversationID, at)
+func (s *Store) ClearConversation(ctx context.Context, userID, conversationID int64) error {
+	_, err := s.pool.Exec(ctx, clearConversationSQL, userID, conversationID)
 	if err != nil {
 		return fmt.Errorf("store: could not clear the conversation %d: %w", conversationID, err)
 	}
 	return nil
 }
 
-func (s *Store) MarkConversationRead(ctx context.Context, userID, conversationID int64, at time.Time) error {
-	if _, err := s.pool.Exec(ctx, markReadSQL, userID, conversationID, at); err != nil {
+func (s *Store) MarkConversationRead(ctx context.Context, userID, conversationID int64) error {
+	if _, err := s.pool.Exec(ctx, markReadSQL, userID, conversationID); err != nil {
 		return fmt.Errorf("store: could not mark the conversation %d read: %w", conversationID, err)
 	}
 	return nil

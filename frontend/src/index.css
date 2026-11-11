@@ -645,10 +645,6 @@
   animation: var(--animate-shimmer);
 }
 
-@utility rule-under {
-  border-bottom: 1px solid var(--color-ink);
-}
-
 @utility glass {
   background-color: var(--c-glass-bar);
   border-color: var(--color-line);
@@ -682,10 +678,6 @@
   border: 1px solid var(--color-line);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-}
-
-@utility text-shadow-hero {
-  text-shadow: 0 1px 2px rgb(10 22 49 / 0.45), 0 2px 12px rgb(10 22 49 / 0.3);
 }
 
 @utility press {

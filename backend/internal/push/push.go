@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"log"
-	"net/http"
 	"net/url"
 	"time"
 )
@@ -130,22 +129,22 @@ func (w *Worker) send(ctx context.Context, subscription store.PushSubscription, 
 	status, err := w.sender.Send(sendContext, subscription, message)
 	cancel()
 	host := endpointHost(subscription.Endpoint)
-	if err != nil {
-		log.Printf("push: %s could not be reached", host)
-		return false
-	}
-	if status == http.StatusNotFound || status == http.StatusGone {
-		log.Printf("push: %s answered %d, dropping the subscription", host, status)
-		if err := w.subscriptions.DropPushSubscription(ctx, subscription.Endpoint); err != nil {
-			log.Printf("push: could not drop a dead subscription: %v", err)
+	reason := ReasonOf(status, err)
+	if reason == store.PushReasonExpired {
+		log.Printf("push: %s answered %d, dropping the subscription (%s)", host, status, reason)
+		if dropErr := w.subscriptions.DropPushSubscription(ctx, subscription.Endpoint); dropErr != nil {
+			log.Printf("push: could not drop a dead subscription: %v", dropErr)
 		}
 		return false
 	}
-	if status >= http.StatusBadRequest {
-		log.Printf("push: %s answered %d", host, status)
+	if reason == store.PushReasonNetwork {
+		log.Printf("push: %s could not be reached (%s)", host, reason)
 		return false
 	}
-	log.Printf("push: %s answered %d", host, status)
+	if reason != "" {
+		log.Printf("push: %s answered %d (%s)", host, status, reason)
+		return false
+	}
 	if err := w.subscriptions.TouchPushSubscription(ctx, subscription.Endpoint, w.now()); err != nil {
 		log.Printf("push: could not mark a subscription used: %v", err)
 	}

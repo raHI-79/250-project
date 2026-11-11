@@ -14,6 +14,7 @@ import {
   useConfirm,
   useToast,
 } from '../../components/ui'
+import CalendarSettings from '../../components/CalendarSettings'
 import TimeRangeFields from '../../components/forms/TimeRangeFields'
 import api from '../../lib/api'
 import { usePeriods, useResource } from '../../lib/hooks'
@@ -142,6 +143,7 @@ export default function AdminRoutinesPage() {
   return (
     <>
       <PageHeader eyebrow="Weekly routine" title="Routines" subtitle="The fixed weekly routine of every batch" />
+      <CalendarSettings />
       <Card hover={false} className="mb-6">
         <form onSubmit={save} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}

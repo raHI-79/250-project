@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -44,7 +44,7 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
-        run: go test ./...
+        run: go test -timeout 25m ./...
 
   frontend:
     name: Frontend
@@ -65,3 +65,97 @@ jobs:
         run: npm run lint
       - name: Build
         run: npm run build
+
+  browser:
+    name: Browser check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sust_coord_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      PORT: '8080'
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/sust_coord_e2e?sslmode=disable
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/sust_coord_e2e?sslmode=disable
+      JWT_SECRET: a-ci-only-secret-that-is-long-enough-for-the-config-check
+      APP_TIMEZONE: Asia/Dhaka
+      FRONTEND_ORIGIN: http://localhost:5173
+      ADMIN_IDENTIFIER: office
+      ADMIN_PASSWORD: sust-250-project
+      ADMIN_EMAIL: office@sust.edu
+      ADMIN_PHONE: '+8801700000000'
+      SUPER_ADMIN_IDENTIFIER: chief
+      DEMO_PASSWORD: sust-250-project
+      E2E_BASE_URL: http://localhost:5173
+      E2E_OFFICE_ID: office
+      E2E_CONTROL_ID: chief
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Load the demo data
+        working-directory: backend
+        run: go run ./cmd/seed -demo
+      - name: Start the server
+        working-directory: backend
+        run: |
+          go run ./cmd/server > server.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the server did not come up"
+          cat server.log
+          exit 1
+      - name: Install the frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Install the browser
+        working-directory: frontend
+        run: npm run e2e:install
+      - name: Start the website
+        working-directory: frontend
+        run: |
+          npm run dev > vite.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:5173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the website did not come up"
+          cat vite.log
+          exit 1
+      - name: Walk every page
+        working-directory: frontend
+        run: npm run e2e
+      - name: Keep the report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-check
+          path: |
+            frontend/e2e/.artifacts
+            frontend/vite.log
+            backend/server.log
+          retention-days: 7

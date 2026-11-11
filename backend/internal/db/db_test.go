@@ -21,6 +21,7 @@ const (
 
 var expectedTables = []string{
 	"admin_audit",
+	"alert_dismissals",
 	"admin_permissions",
 	"approval_requests",
 	"analytics_daily",
@@ -36,6 +37,7 @@ var expectedTables = []string{
 	"device_bindings",
 	"device_change_requests",
 	"fcm_tokens",
+	"holidays",
 	"ip_blocks",
 	"messages",
 	"notices",
@@ -47,6 +49,7 @@ var expectedTables = []string{
 	"push_subscriptions",
 	"publications",
 	"reminder_log",
+	"request_counters",
 	"published_items",
 	"schedule_items",
 	"routines",

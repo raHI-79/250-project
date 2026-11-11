@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CalendarClock, Link2, Pencil, Trash2 } from 'lucide-react'
+import DayKindChip from '../../../components/schedule/DayKindChip'
 import ItemBadges from '../../../components/schedule/ItemBadges'
 import { CancelModal, LinkModal, RescheduleModal } from '../../../components/schedule/ScheduleModals'
 import { Alert, Button, Card, EmptyState, SkeletonCard, useConfirm, useToast } from '../../../components/ui'
@@ -10,16 +11,17 @@ import {
   ACTION_CANCEL,
   ACTION_DELETE,
   ACTION_EDIT,
+  ACTION_EDIT_LINK,
   ACTION_REMOVE_FROM_FINAL,
   ACTION_REQUEST_RESCHEDULE,
   ACTION_SET_SLOT,
   ACTION_SET_TIME,
   allows,
-  isOnline,
   needsLink,
   placeOf,
   sectionShort,
 } from '../../../lib/schedule'
+import { dayKindNote } from '../../../lib/dayKind'
 import { dayHeading, formatDate, formatTimeRange } from '../../../lib/time'
 import cx from '../../../lib/cx'
 import CourseName from '../../../components/schedule/CourseName'
@@ -180,7 +182,7 @@ export default function UpcomingTab({ upcoming, later, highlight, onChanged }) {
               {allows(item, ACTION_SET_TIME) ? 'Set time' : 'Edit'}
             </Button>
           )}
-          {isOnline(item) && item.status !== 'cancelled' && (
+          {allows(item, ACTION_EDIT_LINK) && (
             <Button size="sm" variant="secondary" onClick={() => setLinking(item)}>
               <Link2 size={14} />
               {needsLink(item) ? 'Add link' : 'Edit link'}
@@ -206,12 +208,17 @@ export default function UpcomingTab({ upcoming, later, highlight, onChanged }) {
       )}
     </li>
   )
-  const dayCard = (date, dayItems) => (
+  const dayCard = (date, dayItems, kind) => (
     <Card key={date} hover={false} className="animate-fade-in-up">
       <p className="font-display text-lg font-bold text-ink">{dayHeading(date)}</p>
+      {kind && <DayKindChip kind={kind} className="mt-2" />}
       {dayItems.length === 0 ? (
         <p className="mt-2 text-sm text-muted">
-          {readOnly ? 'Nothing was on the routine for this day.' : 'Nothing on this day.'}
+          {kind
+            ? dayKindNote(kind)
+            : readOnly
+              ? 'Nothing was on the routine for this day.'
+              : 'Nothing on this day.'}
         </p>
       ) : (
         <ul className="mt-2 flex flex-col gap-3">{dayItems.map(line)}</ul>
@@ -232,8 +239,8 @@ export default function UpcomingTab({ upcoming, later, highlight, onChanged }) {
   return (
     <>
       <div className="flex flex-col gap-4">
-        {dayCard(upcoming.data.date, items)}
-        {laterDays.map((day) => dayCard(day.date, day.items))}
+        {dayCard(upcoming.data.date, items, upcoming.data.day_kind)}
+        {laterDays.map((day) => dayCard(day.date, day.items, day.day_kind))}
         {later && !readOnly && (
           <>
             {later.error && <Alert tone="error">{later.error}</Alert>}

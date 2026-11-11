@@ -50,9 +50,6 @@ export const sortedRoster = (marks) => [...(marks || [])].sort(byRegNo)
 
 export const sectionLabel = (section) => (section === 'ALL' ? 'A and B' : `Section ${section}`)
 
-export const classLabel = (entry) =>
-  `${entry.course_code} · ${entry.batch} · ${sectionLabel(entry.section)}`
-
 export const PASS_MARK = 50
 
 export const belowPass = (percent) => Number(percent) < PASS_MARK

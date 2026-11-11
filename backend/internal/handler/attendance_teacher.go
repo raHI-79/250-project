@@ -202,7 +202,7 @@ func (a *Attendance) Start() http.HandlerFunc {
 			Section:        section,
 			ScheduleItemID: request.ScheduleItemID,
 			TeacherID:      teacher.ID,
-			EndsAt:         now.Add(time.Duration(request.Minutes) * time.Minute),
+			Minutes:        request.Minutes,
 			TokenKey:       key,
 			Method:         method,
 		})

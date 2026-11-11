@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/raHI-79/250-project/backend/internal/config"
+	"github.com/raHI-79/250-project/backend/internal/daydate"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -16,14 +17,13 @@ const (
 	Interval           = 5 * time.Minute
 	TitleNoResponse    = "No answer from the teacher"
 	TitleExamInFinal   = "Exam added to the final routine"
-	dateLayout         = "2006-01-02"
 	cleanupMinute      = 5
 	noResponseSentence = "%s on %s at %s got no answer by the deadline. The room stays booked, so decide for your batch."
 	examFinalSentence  = "%s on %s is in the final routine. Set the time and the room, then publish."
 )
 
 type Store interface {
-	GenerateFixedItems(ctx context.Context, from, to string) (int, error)
+	GenerateFixedItems(ctx context.Context, from, to string, offDays []int) (int, error)
 	MarkNoResponse(ctx context.Context, date string) ([]store.ScheduleItem, error)
 	PromoteExamsToFinal(ctx context.Context, date string) ([]store.ScheduleItem, error)
 	ClearPastFinal(ctx context.Context, date string) (int, error)
@@ -134,16 +134,23 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 }
 
 func (s *Scheduler) Generate(ctx context.Context, now time.Time) (int, error) {
-	from := now.Format(dateLayout)
-	to := now.AddDate(0, 0, s.daysAhead(ctx)).Format(dateLayout)
-	return s.items.GenerateFixedItems(ctx, from, to)
+	from := s.cfg.DateOf(now)
+	to := daydate.Shift(from, s.daysAhead(ctx))
+	return s.items.GenerateFixedItems(ctx, from, to, s.OffDays(ctx))
+}
+
+func (s *Scheduler) OffDays(ctx context.Context) []int {
+	if s.values == nil {
+		return settings.OffDayNumbers()
+	}
+	return s.values.Numbers(ctx, settings.KeyOffDays, settings.OffDayNumbers())
 }
 
 func (s *Scheduler) CloseDecisions(ctx context.Context, now time.Time) (int, error) {
 	if !s.pastLastReminder(ctx, now) {
 		return 0, nil
 	}
-	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
+	tomorrow := daydate.Shift(s.cfg.DateOf(now), 1)
 	items, err := s.items.MarkNoResponse(ctx, tomorrow)
 	if err != nil {
 		return 0, err
@@ -168,7 +175,7 @@ func (s *Scheduler) pastLastReminder(ctx context.Context, now time.Time) bool {
 }
 
 func (s *Scheduler) ClearPastFinal(ctx context.Context, now time.Time) (int, error) {
-	today := now.Format(dateLayout)
+	today := s.cfg.DateOf(now)
 	if s.cleanedOn == today {
 		return 0, nil
 	}
@@ -184,7 +191,7 @@ func (s *Scheduler) ClearPastFinal(ctx context.Context, now time.Time) (int, err
 }
 
 func (s *Scheduler) PromoteExams(ctx context.Context, now time.Time) (int, error) {
-	tomorrow := now.AddDate(0, 0, 1).Format(dateLayout)
+	tomorrow := daydate.Shift(s.cfg.DateOf(now), 1)
 	items, err := s.items.PromoteExamsToFinal(ctx, tomorrow)
 	if err != nil {
 		return 0, err

@@ -16,7 +16,6 @@ import (
 const (
 	MessageCourseCreated    = "Course added."
 	MessageRoutineMoved     = "Routine entry moved."
-	MessageRunningSemester  = "Running semester updated."
 	MessageCourseDeleted    = "Course deleted."
 	MessageDuplicateCourse  = "A course with this code already exists."
 	MessageCourseUnknown    = "No course found with this ID."

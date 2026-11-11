@@ -91,17 +91,17 @@ type TeacherFilter struct {
 }
 
 type NewTeacher struct {
-	Name            string
-	Designation     string
-	Email           string
-	Phone           string
-	BloodGroup      string
-	DateOfBirth     string
-	OfficeRoom      string
-	JoiningDate     string
-	PhotoPath       string
-	InviteHash      string
-	InviteExpiresAt time.Time
+	Name           string
+	Designation    string
+	Email          string
+	Phone          string
+	BloodGroup     string
+	DateOfBirth    string
+	OfficeRoom     string
+	JoiningDate    string
+	PhotoPath      string
+	InviteHash     string
+	InviteLifetime time.Duration
 }
 
 type TeacherUpdate struct {
@@ -182,7 +182,7 @@ JOIN students s ON s.user_id = u.id
 WHERE u.id = $1 AND s.is_cr`
 	insertTeacherUserSQL = `INSERT INTO users
 (role, password_hash, status, photo_path, invite_token, invite_expires_at)
-VALUES ('teacher', '', 'invited', NULLIF($1, ''), $2, $3)
+VALUES ('teacher', '', 'invited', NULLIF($1, ''), $2, now() + make_interval(secs => $3))
 RETURNING id`
 	insertTeacherSQL = `INSERT INTO teachers
 (user_id, name, designation, email, phone, blood_group, date_of_birth, office_room, joining_date)
@@ -214,7 +214,8 @@ SET name = COALESCE($2, name),
 WHERE user_id = $1
 RETURNING id`
 	resetTeacherInviteSQL = `UPDATE users
-SET invite_token = $2, invite_expires_at = $3, invite_attempts = 0, updated_at = now()
+SET invite_token = $2, invite_expires_at = now() + make_interval(secs => $3), invite_attempts = 0,
+    updated_at = now()
 WHERE id = $1 AND role = 'teacher' AND status = 'invited'
 RETURNING id`
 	findInviteSQL = `SELECT u.id, COALESCE(t.teacher_id, ''), t.name, t.designation, t.email,
@@ -552,7 +553,7 @@ func (s *Store) CreateTeacher(ctx context.Context, teacher NewTeacher) (int64, e
 	err = tx.QueryRow(ctx, insertTeacherUserSQL,
 		teacher.PhotoPath,
 		teacher.InviteHash,
-		teacher.InviteExpiresAt,
+		teacher.InviteLifetime.Seconds(),
 	).Scan(&userID)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -669,9 +670,9 @@ func (s *Store) UpdateTeacher(ctx context.Context, userID int64, update TeacherU
 	return nil
 }
 
-func (s *Store) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (TeacherInvite, error) {
+func (s *Store) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, lifetime time.Duration) (TeacherInvite, error) {
 	var id int64
-	err := s.pool.QueryRow(ctx, resetTeacherInviteSQL, userID, inviteHash, expiresAt).Scan(&id)
+	err := s.pool.QueryRow(ctx, resetTeacherInviteSQL, userID, inviteHash, lifetime.Seconds()).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TeacherInvite{}, s.inviteConflict(ctx, userID)
 	}

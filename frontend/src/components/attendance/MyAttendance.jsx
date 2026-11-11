@@ -13,15 +13,11 @@ import { useResource } from '../../lib/hooks'
 import { useSearchParams } from 'react-router-dom'
 import { formatClock, formatDate } from '../../lib/time'
 import { belowPass, methodLabel } from '../../lib/attendance'
+import { monthHeading } from '../../lib/time'
 
 const monthKey = (date) => String(date || '').slice(0, 7)
 
-const monthLabel = (key) => {
-  const [year, month] = String(key || '').split('-')
-  if (!year || !month) return ''
-  const date = new Date(Number(year), Number(month) - 1, 1)
-  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
-}
+const monthLabel = (key) => monthHeading(key)
 
 function CourseCard({ course, active, onPick }) {
   return (

@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Activity, AlertTriangle, Database, HardDrive, Server } from 'lucide-react'
+import { Activity, Database, HardDrive, Server } from 'lucide-react'
 import {
   Alert,
   Card,
@@ -28,6 +28,7 @@ import {
 import Sparkline from '../../components/charts/Sparkline'
 import RangePicker from '../../components/control/RangePicker'
 import { AXIS_INK, GRID, SERIES, legendStyle, tooltipStyle } from '../../components/charts/theme'
+import HealthAlerts from '../../components/control/HealthAlerts'
 import api from '../../lib/api'
 import { formatDateTime } from '../../lib/time'
 
@@ -75,6 +76,8 @@ const share = (ok, failed) => {
   if (total === 0) return '0%'
   return `${Math.round((Number(failed || 0) / total) * 100)}%`
 }
+
+const percent = (value) => `${Math.round(Number(value || 0) * 100)}%`
 
 function Metric({ label, value, hint }) {
   return (
@@ -178,18 +181,11 @@ export default function ControlDashboardPage() {
           {error}
         </Alert>
       )}
-      {(data?.alerts || []).length > 0 && (
-        <div className="mb-5 flex flex-col gap-2">
-          {data.alerts.map((alert) => (
-            <Alert key={alert.key} tone={alert.tone === 'error' ? 'error' : 'warning'}>
-              <span className="inline-flex items-center gap-2">
-                <AlertTriangle size={16} aria-hidden="true" />
-                {alert.message}
-              </span>
-            </Alert>
-          ))}
-        </div>
-      )}
+      <HealthAlerts
+        alerts={data?.alerts || []}
+        onDismissed={() => load(true)}
+        className="mb-5"
+      />
       {loading && !data ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <SkeletonCard />
@@ -566,6 +562,11 @@ export default function ControlDashboardPage() {
             <h2 className="font-display mb-3 text-section font-bold text-ink">System health</h2>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Metric
+                label="Requests"
+                value={system?.requests ?? 0}
+                hint="Requests the handlers answered in this period, probes left out."
+              />
+              <Metric
                 label="Version"
                 value={system?.version || '—'}
                 hint={system?.commit ? `Commit ${system.commit}` : 'The running release'}
@@ -593,7 +594,7 @@ export default function ControlDashboardPage() {
               <Metric
                 label="5xx answers"
                 value={system?.server_5xx ?? 0}
-                hint="Server errors in this period."
+                hint="Server errors from our own handlers, after a restart and the probes left out."
               />
               <Metric
                 label="Email failures"
@@ -601,12 +602,11 @@ export default function ControlDashboardPage() {
                 hint={`${system?.emails_sent ?? 0} sent, ${system?.emails_failed ?? 0} failed.`}
               />
               <Metric
-                label="Push failures"
-                value={share(
-                  (system?.push_sent ?? 0) + (system?.fcm_sent ?? 0),
-                  (system?.push_failed ?? 0) + (system?.fcm_failed ?? 0),
-                )}
-                hint={`${system?.push_tokens ?? 0} web subscriptions, ${system?.fcm_tokens ?? 0} app tokens.`}
+                label="Notification failures"
+                value={percent(system?.push_failure_share)}
+                hint={`${system?.push_cleaned ?? 0} expired subscriptions were cleaned up and left out. ${
+                  system?.push_tokens ?? 0
+                } web subscriptions, ${system?.fcm_tokens ?? 0} app tokens.`}
               />
               <Metric
                 label="Last backup"
@@ -615,6 +615,83 @@ export default function ControlDashboardPage() {
               />
             </div>
           </section>
+          <Card hover={false} flush id="system-notifications">
+            <CardHeader
+              title="Why notifications did not arrive"
+              subtitle="Every failure of this period by channel and by reason"
+            />
+            {(system?.push_reasons || []).length === 0 ? (
+              <div className="px-4 pb-4">
+                <EmptyState
+                  icon={Server}
+                  title="Every notification arrived"
+                  text="Nothing was refused in this period."
+                />
+              </div>
+            ) : (
+              <DataTable>
+                <thead>
+                  <tr className="border-b border-line bg-wash">
+                    <th className="px-4 py-3 font-semibold text-ink-soft">Channel and reason</th>
+                    <th className="px-4 py-3 text-right font-semibold text-ink-soft">Failures</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {system.push_reasons.map((row) => (
+                    <tr
+                      key={`${row.channel}-${row.reason}`}
+                      className="border-b border-line last:border-b-0"
+                    >
+                      <td className="px-4 py-3 wrap-long text-ink">{row.label}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink-soft">
+                        {row.total}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            )}
+          </Card>
+          <Card hover={false} flush id="system-server-errors">
+            <CardHeader
+              title="Which requests failed"
+              subtitle="The addresses that answered with a server error in this period"
+            />
+            {(system?.failing_paths || []).length === 0 ? (
+              <div className="px-4 pb-4">
+                <EmptyState
+                  icon={Server}
+                  title="No server errors"
+                  text="Every request in this period was answered."
+                />
+              </div>
+            ) : (
+              <DataTable>
+                <thead>
+                  <tr className="border-b border-line bg-wash">
+                    <th className="px-4 py-3 font-semibold text-ink-soft">Request</th>
+                    <th className="px-4 py-3 text-right font-semibold text-ink-soft">Errors</th>
+                    <th className="px-4 py-3 font-semibold text-ink-soft">Last message</th>
+                    <th className="px-4 py-3 font-semibold text-ink-soft">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {system.failing_paths.map((row) => (
+                    <tr key={row.path} className="border-b border-line last:border-b-0">
+                      <td className="px-4 py-3 wrap-long text-ink">{row.path}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink-soft">
+                        {row.total}
+                      </td>
+                      <td className="px-4 py-3 wrap-long text-ink-soft">{row.message || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
+                        {formatDateTime(row.last)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            )}
+          </Card>
           <Card hover={false} flush>
             <CardHeader title="Latest server errors" subtitle="The five newest 5xx answers" />
             {(system?.server_errors || []).length === 0 ? (

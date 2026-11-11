@@ -42,9 +42,9 @@ type OfficeStore interface {
 	Permissions(ctx context.Context, userID int64) ([]string, error)
 	SetPermissions(ctx context.Context, userID int64, names []string, grantedBy int64) error
 	AllPermissions(ctx context.Context) (map[int64][]string, error)
-	CreateAdminInvite(ctx context.Context, email, inviteHash string, expiresAt time.Time,
+	CreateAdminInvite(ctx context.Context, email, inviteHash string, lifetime time.Duration,
 		invitedBy int64) (int64, error)
-	ResendAdminInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (string, error)
+	ResendAdminInvite(ctx context.Context, userID int64, inviteHash string, lifetime time.Duration) (string, error)
 	CancelAdminInvite(ctx context.Context, userID int64) (string, error)
 	SuspendAdmin(ctx context.Context, userID int64) (string, error)
 	RestoreAdmin(ctx context.Context, userID int64) (string, error)
@@ -162,7 +162,7 @@ func (s *SuperAdmin) Invite() http.HandlerFunc {
 			return
 		}
 		expiresAt := s.cfg.Now().Add(inviteLifetime)
-		userID, err := s.office.CreateAdminInvite(r.Context(), email, hash, expiresAt, current.ID)
+		userID, err := s.office.CreateAdminInvite(r.Context(), email, hash, inviteLifetime, current.ID)
 		if errors.Is(err, store.ErrDuplicateAccount) {
 			httpx.WriteError(w, http.StatusConflict, MessageAdminDuplicate)
 			return
@@ -197,7 +197,7 @@ func (s *SuperAdmin) ResendInvite() http.HandlerFunc {
 			return
 		}
 		expiresAt := s.cfg.Now().Add(inviteLifetime)
-		email, err := s.office.ResendAdminInvite(r.Context(), userID, hash, expiresAt)
+		email, err := s.office.ResendAdminInvite(r.Context(), userID, hash, inviteLifetime)
 		if errors.Is(err, store.ErrNotFound) {
 			httpx.WriteError(w, http.StatusNotFound, MessageAdminInviteGone)
 			return

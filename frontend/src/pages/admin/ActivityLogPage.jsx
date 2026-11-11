@@ -5,6 +5,7 @@ import {
   Alert,
   Button,
   DataTable,
+  DateField,
   EmptyState,
   Input,
   PageHeader,
@@ -166,8 +167,8 @@ export default function ActivityLogPage() {
           <option value="web">Website</option>
           <option value="android">Android app</option>
         </Select>
-        <Input label="From" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-        <Input label="To" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+        <DateField label="From" value={from} onChange={setFrom} />
+        <DateField label="To" value={to} onChange={setTo} />
         <Input
           label="Search"
           value={search}

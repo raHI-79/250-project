@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Check, Copy, Eye, EyeOff, Loader2, Lock, UserRound, X } from 'lucide-react'
-import { Alert, Button, Input, PasswordInput, SkeletonLines, Stepper } from '../../components/ui'
+import {
+  Alert,
+  Button,
+  DateField,
+  Input,
+  PasswordInput,
+  SkeletonLines,
+  Stepper,
+} from '../../components/ui'
 import PhotoPicker from '../../components/forms/PhotoPicker'
 import AuthScreen from '../../components/layout/AuthScreen'
 import AuthHeading from '../../components/layout/AuthHeading'
@@ -248,11 +256,10 @@ export default function ActivatePage() {
                     The invitation was sent to {invite?.masked_email || 'your official address'}.
                     Confirm your date of birth to continue.
                   </Alert>
-                  <Input
+                  <DateField
                     label="Date of birth"
-                    type="date"
                     value={dateOfBirth}
-                    onChange={(event) => setDateOfBirth(event.target.value)}
+                    onChange={setDateOfBirth}
                     required
                   />
                 </>

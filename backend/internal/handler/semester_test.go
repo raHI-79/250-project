@@ -142,6 +142,11 @@ func TestRunningSemestersList(t *testing.T) {
 	}
 }
 
+func (f *fakeCourseStore) DayKinds(ctx context.Context, from, to string,
+	offDays []int) (map[string]store.DayKind, error) {
+	return nil, nil
+}
+
 type fakeCourseStore struct {
 	profile store.StudentProfile
 	running string

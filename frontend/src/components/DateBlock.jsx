@@ -1,13 +1,9 @@
 import cx from '../lib/cx'
-
-const parse = (value) => {
-  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`)
-  return Number.isNaN(date.getTime()) ? null : date
-}
+import { dayOfMonth, isoDate, monthName, weekdayName } from '../lib/time'
 
 export default function DateBlock({ value, className }) {
-  const date = parse(value)
-  if (!date) return null
+  const stamp = isoDate(value)
+  if (!stamp) return null
   return (
     <div
       className={cx(
@@ -16,13 +12,13 @@ export default function DateBlock({ value, className }) {
       )}
     >
       <p className="bg-brand-600 py-0.5 text-2xs font-bold tracking-[0.08em] text-page uppercase">
-        {date.toLocaleDateString('en-GB', { month: 'short' })}
+        {monthName(stamp)}
       </p>
       <p className="font-numeral pt-1 text-2xl leading-none font-bold text-ink">
-        {String(date.getDate()).padStart(2, '0')}
+        {dayOfMonth(stamp)}
       </p>
       <p className="pb-1.5 text-2xs font-semibold tracking-[0.06em] text-muted uppercase">
-        {date.toLocaleDateString('en-GB', { weekday: 'short' })}
+        {weekdayName(stamp).slice(0, 3)}
       </p>
     </div>
   )

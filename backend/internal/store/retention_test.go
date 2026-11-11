@@ -39,7 +39,7 @@ func TestInvitedTeachersShareTheEmptyUserID(t *testing.T) {
 	first := NewTeacher{
 		Name: "First Invited", Designation: "Lecturer", Email: "first@sust.edu", Phone: "01812345671",
 		BloodGroup: "B+", DateOfBirth: "1988-03-09", OfficeRoom: "AB-401",
-		InviteHash: "first-hash", InviteExpiresAt: time.Now().Add(time.Hour),
+		InviteHash: "first-hash", InviteLifetime: time.Hour,
 	}
 	second := first
 	second.Name = "Second Invited"

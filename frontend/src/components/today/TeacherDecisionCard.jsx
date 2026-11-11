@@ -7,8 +7,9 @@ import {
   ACTION_CANCEL,
   ACTION_CONFIRM,
   ACTION_DECLINE,
+  ACTION_EDIT,
+  ACTION_EDIT_LINK,
   ACTION_REQUEST_RESCHEDULE,
-  STATUS_CANCELLED,
   STATUS_CR_ASK,
   allows,
   canEditItem,
@@ -33,7 +34,6 @@ export default function TeacherDecisionCard({
   onLink,
   onDecide,
 }) {
-  const cancelled = item.status === STATUS_CANCELLED
   return (
     <Card
       hover={false}
@@ -95,13 +95,13 @@ export default function TeacherDecisionCard({
             Cancel
           </Button>
         )}
-        {onEdit && canEditItem(item) && (
+        {onEdit && allows(item, ACTION_EDIT) && canEditItem(item) && (
           <Button size="sm" variant="secondary" onClick={() => onEdit(item)}>
             <Pencil size={14} />
             Edit
           </Button>
         )}
-        {canEditLink(item) && !cancelled && (
+        {allows(item, ACTION_EDIT_LINK) && canEditLink(item) && (
           <Button size="sm" variant="secondary" onClick={() => onLink(item)}>
             {needsLink(item) ? <Link2 size={14} /> : <Video size={14} />}
             {needsLink(item) ? 'Add meeting link' : 'Change link'}

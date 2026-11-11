@@ -235,14 +235,6 @@ func (s *Store) DropSudo(ctx context.Context, userID int64) error {
 	return nil
 }
 
-func (s *Store) DeleteOldSessions(ctx context.Context, before time.Time) (int64, error) {
-	tag, err := s.pool.Exec(ctx, deleteOldSessionsSQL, before)
-	if err != nil {
-		return 0, fmt.Errorf("store: could not delete the expired sessions: %w", err)
-	}
-	return tag.RowsAffected(), nil
-}
-
 func (s *Store) SetTwoStep(ctx context.Context, userID int64, enabled bool) error {
 	var id int64
 	err := s.pool.QueryRow(ctx, setTwoStepSQL, userID, enabled).Scan(&id)

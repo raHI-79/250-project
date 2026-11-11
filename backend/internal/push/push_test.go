@@ -277,3 +277,46 @@ func TestEndpointHostFallsBackWhenTheEndpointIsUnusable(t *testing.T) {
 		t.Errorf("endpointHost = %q, want %q", got, unknownHost)
 	}
 }
+
+func TestEveryAnswerThatMeansTheSubscriptionIsGoneDropsTheRow(t *testing.T) {
+	silence(t)
+	for _, status := range []int{http.StatusNotFound, http.StatusGone, http.StatusForbidden} {
+		subscriptions := &fakeSubscriptions{rows: []store.PushSubscription{
+			{ID: 1, UserID: 7, Endpoint: "https://push.example/dead", P256dh: "k", Auth: "a"},
+		}}
+		sender := &fakeSender{status: map[string]int{"https://push.example/dead": status}}
+		worker := NewWorker(subscriptions, sender, 1)
+		sent, err := worker.SendTest(context.Background(), 7, "SUST CSE", "Working", "")
+		if err != nil {
+			t.Fatalf("SendTest returned %v", err)
+		}
+		if sent != 0 {
+			t.Errorf("a %d answer counted as %d delivered", status, sent)
+		}
+		if len(subscriptions.dropped) != 1 {
+			t.Errorf("a %d answer dropped %v, want the one dead subscription",
+				status, subscriptions.dropped)
+		}
+		if len(subscriptions.touched) != 0 {
+			t.Errorf("a %d answer marked the dead subscription used", status)
+		}
+	}
+}
+
+func TestAnAnswerWorthRetryingKeepsTheSubscription(t *testing.T) {
+	silence(t)
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError,
+		http.StatusUnauthorized} {
+		subscriptions := &fakeSubscriptions{rows: []store.PushSubscription{
+			{ID: 1, UserID: 7, Endpoint: "https://push.example/busy", P256dh: "k", Auth: "a"},
+		}}
+		sender := &fakeSender{status: map[string]int{"https://push.example/busy": status}}
+		worker := NewWorker(subscriptions, sender, 1)
+		if _, err := worker.SendTest(context.Background(), 7, "SUST CSE", "Working", ""); err != nil {
+			t.Fatalf("SendTest returned %v", err)
+		}
+		if len(subscriptions.dropped) != 0 {
+			t.Errorf("a %d answer dropped a subscription worth retrying", status)
+		}
+	}
+}

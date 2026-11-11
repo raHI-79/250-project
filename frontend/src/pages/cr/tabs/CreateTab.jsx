@@ -2,11 +2,22 @@ import { useEffect, useState } from 'react'
 import { CalendarPlus } from 'lucide-react'
 import SlotFields from '../../../components/schedule/SlotFields'
 import TimeRangeFields from '../../../components/forms/TimeRangeFields'
-import { Alert, Button, Card, Input, Select, SkeletonLines, Textarea, useToast } from '../../../components/ui'
+import {
+  Alert,
+  Button,
+  Card,
+  DateField,
+  Input,
+  Select,
+  SkeletonLines,
+  Textarea,
+  useToast,
+} from '../../../components/ui'
 import api from '../../../lib/api'
 import { usePeriods, useResource } from '../../../lib/hooks'
 import { MODE_ROOM, SECTION_ALL, periodRangeError, sectionLabel, slotError } from '../../../lib/schedule'
-import { today } from '../../../lib/time'
+import HolidayNote from '../../../components/schedule/HolidayNote'
+import { today, weekdayNumber } from '../../../lib/time'
 
 const EMPTY = {
   kind: 'class',
@@ -21,7 +32,7 @@ const EMPTY = {
   teacher_id: '',
 }
 
-const weekdayOf = (date) => new Date(`${date}T00:00:00`).getDay()
+const weekdayOf = (date) => weekdayNumber(date)
 
 const slotFor = (course, date) => {
   if (!course || !date) return null
@@ -136,15 +147,15 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
             {ownSection && <option value={ownSection}>{sectionLabel(ownSection)}</option>}
             <option value={SECTION_ALL}>{sectionLabel(SECTION_ALL)}</option>
           </Select>
-          <Input
+          <DateField
             label="Date"
-            type="date"
             value={form.item_date}
             min={today()}
-            onChange={set('item_date')}
+            onChange={(next) => set('item_date')({ target: { value: next } })}
             required
           />
         </div>
+        <HolidayNote date={form.item_date} />
         {form.course_id && teachers.length > 1 ? (
           <Select
             label="Teacher"

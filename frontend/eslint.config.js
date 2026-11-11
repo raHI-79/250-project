@@ -27,12 +27,15 @@ export default defineConfig([
     },
   },
   {
-    files: ['scripts/**/*.{js,mjs}'],
+    files: ['scripts/**/*.{js,mjs}', 'e2e/**/*.{js,mjs}'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 'latest',
-      globals: globals.node,
+      globals: { ...globals.node, ...globals.browser },
       sourceType: 'module',
+    },
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])

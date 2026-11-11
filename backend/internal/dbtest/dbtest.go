@@ -12,10 +12,20 @@ import (
 )
 
 const (
+	Timezone       = "Asia/Dhaka"
 	DatabaseSuffix = "_test"
 	Timeout        = 60 * time.Second
 	lockKey        = 250250250
 )
+
+func Location(t *testing.T) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation(Timezone)
+	if err != nil {
+		t.Fatalf("could not load %s: %v", Timezone, err)
+	}
+	return loc
+}
 
 func LoadEnv() error {
 	return config.LoadEnvFile(filepath.Join("..", "..", ".env"))
@@ -31,6 +41,10 @@ func Pool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	if err != nil {
 		t.Fatalf("TEST_DATABASE_URL could not be parsed: %v", err)
 	}
+	if poolConfig.ConnConfig.RuntimeParams == nil {
+		poolConfig.ConnConfig.RuntimeParams = make(map[string]string, 1)
+	}
+	poolConfig.ConnConfig.RuntimeParams["timezone"] = Timezone
 	name := poolConfig.ConnConfig.Database
 	if !strings.HasSuffix(name, DatabaseSuffix) {
 		t.Fatalf("refusing to run against database %q because its name does not end with %q", name, DatabaseSuffix)

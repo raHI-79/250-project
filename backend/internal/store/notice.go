@@ -13,8 +13,6 @@ const (
 	SourceCR      = "cr"
 	SourceTeacher = "teacher"
 	NoticeAll     = "all"
-	NoticeMine    = "my"
-	NoticeOthers  = "other"
 )
 
 type NewNotice struct {

@@ -182,7 +182,9 @@ semester, and sets the running semester of a batch, from the same page.
 ### 4.2 Dated items
 
 A background job turns the fixed routine into dated schedule items for the days
-ahead. Every item carries a status:
+ahead. It skips the weekly off days and the holidays, and fills a working day
+with the routine of the weekday the office chose for it (see 4.7). Every item
+carries a status:
 
 | Status | Meaning |
 |---|---|
@@ -242,6 +244,57 @@ section, the course and the status.
 The class representative picks the items their batch should read and publishes
 them. Publishing writes a snapshot, so later edits to an item never change what
 was published; a new publication replaces it.
+
+What a role may do with an item is decided by one rule on the server, from the
+role, the status, the origin and whether the item is in a final routine. Every
+view returns the answer as `allowed_actions`, and the website and the app draw
+only those buttons:
+
+- an item outside a final routine offers **Add to final** and never **Remove
+  from final**; an item inside one offers **Remove from final** and never **Add
+  to final**;
+- a cancelled item offers neither; the class representative takes it out of the
+  final routine by selecting it there;
+- a day that has passed offers nothing.
+
+### 4.7 Off days, holidays and working days
+
+The weekly off days default to Friday and Saturday. The office portal and the
+control room both keep them and a list of dated entries:
+
+| Entry | Effect on the generator |
+|---|---|
+| A weekly off day | No fixed routine is generated |
+| A holiday, with a name | No fixed routine is generated |
+| A working day that follows a weekday | The routine of that weekday is generated, such as a make-up Saturday that follows Sunday |
+
+An off day or a holiday only stops the automatic fixed routine. A class, lab,
+makeup class or exam that a class representative or a teacher creates for such a
+date is kept, published and announced as on any other day; creating one shows a
+small *This is a holiday* note and never an error. Adding a holiday removes only
+the generated items nobody has decided on yet — still waiting for their teacher,
+in no final routine and never published — and tells their teacher and class
+representatives. Reminders fire only for undecided items that exist, so a class
+created on a holiday is reminded about like any other.
+
+Every routine view puts one chip at the top of such a day: *Holiday · `<name>`*
+for a holiday, *Holiday · `<weekday>`* for a weekly off day and *Working day ·
+follows `<weekday>`* for a working day. The classes and exams of that date are
+listed under the chip with their usual actions; only a day with nothing on it
+shows the chip alone. The chip reaches the hub, the final routine, the teacher
+views, the student routine and the student Today page.
+
+### 4.8 Dates and the time zone
+
+Every date the server works with is a Dhaka date. The pool pins each database
+session to `APP_TIMEZONE`, so `CURRENT_DATE`, `now()` and every cast between a
+date and a stamp land on the Dhaka day rather than the day of the database
+server; between six in the evening and midnight that used to be the day before.
+Stamps compared against each other are written by the same clock: the password
+reset deadlines, the conversation read and clear marks and both ends of an
+attendance window are all written by the database. Dates travel as
+`YYYY-MM-DD`, every date the portal shows reads `Fri 6 Nov 2026`, and every date
+field asks for the day, the month and the year in that order.
 
 ## 5. Student pages
 
@@ -485,10 +538,9 @@ office never does.
 
 ### 11.3 Installable site
 
-`/.well-known/assetlinks.json` is served as `application/json` without a
-redirect, so Android can verify the installed app, drop the URL bar and accept
-the delegated notifications. A web manifest and a service worker make the site
-installable. The app registers
+A web manifest and a service worker make the site installable on iPhone and the
+desktop. On Android the site points at the app instead, which is a Capacitor
+build that needs no digital asset link. The app registers
 `/sw.js` at scope `/` on every start and re-syncs its subscription on start and
 on each visibility change, subscribing again whenever the server key changed.
 The service worker always shows the notification and, on click, focuses an open
@@ -789,13 +841,36 @@ minute and the header carries the time they were last read.
   tomorrow's undecided classes per teacher, pending phone change requests, and
   the notices, polls and messages of the period.
 - **System health** — server uptime, version and commit, database size,
-  uploaded file storage, 4xx and 5xx counts with the latest five 5xx paths,
-  push and FCM sends with their failure share and token counts, emails sent and
-  failed, and the time of the last successful database backup.
+  uploaded file storage, the requests of the period, 4xx and 5xx counts, the
+  addresses that answered with a server error with their count, their last
+  message and when it was, the latest five 5xx answers, the notification failure
+  share with the failures broken down by channel and by reason, the token
+  counts, emails sent and failed, and the time of the last successful database
+  backup.
 
-An alerts banner sits at the top for a 5xx spike, an email or push failure share
-above a fifth, a backup older than 36 hours, a failed sign-in spike from one
-address and a deleted attendance sheet. Every number carries a label and a
+A 5xx counts only when one of our own handlers answered it while the server was
+running normally: the first minute after a start, the platform health probes, the
+503 the maintenance gate writes on purpose and a request the caller abandoned
+before the answer, whose database call was cancelled under it, are left out. A notification
+counts by what the push service actually answered. A subscription the push
+service has thrown away — 404, 410 or 403 for web push, UNREGISTERED, NOT_FOUND
+or INVALID_ARGUMENT for the app — is dropped at once, and the nightly sweep drops
+the web push subscriptions nothing has used for sixty days.
+
+An alerts banner sits at the top for:
+
+| Alert | Fires when |
+|---|---|
+| Server errors | at least 10 server errors among at least 200 requests in the period |
+| Email failures | more than a fifth of at least 5 emails failed |
+| Notification failures | more than a fifth of at least 20 sends failed, leaving out the expired subscriptions the server cleaned up |
+| Backup | the last successful backup is older than 36 hours |
+| Sign-in spike | one address failed to sign in at least 10 times in the last hour |
+| Deleted sheet | an attendance sheet was deleted in the last day |
+
+Each alert carries one icon, a **Details** link to its System health section and
+**Dismiss for a day**, which the server stores so the alert stays quiet on every
+device the super admin signs in from. Every number carries a label and a
 tooltip, and each panel has its own empty state.
 
 ### 14.4 The backup status endpoint
@@ -870,6 +945,9 @@ redeploy:
   attendance from the website.
 - **Reminder times**, the **morning reminder** and the **days ahead** the routine
   is generated, with the environment value as the default.
+- **Weekly off days** and the **holiday list**, with working days that follow
+  another weekday (see 4.7). The office portal edits the same calendar on its
+  **Routines** page.
 - **Minimum supported app version**, below which the app shows a blocking
   *Update required* screen.
 - **Retention windows** for the page views, the activity events and the

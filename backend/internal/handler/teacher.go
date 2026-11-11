@@ -8,6 +8,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/notify"
+	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
@@ -46,6 +47,7 @@ const (
 
 type TeacherStore interface {
 	GetTeacherByUser(ctx context.Context, userID int64) (store.Teacher, error)
+	DayKinds(ctx context.Context, from, to string, offDays []int) (map[string]store.DayKind, error)
 	ListTeacherRoutine(ctx context.Context, teacherID int64) ([]store.RoutineRow, error)
 	ListTeacherDayItems(ctx context.Context, teacherID int64, date string) ([]store.ScheduleItem, error)
 	ListTeacherItemsRange(ctx context.Context, teacherID int64, from, to string) ([]store.ScheduleItem, error)
@@ -76,16 +78,27 @@ type Teacher struct {
 	cfg      *config.Config
 	teachers TeacherStore
 	alerts   BroadcastNotifier
+	values   *settings.Cache
 }
 
 func NewTeacher(cfg *config.Config, teachers TeacherStore, alerts BroadcastNotifier) *Teacher {
 	return &Teacher{cfg: cfg, teachers: teachers, alerts: alerts}
 }
 
+func (t *Teacher) WithSettings(values *settings.Cache) *Teacher {
+	t.values = values
+	return t
+}
+
+func (t *Teacher) dayKind(r *http.Request, date string) *dayKindBody {
+	return kindOf(dayKinds(r, t.teachers, t.values, date, date), date)
+}
+
 type nextDayResponse struct {
-	Date    string     `json:"date"`
-	Weekday string     `json:"weekday"`
-	Items   []itemBody `json:"items"`
+	Date    string       `json:"date"`
+	Weekday string       `json:"weekday"`
+	Kind    *dayKindBody `json:"day_kind,omitempty"`
+	Items   []itemBody   `json:"items"`
 }
 
 type rangeResponse struct {
@@ -179,9 +192,7 @@ func (t *Teacher) NextDay() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		now := t.cfg.Now()
-		tomorrow := now.AddDate(0, 0, 1)
-		day := validate.DateString(tomorrow)
+		day := t.cfg.Tomorrow()
 		items, err := t.teachers.ListTeacherDayItems(r.Context(), teacher.ID, day)
 		if err != nil {
 			log.Printf("handler: could not list the next day of a teacher: %v", err)
@@ -190,7 +201,8 @@ func (t *Teacher) NextDay() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, nextDayResponse{
 			Date:    day,
-			Weekday: validate.DayName(int(tomorrow.Weekday())),
+			Weekday: weekdayOf(day, t.cfg),
+			Kind:    t.dayKind(r, day),
 			Items:   newItemBodies(items),
 		})
 	}
@@ -214,12 +226,13 @@ func (t *Teacher) Upcoming() http.HandlerFunc {
 				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 				return
 			}
-			past := day < validate.DateString(now)
+			past := day < t.cfg.DateOf(now)
 			kept := items
 			if !past {
 				kept = liveItems(items)
 			}
-			httpx.WriteJSON(w, http.StatusOK, dateItems(kept, day, past, t.cfg, teacherActions))
+			httpx.WriteJSON(w, http.StatusOK,
+				dateItems(kept, day, past, t.cfg, ViewerRoleTeacher, t.dayKind(r, day)))
 			return
 		}
 		from, to, ok := t.upcomingRange(w, r, now)
@@ -232,7 +245,8 @@ func (t *Teacher) Upcoming() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		days, more := firstDays(groupItemDays(liveItems(items), t.cfg, teacherActions),
+		kinds := dayKinds(r, t.teachers, t.values, from, to)
+		days, more := firstDays(groupItemDays(liveItems(items), t.cfg, ViewerRoleTeacher, kinds),
 			requestedDayLimit(r))
 		httpx.WriteJSON(w, http.StatusOK, rangeResponse{
 			From:    from,
@@ -288,7 +302,7 @@ func (t *Teacher) FinalRoutine() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		from := validate.DateString(t.cfg.Now())
+		from := t.cfg.Today()
 		day, picked, ok := requestedDay(w, r, t.cfg)
 		if !ok {
 			return
@@ -300,7 +314,8 @@ func (t *Teacher) FinalRoutine() http.HandlerFunc {
 				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 				return
 			}
-			httpx.WriteJSON(w, http.StatusOK, dateItems(items, day, day < from, t.cfg, teacherActions))
+			httpx.WriteJSON(w, http.StatusOK,
+				dateItems(items, day, day < from, t.cfg, ViewerRoleTeacher, t.dayKind(r, day)))
 			return
 		}
 		items, err := t.teachers.ListTeacherFinalItems(r.Context(), teacher.ID, from)
@@ -309,9 +324,10 @@ func (t *Teacher) FinalRoutine() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
+		kinds := dayKinds(r, t.teachers, t.values, from, t.horizon(r, from))
 		httpx.WriteJSON(w, http.StatusOK, finalItemsResponse{
 			Items: newItemBodies(items),
-			Days:  groupItemDays(items, t.cfg, teacherActions),
+			Days:  groupItemDays(items, t.cfg, ViewerRoleTeacher, kinds),
 		})
 	}
 }
@@ -461,7 +477,7 @@ func (t *Teacher) Exams() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		from := validate.DateString(t.cfg.Now())
+		from := t.cfg.Today()
 		day, picked, ok := requestedDay(w, r, t.cfg)
 		if !ok {
 			return
@@ -473,7 +489,8 @@ func (t *Teacher) Exams() http.HandlerFunc {
 				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 				return
 			}
-			httpx.WriteJSON(w, http.StatusOK, dateItems(items, day, day < from, t.cfg, teacherActions))
+			httpx.WriteJSON(w, http.StatusOK,
+				dateItems(items, day, day < from, t.cfg, ViewerRoleTeacher, t.dayKind(r, day)))
 			return
 		}
 		items, err := t.teachers.ListTeacherExams(r.Context(), teacher.ID, from)

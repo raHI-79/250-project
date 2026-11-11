@@ -18,6 +18,7 @@ import {
   MessageModal,
   RescheduleModal,
 } from '../../components/schedule/ScheduleModals'
+import DayKindChip from '../../components/schedule/DayKindChip'
 import DayPicker from '../../components/schedule/DayPicker'
 import QuickActions from '../../components/today/QuickActions'
 import TeacherDecisionCard from '../../components/today/TeacherDecisionCard'
@@ -34,6 +35,7 @@ import {
 } from '../../components/ui'
 import { useAuth } from '../../context/auth'
 import api from '../../lib/api'
+import { dayKindNote } from '../../lib/dayKind'
 import { useHighlight, useMoreDays, useNow, useQueryTab, useResource } from '../../lib/hooks'
 import paths, { TEACHER_TAB_FINAL, TEACHER_TAB_NEXT_DAY } from '../../lib/paths'
 import {
@@ -99,6 +101,7 @@ export default function TeacherUpcomingPage() {
   const [linking, setLinking] = useState(null)
   const [busy, setBusy] = useState(0)
   const dayReadOnly = Boolean(upcoming.data?.read_only)
+  const dayKind = upcoming.data?.day_kind || null
   const dayItems = useMemo(() => upcoming.data?.items || [], [upcoming.data])
   const laterDays = later.days
   const finalReadOnly = Boolean(final.data?.read_only)
@@ -291,11 +294,22 @@ export default function TeacherUpcomingPage() {
               <div className="flex flex-col gap-6">
                 <section>
                   <p className="mb-2 text-sm font-semibold text-ink-soft">{dayHeading(day)}</p>
+                  {dayKind && <DayKindChip kind={dayKind} className="mb-3" />}
                   {dayItems.length === 0 ? (
                     <EmptyState
                       icon={CalendarClock}
-                      title={dayReadOnly ? 'Nothing was held that day' : 'No classes that day'}
-                      text="Nothing of yours is on the routine for this date."
+                      title={
+                        dayKind
+                          ? dayKind.label
+                          : dayReadOnly
+                            ? 'Nothing was held that day'
+                            : 'No classes that day'
+                      }
+                      text={
+                        dayKind
+                          ? dayKindNote(dayKind)
+                          : 'Nothing of yours is on the routine for this date.'
+                      }
                       action={
                         <Button
                           as={Link}
@@ -316,6 +330,7 @@ export default function TeacherUpcomingPage() {
                     <p className="mb-2 text-sm font-semibold text-ink-soft">
                       {dayHeading(entry.date)}
                     </p>
+                    {entry.day_kind && <DayKindChip kind={entry.day_kind} className="mb-3" />}
                     {dayList(entry.items)}
                   </section>
                 ))}

@@ -157,7 +157,7 @@ func (f *fakeAdminStore) UpdateTeacher(ctx context.Context, userID int64, update
 	return nil
 }
 
-func (f *fakeAdminStore) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (store.TeacherInvite, error) {
+func (f *fakeAdminStore) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, lifetime time.Duration) (store.TeacherInvite, error) {
 	if f.err != nil {
 		return store.TeacherInvite{}, f.err
 	}
@@ -836,7 +836,7 @@ func TestAdminInviteTeacher(t *testing.T) {
 			if created.DateOfBirth != "1988-03-09" || created.JoiningDate != "2015-01-15" {
 				t.Errorf("created = %+v, want the submitted dates", created)
 			}
-			if created.InviteHash == "" || created.InviteExpiresAt.IsZero() {
+			if created.InviteHash == "" || created.InviteLifetime <= 0 {
 				t.Error("the store did not receive an invitation token and expiry")
 			}
 			if test.withPhoto && created.PhotoPath == "" {

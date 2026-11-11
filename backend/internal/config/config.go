@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/raHI-79/250-project/backend/internal/daydate"
 	"os"
 	"strconv"
 	"strings"
@@ -46,6 +47,7 @@ var (
 )
 
 type Config struct {
+	clock              func() time.Time
 	Port               string
 	AppEnv             string
 	Version            string
@@ -242,7 +244,50 @@ func (c *Config) ServesStatic() bool {
 }
 
 func (c *Config) Now() time.Time {
+	if c.clock != nil {
+		return c.clock().In(c.Location)
+	}
 	return time.Now().In(c.Location)
+}
+
+func (c *Config) Freeze(at time.Time) {
+	c.clock = func() time.Time { return at }
+}
+
+func (c *Config) Today() string {
+	return daydate.Of(c.Now(), c.Location)
+}
+
+func (c *Config) Tomorrow() string {
+	return daydate.Tomorrow(c.Now(), c.Location)
+}
+
+func (c *Config) Yesterday() string {
+	return daydate.Yesterday(c.Now(), c.Location)
+}
+
+func (c *Config) DateOf(at time.Time) string {
+	return daydate.Of(at, c.Location)
+}
+
+func (c *Config) ParseDate(value string) (time.Time, error) {
+	return daydate.Parse(value, c.Location)
+}
+
+func (c *Config) DayStart(date string) (time.Time, error) {
+	return daydate.Start(date, c.Location)
+}
+
+func (c *Config) DayEnd(date string) (time.Time, error) {
+	return daydate.End(date, c.Location)
+}
+
+func (c *Config) StartOfToday() time.Time {
+	return daydate.StartOf(c.Now(), c.Location)
+}
+
+func (c *Config) Shift(date string, days int) string {
+	return daydate.Shift(date, days)
 }
 
 func clockList(key, value string) ([]string, error) {
@@ -280,17 +325,6 @@ func (c *Config) SuperAdminIdentifier() string {
 		return c.SuperAdminID
 	}
 	return c.AdminIdentifier
-}
-
-func (c *Config) HasMailer() bool {
-	switch c.MailProvider {
-	case MailProviderBrevo:
-		return c.BrevoAPIKey != "" && c.MailFrom != ""
-	case MailProviderAppsScript:
-		return c.AppsScriptURL != "" && c.AppsScriptSecret != ""
-	default:
-		return c.SMTPHost != ""
-	}
 }
 
 func (c *Config) IsProduction() bool {

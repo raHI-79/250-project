@@ -39,12 +39,6 @@ export const useSite = () => {
   return state || {}
 }
 
-export const featureOn = (site, name) => {
-  const features = site?.features
-  if (!features || !(name in features)) return true
-  return Boolean(features[name])
-}
-
 export const updateRequired = (site) => {
   if (!isNative()) return false
   const floor = String(site?.min_app_version || '').trim()

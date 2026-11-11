@@ -77,7 +77,7 @@ func (a *Admin) CreateTeacher() http.HandlerFunc {
 		}
 		expiresAt := a.cfg.Now().Add(inviteLifetime)
 		teacher.InviteHash = hash
-		teacher.InviteExpiresAt = expiresAt
+		teacher.InviteLifetime = inviteLifetime
 		userID, err := a.people.CreateTeacher(r.Context(), teacher)
 		if err != nil {
 			a.removePhoto(photoPath)
@@ -183,7 +183,7 @@ func (a *Admin) ResendInvite() http.HandlerFunc {
 			return
 		}
 		expiresAt := a.cfg.Now().Add(inviteLifetime)
-		invite, err := a.people.ResetTeacherInvite(r.Context(), userID, hash, expiresAt)
+		invite, err := a.people.ResetTeacherInvite(r.Context(), userID, hash, inviteLifetime)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			httpx.WriteError(w, http.StatusNotFound, MessageTeacherNotFound)

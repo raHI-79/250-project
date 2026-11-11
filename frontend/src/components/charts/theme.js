@@ -5,20 +5,9 @@ export const SERIES = [
   'var(--color-success-500)',
 ]
 
-export const SERIES_NAMES = ['Ocean', 'Amber', 'Violet', 'Green']
-
 export const GRID = 'var(--color-line)'
 
 export const AXIS_INK = 'var(--color-muted)'
-
-export const SURFACE = 'var(--color-surface)'
-
-export const axis = {
-  stroke: GRID,
-  tick: { fill: AXIS_INK, fontSize: 12 },
-  tickLine: false,
-  axisLine: { stroke: GRID },
-}
 
 export const tooltipStyle = {
   contentStyle: {

@@ -89,7 +89,14 @@ func plannedItem() store.ScheduleItem {
 	}
 }
 
+func (f *fakeScheduleStore) DayKinds(ctx context.Context, from, to string,
+	offDays []int) (map[string]store.DayKind, error) {
+	return f.kinds, nil
+}
+
 type fakeScheduleStore struct {
+	kinds          map[string]store.DayKind
+	byDate         map[string][]store.ScheduleItem
 	item           store.ScheduleItem
 	items          []store.ScheduleItem
 	routines       []store.RoutineRow
@@ -442,6 +449,9 @@ func (f *fakeScheduleStore) ListCourseTeachers(ctx context.Context, batch, secti
 func (f *fakeScheduleStore) ListBatchItemsOnDate(ctx context.Context, batch,
 	date string) ([]store.ScheduleItem, error) {
 	f.askedDates = append(f.askedDates, date)
+	if f.byDate != nil {
+		return f.byDate[date], f.err
+	}
 	return f.items, f.err
 }
 
