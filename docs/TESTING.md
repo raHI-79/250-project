@@ -121,7 +121,7 @@ Each file is one flow, with a named section per step.
 
 | Test | What it proves |
 |---|---|
-| `internal/metrics/requests_test.go` | A server error counts only when it came from one of our handlers while the server was running normally: the first minute after a start, the platform probes and the 503 the maintenance gate writes are left out. The request counter writes one row per flush |
+| `internal/metrics/requests_test.go` | A server error counts only when it came from one of our handlers while the server was running normally: the first minute after a start, the platform probes, the 503 the maintenance gate writes and a request the caller abandoned are left out, while a request that ran out of time still counts. The request counter writes one row per flush |
 | `internal/handler/dashboard_test.go` | The alert thresholds, including the minimum request volume behind a 5xx alert and the minimum twenty sends behind a notification alert; that the expired subscriptions the server cleaned up are left out of the failure share; that a dismissal keeps one alert quiet for a day without silencing the others; and that every alert carries a message, a tone and a System health section to link to |
 | `internal/push/reason_test.go` | Every push answer maps to one reason; 404, 410 and 403 all mean the subscription is gone; the VAPID pair is checked once and the startup line never prints a key |
 | `internal/push/push_test.go` | An answer that means the subscription is gone drops the row, an answer worth retrying keeps it, and the log carries the host and the status but never a key |

@@ -849,8 +849,9 @@ minute and the header carries the time they were last read.
   backup.
 
 A 5xx counts only when one of our own handlers answered it while the server was
-running normally: the first minute after a start, the platform health probes and
-the 503 the maintenance gate writes on purpose are left out. A notification
+running normally: the first minute after a start, the platform health probes, the
+503 the maintenance gate writes on purpose and a request the caller abandoned
+before the answer, whose database call was cancelled under it, are left out. A notification
 counts by what the push service actually answered. A subscription the push
 service has thrown away — 404, 410 or 403 for web push, UNREGISTERED, NOT_FOUND
 or INVALID_ARGUMENT for the app — is dropped at once, and the nightly sweep drops

@@ -125,6 +125,7 @@ func TestTheCountersLeaveOutWhatIsNotAHandlerFault(t *testing.T) {
 		path        string
 		agent       string
 		started     time.Time
+		ended       error
 		wantErrors  int
 		wantCounted int
 		wantFailed  int
@@ -176,6 +177,26 @@ func TestTheCountersLeaveOutWhatIsNotAHandlerFault(t *testing.T) {
 			wantFailed:  0,
 		},
 		{
+			name:        "a request the caller abandoned",
+			handler:     answer(http.StatusInternalServerError, `{"error":"Something went wrong. Please try again."}`),
+			path:        "/api/students/today",
+			started:     past,
+			ended:       context.Canceled,
+			wantErrors:  0,
+			wantCounted: 1,
+			wantFailed:  0,
+		},
+		{
+			name:        "a request that ran out of time",
+			handler:     answer(http.StatusInternalServerError, `{"error":"Something went wrong. Please try again."}`),
+			path:        "/api/students/today",
+			started:     past,
+			ended:       context.DeadlineExceeded,
+			wantErrors:  1,
+			wantCounted: 1,
+			wantFailed:  1,
+		},
+		{
 			name:        "a real server error",
 			handler:     answer(http.StatusInternalServerError, `{"error":"boom"}`),
 			path:        "/api/me",
@@ -195,6 +216,9 @@ func TestTheCountersLeaveOutWhatIsNotAHandlerFault(t *testing.T) {
 			if test.agent != "" {
 				request.Header.Set("User-Agent", test.agent)
 			}
+			if test.ended != nil {
+				request = request.WithContext(endedContext{Context: request.Context(), err: test.ended})
+			}
 			handler.ServeHTTP(httptest.NewRecorder(), request)
 			if got := len(sink.of(store.KindClient5x)); got != test.wantErrors {
 				t.Errorf("recorded %d server errors, want %d", got, test.wantErrors)
@@ -209,6 +233,13 @@ func TestTheCountersLeaveOutWhatIsNotAHandlerFault(t *testing.T) {
 		})
 	}
 }
+
+type endedContext struct {
+	context.Context
+	err error
+}
+
+func (c endedContext) Err() error { return c.err }
 
 func TestARequestThatWentWrongIsStillCountedAsAClientError(t *testing.T) {
 	silence(t)

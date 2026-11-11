@@ -376,7 +376,8 @@ log. `docs/DEPLOY.md` has the three lines to paste into the Render shell.
   field asks for the day, the month and the year in that order.
 - **System health** on the control room dashboard counts only the server errors
   our own handlers answered: the first minute after a start, the platform
-  probes and the 503 the maintenance gate writes are left out, and the alert
+  probes, the 503 the maintenance gate writes and a request the caller abandoned
+  before the answer are left out, and the alert
   needs at least 200 requests in the period behind it. It lists the addresses
   that failed with their count, their last message and when it was. The
   notification failures are broken down by channel (web push or the app) and by

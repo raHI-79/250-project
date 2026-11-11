@@ -60,9 +60,13 @@ a test that failed before the fix and passes after it.
 - **"The server answered with 5xx more than usual."** The count took every 5xx,
   including the 503 of a maintenance window, the platform health probes and the
   few errors a restart answers before the pool is warm, and it fired on a flat
-  number with no idea how busy the period was. It now counts only our own
-  handlers after the first minute, needs 200 requests behind it, and System health
-  lists the failing addresses with their count, last message and time.
+  number with no idea how busy the period was. It also counted every request the
+  caller gave up on: a phone that left a page before it loaded cancelled the
+  database call under the handler, which answered 500 to nobody. The browser check
+  saw 450 of them in one run and not one real error. It now counts only our own
+  handlers after the first minute, leaves out a request the caller abandoned,
+  needs 200 requests behind it, and System health lists the failing addresses with
+  their count, last message and time.
 - **"More than a fifth of the push notifications failed."** A subscription the
   browser had thrown away answered 410 and was counted as a success, a 403 never
   dropped its row, and the same dead endpoints failed on every send for ever. Every

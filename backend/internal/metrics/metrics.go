@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/raHI-79/250-project/backend/internal/fcm"
 	"github.com/raHI-79/250-project/backend/internal/mailer"
 	"github.com/raHI-79/250-project/backend/internal/push"
@@ -157,8 +158,9 @@ func (w *statusWriter) message() string {
 
 // Responses counts what the handlers answered. A server error only counts when it came
 // out of one of our own handlers while the server was running normally, so the count
-// leaves out the first minute after a start, the platform health probes and the 503 the
-// maintenance gate writes on purpose.
+// leaves out the first minute after a start, the platform health probes, the 503 the
+// maintenance gate writes on purpose and a request the caller abandoned before the answer,
+// whose database call was cancelled under it.
 func Responses(sink Sink, counter *Counter) func(http.Handler) http.Handler {
 	return responsesStartedAt(time.Now(), sink, counter)
 }
@@ -172,7 +174,8 @@ func responsesStartedAt(startedAt time.Time, sink Sink,
 			probe := IsProbe(r)
 			settling := time.Since(startedAt) < SettleWindow
 			maintenance := watched.Header().Get(MaintenanceHeader) != ""
-			serverError := watched.status >= 500 && !probe && !settling && !maintenance
+			abandoned := errors.Is(r.Context().Err(), context.Canceled)
+			serverError := watched.status >= 500 && !probe && !settling && !maintenance && !abandoned
 			if !probe {
 				counter.Add(serverError)
 			}
