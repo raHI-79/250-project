@@ -16,6 +16,9 @@ backend/.env.local
 backend/uploads/
 node_modules/
 frontend/dist/
+frontend/e2e/.artifacts/
+frontend/playwright-report/
+frontend/test-results/
 frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*

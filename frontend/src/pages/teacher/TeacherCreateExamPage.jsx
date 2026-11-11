@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ClipboardList, Plus, Trash2 } from 'lucide-react'
+import HolidayNote from '../../components/schedule/HolidayNote'
 import ItemBadges from '../../components/schedule/ItemBadges'
 import { CancelModal } from '../../components/schedule/ScheduleModals'
 import {
@@ -172,6 +173,7 @@ export default function TeacherCreateExamPage() {
               required
             />
           </div>
+          <HolidayNote date={form.item_date} />
           <Textarea
             label="Syllabus"
             value={form.syllabus}

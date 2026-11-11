@@ -16,6 +16,7 @@ import {
 import api from '../../../lib/api'
 import { usePeriods, useResource } from '../../../lib/hooks'
 import { MODE_ROOM, SECTION_ALL, periodRangeError, sectionLabel, slotError } from '../../../lib/schedule'
+import HolidayNote from '../../../components/schedule/HolidayNote'
 import { today, weekdayNumber } from '../../../lib/time'
 
 const EMPTY = {
@@ -154,6 +155,7 @@ export default function CreateTab({ courses, ownSection, prefill, onCreated }) {
             required
           />
         </div>
+        <HolidayNote date={form.item_date} />
         {form.course_id && teachers.length > 1 ? (
           <Select
             label="Teacher"
