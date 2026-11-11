@@ -4,6 +4,125 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.7.0
+
+A full quality pass over the website, the app and the server. Every bug below has
+a test that failed before the fix and passes after it.
+
+### Dates, the time zone and the calendar
+
+- **Tomorrow was the wrong day every evening.** The database pool ran in the zone of
+  the database server, so `CURRENT_DATE`, `now()`, `date_trunc` and every cast
+  between a date and a stamp named the day before between six in the evening and
+  midnight in Dhaka. The pool now pins every session to `APP_TIMEZONE`. Two
+  dashboard tests that were already failing on the branch pass because of it.
+- **Two clocks for one deadline.** The password reset deadlines, the conversation
+  read and clear marks, the end of an attendance window, the invitation links of
+  teachers and office admins, the two-person approvals and the address blocks were
+  written by the server and compared by the database. A skew between the two could
+  expire a code early, hide a message that had arrived, or put the end of an
+  attendance window before its start, which the database refused. The server now
+  passes a lifetime and the database writes every one of them.
+- **Classes on Friday and Saturday.** The generator knew nothing about off days.
+  Weekly off days now live in the settings (Friday and Saturday by default) and a
+  holiday list holds named holidays and working days that follow another weekday,
+  editable on the office portal's **Routines** page and in the control room's
+  **Site settings**. They only stop the automatic fixed routine: a class, lab,
+  makeup class or exam created for such a date is kept, published and announced,
+  and the create forms say *This is a holiday* instead of refusing the date.
+  Adding a holiday removes only the generated items nobody has decided on yet and
+  tells their teacher and class representatives.
+- **Dates read 11/06/2026.** The website and the app read every date in the browser
+  zone and wrote it in the browser locale. One helper now reads and writes every
+  date in Asia/Dhaka, every date reads `Fri 6 Nov 2026`, and a day / month / year
+  field replaces the browser's own date input everywhere. What has started and
+  what may still be edited is decided by the Dhaka clock, so a phone set to
+  another zone agrees with the server.
+- The settings cache dereferenced a missing store when it saved.
+
+### The routine views
+
+- **Tomorrow and Today listed the same classes.** The hub sent the chosen date and
+  `/api/cr/upcoming` read only `from`, so both tabs answered every item from today
+  to the horizon under an empty heading. It now answers the day it is asked for.
+- **"Remove from final" on rows that were not in it.** That same list carried rows
+  of other days that were already in a final routine. One rule on the server now
+  decides every action from the role, the status, the origin and `in_final`, every
+  view returns it as `allowed_actions`, and the website draws nothing else: an item
+  outside a final routine offers only *Add to final*, one inside only *Remove from
+  final*, a cancelled item neither, and a past day nothing.
+- Every routine view carries the same chip for a day the routine leaves empty —
+  *Holiday · Victory Day*, *Holiday · Friday* or *Working day · follows Sunday* —
+  with the day's own classes and exams listed under it.
+
+### Server health
+
+- **"The server answered with 5xx more than usual."** The count took every 5xx,
+  including the 503 of a maintenance window, the platform health probes and the
+  few errors a restart answers before the pool is warm, and it fired on a flat
+  number with no idea how busy the period was. It now counts only our own
+  handlers after the first minute, needs 200 requests behind it, and System health
+  lists the failing addresses with their count, last message and time.
+- **"More than a fifth of the push notifications failed."** A subscription the
+  browser had thrown away answered 410 and was counted as a success, a 403 never
+  dropped its row, and the same dead endpoints failed on every send for ever. Every
+  answer now maps to a reason, 404, 410 and 403 drop the subscription at once, a
+  nightly sweep drops the ones unused for sixty days, and the alert needs twenty
+  sends and leaves the cleaned-up ones out. System health breaks the failures down
+  by channel and by reason.
+- The VAPID pair and the Firebase service account are checked once at startup with
+  one log line each that never prints a key.
+- Each alert can be dismissed for a day, stored on the server, and links to its
+  System health section. The banner drew two icons; it draws one.
+
+### Security
+
+- A route table test reads every `/api` route the router registers out of the
+  source and fails on one that names nobody who may call it. It found twenty-five.
+- The phone-only attendance routes checked the client rule after reading the
+  student from the database; they now refuse the website first.
+- Proven by new tests: the public routes really are public, an office token is
+  refused from the app, a date of birth never leaves an office body, the attendance
+  token key never reaches a student, no message carries a secret, every list is
+  bounded, and both uploaders judge a file by its content.
+
+### The browser check
+
+- `npm run e2e` walks every page and the dialogs of the student, the class
+  representative, the teacher, the office admin and the super admin at 390 px and
+  1280 px, in light and in dark, and fails on console errors, failing API calls,
+  sideways scrolling, overflow, cut-off text, controls under a bar, dialogs taller
+  than the screen and pages that cannot be read to the end. CI runs it on every
+  pull request.
+- It found the per-session **Sign out** button on the account pages squeezed until
+  its label was cut off on a phone.
+
+### Removed
+
+- Thirty-five exported Go names nothing used, among them `DeleteOldSessions`,
+  `HasMailer`, `ConversationScope`, `NoteAudience`, `SectionsWithAll` and
+  twenty response messages no handler sent.
+- The `/.well-known/assetlinks.json` handling left over from the PWABuilder app.
+  The Capacitor app declares no App Links, and no such file is shipped.
+- `NoteFields`, a form component nothing rendered, with `noteError` and
+  twenty-one other frontend exports nothing imported.
+- The `rule-under` and `text-shadow-hero` utilities and three campus banner
+  photos (807 KB) that no page shows.
+- `go mod tidy`: two modules that were imported directly but listed as indirect,
+  and fourteen stale checksum lines.
+
+The built site shrinks from 8,224,107 to 7,416,772 bytes (−807,335, −9.8 %). The
+JavaScript and the CSS are the same size as before, because the bundler had already
+left the dead code out; the saving is the three photos. Every npm dependency is
+still imported.
+
+### Needs doing by hand
+
+- Nothing new on Render: the off days default to Friday and Saturday, and the
+  holiday list starts empty. The new migrations run on the next deploy.
+- After the deploy, the super admin may want to dismiss any alert left over from
+  the old counting; it clears on its own as the period moves on.
+
 ## 2.6.1
 
 - **The portal asks for the password instead of refusing.** A `428` from the

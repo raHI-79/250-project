@@ -358,9 +358,37 @@ log. `docs/DEPLOY.md` has the three lines to paste into the Render shell.
 - Every write in the control room needs a password confirmation first, which
   opens a five-minute window on that session; without it the answer is `428`.
 - Maintenance mode, the registration switch, the announcement banner, the feature
-  switches, the reminder times, the days ahead, the minimum app version and the
-  retention windows live in the `settings` table and take effect within half a
-  minute. The environment values are their defaults.
+  switches, the reminder times, the days ahead, the weekly off days, the minimum
+  app version and the retention windows live in the `settings` table and take
+  effect within half a minute. The environment values are their defaults.
+- The weekly off days default to Friday and Saturday. The office portal
+  (**Routines**) and the control room (**Site settings**) both edit them and the
+  holiday list: a named holiday, or a working day that follows another weekday's
+  routine, such as a make-up Saturday that follows Sunday. Off days and holidays
+  only stop the automatic fixed routine; a class, lab, makeup class or exam
+  somebody creates for such a date is kept, published and announced as on any
+  other day. Adding a holiday removes only the generated items nobody has
+  decided on yet and tells their teacher and class representatives.
+- Every date the server derives follows `APP_TIMEZONE`: the pool pins each
+  database session to it, so `CURRENT_DATE`, `now()` and every cast between a
+  date and a stamp land on the Dhaka day rather than the day of the database
+  server. Every date the portal shows reads `Fri 6 Nov 2026`, and every date
+  field asks for the day, the month and the year in that order.
+- **System health** on the control room dashboard counts only the server errors
+  our own handlers answered: the first minute after a start, the platform
+  probes and the 503 the maintenance gate writes are left out, and the alert
+  needs at least 200 requests in the period behind it. It lists the addresses
+  that failed with their count, their last message and when it was. The
+  notification failures are broken down by channel (web push or the app) and by
+  reason; a subscription the push service has thrown away (404, 410, 403, or
+  UNREGISTERED, NOT_FOUND and INVALID_ARGUMENT for the app) is dropped at once,
+  the nightly sweep drops the web push subscriptions nothing has used for sixty
+  days, and the alert needs at least twenty sends and leaves the cleaned-up ones
+  out of its share. The super admin can set any alert aside for a day, and each
+  one links to its section.
+- The VAPID pair and the Firebase service account are read and checked once at
+  startup, each with one log line that says whether the channel is on and never
+  prints a key.
 - Deleting an account for good, deleting a whole attendance sheet and removing an
   office admin need a second office admin to approve within 24 hours whenever one
   exists; the super admin overrides after confirming its password.
@@ -813,6 +841,9 @@ worker deletes that subscription.
 
 ## How to run tests
 
+Every suite, what it proves and how to run it is described in
+[docs/TESTING.md](docs/TESTING.md). In short:
+
 ```powershell
 cd backend
 go test ./...
@@ -868,15 +899,28 @@ npm test
 npm run build
 ```
 
+The browser check walks every page of every role at 390 px and 1280 px, in
+light and in dark, against a local server with the demo data. It needs the
+server and the website running; see [docs/TESTING.md](docs/TESTING.md#6-the-browser-check)
+for the variables it reads.
+
+```powershell
+cd frontend
+npm run e2e:install
+npm run e2e
+```
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs on every push to `main` and on every pull
-request, in two jobs:
+request, in three jobs:
 
-- **Backend** — a PostgreSQL service, then the `gofmt` check, `go vet ./...` and
-  `go test ./...` with `TEST_DATABASE_URL` pointing at that service, so the
-  integration tests really run.
+- **Backend** — a PostgreSQL 18 service, then the `gofmt` check, `go vet ./...`
+  and `go test -timeout 25m ./...` with `TEST_DATABASE_URL` pointing at that
+  service, so the integration tests really run.
 - **Frontend** — `npm ci`, `npm run lint` and `npm run build`.
+- **Browser check** — loads the demo data, starts the server and the website and
+  runs `npm run e2e`; a failed run keeps its report and both logs.
 
 ## API endpoints
 
@@ -984,6 +1028,11 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/api/super-admin/release` | super admin | The current Android release, its downloads, the share link and the floor |
 | `POST` | `/api/super-admin/release/announce` | super admin | Sends the update notification again |
 | `GET` | `/api/super-admin/data` | super admin | Row counts, the last backups and the retention windows |
+| `POST` | `/api/super-admin/alerts/{key}/dismiss` | super admin | Keeps one dashboard alert quiet for a day, on every device |
+| `GET` | `/api/super-admin/calendar` | super admin | The weekly off days and the holidays from today on |
+| `PUT` | `/api/super-admin/calendar/holidays` | super admin | `{date, name, working_day, follows_weekday}` saves a holiday or a working day; answers `removed_items` |
+| `DELETE` | `/api/super-admin/calendar/holidays/{date}` | super admin | Removes a holiday or a working day; `404` when none is set |
+| `PUT` | `/api/super-admin/calendar/off-days` | super admin | `{off_days}` with weekday numbers from 0 (Sunday) to 6 (Saturday) |
 | `POST` | `/api/system/backup-status` | secret | Records a successful backup; needs the `X-Backup-Secret` header |
 | `GET` | `/api/admin/stats` | admin | `total_students`, `total_crs`, `total_teachers`, `pending_approvals` |
 | `POST` | `/api/admin/courses` | admin | Adds a course with `code`, `title` and a required `credit` of 0.5 to 6.0 in steps of 0.25; the code is stored in upper case, `409` on a duplicate |
@@ -1007,6 +1056,11 @@ Every route lives under `/api`. Errors always use the same shape:
 | `PATCH` | `/api/admin/periods/{id}` | admin | Changes any of those fields; `409` on an overlap, `404` when unknown |
 | `DELETE` | `/api/admin/periods/{id}` | admin | Removes a period; `409` when it is the last one left |
 | `POST` | `/api/admin/periods/reorder` | admin | `{ids}` holding every period exactly once, in the new order |
+| `GET` | `/api/admin/calendar` | admin, routines | The weekly off days and the holidays from today on |
+| `PUT` | `/api/admin/calendar/holidays` | admin, routines | Saves a holiday or a working day, as in the control room |
+| `DELETE` | `/api/admin/calendar/holidays/{date}` | admin, routines | Removes a holiday or a working day |
+| `PUT` | `/api/admin/calendar/off-days` | admin, routines | Saves the weekly off days |
+| `GET` | `/api/calendar` | everyone signed in | The read-only calendar the routine pages draw their holiday chips from |
 | `GET` | `/api/notifications` | student, CR, teacher | Newest first; `limit` defaults to 30 and may not exceed 100 |
 | `GET` | `/api/notifications/unread-count` | student, CR, teacher | How many matching notifications arrived after `since` |
 | `GET` | `/api/cr/routine` | CR | Fixed routine of the CR's own batch and section, including the `ALL` entries |

@@ -149,6 +149,18 @@ Each file is one flow, with a named section per step.
 For each of the five roles — student, class representative, teacher, office admin
 and super admin — it signs in through the real form, visits every page and opens
 whatever dialogs those pages offer, at 390 px and at 1280 px, in light and in dark.
+That is ten cases per project and forty in all; a full run takes about twenty
+minutes.
+
+Before any case runs, a global setup (`e2e/setup/grant.js`) signs in as the super
+admin, confirms the password and grants the seeded office admin every
+permission, the way a real deployment starts. Without it every office page would
+answer 403 to an admin nobody had trusted yet.
+
+The dialogs are found rather than listed: on the pages in `DIALOG_PAGES` the suite
+presses each control whose name starts like an opener (*Invite*, *Add*, *Edit*,
+*Remove*, *Change*, …) and measures whatever dialog appears, so renaming a button
+cannot leave a stale table behind.
 
 A case fails on:
 
@@ -161,9 +173,18 @@ A case fails on:
 - a dialog taller than the screen with no inner scrolling,
 - a page whose last content cannot be reached by scrolling.
 
-Decoration nobody can touch, a wide table inside its own horizontal scroller and a
-label only a screen reader reads are not faults, and the suite says so explicitly
-rather than by accident.
+These are not faults, and the suite says so explicitly rather than by accident:
+
+- decoration nobody can touch, such as the background shapes of the sign-in pages;
+- a wide table or week grid inside its own horizontal scroller;
+- a label only a screen reader reads;
+- the controls behind an open dialog, which are meant to be out of reach;
+- an endless list, such as the activity log, whose end moves as it loads more;
+- a page measured mid-animation: the suite waits for every finite animation to
+  finish first, and a page that scrolls smoothly is jumped instantly.
+
+The app banner that offers the Android app is closed before a page is measured,
+since a reader closes it once and never sees it again.
 
 ### 6.1 Running it
 
