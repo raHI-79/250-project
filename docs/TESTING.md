@@ -184,7 +184,11 @@ These are not faults, and the suite says so explicitly rather than by accident:
 - the controls behind an open dialog, which are meant to be out of reach;
 - an endless list, such as the activity log, whose end moves as it loads more;
 - a page measured mid-animation: the suite waits for every finite animation to
-  finish first, and a page that scrolls smoothly is jumped instantly.
+  finish first, and a page that scrolls smoothly is jumped instantly;
+- a connection to another site that drops on the way, such as a font file from
+  Google on a poor network. The same failure on the portal's own address still
+  fails, and so does another site answering with an error status; every console
+  error the suite reports names the address it came from.
 
 The app banner that offers the Android app is closed before a page is measured,
 since a reader closes it once and never sees it again.

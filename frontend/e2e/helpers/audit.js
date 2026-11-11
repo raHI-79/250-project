@@ -11,6 +11,19 @@ const IGNORED_CONSOLE = [
   /ResizeObserver loop/i,
 ]
 
+// A connection to another site that drops on the way, such as a font file from Google on a
+// poor network, says nothing about the portal. The same failure on the portal's own address
+// still counts, and so does another site answering with an error status.
+const NETWORK_FAILURE = /^Failed to load resource: net::ERR_/
+
+const isOtherSite = (page, address) => {
+  try {
+    return new URL(address).origin !== new URL(page.url()).origin
+  } catch {
+    return false
+  }
+}
+
 // Addresses whose failure is expected: the push key is absent on a server with no VAPID
 // pair, and the beacon is allowed to be refused by the rate limiter.
 const TOLERATED_API = [
@@ -29,7 +42,9 @@ export function watch(page) {
     if (message.type() !== 'error') return
     const text = message.text()
     if (IGNORED_CONSOLE.some((pattern) => pattern.test(text))) return
-    problems.console.push(text)
+    const source = message.location()?.url || ''
+    if (NETWORK_FAILURE.test(text) && isOtherSite(page, source)) return
+    problems.console.push(source ? `${text} (${source})` : text)
   })
   page.on('pageerror', (error) => {
     problems.pageErrors.push(String(error && error.message ? error.message : error))
