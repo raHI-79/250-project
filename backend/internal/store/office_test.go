@@ -39,7 +39,7 @@ func TestEnsureSuperAdminPromotesTheSeededAccount(t *testing.T) {
 func TestAdminInviteBecomesAnActiveAdmin(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	chief := insertUser(t, ctx, pool, RoleAdmin, "chief", StatusActive, 0)
-	expires := time.Now().Add(72 * time.Hour)
+	expires := 72 * time.Hour
 	userID, err := store.CreateAdminInvite(ctx, "office@sust.edu", inviteHash, expires, chief)
 	if err != nil {
 		t.Fatalf("CreateAdminInvite() returned an unexpected error: %v", err)
@@ -73,7 +73,7 @@ func TestAdminInviteBecomesAnActiveAdmin(t *testing.T) {
 func TestAdminInviteCanBeResentAndCancelled(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	chief := insertUser(t, ctx, pool, RoleAdmin, "chief", StatusActive, 0)
-	expires := time.Now().Add(72 * time.Hour)
+	expires := 72 * time.Hour
 	userID, err := store.CreateAdminInvite(ctx, "second@sust.edu", inviteHash, expires, chief)
 	if err != nil {
 		t.Fatalf("CreateAdminInvite() returned an unexpected error: %v", err)

@@ -34,10 +34,6 @@ func Sections() []string {
 	return []string{SectionA, SectionB}
 }
 
-func SectionsWithAll() []string {
-	return []string{SectionA, SectionB, SectionAll}
-}
-
 func ClockTime(label, value string) (string, error) {
 	trimmed, err := Required(label, value)
 	if err != nil {

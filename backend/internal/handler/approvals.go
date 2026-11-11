@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/raHI-79/250-project/backend/internal/auth"
-	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
 	"github.com/raHI-79/250-project/backend/internal/middleware"
 	"github.com/raHI-79/250-project/backend/internal/store"
@@ -28,7 +27,7 @@ const (
 )
 
 type ApprovalStore interface {
-	CreateApproval(ctx context.Context, approval store.Approval) (int64, error)
+	CreateApproval(ctx context.Context, approval store.Approval, window time.Duration) (int64, error)
 	ListApprovals(ctx context.Context) ([]store.Approval, error)
 	LoadApproval(ctx context.Context, approvalID int64) (store.Approval, error)
 	DecideApproval(ctx context.Context, approvalID, deciderID int64, status string) (store.Approval, error)
@@ -36,14 +35,13 @@ type ApprovalStore interface {
 }
 
 type Approvals struct {
-	cfg     *config.Config
 	store   ApprovalStore
 	events  *Recorder
 	runners map[string]func(ctx context.Context, approval store.Approval) error
 }
 
-func NewApprovals(cfg *config.Config, people ApprovalStore, events *Recorder) *Approvals {
-	return &Approvals{cfg: cfg, store: people, events: events,
+func NewApprovals(people ApprovalStore, events *Recorder) *Approvals {
+	return &Approvals{store: people, events: events,
 		runners: make(map[string]func(ctx context.Context, approval store.Approval) error)}
 }
 
@@ -105,9 +103,8 @@ func (a *Approvals) Needed(w http.ResponseWriter, r *http.Request, action, targe
 		Summary:     summary,
 		Payload:     body,
 		RequestedBy: current.ID,
-		ExpiresAt:   a.cfg.Now().Add(ApprovalWindow),
 	}
-	id, err := a.store.CreateApproval(r.Context(), request)
+	id, err := a.store.CreateApproval(r.Context(), request, ApprovalWindow)
 	if err != nil {
 		log.Printf("handler: could not record an approval request: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)

@@ -22,7 +22,6 @@ const (
 	MessagePersonRestored  = "Account restored."
 	MessagePersonSignedOut = "Signed out everywhere."
 	MessagePhoneReset      = "The attendance phone was reset."
-	MessageResetSent       = "A password reset email is on its way."
 	MessageRoleChanged     = "Role changed."
 	MessageBulkDone        = "Done."
 	MessageNoSelection     = "Select at least one account."

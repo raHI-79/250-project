@@ -51,14 +51,6 @@ func MessageBody(label, value string, hasAttachment bool) (string, error) {
 	return trimmed, nil
 }
 
-func ConversationScope(label, value string) (string, error) {
-	return oneOf(label, value, conversationScopes)
-}
-
-func NoteAudience(label, value string) (string, error) {
-	return oneOf(label, value, noteAudiences)
-}
-
 func NoticeSource(label, value string) (string, error) {
 	return oneOf(label, value, noticeSources)
 }

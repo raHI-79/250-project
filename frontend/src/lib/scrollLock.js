@@ -44,8 +44,4 @@ export const lockScroll = () => shared.lock()
 
 export const isScrollLocked = () => shared.locked()
 
-export const scrollLockDepth = () => shared.depth()
-
-export const resetScrollLock = () => shared.reset()
-
 export default shared

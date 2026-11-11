@@ -1,5 +1,3 @@
-import { isAndroidApp } from './native'
-
 const SCRIPT_SRC = 'https://accounts.google.com/gsi/client'
 
 const SOCIAL_PROVIDER = 'google'
@@ -117,15 +115,3 @@ export const nativeGoogleCredential = async (clientId, hostedDomain) => {
   if (!token) throw new Error('Google returned no identity token for this account.')
   return token
 }
-
-export const nativeGoogleSignOut = async (clientId) => {
-  if (!isAndroidApp() || !clientId) return
-  try {
-    const login = await socialLogin(clientId)
-    await login.logout({ provider: SOCIAL_PROVIDER })
-  } catch {
-    social = null
-  }
-}
-
-export const googleSupported = () => typeof window !== 'undefined'

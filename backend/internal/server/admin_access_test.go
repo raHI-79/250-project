@@ -110,7 +110,7 @@ func (emptyAdminStore) UpdateTeacher(ctx context.Context, userID int64, update s
 	return store.ErrNotFound
 }
 
-func (emptyAdminStore) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, expiresAt time.Time) (store.TeacherInvite, error) {
+func (emptyAdminStore) ResetTeacherInvite(ctx context.Context, userID int64, inviteHash string, lifetime time.Duration) (store.TeacherInvite, error) {
 	return store.TeacherInvite{}, store.ErrNotFound
 }
 

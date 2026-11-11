@@ -19,7 +19,6 @@ import (
 
 const (
 	MessageNotAStudent = "No student profile found for this account."
-	StatusScheduled    = "scheduled"
 	StatusCancelled    = "cancelled"
 	GroupDropCourses   = "drop_courses"
 	LabelDropCourses   = "Drop courses"

@@ -485,10 +485,9 @@ office never does.
 
 ### 11.3 Installable site
 
-`/.well-known/assetlinks.json` is served as `application/json` without a
-redirect, so Android can verify the installed app, drop the URL bar and accept
-the delegated notifications. A web manifest and a service worker make the site
-installable. The app registers
+A web manifest and a service worker make the site installable on iPhone and the
+desktop. On Android the site points at the app instead, which is a Capacitor
+build that needs no digital asset link. The app registers
 `/sw.js` at scope `/` on every start and re-syncs its subscription on start and
 on each visibility change, subscribing again whenever the server key changed.
 The service worker always shows the notification and, on click, focuses an open

@@ -137,7 +137,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	events := handler.NewRecorder(deps.Config, deps.Events)
 	gates := handler.NewGates(deps.Values)
 	blocks := handler.NewBlocks(deps.Walls, events)
-	asks := handler.NewApprovals(deps.Config, deps.Asks, events)
+	asks := handler.NewApprovals(deps.Asks, events)
 	authHandler := handler.NewAuth(deps.Config, deps.Auth, deps.Tokens, mail, proofs, google, photos).
 		WithOffice(deps.Invites, events).
 		WithWatch(deps.Watch).

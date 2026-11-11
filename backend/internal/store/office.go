@@ -16,7 +16,6 @@ var (
 
 const (
 	OfficeSourceAccount = "account"
-	OfficeSourceTeacher = "teacher"
 )
 
 type OfficeAdmin struct {
@@ -68,7 +67,7 @@ ORDER BY CASE u.role WHEN 'super_admin' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
          lower(COALESCE(u.identifier, t.name, '')) ASC`
 	createAdminInviteSQL = `INSERT INTO users (role, status, contact_email, invite_token, invite_expires_at,
 invite_sent_at, invited_by, password_hash)
-VALUES ('admin', 'invited', $1, $2, $3, now(), $4, '')
+VALUES ('admin', 'invited', $1, $2, now() + make_interval(secs => $3), now(), $4, '')
 RETURNING id`
 	emailTakenSQL = `SELECT EXISTS (
     SELECT 1 FROM users u
@@ -78,7 +77,8 @@ RETURNING id`
       AND u.status <> 'removed'
 )`
 	resendAdminInviteSQL = `UPDATE users
-SET invite_token = $2, invite_expires_at = $3, invite_attempts = 0, invite_sent_at = now(), updated_at = now()
+SET invite_token = $2, invite_expires_at = now() + make_interval(secs => $3), invite_attempts = 0,
+    invite_sent_at = now(), updated_at = now()
 WHERE id = $1 AND role = 'admin' AND status = 'invited'
 RETURNING COALESCE(contact_email, '')`
 	cancelAdminInviteSQL = `DELETE FROM users
@@ -171,7 +171,7 @@ func (s *Store) EmailTaken(ctx context.Context, email string) (bool, error) {
 }
 
 func (s *Store) CreateAdminInvite(ctx context.Context, email, inviteHash string,
-	expiresAt time.Time, invitedBy int64) (int64, error) {
+	lifetime time.Duration, invitedBy int64) (int64, error) {
 	taken, err := s.EmailTaken(ctx, email)
 	if err != nil {
 		return 0, err
@@ -180,7 +180,7 @@ func (s *Store) CreateAdminInvite(ctx context.Context, email, inviteHash string,
 		return 0, ErrDuplicateAccount
 	}
 	var id int64
-	err = s.pool.QueryRow(ctx, createAdminInviteSQL, email, inviteHash, expiresAt, invitedBy).Scan(&id)
+	err = s.pool.QueryRow(ctx, createAdminInviteSQL, email, inviteHash, lifetime.Seconds(), invitedBy).Scan(&id)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return 0, ErrDuplicateAccount
@@ -191,9 +191,9 @@ func (s *Store) CreateAdminInvite(ctx context.Context, email, inviteHash string,
 }
 
 func (s *Store) ResendAdminInvite(ctx context.Context, userID int64, inviteHash string,
-	expiresAt time.Time) (string, error) {
+	lifetime time.Duration) (string, error) {
 	var email string
-	err := s.pool.QueryRow(ctx, resendAdminInviteSQL, userID, inviteHash, expiresAt).Scan(&email)
+	err := s.pool.QueryRow(ctx, resendAdminInviteSQL, userID, inviteHash, lifetime.Seconds()).Scan(&email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
 	}

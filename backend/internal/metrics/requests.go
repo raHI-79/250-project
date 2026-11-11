@@ -74,11 +74,6 @@ func NewCounter(store CounterStore) *Counter {
 	return &Counter{store: store, now: time.Now, window: FlushWindow}
 }
 
-func (c *Counter) WithClock(now func() time.Time) *Counter {
-	c.now = now
-	return c
-}
-
 func (c *Counter) Add(failed bool) {
 	if c == nil {
 		return

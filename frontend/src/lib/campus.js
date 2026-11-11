@@ -11,8 +11,6 @@ export const HERO_IMAGES = CAMPUS_PHOTOS.map((photo) => photo.src)
 
 export const HERO_BUILDING = [CAMPUS_PHOTOS[1].src]
 
-export const HOME_PHOTO = CAMPUS_PHOTOS[1]
-
 export const HOME_SLIDE_AFTER = 6000
 
 export const captionFor = (source) =>

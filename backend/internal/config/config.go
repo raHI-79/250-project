@@ -250,10 +250,6 @@ func (c *Config) Now() time.Time {
 	return time.Now().In(c.Location)
 }
 
-func (c *Config) SetClock(clock func() time.Time) {
-	c.clock = clock
-}
-
 func (c *Config) Freeze(at time.Time) {
 	c.clock = func() time.Time { return at }
 }
@@ -329,17 +325,6 @@ func (c *Config) SuperAdminIdentifier() string {
 		return c.SuperAdminID
 	}
 	return c.AdminIdentifier
-}
-
-func (c *Config) HasMailer() bool {
-	switch c.MailProvider {
-	case MailProviderBrevo:
-		return c.BrevoAPIKey != "" && c.MailFrom != ""
-	case MailProviderAppsScript:
-		return c.AppsScriptURL != "" && c.AppsScriptSecret != ""
-	default:
-		return c.SMTPHost != ""
-	}
 }
 
 func (c *Config) IsProduction() bool {

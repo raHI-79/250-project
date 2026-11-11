@@ -54,7 +54,6 @@ const (
 	ActionApprovalNo      = "approval_declined"
 	ActionOverride        = "override"
 	ActionLocked          = "account_locked"
-	ActionRetention       = "retention"
 	ActionBackup          = "backup"
 )
 

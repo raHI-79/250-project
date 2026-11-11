@@ -735,14 +735,11 @@ release notes to make the update unskippable.
 
 #### Installing as an Android app
 
-`frontend/public/.well-known/assetlinks.json` carries the statement PWABuilder
-generates for the signed APK. Vite copies the folder into `dist/`, and the Go
-server answers `/.well-known/assetlinks.json` as `application/json` without a
-redirect, which is what Android checks to verify the app. Once it verifies, the
-URL bar disappears inside the installed app and the app may show the
-notifications the site asks for. If either breaks, open
-`https://<your host>/.well-known/assetlinks.json` in a browser first: it has to
-return the JSON, not the page shell.
+The Android app is the same frontend wrapped in Capacitor, package
+`edu.sust.cse.portal`, and it is built and signed by
+`.github/workflows/android.yml`. It needs no digital asset link: it bundles the
+pages itself and receives its notifications through Firebase Cloud Messaging.
+[docs/ANDROID.md](docs/ANDROID.md) covers building, releasing and installing it.
 
 #### Generating the icons
 

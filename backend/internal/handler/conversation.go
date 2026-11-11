@@ -19,18 +19,14 @@ import (
 
 const (
 	MessageConversationMissing = "No conversation found with this ID."
-	MessageCannotPost          = "Only members of this group can post in it."
-	MessageNeedsContent        = "Write something, add a link or attach a file."
 	MessageUnknownContact      = "No active account found with this ID."
 	MessageSelfConversation    = "You cannot start a conversation with yourself."
 	MessageGroupNotAllowed     = "Only teachers and class representatives can start a group."
 	MessageContactBlocked      = "Students can only message teachers, class representatives and the department office."
 	MessageMessageMissing      = "No message of yours found with this ID."
 	MessageEditWindowOver      = "A message can only be edited or deleted within two minutes of sending it."
-	MessageEdited              = "Message updated."
 	MessageDeleted             = "Message deleted."
 	MessageChatCleared         = "Chat deleted for you."
-	MessageSent                = "Message sent."
 	MessageFileNotAllowed      = "This file type is not allowed."
 	fieldBody                  = "body"
 	fieldLink                  = "link"

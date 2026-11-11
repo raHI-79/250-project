@@ -18,7 +18,6 @@ const (
 )
 
 const (
-	ProviderSMTP       = "smtp"
 	ProviderBrevo      = "brevo"
 	ProviderAppsScript = "appsscript"
 )

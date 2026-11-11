@@ -39,14 +39,9 @@ const (
 	MethodApp     = "app"
 	MethodCode    = "code"
 	MethodWeb     = "web"
-	MethodManual  = "manual"
-	MethodSystem  = "system"
 	TakeBluetooth = "bluetooth"
 	TakeRollCall  = "roll_call"
 	SectionAll    = "ALL"
-	RequestOpen   = "pending"
-	RequestTaken  = "approved"
-	RequestTurned = "rejected"
 )
 
 const (

@@ -20,7 +20,6 @@ import (
 
 const (
 	MessageNotACR             = "No class representative profile found for this account."
-	MessageDateRequired       = "date is required."
 	MessageItemCreated        = "Added to your batch schedule."
 	MessageItemUpdated        = "Schedule item updated."
 	MessageItemRemoved        = "Schedule item deleted."

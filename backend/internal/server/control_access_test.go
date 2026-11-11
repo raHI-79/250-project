@@ -46,12 +46,12 @@ func (stubOfficeStore) ListOfficeAdmins(ctx context.Context) ([]store.OfficeAdmi
 }
 
 func (stubOfficeStore) CreateAdminInvite(ctx context.Context, email, inviteHash string,
-	expiresAt time.Time, invitedBy int64) (int64, error) {
+	lifetime time.Duration, invitedBy int64) (int64, error) {
 	return 7, nil
 }
 
 func (stubOfficeStore) ResendAdminInvite(ctx context.Context, userID int64, inviteHash string,
-	expiresAt time.Time) (string, error) {
+	lifetime time.Duration) (string, error) {
 	return "office@sust.edu", nil
 }
 

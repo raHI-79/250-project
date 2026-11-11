@@ -9,13 +9,11 @@ import (
 )
 
 var (
-	ErrApprovalGone  = errors.New("store: the request is no longer waiting")
-	ErrOwnApproval   = errors.New("store: a request cannot be approved by the person who asked")
-	ErrAccountLocked = errors.New("store: the account is locked")
+	ErrApprovalGone = errors.New("store: the request is no longer waiting")
+	ErrOwnApproval  = errors.New("store: a request cannot be approved by the person who asked")
 )
 
 const (
-	ApprovalPending  = "pending"
 	ApprovalApproved = "approved"
 	ApprovalDeclined = "declined"
 	ApprovalExpired  = "expired"
@@ -74,7 +72,7 @@ WHERE b.expires_at IS NULL OR b.expires_at > now()
 ORDER BY b.created_at DESC`
 	activeBlocksSQL = `SELECT cidr FROM ip_blocks WHERE expires_at IS NULL OR expires_at > now()`
 	insertBlockSQL  = `INSERT INTO ip_blocks (cidr, reason, created_by, expires_at)
-VALUES ($1, $2, NULLIF($3, 0), $4)
+VALUES ($1, $2, NULLIF($3, 0), now() + make_interval(secs => NULLIF($4::double precision, 0)))
 ON CONFLICT (cidr) DO UPDATE
 SET reason = EXCLUDED.reason, created_by = EXCLUDED.created_by,
     expires_at = EXCLUDED.expires_at, created_at = now()
@@ -82,7 +80,7 @@ RETURNING id`
 	deleteBlockSQL    = `DELETE FROM ip_blocks WHERE id = $1 RETURNING cidr`
 	insertApprovalSQL = `INSERT INTO approval_requests
 (action, target_type, target_id, summary, payload, requested_by, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))
 RETURNING id`
 	approvalColumns = `a.id, a.action, a.target_type, a.target_id, a.summary, a.payload,
 a.requested_by, COALESCE(asker.identifier, s.full_name, t.name, ''), a.status, a.created_at,
@@ -214,9 +212,9 @@ func (s *Store) ActiveIPBlocks(ctx context.Context) ([]string, error) {
 }
 
 func (s *Store) BlockIP(ctx context.Context, cidr, reason string, by int64,
-	expiresAt *time.Time) (int64, error) {
+	lifetime time.Duration) (int64, error) {
 	var id int64
-	if err := s.pool.QueryRow(ctx, insertBlockSQL, cidr, reason, by, expiresAt).Scan(&id); err != nil {
+	if err := s.pool.QueryRow(ctx, insertBlockSQL, cidr, reason, by, lifetime.Seconds()).Scan(&id); err != nil {
 		return 0, fmt.Errorf("store: could not block %q: %w", cidr, err)
 	}
 	return id, nil
@@ -260,11 +258,11 @@ func scanApproval(row pgx.Row) (Approval, error) {
 	return approval, nil
 }
 
-func (s *Store) CreateApproval(ctx context.Context, approval Approval) (int64, error) {
+func (s *Store) CreateApproval(ctx context.Context, approval Approval, window time.Duration) (int64, error) {
 	var id int64
 	err := s.pool.QueryRow(ctx, insertApprovalSQL, approval.Action, approval.TargetType,
 		approval.TargetID, approval.Summary, approval.Payload, approval.RequestedBy,
-		approval.ExpiresAt).Scan(&id)
+		window.Seconds()).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("store: could not record the %s request: %w", approval.Action, err)
 	}

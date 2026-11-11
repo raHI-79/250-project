@@ -217,19 +217,18 @@ func TestPromoteCR(t *testing.T) {
 
 func TestTeacherInvitations(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
-	expiresAt := time.Now().Add(72 * time.Hour).Truncate(time.Second)
 	teacher := NewTeacher{
-		Name:            "Invited Teacher",
-		Designation:     "Assistant Professor",
-		Email:           "invited@sust.edu",
-		Phone:           "01812345678",
-		BloodGroup:      "B+",
-		DateOfBirth:     "1988-03-09",
-		OfficeRoom:      "AB-401",
-		JoiningDate:     "2015-01-15",
-		PhotoPath:       "/uploads/photos/teacher.png",
-		InviteHash:      "stored-invite-hash",
-		InviteExpiresAt: expiresAt,
+		Name:           "Invited Teacher",
+		Designation:    "Assistant Professor",
+		Email:          "invited@sust.edu",
+		Phone:          "01812345678",
+		BloodGroup:     "B+",
+		DateOfBirth:    "1988-03-09",
+		OfficeRoom:     "AB-401",
+		JoiningDate:    "2015-01-15",
+		PhotoPath:      "/uploads/photos/teacher.png",
+		InviteHash:     "stored-invite-hash",
+		InviteLifetime: 72 * time.Hour,
 	}
 	userID, err := store.CreateTeacher(ctx, teacher)
 	if err != nil {
@@ -262,7 +261,7 @@ func TestTeacherInvitations(t *testing.T) {
 	if err != nil || attempts != 1 {
 		t.Fatalf("CountInviteAttempt() = %d, %v, want 1 and no error", attempts, err)
 	}
-	refreshed, err := store.ResetTeacherInvite(ctx, userID, "second-invite-hash", expiresAt)
+	refreshed, err := store.ResetTeacherInvite(ctx, userID, "second-invite-hash", 72*time.Hour)
 	if err != nil {
 		t.Fatalf("ResetTeacherInvite() returned an unexpected error: %v", err)
 	}
@@ -310,10 +309,10 @@ func TestTeacherInvitations(t *testing.T) {
 	if err := store.ActivateTeacher(ctx, userID, "karim.two", "another-hash", ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("second ActivateTeacher() error = %v, want ErrNotFound", err)
 	}
-	if _, err := store.ResetTeacherInvite(ctx, userID, "third-hash", expiresAt); !errors.Is(err, ErrNotInvited) {
+	if _, err := store.ResetTeacherInvite(ctx, userID, "third-hash", 72*time.Hour); !errors.Is(err, ErrNotInvited) {
 		t.Errorf("ResetTeacherInvite() for an active teacher error = %v, want ErrNotInvited", err)
 	}
-	if _, err := store.ResetTeacherInvite(ctx, 999999, "third-hash", expiresAt); !errors.Is(err, ErrNotFound) {
+	if _, err := store.ResetTeacherInvite(ctx, 999999, "third-hash", 72*time.Hour); !errors.Is(err, ErrNotFound) {
 		t.Errorf("ResetTeacherInvite() for an unknown teacher error = %v, want ErrNotFound", err)
 	}
 }

@@ -45,7 +45,6 @@ const (
 	MessageUnknownLoginPortal  = "portal must be student or teacher."
 	MessageDateOfBirthRequired = "Date of birth is required."
 	MessageAccountLocked       = "Too many wrong passwords. Try again in a few minutes."
-	MessageRegistrationClosed  = "Registration is closed right now."
 	ResetEmailSubject          = "Password reset code"
 	NewDeviceEmailSubject      = "A new sign-in to your office account"
 	PortalStudent              = "student"

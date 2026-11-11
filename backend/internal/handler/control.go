@@ -31,7 +31,7 @@ const (
 
 type ControlStore interface {
 	ListIPBlocks(ctx context.Context) ([]store.IPBlock, error)
-	BlockIP(ctx context.Context, cidr, reason string, by int64, expiresAt *time.Time) (int64, error)
+	BlockIP(ctx context.Context, cidr, reason string, by int64, lifetime time.Duration) (int64, error)
 	UnblockIP(ctx context.Context, blockID int64) (string, error)
 	LockedAccounts(ctx context.Context) ([]store.LockedAccount, error)
 	ClearFailures(ctx context.Context, userID int64) error
@@ -244,18 +244,17 @@ func (c *Control) Block() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, MessageBlockBadRange)
 			return
 		}
-		var expires *time.Time
+		var lifetime time.Duration
 		if request.Hours > 0 {
 			if request.Hours > maxBlockHours {
 				httpx.WriteError(w, http.StatusBadRequest, "That is too long.")
 				return
 			}
-			until := c.cfg.Now().Add(time.Duration(request.Hours) * time.Hour)
-			expires = &until
+			lifetime = time.Duration(request.Hours) * time.Hour
 		}
 		current, _ := middleware.CurrentUser(r.Context())
 		if _, err := c.guards.BlockIP(r.Context(), cidr, strings.TrimSpace(request.Reason),
-			current.ID, expires); err != nil {
+			current.ID, lifetime); err != nil {
 			log.Printf("handler: could not block an address: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return

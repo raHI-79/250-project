@@ -2,11 +2,13 @@ package handler
 
 import (
 	"github.com/raHI-79/250-project/backend/internal/auth"
+	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/notify"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"net/http"
 	"testing"
+	"time"
 )
 
 const (
@@ -16,12 +18,19 @@ const (
 
 func newTeacherHandler(t *testing.T, items *fakeScheduleStore, alerts *fakeNotifier) *Teacher {
 	t.Helper()
-	return NewTeacher(accountConfig(t, "test"), items, alerts)
+	return NewTeacher(scheduleConfig(t), items, alerts)
 }
 
 func newCRHandler(t *testing.T, items *fakeScheduleStore, alerts *fakeNotifier) *CR {
 	t.Helper()
-	return NewCR(accountConfig(t, "test"), items, alerts)
+	return NewCR(scheduleConfig(t), items, alerts)
+}
+
+func scheduleConfig(t *testing.T) *config.Config {
+	t.Helper()
+	cfg := accountConfig(t, "test")
+	cfg.Freeze(time.Date(2026, time.November, 5, 10, 0, 0, 0, cfg.Location))
+	return cfg
 }
 
 func TestTeacherConfirm(t *testing.T) {
@@ -236,8 +245,8 @@ func TestTeacherDecidesAProposal(t *testing.T) {
 
 func TestTeacherExamValidation(t *testing.T) {
 	silenceLog(t)
-	tomorrow := validate.DateString(accountConfig(t, "test").Now().AddDate(0, 0, 1))
-	yesterday := validate.DateString(accountConfig(t, "test").Now().AddDate(0, 0, -1))
+	tomorrow := validate.DateString(scheduleConfig(t).Now().AddDate(0, 0, 1))
+	yesterday := validate.DateString(scheduleConfig(t).Now().AddDate(0, 0, -1))
 	tests := []struct {
 		name        string
 		body        string
@@ -317,7 +326,7 @@ func TestTeacherExamValidation(t *testing.T) {
 
 func TestCRCreateItem(t *testing.T) {
 	silenceLog(t)
-	tomorrow := validate.DateString(accountConfig(t, "test").Now().AddDate(0, 0, 1))
+	tomorrow := validate.DateString(scheduleConfig(t).Now().AddDate(0, 0, 1))
 	base := func(extra string) string {
 		return `{"kind":"class","course_id":7,"section":"A","item_date":"` + tomorrow + `"` + extra + `}`
 	}
@@ -700,7 +709,7 @@ func TestNextDayCarriesTheWindow(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (body = %q)", rec.Code, rec.Body.String())
 	}
 	payload := decodeBody(t, rec)
-	tomorrow := validate.DateString(accountConfig(t, "test").Now().AddDate(0, 0, 1))
+	tomorrow := validate.DateString(scheduleConfig(t).Now().AddDate(0, 0, 1))
 	if payload["date"] != tomorrow {
 		t.Errorf("date = %v, want tomorrow %q", payload["date"], tomorrow)
 	}

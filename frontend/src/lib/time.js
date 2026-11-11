@@ -88,8 +88,6 @@ export const today = (now = new Date()) => isoDate(now)
 
 export const tomorrow = (now = new Date()) => shiftDate(today(now), 1)
 
-export const yesterday = (now = new Date()) => shiftDate(today(now), -1)
-
 export const defaultUpcomingDay = (now = new Date()) => tomorrow(now)
 
 export const isValidDate = (value) => {
