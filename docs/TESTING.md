@@ -150,7 +150,10 @@ For each of the five roles — student, class representative, teacher, office ad
 and super admin — it signs in through the real form, visits every page and opens
 whatever dialogs those pages offer, at 390 px and at 1280 px, in light and in dark.
 That is ten cases per project and forty in all; a full run takes about twenty
-minutes.
+minutes. `specs/fonts.spec.js` adds one more per project: it holds the Google
+Fonts stylesheet back for good and expects the sign-in form within ten seconds.
+Before measuring a page the suite waits for the font, so every reading is of the
+face a reader ends up with.
 
 Before any case runs, a global setup (`e2e/setup/grant.js`) signs in as the super
 admin, confirms the password and grants the seeded office admin every

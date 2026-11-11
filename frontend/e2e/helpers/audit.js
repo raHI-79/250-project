@@ -214,9 +214,20 @@ export async function measure(page) {
   })
 }
 
-// settleAnimations waits for every running animation to finish. A dialog slides and fades
-// in, and a reading taken mid-animation sees buttons narrower than they end up.
+// settleAnimations waits for the font and then for every running animation to finish. The
+// font stylesheet loads without holding the page back, so a reading taken before it lands
+// measures the fallback face; a dialog slides and fades in, and a reading taken
+// mid-animation sees buttons narrower than they end up.
 export async function settleAnimations(page) {
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('link[rel="stylesheet"]')].every((link) => link.media !== 'print') &&
+        document.fonts.status === 'loaded',
+      null,
+      { timeout: 15_000 },
+    )
+    .catch(() => {})
   await page
     .evaluate(() =>
       Promise.race([

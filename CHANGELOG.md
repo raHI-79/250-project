@@ -100,6 +100,13 @@ a test that failed before the fix and passes after it.
   pull request.
 - It found the per-session **Sign out** button on the account pages squeezed until
   its label was cut off on a phone.
+- It found every page waiting for Google Fonts. The font stylesheet blocked the
+  first paint and the start of the app, so a slow or blocked answer from Google
+  left a blank screen, not even the splash, for as long as the network took: a
+  stalled answer kept the sign-in page unusable past thirty seconds. The
+  stylesheet now loads on the side, the page reads in the system face until
+  Nunito lands, and a spec holds the font back for good and expects the sign-in
+  form within ten seconds.
 
 ### Removed
 
