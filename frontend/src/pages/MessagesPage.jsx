@@ -1,3 +1,5 @@
+import { FEATURE_GROUPS, featureOn } from '../lib/features'
+import { useFeatures } from '../lib/featureState'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Info, Plus, Trash2, Users } from 'lucide-react'
@@ -65,7 +67,9 @@ export default function MessagesPage() {
     Promise.resolve(loadThread()).finally(() => setThreadLoading(false))
   }, [activeId, loadThread])
   usePolling(activeId ? loadThread : null, THREAD_INTERVAL)
-  const canStartGroups = user?.role === 'teacher' || user?.role === 'cr'
+  const features = useFeatures()
+  const canStartGroups =
+    (user?.role === 'teacher' || user?.role === 'cr') && featureOn(features, FEATURE_GROUPS)
   const active = useMemo(
     () => items.find((entry) => entry.id === activeId) || opened,
     [items, activeId, opened],

@@ -1,3 +1,4 @@
+import MissingItem from '../../components/MissingItem'
 import { useState } from 'react'
 import { ClipboardList, Video } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -47,6 +48,7 @@ export default function ExamsPage() {
         onClear={() => setDay('')}
         clearLabel="Show every exam ahead"
       />
+      <MissingItem highlight={highlight} what="exam" all="All exams" to={paths.student.exams()} />
       {error && (
         <Alert tone="error" className="mb-5">
           {error}

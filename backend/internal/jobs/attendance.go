@@ -27,7 +27,7 @@ func (s *Scheduler) WarnLowAttendance(ctx context.Context) (int, error) {
 	before := now.Add(-attendance.AlertCooldown)
 	sent := 0
 	for _, row := range rows {
-		if !attendance.AlertDue(row.Present, row.Held, row.LastSentAt, now) {
+		if !attendance.CreditAlertDue(row.Credit, row.Held, row.LastSentAt, now) {
 			continue
 		}
 		fresh, err := s.items.ClaimAttendanceAlert(ctx, row.StudentID, row.CourseID, before)
@@ -38,7 +38,7 @@ func (s *Scheduler) WarnLowAttendance(ctx context.Context) (int, error) {
 		if !fresh {
 			continue
 		}
-		title := LowAttendanceTitle(row.CourseTitle, attendance.Percentage(row.Present, row.Held))
+		title := LowAttendanceTitle(row.CourseTitle, attendance.Rate(row.Credit, row.Held))
 		err = s.alerts.NotifyUser(ctx, row.UserID, notify.TypeAttend, title, lowAttendanceBody,
 			notify.Ref(notify.LinkAttendMine, row.CourseID))
 		if err != nil {

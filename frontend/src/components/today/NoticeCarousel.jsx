@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { Bookmark } from 'lucide-react'
 import DateBlock from '../DateBlock'
 import { Carousel, StatusBadge } from '../ui'
-import { noticesFor } from '../../lib/paths'
+import { noticeFor } from '../../lib/paths'
 
 const SOURCES = {
   admin: { label: 'Department', tone: 'brand' },
@@ -18,7 +18,8 @@ export default function NoticeCarousel({ notices, role }) {
         return (
           <Link
             key={notice.id}
-            to={noticesFor(role, { highlight: notice.id })}
+            to={noticeFor(role, notice.id)}
+            data-notice-card={notice.id}
             className="surface-card press flex w-[17rem] shrink-0 snap-start gap-3 p-4"
           >
             <DateBlock value={notice.created_at} />

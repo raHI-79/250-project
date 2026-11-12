@@ -1,3 +1,5 @@
+import paths from '../../lib/paths'
+import MissingItem from '../../components/MissingItem'
 import { useEffect, useState } from 'react'
 import { ClipboardList, Plus, Trash2 } from 'lucide-react'
 import HolidayNote from '../../components/schedule/HolidayNote'
@@ -134,6 +136,7 @@ export default function TeacherCreateExamPage() {
         eyebrow="Examinations" title="Create exam"
         subtitle="File an exam with its syllabus; the class representative sets the time and the room"
       />
+      <MissingItem highlight={highlight} what="exam" all="All exams" to={paths.teacher.createExam()} />
       <Card hover={false} className="mb-5">
         <form onSubmit={submit} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}

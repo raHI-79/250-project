@@ -4,6 +4,80 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.8.0
+
+### Attendance rules
+
+- **Present, late or absent.** The roll call has three compact buttons, P, L and
+  A. A teacher can change any student to Late, with a note, from the history at
+  any time. My attendance, the session lists and the Excel sheet show L in its
+  own colour and count lates separately.
+- **Late by time.** A Bluetooth, code or web mark after the late boundary is
+  late. The boundary is the original end, so marks after an extension are late,
+  or "Late after N minutes" set when starting.
+- **Flexible times.** 5, 10, 15, 20 and 30 minutes stay as quick chips; Custom
+  takes 1 to 240 minutes and Open until takes a time today. Extend has +5, +10
+  and a custom number. The server checks the limits and says what is wrong.
+- **Class hours and credit.** A session is worth 1 to 4 class hours, prefilled
+  from the routine. Present counts the hours, late counts the hours times the
+  late weight (0.5 by default, set in the control room or the office portal) and
+  absent counts nothing. Every percentage, the 50 % alert and the Excel export
+  use credit over the hours held. Existing sessions count as 1 hour.
+- **Late joiners.** A student who joins a course later is absent, with the note
+  Joined later, from the classes held this semester before they joined, and a
+  teacher can change those entries. Existing students were filled in.
+
+### The public website
+
+- **Edit the website without code.** Control room → Website edits the header,
+  the home page and its slideshow, the order and visibility of the sections, the
+  footer, the sign-in texts and the SEO fields.
+- **New sections and pages.** Custom home sections and public pages at
+  /p/<slug> are built from safe blocks: heading, formatted text, image, image
+  with text, button, cards and questions and answers.
+- **Draft, preview, publish, restore.** Edits save as a draft, Preview shows it
+  to the super admin only, Publish keeps every version with who and when, and
+  Restore brings one back. Publishing needs the password confirmation.
+- **Developed by CoordiNet.** Every public page and the app profile carry the
+  credit, linking to About CoordiNet. It cannot be edited, hidden or replaced.
+
+### No more blank screens
+
+- **Picking a day no longer blanks the routine.** Choosing a date in the date
+  field drew the Upcoming routine page once before the new day had loaded and the
+  whole app disappeared. A page now waits for its own data, in light and dark
+  mode, on the website and in the app.
+- **A calm screen instead of a blank one.** Every page and every sheet sits in an
+  error boundary: "Something went wrong" with Try again and Go home. The Android
+  back button keeps working there and closes an open sheet first. The problem
+  (name, message and page only) is reported and listed under System health as
+  "Screens that broke".
+
+### Notifications and notice links
+
+- **Opening a notification marks it read everywhere.** Read state is kept by the
+  server, so the bell goes down at once on the phone and the website and stays
+  down. Badges show the exact number up to 99 and 99+ above; the app icon counts
+  messages and notifications together.
+- **A notice link opens that notice.** The home carousel, the bell, pushes and the
+  search open the notice itself. A removed notice, exam or poll says it is no
+  longer available and links to the full list.
+
+### Header art and server errors
+
+- **The whole IICT building, always.** Every blue header sizes the art so the
+  building and its nearest trees fit the width, anchored centre bottom with the
+  sky blending into the header; wide desktop headers keep the full-width trees.
+- **A switched-off feature is not a server error.** It answers 403 `feature_off`,
+  is not counted under System health, and the app no longer calls or polls it:
+  its menu item, tab, badge and home tile are hidden and a direct visit says
+  "Messages is turned off by the department".
+- **Fewer one-off errors after a quiet spell.** A database connection that went
+  away while idle is checked and replaced before the next request uses it.
+- **Quieter alerts.** The server-error alert needs at least 10 real errors and
+  more than 1 % of requests, and lists the top addresses; a deleted attendance
+  sheet is shown as information.
+
 ## 2.7.2
 
 ### Header art and header size

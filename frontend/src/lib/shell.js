@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isNative } from './native'
+import { closeTopSheet } from './sheetStack'
 import { CHROME_COLORS } from './theme'
 
 const HOME_PATHS = ['/', '/student/today', '/teacher/upcoming-routine', '/student/login']
@@ -46,6 +47,7 @@ export const useNativeBackButton = () => {
     import('@capacitor/app').then(({ App }) => {
       if (!live) return
       App.addListener('backButton', ({ canGoBack }) => {
+        if (closeTopSheet()) return
         if (HOME_PATHS.includes(window.location.pathname) || !canGoBack) {
           App.exitApp()
           return

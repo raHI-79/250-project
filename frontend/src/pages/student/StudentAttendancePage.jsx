@@ -1,3 +1,6 @@
+import FeatureOff from '../../components/FeatureOff'
+import { FEATURE_WEB_ATTENDANCE, featureOn } from '../../lib/features'
+import { useFeatures } from '../../lib/featureState'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bluetooth, CheckCircle2, KeyRound, Smartphone } from 'lucide-react'
 import {
@@ -121,6 +124,7 @@ function PhonePanel({ phone, busy, onRegister, onRequest }) {
 export default function StudentAttendancePage() {
   const toast = useToast()
   const [tab, setTab] = useQueryTab(TAB_VALUES, STUDENT_TAB_MARK)
+  const webOn = featureOn(useFeatures(), FEATURE_WEB_ATTENDANCE)
   const [device, setDevice] = useState('')
   const [step, setStep] = useState(STEP_IDLE)
   const [token, setToken] = useState('')
@@ -208,9 +212,9 @@ export default function StudentAttendancePage() {
     setBusy('mark')
     try {
       if (codeOnly) {
-        await api.post('/api/students/attendance/mark', codeOnlyMarkBody(session, code))
+        const saved = await api.post('/api/students/attendance/mark', codeOnlyMarkBody(session, code))
         setDone(true)
-        toast.success('You are marked present.')
+        toast.success(saved?.message || 'You are marked present.')
         reload()
         return
       }
@@ -219,7 +223,7 @@ export default function StudentAttendancePage() {
         toast.error('Your location is needed to mark you present. Follow the steps above.')
         return
       }
-      await api.post('/api/students/attendance/mark', {
+      const saved = await api.post('/api/students/attendance/mark', {
         session_id: session.id,
         code: code.trim(),
         lat: position.lat,
@@ -227,7 +231,7 @@ export default function StudentAttendancePage() {
         accuracy_m: position.accuracy_m,
       })
       setDone(true)
-      toast.success('You are marked present.')
+      toast.success(saved?.message || 'You are marked present.')
       reload()
     } catch (failure) {
       toast.error(failure.message)
@@ -244,12 +248,12 @@ export default function StudentAttendancePage() {
         return
       }
       if (codeOnly) {
-        await api.post('/api/students/attendance/mark', {
+        const saved = await api.post('/api/students/attendance/mark', {
           ...codeOnlyMarkBody(session, code),
           device_id: device,
         })
         setDone(true)
-        toast.success('You are marked present.')
+        toast.success(saved?.message || 'You are marked present.')
         reload()
         return
       }
@@ -258,7 +262,7 @@ export default function StudentAttendancePage() {
         toast.error('Your phone did not report a position. Turn location on and try again.')
         return
       }
-      await api.post('/api/students/attendance/mark', {
+      const saved = await api.post('/api/students/attendance/mark', {
         session_id: session.id,
         token: useCode ? '' : token,
         code: useCode ? code.trim() : '',
@@ -269,7 +273,7 @@ export default function StudentAttendancePage() {
         device_id: device,
       })
       setDone(true)
-      toast.success('You are marked present.')
+      toast.success(saved?.message || 'You are marked present.')
       reload()
     } catch (failure) {
       toast.error(failure.message)
@@ -429,7 +433,10 @@ export default function StudentAttendancePage() {
         ) : (
           <EmptyState icon={Smartphone} title="Only in the app" text={WEB_PHONE_MESSAGE} />
         ))}
-      {tab === STUDENT_TAB_MARK && !app && markTab}
+      {tab === STUDENT_TAB_MARK && !app && webOn && markTab}
+      {tab === STUDENT_TAB_MARK && !app && !webOn && (
+        <FeatureOff feature={FEATURE_WEB_ATTENDANCE} compact />
+      )}
       {tab === STUDENT_TAB_MARK && app && (
       <div className="flex flex-col gap-5">
         <PhonePanel phone={phone} busy={busy} onRegister={register} onRequest={request} />

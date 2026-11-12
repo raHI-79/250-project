@@ -18,6 +18,7 @@ func lowRow(studentID int64, present, held int, lastSent time.Time) store.Attend
 		CourseTitle: "Databases",
 		Held:        held,
 		Present:     present,
+		Credit:      float64(present),
 		LastSentAt:  lastSent,
 	}
 }

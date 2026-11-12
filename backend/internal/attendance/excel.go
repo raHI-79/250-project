@@ -6,9 +6,12 @@ import (
 	"github.com/xuri/excelize/v2"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const LateFill = "FEF3C7"
 
 const (
 	SummarySheet  = "Summary"
@@ -20,7 +23,9 @@ const (
 	columnDateW   = 9.0
 	columnCountW  = 11.0
 	presentLetter = "P"
+	lateLetter    = "L"
 	absentLetter  = "A"
+	HoursRow      = "Class hours"
 	NoLocation    = "No location"
 )
 
@@ -33,6 +38,7 @@ type ExportRow struct {
 	Status     string
 	Note       string
 	NoLocation bool
+	Hours      int
 }
 
 type ExportClass struct {
@@ -41,6 +47,8 @@ type ExportClass struct {
 	Batch       string
 	Section     string
 	Sessions    int
+	LateWeight  float64
+	WeightSet   bool
 	Rows        []ExportRow
 }
 
@@ -50,8 +58,32 @@ type studentLine struct {
 	regNo      string
 	marks      map[int64]ExportRow
 	present    int
+	late       int
+	lates      int
 	held       int
 	noLocation int
+}
+
+func (c ExportClass) weight() float64 {
+	if c.WeightSet {
+		return c.LateWeight
+	}
+	return DefaultLateWeight
+}
+
+func rowHours(row ExportRow) int {
+	if row.Hours < MinHours {
+		return MinHours
+	}
+	return row.Hours
+}
+
+func (l *studentLine) credit(weight float64) float64 {
+	return Credit(l.present, l.late, weight)
+}
+
+func CreditText(credit float64) string {
+	return strconv.FormatFloat(math.Round(credit*100)/100, 'f', -1, 64)
 }
 
 func SheetName(class ExportClass, taken map[string]bool) string {
@@ -97,12 +129,16 @@ func lines(class ExportClass) ([]*studentLine, []ExportRow) {
 			order = append(order, line)
 		}
 		line.marks[row.SessionID] = row
-		line.held++
-		if row.Status == Present {
-			line.present++
-			if row.NoLocation {
-				line.noLocation++
-			}
+		line.held += rowHours(row)
+		switch row.Status {
+		case Present:
+			line.present += rowHours(row)
+		case Late:
+			line.late += rowHours(row)
+			line.lates++
+		}
+		if row.NoLocation && row.Status != Absent {
+			line.noLocation++
 		}
 		if !seen[row.SessionID] {
 			seen[row.SessionID] = true
@@ -123,7 +159,7 @@ func ClassAverage(class ExportClass) (float64, int) {
 	}
 	total, below := 0.0, 0
 	for _, line := range order {
-		share := Percentage(line.present, line.held)
+		share := Rate(line.credit(class.weight()), line.held)
 		total += share
 		if share < AlertPercentage {
 			below++
@@ -149,6 +185,14 @@ func BuildWorkbook(classes []ExportClass, withSummary bool) (*bytes.Buffer, erro
 	if err != nil {
 		return nil, fmt.Errorf("attendance: could not style the marks: %w", err)
 	}
+	late, err := book.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Color: "92400E"},
+		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{LateFill}},
+		Alignment: &excelize.Alignment{Horizontal: "center"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("attendance: could not style the late marks: %w", err)
+	}
 	low, err := book.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Color: "9B1C1C"},
 		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"FDE8E8"}},
@@ -170,7 +214,7 @@ func BuildWorkbook(classes []ExportClass, withSummary bool) (*bytes.Buffer, erro
 		} else if _, err := book.NewSheet(name); err != nil {
 			return nil, fmt.Errorf("attendance: could not add the sheet %q: %w", name, err)
 		}
-		if err := writeClassSheet(book, name, class, header, centered, low); err != nil {
+		if err := writeClassSheet(book, name, class, header, centered, low, late); err != nil {
 			return nil, err
 		}
 	}
@@ -201,7 +245,7 @@ func BuildWorkbook(classes []ExportClass, withSummary bool) (*bytes.Buffer, erro
 }
 
 func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
-	header, centered, low int) error {
+	header, centered, low, late int) error {
 	order, sessions := lines(class)
 	flagged := false
 	for _, line := range order {
@@ -213,7 +257,7 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 	for _, session := range sessions {
 		titles = append(titles, session.StartedAt.Format(dateHeader))
 	}
-	titles = append(titles, "Present", "Total", "Percentage")
+	titles = append(titles, "Classes held", "Attended", "Lates", "Percentage")
 	if flagged {
 		titles = append(titles, NoLocation)
 	}
@@ -243,14 +287,21 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 			letter := ""
 			if ok {
 				letter = absentLetter
-				if mark.Status == Present {
+				switch mark.Status {
+				case Present:
 					letter = presentLetter
+				case Late:
+					letter = lateLetter
 				}
+			}
+			markStyle := centered
+			if letter == lateLetter {
+				markStyle = late
 			}
 			if err := book.SetCellStr(sheet, cell, letter); err != nil {
 				return fmt.Errorf("attendance: could not write a mark: %w", err)
 			}
-			if err := book.SetCellStyle(sheet, cell, cell, centered); err != nil {
+			if err := book.SetCellStyle(sheet, cell, cell, markStyle); err != nil {
 				return fmt.Errorf("attendance: could not style a mark: %w", err)
 			}
 			if text := markComment(mark, ok); text != "" {
@@ -266,15 +317,20 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 				}
 			}
 		}
-		share := Percentage(line.present, line.held)
+		credit := line.credit(class.weight())
+		share := Rate(credit, line.held)
 		presentCell := cellAt(3+len(sessions), row)
 		totalCell := cellAt(4+len(sessions), row)
-		shareCell := cellAt(5+len(sessions), row)
-		if err := book.SetCellInt(sheet, presentCell, int64(line.present)); err != nil {
-			return fmt.Errorf("attendance: could not write a present count: %w", err)
+		latesCell := cellAt(5+len(sessions), row)
+		shareCell := cellAt(6+len(sessions), row)
+		if err := book.SetCellInt(sheet, presentCell, int64(line.held)); err != nil {
+			return fmt.Errorf("attendance: could not write the classes held: %w", err)
 		}
-		if err := book.SetCellInt(sheet, totalCell, int64(line.held)); err != nil {
-			return fmt.Errorf("attendance: could not write a session count: %w", err)
+		if err := book.SetCellStr(sheet, totalCell, CreditText(credit)); err != nil {
+			return fmt.Errorf("attendance: could not write the attended credit: %w", err)
+		}
+		if err := book.SetCellInt(sheet, latesCell, int64(line.lates)); err != nil {
+			return fmt.Errorf("attendance: could not write the late count: %w", err)
 		}
 		if err := book.SetCellStr(sheet, shareCell, sharePercent(share)); err != nil {
 			return fmt.Errorf("attendance: could not write a percentage: %w", err)
@@ -287,13 +343,34 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 			return fmt.Errorf("attendance: could not style a percentage: %w", err)
 		}
 		if flagged && line.noLocation > 0 {
-			flagCell := cellAt(6+len(sessions), row)
+			flagCell := cellAt(7+len(sessions), row)
 			if err := book.SetCellInt(sheet, flagCell, int64(line.noLocation)); err != nil {
 				return fmt.Errorf("attendance: could not write a no location count: %w", err)
 			}
 			if err := book.SetCellStyle(sheet, flagCell, flagCell, centered); err != nil {
 				return fmt.Errorf("attendance: could not style a no location count: %w", err)
 			}
+		}
+	}
+	hoursRow := len(order) + 2
+	if len(sessions) > 0 {
+		if err := book.SetCellStr(sheet, cellAt(1, hoursRow), HoursRow); err != nil {
+			return fmt.Errorf("attendance: could not label the class hours: %w", err)
+		}
+		total := 0
+		for offset, session := range sessions {
+			cell := cellAt(3+offset, hoursRow)
+			total += rowHours(session)
+			if err := book.SetCellInt(sheet, cell, int64(rowHours(session))); err != nil {
+				return fmt.Errorf("attendance: could not write the class hours: %w", err)
+			}
+		}
+		if err := book.SetCellInt(sheet, cellAt(3+len(sessions), hoursRow), int64(total)); err != nil {
+			return fmt.Errorf("attendance: could not total the class hours: %w", err)
+		}
+		if err := book.SetCellStyle(sheet, cellAt(1, hoursRow), cellAt(3+len(sessions), hoursRow),
+			header); err != nil {
+			return fmt.Errorf("attendance: could not style the class hours: %w", err)
 		}
 	}
 	if err := book.SetPanes(sheet, &excelize.Panes{
@@ -320,7 +397,7 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 		}
 	}
 	countFrom, _ := excelize.ColumnNumberToName(3 + len(sessions))
-	lastCount := 5 + len(sessions)
+	lastCount := 6 + len(sessions)
 	if flagged {
 		lastCount++
 	}
@@ -386,7 +463,7 @@ func markComment(mark ExportRow, found bool) string {
 	if !found {
 		return ""
 	}
-	if mark.NoLocation && mark.Status == Present {
+	if mark.NoLocation && mark.Status != Absent {
 		if mark.Note != "" {
 			return NoLocation + " · " + mark.Note
 		}

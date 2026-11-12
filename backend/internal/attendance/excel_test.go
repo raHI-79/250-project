@@ -73,9 +73,10 @@ func TestWorkbookHoldsOneSheetPerClass(t *testing.T) {
 		{reference: "C1", want: "05 Oct"},
 		{reference: "D1", want: "12 Oct"},
 		{reference: "E1", want: "19 Oct"},
-		{reference: "F1", want: "Present"},
-		{reference: "G1", want: "Total"},
-		{reference: "H1", want: "Percentage"},
+		{reference: "F1", want: "Classes held"},
+		{reference: "G1", want: "Attended"},
+		{reference: "H1", want: "Lates"},
+		{reference: "I1", want: "Percentage"},
 		{reference: "A2", want: "Ada Byron"},
 		{reference: "B2", want: "2023331001"},
 		{reference: "C2", want: "P"},
@@ -83,14 +84,19 @@ func TestWorkbookHoldsOneSheetPerClass(t *testing.T) {
 		{reference: "E2", want: "P"},
 		{reference: "F2", want: "3"},
 		{reference: "G2", want: "3"},
-		{reference: "H2", want: "100 %"},
+		{reference: "H2", want: "0"},
+		{reference: "I2", want: "100 %"},
 		{reference: "A3", want: "Alan Turing"},
 		{reference: "C3", want: "A"},
 		{reference: "D3", want: "A"},
 		{reference: "E3", want: "P"},
-		{reference: "F3", want: "1"},
-		{reference: "G3", want: "3"},
-		{reference: "H3", want: "33 %"},
+		{reference: "F3", want: "3"},
+		{reference: "G3", want: "1"},
+		{reference: "H3", want: "0"},
+		{reference: "I3", want: "33 %"},
+		{reference: "A4", want: HoursRow},
+		{reference: "C4", want: "1"},
+		{reference: "F4", want: "3"},
 	}
 	for _, tc := range tests {
 		if got := cell(t, book, sheet, tc.reference); got != tc.want {
@@ -133,11 +139,11 @@ func TestWorkbookPaintsBelowFiftyRed(t *testing.T) {
 	}
 	book := openWorkbook(t, buffer)
 	sheet := "CSE245 CSE-23-A"
-	low, err := book.GetCellStyle(sheet, "H3")
+	low, err := book.GetCellStyle(sheet, "I3")
 	if err != nil {
 		t.Fatalf("GetCellStyle() returned an unexpected error: %v", err)
 	}
-	high, err := book.GetCellStyle(sheet, "H2")
+	high, err := book.GetCellStyle(sheet, "I2")
 	if err != nil {
 		t.Fatalf("GetCellStyle() returned an unexpected error: %v", err)
 	}
@@ -298,17 +304,17 @@ func TestWorkbookFlagsCodeOnlyMarksWithNoLocation(t *testing.T) {
 	}
 	book := openWorkbook(t, buffer)
 	sheet := "CSE245 CSE-23-A"
-	if got := cell(t, book, sheet, "I1"); got != NoLocation {
-		t.Errorf("I1 = %q, want the %q column", got, NoLocation)
+	if got := cell(t, book, sheet, "J1"); got != NoLocation {
+		t.Errorf("J1 = %q, want the %q column", got, NoLocation)
 	}
 	if got := cell(t, book, sheet, "D2"); got != "P" {
 		t.Errorf("D2 = %q, want the mark to stay present", got)
 	}
-	if got := cell(t, book, sheet, "I2"); got != "1" {
-		t.Errorf("I2 = %q, want one mark without a location", got)
+	if got := cell(t, book, sheet, "J2"); got != "1" {
+		t.Errorf("J2 = %q, want one mark without a location", got)
 	}
-	if got := cell(t, book, sheet, "I3"); got != "" {
-		t.Errorf("I3 = %q, want nothing for a student with every mark checked", got)
+	if got := cell(t, book, sheet, "J3"); got != "" {
+		t.Errorf("J3 = %q, want nothing for a student with every mark checked", got)
 	}
 	comments, err := book.GetComments(sheet)
 	if err != nil {
@@ -336,7 +342,56 @@ func TestWorkbookWithoutCodeOnlyMarksHasNoFlagColumn(t *testing.T) {
 		t.Fatalf("BuildWorkbook() returned an unexpected error: %v", err)
 	}
 	book := openWorkbook(t, buffer)
-	if got := cell(t, book, "CSE245 CSE-23-A", "I1"); got != "" {
-		t.Errorf("I1 = %q, want no extra column when every mark has a location", got)
+	if got := cell(t, book, "CSE245 CSE-23-A", "J1"); got != "" {
+		t.Errorf("J1 = %q, want no extra column when every mark has a location", got)
+	}
+}
+
+func TestWorkbookWeighsLatesAndClassHours(t *testing.T) {
+	first := time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)
+	second := first.AddDate(0, 0, 7)
+	third := second.AddDate(0, 0, 7)
+	class := ExportClass{
+		CourseCode: "CSE245", CourseTitle: "Databases", Batch: "CSE-23", Section: "A", Sessions: 3,
+		Rows: []ExportRow{
+			{StudentID: 1, FullName: "Ada Byron", RegNo: "2023331001", SessionID: 1, StartedAt: first,
+				Status: Present, Hours: 2},
+			{StudentID: 1, FullName: "Ada Byron", RegNo: "2023331001", SessionID: 2, StartedAt: second,
+				Status: Late, Hours: 3},
+			{StudentID: 1, FullName: "Ada Byron", RegNo: "2023331001", SessionID: 3, StartedAt: third,
+				Status: Absent, Hours: 1, Note: NoteJoinedLater},
+		},
+	}
+	buffer, err := BuildWorkbook([]ExportClass{class}, false)
+	if err != nil {
+		t.Fatalf("BuildWorkbook() returned an unexpected error: %v", err)
+	}
+	book := openWorkbook(t, buffer)
+	sheet := "CSE245 CSE-23-A"
+	wants := map[string]string{
+		"C2": "P", "D2": "L", "E2": "A",
+		"F2": "6", "G2": "3.5", "H2": "1", "I2": "58 %",
+		"A3": HoursRow, "C3": "2", "D3": "3", "E3": "1", "F3": "6",
+	}
+	for reference, want := range wants {
+		if got := cell(t, book, sheet, reference); got != want {
+			t.Errorf("%s = %q, want %q", reference, got, want)
+		}
+	}
+	style, err := book.GetCellStyle(sheet, "D2")
+	if err != nil {
+		t.Fatalf("GetCellStyle() returned an unexpected error: %v", err)
+	}
+	painted, err := book.GetStyle(style)
+	if err != nil || len(painted.Fill.Color) == 0 || painted.Fill.Color[0] != LateFill {
+		t.Errorf("a late mark is not painted with its own colour: %v, %v", painted, err)
+	}
+	class.LateWeight, class.WeightSet = 1, true
+	buffer, err = BuildWorkbook([]ExportClass{class}, false)
+	if err != nil {
+		t.Fatalf("BuildWorkbook() returned an unexpected error: %v", err)
+	}
+	if got := cell(t, openWorkbook(t, buffer), sheet, "I2"); got != "83 %" {
+		t.Errorf("with a late weight of 1 the percentage is %q, want 83 %%", got)
 	}
 }

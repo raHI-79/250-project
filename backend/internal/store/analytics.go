@@ -10,13 +10,14 @@ import (
 )
 
 const (
-	KindEmail    = "email"
-	KindPush     = "push"
-	KindFCM      = "fcm"
-	KindClient4x = "http_4xx"
-	KindClient5x = "http_5xx"
-	MaxViewBatch = 20
-	ViewRetained = 90 * 24 * time.Hour
+	KindEmail       = "email"
+	KindPush        = "push"
+	KindFCM         = "fcm"
+	KindClient4x    = "http_4xx"
+	KindClient5x    = "http_5xx"
+	KindClientCrash = "client_crash"
+	MaxViewBatch    = 20
+	ViewRetained    = 90 * 24 * time.Hour
 )
 
 type PageView struct {

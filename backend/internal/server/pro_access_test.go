@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,8 +135,8 @@ func TestSwitchedOffFeaturesRefuseTheirRoutes(t *testing.T) {
 	}
 	for _, entry := range closed {
 		rec := serve(t, router, http.MethodGet, entry.path, "", entry.token)
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Errorf("%s answered %d, want 503 (body = %q)", entry.path, rec.Code, rec.Body.String())
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"feature_off"`) {
+			t.Errorf("%s answered %d, want 403 feature_off (body = %q)", entry.path, rec.Code, rec.Body.String())
 		}
 	}
 	open := serve(t, router, http.MethodGet, "/api/messages/conversations", "",

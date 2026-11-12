@@ -26,8 +26,13 @@ const (
 	MaxReachM        = 100.0
 	TeacherFreshness = 60 * time.Second
 
-	MinDuration = 5 * time.Minute
-	MaxDuration = 30 * time.Minute
+	MinDuration = time.Minute
+	MaxDuration = 4 * time.Hour
+	MinHours    = 1
+	MaxHours    = 4
+
+	DefaultLateWeight = 0.5
+	NoteJoinedLater   = "Joined later"
 
 	AlertPercentage     = 50.0
 	AlertMinSessions    = 3
@@ -37,6 +42,7 @@ const (
 	StatusOpen    = "open"
 	StatusClosed  = "closed"
 	Present       = "present"
+	Late          = "late"
 	Absent        = "absent"
 	MethodApp     = "app"
 	MethodCode    = "code"
@@ -59,7 +65,12 @@ const (
 	MessagePhoneUsed     = "This phone already marked another student in this class."
 	MessageNotOnRoster   = "This class is not on your routine."
 	MessageWebsiteOnly   = "Attendance is marked from the Android app. Open the app and tap I'm present."
-	MessageBadDuration   = "Attendance stays open between 5 and 30 minutes."
+	MessageBadDuration   = "Attendance stays open between 1 minute and 4 hours."
+	MessageBadUntil      = "Open until a time later today, after now."
+	MessageTooLong       = "Attendance cannot stay open more than 4 hours after it started."
+	MessageBadLateAfter  = "Late after must be at least 1 minute and not after the attendance ends."
+	MessageBadHours      = "Class hours are 1, 2, 3 or 4."
+	MessageBadWeight     = "The late weight is a number between 0 and 1."
 	MessageWebNeedsCode  = "Enter the 4-digit code the teacher shows and allow the browser to share your position."
 	MessageRollCallOnly  = "This class is taken by roll call, so the teacher marks the roster."
 	MessageBadTakeMethod = "Attendance is taken either by Bluetooth or by roll call."
@@ -203,6 +214,80 @@ func CheckPosition(student Position, teacher Anchor, now time.Time) (float64, st
 func ValidDuration(minutes int) bool {
 	window := time.Duration(minutes) * time.Minute
 	return window >= MinDuration && window <= MaxDuration
+}
+
+func ValidStatus(status string) bool {
+	return status == Present || status == Late || status == Absent
+}
+
+func ValidHours(hours int) bool {
+	return hours >= MinHours && hours <= MaxHours
+}
+
+func HoursFor(minutes int) int {
+	if minutes <= 0 {
+		return MinHours
+	}
+	hours := (minutes + 59) / 60
+	if hours > MaxHours {
+		return MaxHours
+	}
+	return hours
+}
+
+func MinutesUntil(now, until time.Time) int {
+	if !until.After(now) {
+		return 0
+	}
+	return int(math.Ceil(until.Sub(now).Minutes()))
+}
+
+func ValidLateAfter(lateAfter, minutes int) bool {
+	return lateAfter == 0 || (lateAfter >= 1 && lateAfter <= minutes)
+}
+
+func WithinWindow(startedAt, endsAt time.Time) bool {
+	return endsAt.After(startedAt) && !endsAt.After(startedAt.Add(MaxDuration))
+}
+
+func StatusAt(markedAt, originalEnd, lateAfter time.Time) string {
+	boundary := originalEnd
+	if !lateAfter.IsZero() {
+		boundary = lateAfter
+	}
+	if markedAt.After(boundary) {
+		return Late
+	}
+	return Present
+}
+
+func ValidWeight(weight float64) bool {
+	return weight >= 0 && weight <= 1
+}
+
+func Credit(presentHours, lateHours int, weight float64) float64 {
+	return float64(presentHours) + float64(lateHours)*weight
+}
+
+func Rate(credit float64, heldHours int) float64 {
+	if heldHours <= 0 {
+		return 0
+	}
+	return credit * 100 / float64(heldHours)
+}
+
+func LowCredit(credit float64, heldHours int) bool {
+	return heldHours >= AlertMinSessions && Rate(credit, heldHours) < AlertPercentage
+}
+
+func CreditAlertDue(credit float64, heldHours int, lastSent, now time.Time) bool {
+	if !LowCredit(credit, heldHours) {
+		return false
+	}
+	if lastSent.IsZero() {
+		return true
+	}
+	return now.Sub(lastSent) >= AlertCooldown
 }
 
 func Percentage(present, held int) float64 {

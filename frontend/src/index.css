@@ -839,7 +839,17 @@ select:-webkit-autofill {
     pointer-events: none;
     user-select: none;
     border-radius: inherit;
-    background: #0a6faf url("/brand/header-iict.svg") center bottom / auto 100% no-repeat;
+    overflow: hidden;
+    container-type: size;
+    background: #0a6faf;
+  }
+
+  .header-art::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: url("/brand/header-iict.svg") center bottom / auto 100% no-repeat;
+    background-size: max(100cqw, min(320cqw, 761.905cqh)) auto;
   }
 
   .header-art::after {

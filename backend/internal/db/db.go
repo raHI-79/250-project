@@ -3,9 +3,11 @@ package db
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,13 +16,44 @@ const (
 	DefaultMaxConns   = 10
 	minConns          = 1
 	maxConnLifetime   = time.Hour
-	maxConnIdleTime   = 30 * time.Minute
+	maxConnIdleTime   = 4 * time.Minute
+	IdleCheckAfter    = 30 * time.Second
+	idleCheckTimeout  = 3 * time.Second
 	healthCheckPeriod = time.Minute
 	ConnectWindow     = 60 * time.Second
 	retryPause        = 3 * time.Second
 )
 
+func GuardIdleConnections(poolConfig *pgxpool.Config, idleFor time.Duration) {
+	var released sync.Map
+	poolConfig.AfterRelease = func(conn *pgx.Conn) bool {
+		released.Store(conn, time.Now())
+		return true
+	}
+	poolConfig.BeforeClose = func(conn *pgx.Conn) {
+		released.Delete(conn)
+	}
+	poolConfig.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+		at, ok := released.Load(conn)
+		if !ok || time.Since(at.(time.Time)) < idleFor {
+			return true
+		}
+		check, cancel := context.WithTimeout(ctx, idleCheckTimeout)
+		defer cancel()
+		if err := conn.Ping(check); err != nil {
+			log.Printf("db: dropped a connection that went away while idle: %v", err)
+			return false
+		}
+		return true
+	}
+}
+
 func Open(ctx context.Context, databaseURL string, maxConns int, timezone string) (*pgxpool.Pool, error) {
+	return OpenGuarded(ctx, databaseURL, maxConns, timezone, IdleCheckAfter)
+}
+
+func OpenGuarded(ctx context.Context, databaseURL string, maxConns int, timezone string,
+	idleFor time.Duration) (*pgxpool.Pool, error) {
 	poolConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("db: DATABASE_URL could not be parsed: %w", err)
@@ -39,6 +72,9 @@ func Open(ctx context.Context, databaseURL string, maxConns int, timezone string
 	poolConfig.MaxConnLifetime = maxConnLifetime
 	poolConfig.MaxConnIdleTime = maxConnIdleTime
 	poolConfig.HealthCheckPeriod = healthCheckPeriod
+	if idleFor >= 0 {
+		GuardIdleConnections(poolConfig, idleFor)
+	}
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("db: could not create the connection pool: %w", err)

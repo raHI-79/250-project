@@ -21,6 +21,8 @@ const query = (path, params) => {
 
 export const paths = {
   root: () => build(),
+  page: (slug) => build('p', String(slug)),
+  aboutDevelopers: () => build('about-coordinet'),
   downloadAndroid: () => '/download/android',
   profile: () => build('profile'),
   person: (userId) => build('people', String(userId)),
@@ -49,6 +51,7 @@ export const paths = {
     fixedRoutine: () => build('student', 'fixed-routine'),
     courses: () => build('student', 'courses'),
     notices: (params) => query(build('student', 'notices'), params),
+    notice: (id) => build('student', 'notices', String(id)),
     materials: () => build('student', 'materials'),
     students: () => build('student', 'students'),
     polls: (params) => query(build('student', 'polls'), params),
@@ -103,6 +106,7 @@ export const paths = {
     security: () => build('control-room', 'settings', 'security'),
     users: (params) => query(build('control-room', 'users'), params),
     settings: () => build('control-room', 'settings'),
+    website: () => build('control-room', 'website'),
     watch: () => build('control-room', 'settings', 'monitor'),
     release: () => build('control-room', 'settings', 'app'),
     approvals: () => build('control-room', 'approvals'),
@@ -149,7 +153,14 @@ export const messagesFor = (role, params) => {
   return paths.student.messages(params)
 }
 
-export const noticesFor = (role, params) => {
+export const noticeFor = (role, id) => {
+  if (!id) return noticesFor(role)
+  if (role === 'admin' || role === ROLE_SUPER_ADMIN) return paths.admin.notices({ highlight: id })
+  if (role === 'teacher') return paths.teacher.notices({ highlight: id })
+  return paths.student.notice(id)
+}
+
+export function noticesFor(role, params) {
   if (role === 'admin' || role === ROLE_SUPER_ADMIN) return paths.admin.notices(params)
   if (role === 'teacher') return paths.teacher.notices(params)
   return paths.student.notices(params)
@@ -197,7 +208,7 @@ export const notificationTarget = (link, role) => {
     if (role === 'teacher') return paths.teacher.createExam({ highlight: ref })
     return paths.student.exams({ highlight: ref })
   }
-  if (kind === 'notice') return noticesFor(role, { highlight: ref })
+  if (kind === 'notice') return noticeFor(role, ref)
   if (kind === 'message') return messagesFor(role, { c: ref })
   if (kind === 'poll') return pollsFor(role, { highlight: ref })
   if (kind === 'attendance_mark') return paths.student.attendance({ session: ref })

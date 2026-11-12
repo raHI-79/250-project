@@ -17,6 +17,8 @@ import (
 const (
 	MessageBlocked     = "This address cannot use the portal."
 	MessageFeatureOff  = "This part of the portal is switched off right now."
+	MessageAppOnly     = "Attendance can only be marked from the Android app right now."
+	CodeFeatureOff     = "feature_off"
 	blockCacheWindow   = 30 * time.Second
 	maintenanceAllowed = "/api/health,/api/auth,/api/office,/api/super-admin,/api/admin,/api/system,/api/public,/api/analytics,/api/me"
 )
@@ -59,7 +61,7 @@ func (g *Gates) Feature(key string) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			httpx.WriteError(w, http.StatusServiceUnavailable, MessageFeatureOff)
+			writeFeatureOff(w, MessageFeatureOff)
 		})
 	}
 }
@@ -71,8 +73,7 @@ func (g *Gates) WebAttendance(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		httpx.WriteError(w, http.StatusServiceUnavailable,
-			"Attendance can only be marked from the Android app right now.")
+		writeFeatureOff(w, MessageAppOnly)
 	})
 }
 
@@ -164,4 +165,8 @@ func (b *Blocks) Middleware(next http.Handler) http.Handler {
 			"A blocked address asked for "+r.URL.Path)
 		httpx.WriteError(w, http.StatusForbidden, MessageBlocked)
 	})
+}
+
+func writeFeatureOff(w http.ResponseWriter, message string) {
+	httpx.WriteCoded(w, http.StatusForbidden, CodeFeatureOff, message)
 }

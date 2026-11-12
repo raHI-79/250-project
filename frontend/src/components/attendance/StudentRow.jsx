@@ -1,28 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, NotebookPen, X } from 'lucide-react'
+import { NotebookPen } from 'lucide-react'
 import cx from '../../lib/cx'
 import { markFlags, rollNumber } from '../../lib/attendance'
 
 const MARKS = {
-  present: 'bg-success-600 text-white',
-  absent: 'bg-danger-600 text-white',
+  present: 'border border-success-600 bg-success-600 text-white',
+  late: 'border border-warning-600 bg-warning-600 text-white',
+  absent: 'border border-danger-600 bg-danger-600 text-white',
   idle: 'border border-line-strong bg-surface text-ink-soft',
 }
 
-function MarkButton({ tone, label, short, icon: Icon, active, busy, onClick }) {
+function MarkButton({ tone, label, short, active, busy, onClick }) {
   return (
     <button
       type="button"
       aria-label={label}
       aria-pressed={active}
+      data-mark={tone}
       disabled={busy}
       onClick={onClick}
       className={cx(
-        'press inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-xl px-2.5 text-sm font-bold disabled:opacity-60',
+        'press inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-base font-extrabold disabled:opacity-60',
         active ? MARKS[tone] : MARKS.idle,
       )}
     >
-      <Icon size={17} strokeWidth={2.4} />
       {short}
     </button>
   )
@@ -44,7 +45,7 @@ export default function StudentRow({ mark, status, busy, meta, onMark, onSaveNot
     setEditing(false)
   }
   return (
-    <li className="border-b border-line py-2 last:border-b-0">
+    <li data-student-row={mark.student_id} className="border-b border-line py-2 last:border-b-0">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span
           aria-hidden={!roll}
@@ -81,16 +82,22 @@ export default function StudentRow({ mark, status, busy, meta, onMark, onSaveNot
             tone="present"
             label={`Mark ${mark.full_name} present`}
             short="P"
-            icon={Check}
             active={status === 'present'}
             busy={busy}
             onClick={() => onMark('present', mark.note || '')}
           />
           <MarkButton
+            tone="late"
+            label={`Mark ${mark.full_name} late`}
+            short="L"
+            active={status === 'late'}
+            busy={busy}
+            onClick={() => onMark('late', mark.note || '')}
+          />
+          <MarkButton
             tone="absent"
             label={`Mark ${mark.full_name} absent`}
             short="A"
-            icon={X}
             active={status === 'absent'}
             busy={busy}
             onClick={() => onMark('absent', mark.note || '')}
@@ -121,7 +128,7 @@ export default function StudentRow({ mark, status, busy, meta, onMark, onSaveNot
               if (event.key === 'Escape') setEditing(false)
             }}
             aria-label={`Note for ${mark.full_name}`}
-            placeholder="Why this student is present or absent"
+            placeholder="Why this student is present, late or absent"
             className="h-11 min-w-0 flex-1 rounded-xl border border-line-strong bg-wash px-3 text-sm text-ink outline-none focus:border-brand-600"
           />
           <button

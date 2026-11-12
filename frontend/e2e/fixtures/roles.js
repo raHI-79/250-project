@@ -70,6 +70,7 @@ export const CONTROL_PAGES = [
   { path: '/control-room/users' },
   { path: '/control-room/activity' },
   { path: '/control-room/settings' },
+  { path: '/control-room/website' },
   { path: '/control-room/settings/account' },
   { path: '/control-room/settings/security' },
   { path: '/control-room/settings/monitor' },
@@ -157,4 +158,32 @@ export const PHONE_PAGES = {
     '/office-portal/attendance?tab=phones',
   ],
   control: pathsOf(CONTROL_PAGES),
+}
+
+export const DATE_PAGES = {
+  student: ['/student/upcoming-routine', '/student/exams'],
+  cr: [
+    '/student/upcoming-routine',
+    '/student/exams',
+    '/cr/create-class',
+    '/cr/create-class?tab=final',
+    '/cr/create-class?tab=create',
+  ],
+  teacher: ['/teacher/upcoming-routine', '/teacher/upcoming-routine?tab=final', '/teacher/create-exam'],
+  office: ['/office-portal/activity', '/office-portal/routines', '/office-portal/teachers'],
+  control: ['/control-room', '/control-room/activity', '/control-room/settings'],
+}
+
+export const DATE_PANELS = ['/student/register', '/student/forgot-password', '/teacher/activate']
+
+export const CLASS_EARLY = {
+  label: 'student of the demo teacher',
+  identifier: process.env.E2E_CLASS_EARLY_ID || 's24a2',
+  password: DEMO_PASSWORD,
+}
+
+export const CLASS_LATE = {
+  label: 'second student of the demo teacher',
+  identifier: process.env.E2E_CLASS_LATE_ID || 's24a3',
+  password: DEMO_PASSWORD,
 }

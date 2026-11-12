@@ -1,5 +1,6 @@
+import { STATUS_LABELS, creditText } from '../../lib/attendanceTiming'
 import { useMemo, useState } from 'react'
-import { Check, PieChart, X } from 'lucide-react'
+import { Check, Clock, PieChart, X } from 'lucide-react'
 import {
   Alert,
   Card,
@@ -15,6 +16,12 @@ import { useSearchParams } from 'react-router-dom'
 import { formatClock, formatDate } from '../../lib/time'
 import { belowPass, methodLabel } from '../../lib/attendance'
 import { monthHeading } from '../../lib/time'
+
+const STATUS_TONES = {
+  present: { icon: Check, badge: 'bg-success-50 text-success-600', text: 'text-success-700' },
+  late: { icon: Clock, badge: 'bg-warning-50 text-warning-700', text: 'text-warning-700' },
+  absent: { icon: X, badge: 'bg-danger-50 text-danger-600', text: 'text-danger-600' },
+}
 
 const monthKey = (date) => String(date || '').slice(0, 7)
 
@@ -42,8 +49,9 @@ function CourseCard({ course, active, onPick }) {
       >
         {course.percentage} %
       </p>
-      <p className="text-xs text-muted">
-        {course.present} of {course.held} class{course.held === 1 ? '' : 'es'}
+      <p className="text-xs text-muted" data-course-credit>
+        {creditText(course.credit)} of {course.held} class{course.held === 1 ? '' : 'es'}
+        {course.lates > 0 ? ` · ${course.lates} late` : ''}
       </p>
     </button>
   )
@@ -150,18 +158,21 @@ export default function MyAttendance() {
             ) : (
               <ul className="mt-4 flex flex-col divide-y divide-line">
                 {shown.map((entry) => {
-                  const present = entry.status === 'present'
+                  const tone = STATUS_TONES[entry.status] || STATUS_TONES.absent
+                  const Icon = tone.icon
                   return (
-                    <li key={entry.session_id} className="flex items-center gap-3 py-3">
+                    <li
+                      key={entry.session_id}
+                      data-class-status={entry.status}
+                      className="flex items-center gap-3 py-3"
+                    >
                       <span
                         className={cx(
                           'grid size-9 shrink-0 place-items-center rounded-full',
-                          present
-                            ? 'bg-success-50 text-success-600'
-                            : 'bg-danger-50 text-danger-600',
+                          tone.badge,
                         )}
                       >
-                        {present ? <Check size={17} /> : <X size={17} />}
+                        <Icon size={17} />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block wrap-long text-sm font-semibold text-ink">
@@ -172,6 +183,7 @@ export default function MyAttendance() {
                             entry.teacher_name,
                             methodLabel(entry.method),
                             entry.marked_at ? formatClock(entry.marked_at) : '',
+                            entry.hours > 1 ? `${entry.hours} class hours` : '',
                           )}
                         </span>
                         {entry.note && (
@@ -181,10 +193,10 @@ export default function MyAttendance() {
                       <span
                         className={cx(
                           'shrink-0 text-xs font-bold uppercase',
-                          present ? 'text-success-700' : 'text-danger-600',
+                          tone.text,
                         )}
                       >
-                        {present ? 'Present' : 'Absent'}
+                        {STATUS_LABELS[entry.status] || 'Absent'}
                       </span>
                     </li>
                   )

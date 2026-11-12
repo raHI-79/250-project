@@ -40,6 +40,8 @@ type fakeStore struct {
 	recipients []int64
 	audience   []store.NotificationRecipient
 	roles      map[int64]string
+	readIDs    []int64
+	readBefore time.Time
 }
 
 func (f *fakeStore) ListNotificationRecipients(ctx context.Context, role, batch,
@@ -333,7 +335,7 @@ func TestPageURLPointsAtTheRoutesTheAppKnows(t *testing.T) {
 			name: "a notice for a student",
 			role: auth.RoleStudent,
 			link: store.NotificationLink{Kind: LinkNotice, Ref: 3},
-			want: "https://portal.example/student/notices?highlight=3",
+			want: "https://portal.example/student/notices/3",
 		},
 		{
 			name: "the same notice for a teacher",
@@ -399,7 +401,7 @@ func TestNotifyBroadcastResolvesTheAudienceToEachRole(t *testing.T) {
 			t.Errorf("payload = %+v, want the broadcast title and tag", call.payload)
 		}
 	}
-	student := "https://portal.example/student/notices?highlight=11"
+	student := "https://portal.example/student/notices/11"
 	teacher := "https://portal.example/teacher/notices?highlight=11"
 	if got := byURL[student]; len(got) != 3 {
 		t.Errorf("students = %v, want both students and the representative on %s", got, student)
@@ -423,5 +425,60 @@ func TestGroupByRoleSkipsEmptyRecipients(t *testing.T) {
 	}
 	if len(grouped[auth.RoleTeacher]) != 1 {
 		t.Errorf("teachers = %v, want one account", grouped[auth.RoleTeacher])
+	}
+}
+
+func (f *fakeStore) CountUnreadNotifications(ctx context.Context, userID int64) (int, error) {
+	return f.count, f.err
+}
+
+func (f *fakeStore) MarkNotificationsRead(ctx context.Context, userID int64, ids []int64) error {
+	f.readIDs = append(f.readIDs, ids...)
+	return f.err
+}
+
+func (f *fakeStore) MarkAllNotificationsRead(ctx context.Context, userID int64, before time.Time) error {
+	f.readBefore = before
+	return f.err
+}
+
+func TestReadPageMarksOnlyTheNotificationsOfThatPage(t *testing.T) {
+	notifications := &fakeStore{listed: []store.Notification{
+		{ID: 1, Link: Ref(LinkNotice, 7)},
+		{ID: 2, Link: Ref(LinkNotice, 8)},
+		{ID: 3, Link: Ref(LinkNotice, 7), Read: true},
+		{ID: 4, Link: Ref(LinkExam, 7)},
+		{ID: 5, Link: Page(LinkNotice)},
+		{ID: 6, Link: OnDate(LinkRoutine, "2026-11-14")},
+	}}
+	service := New(notifications)
+	marked, err := service.ReadPage(context.Background(), 9, "/student/notices/7")
+	if err != nil || marked != 1 {
+		t.Fatalf("ReadPage() = %d, %v, want 1", marked, err)
+	}
+	if len(notifications.readIDs) != 1 || notifications.readIDs[0] != 1 {
+		t.Fatalf("marked %v, want only the notification 1", notifications.readIDs)
+	}
+	notifications.readIDs = nil
+	marked, err = service.ReadPage(context.Background(), 9, "/student/upcoming-routine?date=2026-11-14&x=1")
+	if err != nil || marked != 1 || notifications.readIDs[0] != 6 {
+		t.Fatalf("ReadPage() of a routine day = %d, %v, %v", marked, err, notifications.readIDs)
+	}
+	notifications.readIDs = nil
+	marked, err = service.ReadPage(context.Background(), 9, "/student/notices")
+	if err != nil || marked != 0 || len(notifications.readIDs) != 0 {
+		t.Fatalf("a list page marked %d notifications read", marked)
+	}
+}
+
+func TestNoticeLinksOpenTheNoticeItself(t *testing.T) {
+	if got := PageURL("", auth.RoleStudent, Ref(LinkNotice, 12)); got != "/student/notices/12" {
+		t.Fatalf("a student notice link = %q", got)
+	}
+	if got := PageURL("", auth.RoleCR, Ref(LinkNotice, 12)); got != "/student/notices/12" {
+		t.Fatalf("a CR notice link = %q", got)
+	}
+	if got := PageURL("", auth.RoleTeacher, Ref(LinkNotice, 12)); got != "/teacher/notices?highlight=12" {
+		t.Fatalf("a teacher notice link = %q", got)
 	}
 }

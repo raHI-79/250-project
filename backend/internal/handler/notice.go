@@ -12,6 +12,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,6 +20,7 @@ import (
 const (
 	MessageNoticePosted   = "Notice posted."
 	MessageNoticeUnknown  = "No notice found with this ID."
+	MessageNoticeGone     = "This notice is no longer available."
 	MessageNoticeEdited   = "Notice updated."
 	MessageFileTooLarge   = "The attached file is larger than the allowed size."
 	MessageOwnBatchTarget = "Use own to post a notice to your own batch."
@@ -390,6 +392,36 @@ func (n *Notice) StudentNotices() http.HandlerFunc {
 		}
 		notices, err := n.notices.ListStudentNotices(r.Context(), profile.Batch, profile.Section, source, scope)
 		n.write(w, notices, err)
+	}
+}
+
+func (n *Notice) StudentNotice() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profile, ok := n.studentProfile(w, r)
+		if !ok {
+			return
+		}
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			httpx.WriteError(w, http.StatusNotFound, MessageNoticeGone)
+			return
+		}
+		for _, scope := range []string{validate.NoticeScopeMine, validate.NoticeScopeOthers} {
+			notices, err := n.notices.ListStudentNotices(r.Context(), profile.Batch, profile.Section,
+				store.NoticeAll, scope)
+			if err != nil {
+				log.Printf("handler: could not read the notice %d: %v", id, err)
+				httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+				return
+			}
+			for _, notice := range notices {
+				if notice.ID == id {
+					httpx.WriteJSON(w, http.StatusOK, newNoticeItem(notice))
+					return
+				}
+			}
+		}
+		httpx.WriteError(w, http.StatusNotFound, MessageNoticeGone)
 	}
 }
 

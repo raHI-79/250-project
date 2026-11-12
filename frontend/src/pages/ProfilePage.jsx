@@ -10,7 +10,9 @@ import {
   Mail,
   Palette,
   RefreshCw,
+  Code2,
 } from 'lucide-react'
+import { DEVELOPER } from '../lib/siteContent'
 import IdentityCard from '../components/IdentityCard'
 import {
   Alert,
@@ -254,6 +256,13 @@ export default function ProfilePage() {
               title="About"
               subtitle={buildLabel(health.data?.commit)}
               chevron={false}
+            />
+            <ListRow
+              icon={Code2}
+              title={DEVELOPER.label}
+              subtitle={`About ${DEVELOPER.name}`}
+              data-developer-credit
+              onClick={() => navigate(DEVELOPER.path)}
             />
             {updatesSupported() && (
               <ListRow

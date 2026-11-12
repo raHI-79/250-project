@@ -87,6 +87,22 @@ func (emptyNotificationService) UnreadCount(ctx context.Context, userID int64, s
 	return 0, nil
 }
 
+func (emptyNotificationService) Unread(ctx context.Context, userID int64) (int, error) {
+	return 0, nil
+}
+
+func (emptyNotificationService) Read(ctx context.Context, userID int64, ids []int64) error {
+	return nil
+}
+
+func (emptyNotificationService) ReadPage(ctx context.Context, userID int64, page string) (int, error) {
+	return 0, nil
+}
+
+func (emptyNotificationService) ReadAll(ctx context.Context, userID int64, before time.Time) error {
+	return nil
+}
+
 func lookupRoutes() []string {
 	return []string{
 		"/api/lookups/batches",

@@ -28,7 +28,6 @@ import { dots } from '../../lib/dots'
 import {
   CODE_ONLY_LABEL,
   DEFAULT_MINUTES,
-  DURATIONS,
   TAKE_BLUETOOTH,
   TAKE_ROLL_CALL,
   TEACHER_TAB_CLASSES,
@@ -55,6 +54,8 @@ import {
   turnBluetoothOn,
   updateBeacon,
 } from '../../lib/attendance'
+import SessionTiming from '../../components/attendance/SessionTiming'
+import { hoursForClass, newTiming, timingBody, timingProblem } from '../../lib/attendanceTiming'
 
 const TABS = [
   { value: TEACHER_TAB_TAKE, label: 'Take attendance' },
@@ -67,8 +68,9 @@ const TAB_VALUES = TABS.map((entry) => entry.value)
 
 function StartPanel({
   options,
-  minutes,
-  setMinutes,
+  timing,
+  setTiming,
+  problem,
   picked,
   setPicked,
   method,
@@ -168,18 +170,14 @@ function StartPanel({
               </label>
             )}
           </div>
+          <SessionTiming
+            timing={timing}
+            onChange={setTiming}
+            rollCall={method === TAKE_ROLL_CALL}
+            problem={picked ? problem : ''}
+          />
           <div>
-            <p className="label-caps">How long it stays open</p>
-            <Segmented
-              className="mt-2 max-w-md"
-              label="Duration"
-              options={DURATIONS.map((value) => ({ value, label: `${value} min` }))}
-              value={minutes}
-              onChange={setMinutes}
-            />
-          </div>
-          <div>
-            <Button loading={busy} disabled={!picked} onClick={onStart}>
+            <Button loading={busy} disabled={!picked || Boolean(problem)} onClick={onStart}>
               <Radio size={16} /> Start attendance
             </Button>
           </div>
@@ -225,6 +223,7 @@ function HistoryList({ sessions, loading, onOpen }) {
               </span>
               <span className="shrink-0 text-sm font-semibold text-ink">
                 {presentOfRoster(session)}
+                {session.late > 0 ? ` · ${session.late} L` : ''}
               </span>
             </button>
           </li>
@@ -301,7 +300,8 @@ export default function TeacherAttendancePage() {
   const confirm = useConfirm()
   const now = useNow(5000)
   const [tab, setTab] = useQueryTab(TAB_VALUES, TEACHER_TAB_TAKE)
-  const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
+  const [timing, setTiming] = useState(() => newTiming(DEFAULT_MINUTES))
+  const timingError = timingProblem(timing, new Date(now))
   const [method, setMethod] = useState(TAKE_BLUETOOTH)
   const [codeOnly, setCodeOnly] = useState(false)
   const [picked, setPicked] = useState('')
@@ -314,6 +314,16 @@ export default function TeacherAttendancePage() {
   const asked = useRef(false)
   const app = beaconSupported()
   const options = useResource('/api/teacher/attendance/options')
+  const optionList = options.data
+  useEffect(() => {
+    if (!picked || !optionList) return
+    const entry = (optionList.today || [])
+      .concat(optionList.classes || [])
+      .find((item) => classKey(item) === picked)
+    if (!entry) return
+    const hours = entry.hours || hoursForClass(entry.start_time, entry.end_time)
+    setTiming((current) => ({ ...current, hours }))
+  }, [picked, optionList])
   const history = useResource('/api/teacher/attendance/sessions')
   const classes = useResource('/api/teacher/attendance/classes')
   useEffect(() => {
@@ -457,7 +467,7 @@ export default function TeacherAttendancePage() {
     try {
       const session = await api.post(
         '/api/teacher/attendance/sessions',
-        startBody(entry, minutes, method, codeOnly),
+        startBody(entry, timingBody(timing), method, codeOnly),
       )
       setOpen(session)
       setMarks([])
@@ -595,8 +605,9 @@ export default function TeacherAttendancePage() {
           ) : (
             <StartPanel
               options={options.data}
-              minutes={minutes}
-              setMinutes={setMinutes}
+              timing={timing}
+              setTiming={setTiming}
+              problem={timingError}
               picked={picked}
               setPicked={setPicked}
               method={method}

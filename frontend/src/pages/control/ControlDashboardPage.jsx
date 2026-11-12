@@ -692,6 +692,46 @@ export default function ControlDashboardPage() {
               </DataTable>
             )}
           </Card>
+          <Card hover={false} flush id="system-client-crashes">
+            <CardHeader
+              title="Screens that broke"
+              subtitle="Pages of the website or the app that showed the Something went wrong screen"
+            />
+            {(system?.client_crashes || []).length === 0 ? (
+              <div className="px-4 pb-4">
+                <EmptyState
+                  icon={Server}
+                  title="No broken screens"
+                  text="No page reported a problem in this period."
+                />
+              </div>
+            ) : (
+              <DataTable>
+                <thead>
+                  <tr className="border-b border-line bg-wash">
+                    <th className="px-4 py-3 font-semibold text-ink-soft">Page</th>
+                    <th className="px-4 py-3 text-right font-semibold text-ink-soft">Times</th>
+                    <th className="px-4 py-3 font-semibold text-ink-soft">Last problem</th>
+                    <th className="px-4 py-3 font-semibold text-ink-soft">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {system.client_crashes.map((row) => (
+                    <tr key={row.path} className="border-b border-line last:border-b-0">
+                      <td className="px-4 py-3 wrap-long text-ink">{row.path}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink-soft">
+                        {row.total}
+                      </td>
+                      <td className="px-4 py-3 wrap-long text-ink-soft">{row.message || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
+                        {formatDateTime(row.last)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            )}
+          </Card>
           <Card hover={false} flush>
             <CardHeader title="Latest server errors" subtitle="The five newest 5xx answers" />
             {(system?.server_errors || []).length === 0 ? (

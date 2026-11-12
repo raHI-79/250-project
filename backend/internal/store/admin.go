@@ -376,6 +376,9 @@ func (s *Store) DecideRegistration(ctx context.Context, userID int64,
 		return DecidedRegistration{UserID: userID, Status: status, Reason: reason},
 			fmt.Errorf("store: could not read the decided registration %d: %w", userID, err)
 	}
+	if _, err := s.BackfillJoinedLater(ctx, 0, userID); err != nil {
+		return decided, err
+	}
 	return decided, nil
 }
 

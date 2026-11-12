@@ -1,3 +1,5 @@
+import { visibleItems } from '../../lib/features'
+import { useFeatures } from '../../lib/featureState'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -177,6 +179,7 @@ export default function TeacherUpcomingPage() {
         ),
       accept ? 'The new slot is in place' : 'The original slot stays',
     )
+  const features = useFeatures()
   const actions = [
     {
       label: 'Create exam',
@@ -235,7 +238,7 @@ export default function TeacherUpcomingPage() {
         meta={user?.designation || 'Teacher'}
         now={now}
       />
-      <QuickActions actions={actions} className="mt-6 grid-cols-4" />
+      <QuickActions actions={visibleItems(features, actions)} className="mt-6 grid-cols-4" />
       <section className="mt-7">
         <h2 className="font-display mb-3 text-section font-bold text-ink">
           {dayHeading(todayDate())}

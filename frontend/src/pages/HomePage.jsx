@@ -11,8 +11,12 @@ import AppLauncher from '../components/home/AppLauncher'
 import HomeHero from '../components/home/HomeHero'
 import SiteFooter from '../components/home/SiteFooter'
 import StatsStrip from '../components/home/StatsStrip'
-import { IdentityBar, LogoBadge } from '../components/ui'
-import { DEPARTMENT } from '../components/ui/IdentityBar'
+import AndroidDownload from '../components/home/AndroidDownload'
+import Blocks from '../components/site/Blocks'
+import PublicHeader from '../components/site/PublicHeader'
+import RichText from '../components/site/RichText'
+import { seoFor, visibleSections, withDefaults } from '../lib/siteContent'
+import { useSeo, useSiteContent } from '../lib/useSiteContent'
 import paths from '../lib/paths'
 import { useStandalone } from '../lib/standalone'
 
@@ -83,68 +87,104 @@ const PORTALS = [
   },
 ]
 
-export default function HomePage() {
-  const installed = useStandalone()
-  if (installed) return <AppLauncher />
+function AboutSection({ content }) {
+  const home = withDefaults(content).home
   return (
-    <div className="min-h-dvh bg-paper">
-      <IdentityBar right="Class and exam coordination" />
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link to={paths.root()} className="flex min-w-0 items-center gap-3">
-            <LogoBadge size="md" />
-            <span className="min-w-0">
-              <span className="font-display block text-base font-semibold text-ink">
-                SUST CSE
-              </span>
-              <span className="block truncate text-xs text-muted">{DEPARTMENT}</span>
-            </span>
-          </Link>
-          <nav className="flex items-center gap-4 text-sm font-semibold">
-            <Link to={paths.studentLogin()} className="text-ink-soft hover:text-brand-600">
-              Student
-            </Link>
-            <Link to={paths.teacherLogin()} className="text-ink-soft hover:text-brand-600">
-              Teacher
-            </Link>
-            <Link
-              to={paths.studentRegister()}
-              className="rounded-xl border border-brand-600 px-3 py-1.5 text-brand-600 hover:bg-brand-50"
-            >
-              Register
-            </Link>
-          </nav>
-        </div>
-      </header>
-      <HomeHero />
-      <StatsStrip />
-      <section className="px-4 py-14 sm:px-6 sm:py-16">
-        <div className="mx-auto max-w-6xl">
-          <p className="eyebrow">What the department runs here</p>
-          <h2 className="font-display mt-2 text-[22px] font-bold text-ink sm:text-2xl">
-            Everything a class day needs, in one record
+    <section data-home-section="about" className="px-4 py-14 sm:px-6 sm:py-16">
+      <div className="mx-auto max-w-6xl">
+        <p className="eyebrow">What the department runs here</p>
+        {home.about_title && (
+          <h2 className="font-display mt-2 wrap-long text-[22px] font-bold text-ink sm:text-2xl">
+            {home.about_title}
           </h2>
-          <div className="mt-8 grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((feature, position) => (
-              <article
-                key={feature.title}
-                className="border-t-[3px] border-brand-600 bg-surface p-5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <feature.icon size={18} className="text-brand-600" />
-                  <span className="font-numeral text-lg text-gold-500">
-                    {String(position + 1).padStart(2, '0')}
-                  </span>
-                </div>
-                <h3 className="font-display mt-3 text-base font-semibold text-ink">
-                  {feature.title}
-                </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted">{feature.text}</p>
-              </article>
-            ))}
+        )}
+        <RichText text={home.about_text} className="mt-3 max-w-3xl text-muted" />
+        <div className="mt-8 grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature, position) => (
+            <article key={feature.title} className="border-t-[3px] border-brand-600 bg-surface p-5">
+              <div className="flex items-center justify-between gap-3">
+                <feature.icon size={18} className="text-brand-600" />
+                <span className="font-numeral text-lg text-gold-500">
+                  {String(position + 1).padStart(2, '0')}
+                </span>
+              </div>
+              <h3 className="font-display mt-3 text-base font-semibold text-ink">{feature.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">{feature.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function HomeSection({ entry, content }) {
+  if (entry.key === 'stats') return <StatsStrip />
+  if (entry.key === 'about') return <AboutSection content={content} />
+  if (entry.key === 'notices') {
+    return (
+      <section data-home-section="notices" className="border-y border-line bg-wash px-4 py-10 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="eyebrow">Notice board</p>
+            <h2 className="font-display mt-2 text-xl font-bold text-ink">
+              Department, teacher and CR notices
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Notices are for the students and teachers of the department. Sign in to read them.
+            </p>
           </div>
+          <Link
+            to={paths.studentLogin()}
+            className="press inline-flex min-h-11 items-center rounded-xl border border-brand-600 px-4 text-sm font-semibold text-brand-600 hover:bg-brand-50"
+          >
+            Sign in to read the notices
+          </Link>
         </div>
       </section>
+    )
+  }
+  if (entry.key === 'app') {
+    return (
+      <section data-home-section="app" className="px-4 py-10 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 rounded-card border border-line bg-surface p-5">
+          <div className="min-w-0">
+            <h2 className="font-display text-xl font-bold text-ink">The portal as an Android app</h2>
+            <p className="mt-1 text-sm text-muted">
+              Attendance by Bluetooth, notifications and the routine of the day on your phone.
+            </p>
+          </div>
+          <AndroidDownload variant="primary" size="md" />
+        </div>
+      </section>
+    )
+  }
+  if (!entry.custom) return null
+  return (
+    <section data-home-section={entry.key} className="px-4 py-14 sm:px-6 sm:py-16">
+      <div className="mx-auto max-w-6xl">
+        <h2 className="font-display wrap-long text-[22px] font-bold text-ink sm:text-2xl">
+          {entry.custom.title}
+        </h2>
+        <Blocks blocks={entry.custom.blocks} className="mt-6" />
+      </div>
+    </section>
+  )
+}
+
+export default function HomePage() {
+  const installed = useStandalone()
+  const { content, preview } = useSiteContent()
+  useSeo(seoFor(content))
+  if (installed) return <AppLauncher />
+  const sections = visibleSections(content)
+  return (
+    <div className="min-h-dvh bg-paper">
+      <PublicHeader content={content} preview={preview} />
+      <HomeHero content={content} />
+      {sections.map((entry) => (
+        <HomeSection key={entry.key} entry={entry} content={content} />
+      ))}
       <section className="border-y border-line bg-wash px-4 py-14 sm:px-6 sm:py-16">
         <div className="mx-auto max-w-6xl">
           <p className="eyebrow">How it works</p>
@@ -208,7 +248,7 @@ export default function HomePage() {
           </p>
         </div>
       </section>
-      <SiteFooter />
+      <SiteFooter content={content} />
     </div>
   )
 }

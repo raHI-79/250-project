@@ -329,7 +329,7 @@ func (p *Phones) AdminOverview() http.HandlerFunc {
 				}
 				total, below := 0.0, 0
 				for _, rate := range rates {
-					share := attendance.Percentage(rate.Present, rate.Held)
+					share := attendance.Rate(rate.Credit, rate.Held)
 					total += share
 					if share < attendance.AlertPercentage {
 						below++
@@ -381,12 +381,15 @@ func (p *Phones) AdminExport() http.HandlerFunc {
 					httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 					return
 				}
+				weight, set := exportWeight(rows)
 				sheets = append(sheets, attendance.ExportClass{
 					CourseCode:  class.CourseCode,
 					CourseTitle: class.CourseTitle,
 					Batch:       class.Batch,
 					Section:     class.Section,
 					Sessions:    class.Sessions,
+					LateWeight:  weight,
+					WeightSet:   set,
 					Rows:        exportRows(rows),
 				})
 			}

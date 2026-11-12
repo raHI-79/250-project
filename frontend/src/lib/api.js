@@ -4,16 +4,19 @@ import { CLIENT_ANDROID, CLIENT_HEADER, apiURL, isAndroidApp } from './native'
 import { loginFor } from './paths'
 import { askOnce, needsConfirm } from './confirmgate'
 import { afterRequest } from './refresh'
+import { FEATURE_OFF_CODE, featureOffMessage, featureOfRequest, featureOn } from './features'
+import { currentFeatures, turnFeatureOff } from './featureState'
 
 export const SESSION_KEY = 'sustcse.session'
 
 export const HUMAN_CHECK_NEEDED = 'Please complete the human check.'
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code = '') {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -39,6 +42,7 @@ const PUBLIC_ENDPOINTS = [
   '/api/auth/reset-password',
   '/api/push/public-key',
   '/api/app/android-latest',
+  '/api/client-log',
 ]
 
 const isPublicEndpoint = (path) => PUBLIC_ENDPOINTS.some((entry) => path.startsWith(entry))
@@ -98,6 +102,10 @@ const send = async (method, path, { body, query, signal, auth = true, cache } = 
   const pass = humanPass()
   if (pass) headers[HUMAN_HEADER] = pass
   if (isAndroidApp()) headers[CLIENT_HEADER] = CLIENT_ANDROID
+  const feature = featureOfRequest(path)
+  if (!featureOn(currentFeatures(), feature)) {
+    throw new ApiError(403, featureOffMessage(feature), FEATURE_OFF_CODE)
+  }
   const url = apiURL(withQuery(path, query))
   let response
   try {
@@ -116,6 +124,10 @@ const send = async (method, path, { body, query, signal, auth = true, cache } = 
   }
   if (response.status === 403 && data?.error === HUMAN_CHECK_NEEDED) {
     clearHumanPass()
+  }
+  if (response.status === 403 && data?.code === FEATURE_OFF_CODE) {
+    turnFeatureOff(feature)
+    throw new ApiError(403, feature ? featureOffMessage(feature) : data.error, FEATURE_OFF_CODE)
   }
   const message =
     (data && typeof data === 'object' && data.error) ||

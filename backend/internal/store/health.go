@@ -94,12 +94,12 @@ WHERE kind IN ('push', 'fcm') AND created_at >= $1 AND created_at < $2`
 	failingPathsSQL = `WITH latest AS (
     SELECT DISTINCT ON (detail) detail, message, created_at
     FROM system_events
-    WHERE kind = 'http_5xx' AND created_at >= $1 AND created_at < $2
+    WHERE kind = $4 AND created_at >= $1 AND created_at < $2
     ORDER BY detail, created_at DESC
 ), totals AS (
     SELECT detail, COUNT(*) AS total
     FROM system_events
-    WHERE kind = 'http_5xx' AND created_at >= $1 AND created_at < $2
+    WHERE kind = $4 AND created_at >= $1 AND created_at < $2
     GROUP BY detail
 )
 SELECT totals.detail, totals.total, latest.message, latest.created_at
@@ -178,10 +178,18 @@ func (s *Store) PushBreakdown(ctx context.Context, window Window) ([]PushBreakdo
 }
 
 func (s *Store) FailingPaths(ctx context.Context, window Window, limit int) ([]FailingPath, error) {
+	return s.eventPaths(ctx, KindClient5x, window, limit)
+}
+
+func (s *Store) ClientCrashes(ctx context.Context, window Window, limit int) ([]FailingPath, error) {
+	return s.eventPaths(ctx, KindClientCrash, window, limit)
+}
+
+func (s *Store) eventPaths(ctx context.Context, kind string, window Window, limit int) ([]FailingPath, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	rows, err := s.pool.Query(ctx, failingPathsSQL, window.From, window.To, limit)
+	rows, err := s.pool.Query(ctx, failingPathsSQL, window.From, window.To, limit, kind)
 	if err != nil {
 		return nil, fmt.Errorf("store: could not read the failing paths: %w", err)
 	}

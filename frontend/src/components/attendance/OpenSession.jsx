@@ -1,3 +1,4 @@
+import { QUICK_EXTENSIONS, extensionProblem, lateBoundaryNote } from '../../lib/attendanceTiming'
 import { useEffect, useMemo, useState } from 'react'
 import { Bluetooth, Clock, MapPin, Users } from 'lucide-react'
 import { Alert, Button, Card, StatusBadge } from '../ui'
@@ -37,6 +38,10 @@ export default function OpenSession({
   onCodeOnly,
 }) {
   const [extra, setExtra] = useState(10)
+  const [custom, setCustom] = useState('')
+  const [customOpen, setCustomOpen] = useState(false)
+  const extraMinutes = customOpen ? Number(custom) : extra
+  const extraProblem = customOpen ? extensionProblem(custom) : ''
   const [showCode, setShowCode] = useState(!app)
   const left = minutesLeft(session.ends_at, now)
   const present = session.present || 0
@@ -146,15 +151,18 @@ export default function OpenSession({
             aria-label="Extra minutes"
             className="no-scrollbar -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0"
           >
-            {DURATIONS.map((value) => {
-              const active = value === extra
+            {QUICK_EXTENSIONS.map((value) => {
+              const active = !customOpen && value === extra
               return (
                 <button
                   key={value}
                   type="button"
                   role="radio"
                   aria-checked={active}
-                  onClick={() => setExtra(value)}
+                  onClick={() => {
+                    setCustomOpen(false)
+                    setExtra(value)
+                  }}
                   className={cx(
                     'press min-h-10 shrink-0 rounded-full border px-4 text-sm whitespace-nowrap',
                     active
@@ -162,15 +170,54 @@ export default function OpenSession({
                       : 'glass-chip font-medium text-muted hover:border-brand-300 hover:text-ink',
                   )}
                 >
-                  {value}m
+                  +{value} min
                 </button>
               )
             })}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={customOpen}
+              onClick={() => setCustomOpen(true)}
+              className={cx(
+                'press min-h-10 shrink-0 rounded-full border px-4 text-sm whitespace-nowrap',
+                customOpen
+                  ? 'border-brand-600 bg-brand-600 font-semibold text-page'
+                  : 'glass-chip font-medium text-muted hover:border-brand-300 hover:text-ink',
+              )}
+            >
+              Custom
+            </button>
           </div>
+          {customOpen && (
+            <label className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={240}
+                value={custom}
+                onChange={(event) => setCustom(event.target.value)}
+                aria-label="Extra minutes to add"
+                placeholder="7"
+                className="h-11 w-28 rounded-xl border border-line-strong bg-wash px-3 text-sm text-ink tabular-nums outline-none focus:border-brand-600"
+              />
+              more minutes
+            </label>
+          )}
+          {lateBoundaryNote(session) && (
+            <p className="mt-2 text-xs text-muted">{lateBoundaryNote(session)}</p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" loading={busy === 'extend'} onClick={() => onExtend(extra)}>
-            Extend {extra}m
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={busy === 'extend'}
+            disabled={Boolean(extraProblem)}
+            onClick={() => onExtend(extraMinutes)}
+          >
+            Extend {extraProblem ? '' : `${extraMinutes} min`}
           </Button>
           <Button variant="danger" size="sm" loading={busy === 'close'} onClick={onClose}>
             Close attendance

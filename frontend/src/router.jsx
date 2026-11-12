@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { isPreview } from './lib/useSiteContent'
 import AppLayout from './components/layout/AppLayout'
 import AdminLayout from './components/layout/AdminLayout'
 import ControlLayout from './components/layout/ControlLayout'
@@ -14,6 +15,9 @@ import ControlUsersPage from './pages/control/ControlUsersPage'
 import SecurityPage from './pages/office/SecurityPage'
 import ApprovalsPage from './pages/office/ApprovalsPage'
 import ControlSettingsPage from './pages/control/ControlSettingsPage'
+import ControlWebsitePage from './pages/control/ControlWebsitePage'
+import CustomPage from './pages/site/CustomPage'
+import AboutDevelopersPage from './pages/site/AboutDevelopersPage'
 import ControlSecurityMonitorPage from './pages/control/ControlSecurityMonitorPage'
 import ControlReleasePage from './pages/control/ControlReleasePage'
 import ControlDataPage from './pages/control/ControlDataPage'
@@ -29,6 +33,7 @@ import ExamsPage from './pages/student/ExamsPage'
 import CoursesStudentPage from './pages/student/CoursesPage'
 import FixedRoutinePage from './pages/student/FixedRoutinePage'
 import NoticesPage from './pages/NoticesPage'
+import NoticeDetailPage from './pages/NoticeDetailPage'
 import MaterialsPage from './pages/student/MaterialsPage'
 import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
@@ -62,7 +67,6 @@ import NotFoundPage from './pages/NotFoundPage'
 import { SkeletonCard } from './components/ui'
 import { useAuth } from './context/auth'
 import { isNative } from './lib/native'
-import { useNativeBackButton } from './lib/shell'
 import { usePageViews } from './lib/views'
 import {
   PORTAL_ADMIN,
@@ -88,18 +92,21 @@ function ControlGate() {
 
 function Root() {
   const { isAuthenticated, role } = useAuth()
+  const location = useLocation()
+  if (isAuthenticated && role === ROLE_SUPER_ADMIN && isPreview(location.search)) return <HomePage />
   if (isAuthenticated) return <Navigate to={homeFor(role)} replace />
   if (isNative()) return <Navigate to={paths.studentLogin()} replace />
   return <HomePage />
 }
 
 export default function Router() {
-  useNativeBackButton()
   usePageViews()
   const office = !isNative()
   return (
     <Routes>
       <Route path={paths.root()} element={<Root />} />
+      <Route path={paths.aboutDevelopers()} element={<AboutDevelopersPage />} />
+      {office && <Route path={paths.page(':slug')} element={<CustomPage />} />}
       <Route path={paths.studentLogin()} element={<LoginPage portal={PORTAL_STUDENT} />} />
       <Route path={paths.studentRegister()} element={<RegisterPage />} />
       <Route
@@ -155,6 +162,7 @@ export default function Router() {
           <Route path={paths.student.fixedRoutine()} element={<FixedRoutinePage />} />
           <Route path={paths.student.courses()} element={<CoursesStudentPage />} />
           <Route path={paths.student.notices()} element={<NoticesPage />} />
+          <Route path={paths.student.notice(':id')} element={<NoticeDetailPage />} />
           <Route path={paths.student.materials()} element={<MaterialsPage />} />
           <Route path={paths.student.students()} element={<StudentsDirectoryPage />} />
           <Route path={paths.student.polls()} element={<PollsPage />} />
@@ -211,6 +219,7 @@ export default function Router() {
           element={<Navigate to={paths.control.account()} replace />}
         />
         <Route path="settings" element={<ControlSettingsPage />} />
+        <Route path="website" element={<ControlWebsitePage />} />
         <Route path="settings/monitor" element={<ControlSecurityMonitorPage />} />
         <Route path="settings/app" element={<ControlReleasePage />} />
         <Route path="approvals" element={<ApprovalsPage eyebrow="Control room" />} />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import ErrorBoundary from '../ui/ErrorBoundary'
 import Sidebar from './Sidebar'
 import TabBar from './TabBar'
 import TopBar from './TopBar'
@@ -13,12 +14,31 @@ import { useUnreadMessages } from '../../lib/hooks'
 import { setAppBadge, useSectionBadges } from '../../lib/badges'
 import { openSheetCount, releaseStaleLock } from '../../lib/scrollLock'
 import { MESSAGES_BADGE } from '../../lib/nav'
+import { useFollowedLinks, useNotificationFeed, useNotifications } from '../../lib/notifications'
+import { useAuth } from '../../context/auth'
+import FeatureOff from '../FeatureOff'
+import {
+  FEATURE_MESSAGES,
+  featureOfPage,
+  featureOn,
+  visibleGroups,
+  visibleItems,
+} from '../../lib/features'
+import { useFeatures } from '../../lib/featureState'
 
 export default function AppShell({ groups, tabs = [], showBell = true, showSearch = true }) {
   const location = useLocation()
-  const unread = useUnreadMessages()
+  const features = useFeatures()
+  const unread = useUnreadMessages(featureOn(features, FEATURE_MESSAGES))
+  const closed = featureOn(features, featureOfPage(location.pathname))
+    ? ''
+    : featureOfPage(location.pathname)
   const badges = useSectionBadges()
-  useEffect(() => setAppBadge(unread), [unread])
+  const { user } = useAuth()
+  const alerts = useNotifications().unread
+  useNotificationFeed(showBell ? user?.id : null)
+  useFollowedLinks(location, user?.role, showBell ? user?.id : null)
+  useEffect(() => setAppBadge(unread + alerts), [unread, alerts])
   const [menuOpen, setMenuOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [collapsed, setCollapsed] = useState(false)
@@ -38,8 +58,11 @@ export default function AppShell({ groups, tabs = [], showBell = true, showSearc
     if (item.badge === MESSAGES_BADGE) return { ...item, count: unread }
     return { ...item, count: badges[item.badge] || 0 }
   }
-  const sections = groups.map((group) => ({ ...group, items: group.items.map(withCount) }))
-  const bar = tabs.map(withCount)
+  const sections = visibleGroups(features, groups).map((group) => ({
+    ...group,
+    items: group.items.map(withCount),
+  }))
+  const bar = visibleItems(features, tabs).map(withCount)
   return (
     <ChromeContext.Provider value={chrome}>
       <Sidebar groups={sections} open={menuOpen} onClose={() => setMenuOpen(false)} />
@@ -61,7 +84,7 @@ export default function AppShell({ groups, tabs = [], showBell = true, showSearc
           <PushGate />
           <div key={location.pathname} className="animate-fade-in-up mx-auto max-w-6xl">
             <PhotoReminder />
-            <Outlet />
+            <ErrorBoundary>{closed ? <FeatureOff feature={closed} /> : <Outlet />}</ErrorBoundary>
           </div>
         </main>
         <TabBar tabs={bar} />

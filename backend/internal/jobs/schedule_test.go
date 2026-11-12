@@ -97,6 +97,10 @@ func (f *fakeItems) ListLowAttendance(ctx context.Context, minSessions int,
 	return f.low, f.err
 }
 
+func (f *fakeItems) BackfillJoinedLater(ctx context.Context, studentID, userID int64) (int, error) {
+	return 0, nil
+}
+
 func (f *fakeItems) ClaimAttendanceAlert(ctx context.Context, studentID, courseID int64,
 	before time.Time) (bool, error) {
 	if f.taken == nil {

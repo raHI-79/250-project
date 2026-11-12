@@ -51,8 +51,14 @@ func TestAlertRulesFireOnTheRightNumbers(t *testing.T) {
 			wants:    []string{AlertServerErrors},
 		},
 		{
-			name:     "the same run of server errors in a quiet period stays quiet",
-			requests: store.RequestVolume{Requests: minRequestVolume - 1, Failures: serverErrorSpike},
+			name:     "ten server errors that are one in a hundred requests stay quiet",
+			requests: store.RequestVolume{Requests: serverErrorSpike * serverErrorPerCent, Failures: serverErrorSpike},
+			backup:   store.BackupState{LastSuccessAt: &fresh},
+			missing:  []string{AlertServerErrors},
+		},
+		{
+			name:     "nine server errors stay quiet however few the requests",
+			requests: store.RequestVolume{Requests: 20, Failures: serverErrorSpike - 1},
 			backup:   store.BackupState{LastSuccessAt: &fresh},
 			missing:  []string{AlertServerErrors},
 		},
@@ -278,5 +284,49 @@ func TestOnlyKnownAlertsCanBeDismissed(t *testing.T) {
 		if KnownAlert(key) {
 			t.Errorf("KnownAlert(%q) = true, want false", key)
 		}
+	}
+}
+
+func TestServerErrorAlertListsTheTopPathsAndSheetDeletesAreInformation(t *testing.T) {
+	now := time.Now()
+	fresh := now.Add(-time.Hour)
+	paths := make([]store.FailingPath, 0)
+	for index := 0; index < alertDetailLimit+2; index++ {
+		paths = append(paths, store.FailingPath{Path: "GET /api/broken/" + string(rune('a'+index)), Total: 20 - index})
+	}
+	alerts := alertsFor(alertFacts{
+		Requests:  store.RequestVolume{Requests: 300, Failures: 40},
+		Backup:    store.BackupState{LastSuccessAt: &fresh},
+		Deletions: 1,
+		Paths:     paths,
+		Now:       now,
+	})
+	found := map[string]alertItem{}
+	for _, alert := range alerts {
+		found[alert.Key] = alert
+	}
+	errors, ok := found[AlertServerErrors]
+	if !ok {
+		t.Fatalf("the server error alert did not fire: %+v", alerts)
+	}
+	if len(errors.Details) != alertDetailLimit {
+		t.Fatalf("the alert lists %d paths, want %d", len(errors.Details), alertDetailLimit)
+	}
+	if errors.Details[0].Label != "GET /api/broken/a" || errors.Details[0].Count != 20 {
+		t.Fatalf("the first path is %+v", errors.Details[0])
+	}
+	if found[AlertSheetDeletes].Tone != "info" {
+		t.Fatalf("a deleted sheet has the tone %q, want information", found[AlertSheetDeletes].Tone)
+	}
+}
+
+func TestSwitchedOffRequestsNeverCountAsServerErrors(t *testing.T) {
+	volume := realFailures(store.RequestVolume{Requests: 1000, Failures: 250}, 3)
+	if volume.Failures != 3 || serverErrorAlerting(volume) {
+		t.Fatalf("old switched-off answers still alert: %+v", volume)
+	}
+	kept := realFailures(store.RequestVolume{Requests: 100, Failures: 12}, 40)
+	if kept.Failures != 12 || !serverErrorAlerting(kept) {
+		t.Fatalf("real failures were lost: %+v", kept)
 	}
 }

@@ -31,6 +31,7 @@ const (
 	KeyRetainViews        = "retain_analytics_days"
 	KeyRetainEvents       = "retain_audit_days"
 	KeyRetainNotices      = "retain_notifications_days"
+	KeyLateWeight         = "attendance_late_weight"
 
 	On          = "on"
 	Off         = "off"
@@ -59,6 +60,7 @@ var editable = []string{
 	KeyRetainViews,
 	KeyRetainEvents,
 	KeyRetainNotices,
+	KeyLateWeight,
 }
 
 var features = []string{KeyAttendance, KeyPolls, KeyMessages, KeyGroups, KeyWebAttendance}

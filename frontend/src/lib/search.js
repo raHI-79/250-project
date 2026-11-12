@@ -1,6 +1,6 @@
 import api from './api'
 import { navForRole } from './nav'
-import { noticesFor, paths } from './paths'
+import { noticeFor, paths } from './paths'
 import { readJson, writeJson } from './storage'
 
 export const RECENT_KEY = 'sustcse.search.recent'
@@ -84,7 +84,7 @@ const noticeResults = async (role, term) => {
       id: `notice-${notice.id}`,
       title: notice.title,
       subtitle: notice.created_by_name || 'Notice',
-      to: noticesFor(role, { highlight: notice.id }),
+      to: noticeFor(role, notice.id),
     }))
 }
 

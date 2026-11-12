@@ -8,6 +8,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,6 +20,9 @@ type fakeNotificationService struct {
 	askedUser     int64
 	askedLimit    int
 	askedSince    time.Time
+	readIDs       []int64
+	readPage      string
+	readBefore    time.Time
 }
 
 func (f *fakeNotificationService) Recent(ctx context.Context, userID int64, limit int) ([]store.Notification, error) {
@@ -35,6 +39,41 @@ func (f *fakeNotificationService) UnreadCount(ctx context.Context, userID int64,
 		return 0, f.err
 	}
 	return f.count, nil
+}
+
+func (f *fakeNotificationService) Unread(ctx context.Context, userID int64) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	return f.count, nil
+}
+
+func (f *fakeNotificationService) Read(ctx context.Context, userID int64, ids []int64) error {
+	f.askedUser = userID
+	f.readIDs = append(f.readIDs, ids...)
+	if f.err != nil {
+		return f.err
+	}
+	f.count -= len(ids)
+	return nil
+}
+
+func (f *fakeNotificationService) ReadPage(ctx context.Context, userID int64, page string) (int, error) {
+	f.askedUser, f.readPage = userID, page
+	if f.err != nil {
+		return 0, f.err
+	}
+	f.count -= 2
+	return 2, nil
+}
+
+func (f *fakeNotificationService) ReadAll(ctx context.Context, userID int64, before time.Time) error {
+	f.askedUser, f.readBefore = userID, before
+	if f.err != nil {
+		return f.err
+	}
+	f.count = 0
+	return nil
 }
 
 func notificationCall(t *testing.T, handlerFunc http.HandlerFunc, target string, user *middleware.User) *httptest.ResponseRecorder {
@@ -160,5 +199,74 @@ func TestNotificationsUnreadCount(t *testing.T) {
 				t.Errorf("the service was asked for user %d, want %d", service.askedUser, viewer.ID)
 			}
 		})
+	}
+}
+
+func notificationPost(t *testing.T, handlerFunc http.HandlerFunc, target, body string, user *middleware.User) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if user != nil {
+		req = req.WithContext(middleware.WithUser(req.Context(), *user))
+	}
+	rec := httptest.NewRecorder()
+	handlerFunc.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestNotificationsRead(t *testing.T) {
+	silenceLog(t)
+	viewer := &middleware.User{ID: 21, Identifier: "2023331002", Role: "cr"}
+	tests := []struct {
+		name       string
+		body       string
+		user       *middleware.User
+		wantStatus int
+		wantBody   string
+		wantIDs    int
+		wantPage   string
+	}{
+		{name: "one notification", body: `{"id":5}`, user: viewer, wantStatus: http.StatusOK,
+			wantBody: `"unread":3`, wantIDs: 1},
+		{name: "the notifications of a page", body: `{"page":"/student/notices/7"}`, user: viewer,
+			wantStatus: http.StatusOK, wantBody: `"unread":2`, wantPage: "/student/notices/7"},
+		{name: "nothing named", body: `{}`, user: viewer, wantStatus: http.StatusBadRequest,
+			wantBody: MessageReadNothing},
+		{name: "signed out", body: `{"id":5}`, wantStatus: http.StatusUnauthorized,
+			wantBody: middleware.MessageUnauthorized},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := &fakeNotificationService{count: 4}
+			rec := notificationPost(t, NewNotifications(service).Read(), "/api/notifications/read", test.body, test.user)
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), test.wantBody) {
+				t.Fatalf("body = %q, want it to contain %q", rec.Body.String(), test.wantBody)
+			}
+			if len(service.readIDs) != test.wantIDs || service.readPage != test.wantPage {
+				t.Fatalf("marked ids %v and page %q", service.readIDs, service.readPage)
+			}
+		})
+	}
+}
+
+func TestNotificationsReadAll(t *testing.T) {
+	silenceLog(t)
+	viewer := &middleware.User{ID: 21, Identifier: "2023331002", Role: "cr"}
+	service := &fakeNotificationService{count: 4}
+	rec := notificationPost(t, NewNotifications(service).ReadAll(), "/api/notifications/read-all",
+		`{"before":"2026-10-16T09:30:00+06:00"}`, viewer)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"unread":0`) {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if service.readBefore.Year() != 2026 || service.readBefore.Month() != time.October {
+		t.Fatalf("read before %v, want the time the phone remembered", service.readBefore)
+	}
+	rec = notificationPost(t, NewNotifications(service).ReadAll(), "/api/notifications/read-all",
+		`{"before":"yesterday"}`, viewer)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("a bad time answered %d", rec.Code)
 	}
 }

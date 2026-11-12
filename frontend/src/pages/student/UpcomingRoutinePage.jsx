@@ -50,7 +50,7 @@ export default function UpcomingRoutinePage() {
       )}
       {loading ? (
         <SkeletonCard />
-      ) : (
+      ) : !data ? null : (
         <div className="flex flex-col gap-4">
           <p className="font-display text-lg font-semibold text-ink">
             {data.batch} · {data.date_label} ({data.weekday})
