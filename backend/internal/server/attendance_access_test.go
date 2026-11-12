@@ -354,3 +354,36 @@ func TestARollCallIsNotOfferedToStudents(t *testing.T) {
 		t.Errorf("marks = %d, want none in a roll call", presence.marks)
 	}
 }
+
+func TestACodeOnlySessionMarksFromTheWebsiteWithoutAPosition(t *testing.T) {
+	deps, router, presence := newAttendanceRouter(t)
+	openWebSession(presence, attendance.TakeBluetooth)
+	presence.session.CodeOnly = true
+	presence.session.HasLocation = false
+	tokens := accessTokens(t, deps)
+	listed := serveJSON(t, router, http.MethodGet, "/api/students/attendance/open", "",
+		tokens[auth.RoleStudent], false)
+	if !strings.Contains(listed.Body.String(), `"code_only":true`) {
+		t.Fatalf("open session = %q, want it to say the session is code only", listed.Body.String())
+	}
+	withoutCode := serveJSON(t, router, http.MethodPost, "/api/students/attendance/mark",
+		`{"session_id":9}`, tokens[auth.RoleStudent], false)
+	if withoutCode.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 without a code (body = %q)", withoutCode.Code, withoutCode.Body.String())
+	}
+	code := attendance.CurrentCode(presence.session.TokenKey, presence.session.ID, time.Now())
+	rec := serveJSON(t, router, http.MethodPost, "/api/students/attendance/mark",
+		`{"session_id":9,"code":"`+code+`"}`, tokens[auth.RoleStudent], false)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body = %q)", rec.Code, rec.Body.String())
+	}
+	if presence.lastMark.Method != attendance.MethodCode {
+		t.Errorf("method = %q, want %q", presence.lastMark.Method, attendance.MethodCode)
+	}
+	if !presence.lastMark.NoLocation {
+		t.Error("a code only mark was not flagged as having no location")
+	}
+	if presence.lastMark.Lat != 0 || presence.lastMark.DistanceM != 0 {
+		t.Errorf("a code only mark kept a position: %+v", presence.lastMark)
+	}
+}

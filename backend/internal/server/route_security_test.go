@@ -364,6 +364,7 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodGet, path: "/api/teacher/attendance/sessions/1", allowed: teacherOnly()},
 		{method: http.MethodPost, path: "/api/teacher/attendance/sessions/1/location", allowed: teacherOnly()},
 		{method: http.MethodPost, path: "/api/teacher/attendance/sessions/1/extend", allowed: teacherOnly()},
+		{method: http.MethodPost, path: "/api/teacher/attendance/sessions/1/code-only", allowed: teacherOnly()},
 		{method: http.MethodPost, path: "/api/teacher/attendance/sessions/1/close", allowed: teacherOnly()},
 		{method: http.MethodPatch, path: "/api/teacher/attendance/sessions/1/students/2", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/teacher/attendance/classes", allowed: teacherOnly()},

@@ -490,6 +490,7 @@ func registerAttendanceTeacherRoutes(group RouteGroup, marks *handler.Attendance
 	group.Handle("GET /api/teacher/attendance/sessions/{id}", marks.Session())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/location", marks.Location())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/extend", marks.Extend())
+	group.Handle("POST /api/teacher/attendance/sessions/{id}/code-only", marks.CodeOnly())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/close", marks.Close())
 	group.Handle("POST /api/teacher/attendance/sessions/{id}/mark-all", marks.MarkAll())
 	group.Handle("DELETE /api/teacher/attendance/sessions/{id}", marks.DeleteSession())

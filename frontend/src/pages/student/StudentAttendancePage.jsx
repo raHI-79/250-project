@@ -14,18 +14,21 @@ import {
   useToast,
 } from '../../components/ui'
 import MyAttendance from '../../components/attendance/MyAttendance'
+import LocationHelp from '../../components/attendance/LocationHelp'
 import api from '../../lib/api'
 import cx from '../../lib/cx'
 import { useQueryTab, useResource } from '../../lib/hooks'
 import { formatClock } from '../../lib/time'
 import { isAndroidApp } from '../../lib/native'
 import { paths } from '../../lib/paths'
+import useWebLocation from '../../lib/useWebLocation'
+import { browserEnv, studentPlaceState } from '../../lib/webLocation'
 import {
   STUDENT_TAB_MARK,
   STUDENT_TAB_MINE,
   STUDENT_TAB_PHONE,
   askMark,
-  browserPosition,
+  codeOnlyMarkBody,
   confirmIdentity,
   listenForToken,
   markStatus,
@@ -138,7 +141,21 @@ export default function StudentAttendancePage() {
   )
   const session = data?.session
   const phone = data?.phone || { registered: false, this_phone: false, changes: 0, limit: 2 }
-  const canMark = app && phone.registered && phone.this_phone && session && !session.present
+  const codeOnly = Boolean(session?.code_only)
+  const canMark =
+    app && phone.registered && phone.this_phone && session && !session.present && !codeOnly
+  const { place, locate } = useWebLocation({
+    active: !app && Boolean(session) && !session?.present && !done && !codeOnly,
+  })
+  const [locating, setLocating] = useState(false)
+  const askPlace = async () => {
+    setLocating(true)
+    try {
+      return await locate()
+    } finally {
+      setLocating(false)
+    }
+  }
   const listen = useCallback(async () => {
     if (listening.current) return
     listening.current = true
@@ -188,17 +205,24 @@ export default function StudentAttendancePage() {
   const markOnWeb = async () => {
     setBusy('mark')
     try {
-      const place = await browserPosition()
-      if (!place?.found) {
-        toast.error('Your browser did not share a position. Allow location and try again.')
+      if (codeOnly) {
+        await api.post('/api/students/attendance/mark', codeOnlyMarkBody(session, code))
+        setDone(true)
+        toast.success('You are marked present.')
+        reload()
+        return
+      }
+      const position = await locate()
+      if (!position) {
+        toast.error('Your location is needed to mark you present. Follow the steps above.')
         return
       }
       await api.post('/api/students/attendance/mark', {
         session_id: session.id,
         code: code.trim(),
-        lat: place.lat,
-        lng: place.lng,
-        accuracy_m: place.accuracy_m,
+        lat: position.lat,
+        lng: position.lng,
+        accuracy_m: position.accuracy_m,
       })
       setDone(true)
       toast.success('You are marked present.')
@@ -215,6 +239,16 @@ export default function StudentAttendancePage() {
       const confirmed = await confirmIdentity()
       if (confirmed?.available && !confirmed?.confirmed) {
         toast.error(confirmed.message || 'Confirm it is you to be marked present.')
+        return
+      }
+      if (codeOnly) {
+        await api.post('/api/students/attendance/mark', {
+          ...codeOnlyMarkBody(session, code),
+          device_id: device,
+        })
+        setDone(true)
+        toast.success('You are marked present.')
+        reload()
         return
       }
       const place = await readPosition()
@@ -292,13 +326,29 @@ export default function StudentAttendancePage() {
           Mark me
         </Button>
       </div>
-      {!app && (
+      {codeOnly ? (
         <p className="mt-2 text-xs text-muted">
-          The browser asks for your position. You have to be within 30 m of the teacher.
+          This class uses the code only, so your location is not checked.
         </p>
+      ) : (
+        !app && (
+          <p className="mt-2 text-xs text-muted">
+            The browser shares your position when you tap Mark me. You have to be within 30 m of
+            the teacher.
+          </p>
+        )
       )}
     </div>
   )
+  const placePanel =
+    !app && !codeOnly ? (
+      <LocationHelp
+        label="Your location"
+        state={studentPlaceState(place, browserEnv())}
+        onFix={askPlace}
+        busy={locating}
+      />
+    ) : null
   const sessionCard = (children) => (
     <Card hover={false} rule>
       <p className="label-caps">Open now</p>
@@ -332,7 +382,10 @@ export default function StudentAttendancePage() {
               Nothing else to do for this class.
             </Alert>
           ) : (
-            <div className="mt-4 flex flex-col gap-3">{codeField}</div>
+            <div className="mt-4 flex flex-col gap-3">
+              {placePanel}
+              {codeField}
+            </div>
           ),
         )
       )}
@@ -400,6 +453,8 @@ export default function StudentAttendancePage() {
               <Alert tone="warning" className="mt-4">
                 Register this phone, or ask your teachers for it, before you can mark attendance.
               </Alert>
+            ) : codeOnly ? (
+              <div className="mt-4 flex flex-col gap-3">{codeField}</div>
             ) : (
               <div className="mt-4 flex flex-col gap-3">
                 {hint && (
