@@ -26,7 +26,7 @@ export default function StatusTabs({ tabs, value, onChange, tone, className }) {
               onHeader
                 ? active
                   ? 'bg-white font-bold text-brand-700 shadow-[var(--shadow-card)]'
-                  : 'bg-white/20 font-semibold text-white hover:bg-white/30'
+                  : 'bg-[rgb(4_40_66/0.3)] font-semibold text-white ring-1 ring-white/20 ring-inset hover:bg-[rgb(4_40_66/0.42)]'
                 : active
                   ? 'border border-brand-600 bg-brand-600 font-bold text-page'
                   : 'border border-line bg-surface font-semibold text-muted hover:border-brand-200 hover:text-brand-700',
