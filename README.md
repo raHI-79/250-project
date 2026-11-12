@@ -127,7 +127,8 @@ all you have to do is create two empty databases and set your password.
      account created for you at startup,
    - leave `STUDENT_EMAIL_DOMAIN` alone unless your university uses another
      domain, and set `GOOGLE_CLIENT_ID` only if you want the Google Sign-In
-     shortcut on the registration page. Teacher addresses are not tied to a
+     shortcut on the website's registration page (the Android app verifies the
+     email with the 6-digit code only). Teacher addresses are not tied to a
      domain.
 
    `backend/.env` is listed in `.gitignore`, so your password is never
@@ -234,7 +235,7 @@ go run ./cmd/server
 | `UPLOAD_DIR` | `uploads` | Folder where the uploaded PDFs and profile photos are saved, created when it is missing |
 | `MAX_UPLOAD_MB` | `10` | Largest accepted PDF in megabytes; a bigger file gets `413` |
 | `STUDENT_EMAIL_DOMAIN` | `student.sust.edu` | Domain every student email address must end with |
-| `GOOGLE_CLIENT_ID` | none — optional | Google Sign-In client id; empty turns `google_enabled` off |
+| `GOOGLE_CLIENT_ID` | none — optional | Web OAuth client id for Google Sign-In on the website; empty turns `google_enabled` off. The app does not use it |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only browser origin allowed to call the API |
 | `ADMIN_IDENTIFIER` | none — optional | Login id of the admin account created at startup |
 | `ADMIN_PASSWORD` | none — optional | Password of that admin account, at least 8 characters |
@@ -935,7 +936,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `GET` | `/download/android` | public, rate limited | `302` to the signed APK of the newest GitHub Release that carries one; a short HTML page when no build is published, and a `302` to the repository releases page when GitHub itself cannot be read |
 | `GET` | `/api/app/android-latest` | public, rate limited | `{version, version_code, apk_url, notes, required}` of the newest release that carries an APK; `required` is true when the notes carry `[required]`. Every field is empty while no build is published, and `503` `{"error":"Update service is busy, try again later."}` when GitHub is unreachable and nothing is cached |
 | `GET` | `/api/public/stats` | public | `students`, `teachers`, `courses` and `batches` of the home page, active accounts only, cached five minutes |
-| `GET` | `/api/auth/config` | public | `student_email_domain`, `google_enabled`, `google_client_id` (the public web OAuth client id the pages and the app sign in with), `human_check_enabled` and `turnstile_site_key` |
+| `GET` | `/api/auth/config` | public | `student_email_domain`, `google_enabled`, `google_client_id` (the public web OAuth client id the website signs in with; the app has no Google sign-in), `human_check_enabled` and `turnstile_site_key` |
 | `GET` | `/api/auth/sections` | public, rate limited | `?batch=CSE-23` returns the sections seen in that batch's routines and active students, out of `A` and `B` |
 | `GET` | `/api/push/public-key` | public | `enabled` and the VAPID `public_key` when web push is set up |
 | `POST` | `/api/auth/register` | public | `multipart/form-data` student registration with a required photo; `201` on success |
@@ -1395,9 +1396,18 @@ it answers `{"email", "email_proof"}`, where `email_proof` is a JWT signed with
 
 #### The two ways to confirm an email address
 
-Registration keeps **both** paths open and the student picks one on the contact
-step. The **University email** field comes first with the `@student.sust.edu`
-hint, then an `or` divider, then **Continue with Google** below it.
+On the **website** registration keeps **both** paths open and the student picks
+one on the contact step. The **University email** field comes first with the
+`@student.sust.edu` hint, then an `or` divider, then **Continue with Google**
+below it.
+
+The **Android app** offers the email code only: no Google button and no `or`
+divider. **Send code** emails the 6-digit code, the student enters it and
+continues. The hint counts down to the expiry the server returns (15 minutes),
+an expired code says so, and **Resend the code** unlocks after 60 seconds and
+replaces the earlier code. The Android OAuth client in the Google Cloud Console
+is no longer needed; the website still needs the web client and its authorised
+JavaScript origins (see [docs/ANDROID.md](docs/ANDROID.md)).
 
 - Typing the address by hand creates the account as `unverified` and the
   6-digit email code step stays required.
