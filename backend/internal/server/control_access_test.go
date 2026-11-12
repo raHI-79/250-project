@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -277,6 +278,12 @@ func TestSuperAdminRoutesNeedTheControlRoomToken(t *testing.T) {
 		{method: http.MethodGet, path: "/api/super-admin/activity/104"},
 		{method: http.MethodPost, path: "/api/super-admin/admins/invite", body: `{"email":"new@sust.edu"}`},
 		{method: http.MethodPost, path: "/api/super-admin/teachers/103/office-access"},
+		{method: http.MethodGet, path: "/api/super-admin/site/draft"},
+		{method: http.MethodPut, path: "/api/super-admin/site/draft", body: `{}`},
+		{method: http.MethodPost, path: "/api/super-admin/site/publish"},
+		{method: http.MethodGet, path: "/api/super-admin/site/versions"},
+		{method: http.MethodPost, path: "/api/super-admin/site/versions/1/restore"},
+		{method: http.MethodPost, path: "/api/super-admin/site/images"},
 	}
 	for _, route := range routes {
 		t.Run("no token on "+route.path, func(t *testing.T) {
@@ -542,4 +549,26 @@ type limitedPermissions struct {
 
 func (l limitedPermissions) Permissions(ctx context.Context, userID int64) ([]string, error) {
 	return []string{l.allowed}, nil
+}
+
+func TestThePublicWebsiteContentNeedsNoAccountAndPublishingNeedsThePassword(t *testing.T) {
+	deps, router, _ := newControlRouter(t)
+	tokens := controlTokens(t, deps)
+	rec := serve(t, router, http.MethodGet, "/api/site/content", "", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"fallback":true`) {
+		t.Fatalf("the public content answered %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Developed by CoordiNet") {
+		t.Fatalf("the public content does not carry the fixed credit: %s", rec.Body.String())
+	}
+	rec = serve(t, router, http.MethodPost, "/api/super-admin/site/publish", "", tokens[auth.RoleSuperAdmin])
+	if rec.Code != http.StatusPreconditionRequired {
+		t.Fatalf("publishing without the password confirmation answered %d, want 428 (body = %q)",
+			rec.Code, rec.Body.String())
+	}
+	rec = serve(t, router, http.MethodPost, "/api/super-admin/site/versions/1/restore", "",
+		tokens[auth.RoleSuperAdmin])
+	if rec.Code != http.StatusPreconditionRequired {
+		t.Fatalf("restoring without the password confirmation answered %d, want 428", rec.Code)
+	}
 }

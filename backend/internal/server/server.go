@@ -78,6 +78,7 @@ type Dependencies struct {
 	Granted   middleware.PermissionStore
 	Needs     *RouteNeeds
 	Folks     handler.PeopleStore
+	Site      handler.SiteStore
 	Values    *settings.Cache
 	Keys      settings.Store
 	Guardians handler.ControlStore
@@ -278,6 +279,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	chiefOnly.Handle("GET /api/super-admin/settings", control.Settings())
 	chiefOnly.Handle("PUT /api/super-admin/settings", control.SaveSettings())
 	chiefOnly.Handle("GET /api/super-admin/security", control.Security())
+	registerSiteRoutes(mux, chiefOnly, deps, events)
 	officeWeight := AdminGroup(mux, deps)
 	officeWeight.Handle("GET /api/admin/attendance/late-weight", control.LateWeight())
 	officeWeight.Handle("PUT /api/admin/attendance/late-weight", control.SaveLateWeight())
@@ -717,4 +719,49 @@ func registerHolidayRoutes(office, everyone RouteGroup, calendar *handler.Holida
 
 func notFound(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteError(w, http.StatusNotFound, "Route not found")
+}
+
+type noSiteContent struct{}
+
+func (noSiteContent) SaveSiteDraft(ctx context.Context, content []byte, userID int64) error {
+	return store.ErrNotFound
+}
+
+func (noSiteContent) SiteDraft(ctx context.Context) (store.SiteVersion, error) {
+	return store.SiteVersion{}, store.ErrNotFound
+}
+
+func (noSiteContent) SitePublished(ctx context.Context) (store.SiteVersion, error) {
+	return store.SiteVersion{}, store.ErrNotFound
+}
+
+func (noSiteContent) SiteVersion(ctx context.Context, id int64) (store.SiteVersion, error) {
+	return store.SiteVersion{}, store.ErrNotFound
+}
+
+func (noSiteContent) PublishSite(ctx context.Context, content []byte, userID int64, note string) (int64, error) {
+	return 0, store.ErrNotFound
+}
+
+func (noSiteContent) ListSiteVersions(ctx context.Context, limit int) ([]store.SiteVersion, error) {
+	return nil, nil
+}
+
+func registerSiteRoutes(mux *http.ServeMux, chiefOnly RouteGroup, deps Dependencies, events *handler.Recorder) {
+	var content handler.SiteStore = noSiteContent{}
+	if deps.Site != nil {
+		content = deps.Site
+	}
+	var images handler.SiteImages
+	if deps.Photos != nil {
+		images = deps.Photos
+	}
+	site := handler.NewSite(deps.Config, content, images, events)
+	mux.HandleFunc("GET /api/site/content", site.Public())
+	chiefOnly.Handle("GET /api/super-admin/site/draft", site.Draft())
+	chiefOnly.Handle("PUT /api/super-admin/site/draft", site.SaveDraft())
+	chiefOnly.Handle("POST /api/super-admin/site/publish", site.Publish())
+	chiefOnly.Handle("GET /api/super-admin/site/versions", site.Versions())
+	chiefOnly.Handle("POST /api/super-admin/site/versions/{id}/restore", site.Restore())
+	chiefOnly.Handle("POST /api/super-admin/site/images", site.UploadImage())
 }

@@ -142,12 +142,33 @@ test('every blue header draws the shared header art behind its content', () => {
 test('every main page opens with one of the shared headers', () => {
   const shared = /<(PageHeader|TodayHero|AuthScreen)\b/
   const pages = files('pages').filter(
-    (name) => name.endsWith('Page.jsx') && !/\/(HomePage|NotFoundPage)\.jsx$/.test(name),
+    (name) =>
+      name.endsWith('Page.jsx') &&
+      !/\/(HomePage|NotFoundPage)\.jsx$/.test(name) &&
+      !name.startsWith('pages/site/'),
   )
   assert.ok(pages.length > 40, `found ${pages.length} pages`)
   const missing = pages.filter((name) => !shared.test(read(name)))
   assert.deepEqual(missing, [])
   assert.match(read('components/layout/AuthScreen.jsx'), /<AppAuthScreen/)
+})
+
+test('every public website page opens with the website header and ends with the credit', () => {
+  const website = files('pages').filter((name) => name.startsWith('pages/site/'))
+  assert.ok(website.length >= 2, `found ${website.length} website pages`)
+  website.concat(['pages/HomePage.jsx']).forEach((name) => {
+    assert.match(read(name), /<PublicHeader\b/, `${name} opens with the website header`)
+    assert.match(read(name), /<SiteFooter\b/, `${name} ends with the website footer`)
+  })
+  const footer = read('components/home/SiteFooter.jsx')
+  assert.match(footer, /<DeveloperCredit \/>/)
+  assert.doesNotMatch(
+    footer.slice(footer.indexOf('<DeveloperCredit />') - 400, footer.indexOf('<DeveloperCredit />')),
+    /\{shown &&/,
+    'the credit sits outside the part of the footer that can be hidden',
+  )
+  assert.match(read('components/site/DeveloperCredit.jsx'), /DEVELOPER\.label/)
+  assert.doesNotMatch(read('pages/control/ControlWebsitePage.jsx'), /credit:/i)
 })
 
 test('content the hero or the app panel overlap stays above the art', () => {

@@ -117,3 +117,19 @@ export async function workbookEntry(teacherToken, query, name) {
   }
   throw new Error(`the workbook has no ${name}`)
 }
+
+let chief = ''
+
+export async function controlToken(role) {
+  if (chief) return chief
+  const response = await fetch(`${API}/api/auth/control-room/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: role.identifier, password: role.password }),
+  })
+  const body = await response.json()
+  if (!response.ok) throw new Error(`could not sign in to the control room: ${body.error || response.status}`)
+  await need(body.token, 'POST', '/api/office/security/confirm', { password: role.password })
+  chief = body.token
+  return chief
+}

@@ -165,6 +165,7 @@ func run() error {
 			Live:      userStore,
 			Granted:   userStore,
 			Folks:     userStore,
+			Site:      userStore,
 			Locks:     userStore,
 			Keys:      userStore,
 			Guardians: userStore,

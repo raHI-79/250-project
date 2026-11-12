@@ -44,6 +44,7 @@ var expectedTables = []string{
 	"notifications",
 	"notification_reads",
 	"notification_read_marks",
+	"site_content_versions",
 	"poll_options",
 	"poll_votes",
 	"polls",

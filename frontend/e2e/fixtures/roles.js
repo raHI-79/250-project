@@ -70,6 +70,7 @@ export const CONTROL_PAGES = [
   { path: '/control-room/users' },
   { path: '/control-room/activity' },
   { path: '/control-room/settings' },
+  { path: '/control-room/website' },
   { path: '/control-room/settings/account' },
   { path: '/control-room/settings/security' },
   { path: '/control-room/settings/monitor' },

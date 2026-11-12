@@ -1,3 +1,4 @@
+import { useSiteContent } from '../../lib/useSiteContent'
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { IdCard, Lock, UserRound } from 'lucide-react'
@@ -52,6 +53,8 @@ export default function LoginPage({ portal }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const page = copy[portal] || copy.student
+  const site = useSiteContent()
+  const signIn = isNative() ? {} : site.content.sign_in || {}
   const notice = location.state?.notice || ''
   if (isAuthenticated) return <Navigate to={homeFor(role)} replace />
   const onSubmit = async (event) => {
@@ -75,8 +78,8 @@ export default function LoginPage({ portal }) {
       <div className={app ? 'flex flex-1 flex-col' : undefined}>
         <AuthHeading
           eyebrow={page.eyebrow}
-          title={page.heading}
-          subtitle={page.subtitle}
+          title={signIn.title || page.heading}
+          subtitle={signIn.text || page.subtitle}
           switcher
         />
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">

@@ -9,7 +9,15 @@ import {
 } from '../fixtures/roles.js'
 import { clear, expectNoProblems, watch } from '../helpers/audit.js'
 import { appCanReach, asApp, localURL } from '../helpers/appShell.js'
-import { call, classOf, clearToday, need, signInByApi, workbookEntry } from '../helpers/attendance.js'
+import {
+  call,
+  classOf,
+  clearToday,
+  controlToken,
+  need,
+  signInByApi,
+  workbookEntry,
+} from '../helpers/attendance.js'
 import { exerciseDateFields, setTheme } from '../helpers/dates.js'
 import { postNotice, removeNotice } from '../helpers/notices.js'
 import { signIn, visit } from '../helpers/signIn.js'
@@ -455,6 +463,99 @@ test.describe('attendance rules on a phone', () => {
         await call(teacher, 'POST', `/api/teacher/attendance/sessions/${sessionId}/close`)
         await call(teacher, 'DELETE', `/api/teacher/attendance/sessions/${sessionId}`)
       }
+    }
+  })
+})
+
+test.describe('the website editor on a phone', () => {
+  test('publishes a change and a custom page, previews a draft and keeps the CoordiNet credit', async ({
+    page,
+    browser,
+    appShell,
+  }) => {
+    test.skip(appShell, 'the control room is website only')
+    test.setTimeout(8 * 60_000)
+    const chief = await controlToken(ROLES.control)
+    const before = await need(chief, 'GET', '/api/super-admin/site/draft')
+    const stamp = Date.now()
+    const name = `CSE Portal ${stamp}`
+    const draftName = `Draft Portal ${stamp}`
+    const title = `Admission ${stamp}`
+    const slug = `admission-${stamp}`
+    const visitor = await browser.newContext({ viewport: page.viewportSize() })
+    const outside = await visitor.newPage()
+    try {
+      const refused = await call(chief, 'PUT', '/api/super-admin/site/draft', {
+        ...before.content,
+        footer: { ...before.content.footer, hide_credit: true },
+      })
+      expect(refused.status, 'hiding the credit must be refused').toBe(400)
+      expect(refused.data.error).toContain('developer credit')
+      const taken = await call(chief, 'PUT', '/api/super-admin/site/draft', {
+        ...before.content,
+        pages: [{ slug: 'student', title: 'Students', seo_title: '', seo_description: '', blocks: [] }],
+      })
+      expect(taken.status, 'a page named like an app route must be refused').toBe(400)
+
+      await signIn(page, ROLES.control)
+      await visit(page, '/control-room/website')
+      await page.getByLabel('Site name').fill(name)
+      await page.getByRole('tab', { name: 'Footer' }).tap()
+      await page.getByLabel('Show the footer details').uncheck()
+      await page.getByRole('tab', { name: 'Pages' }).tap()
+      await page.getByLabel('Title of a new page').fill(title)
+      await page.getByRole('button', { name: 'Add page' }).tap()
+      const editor = page.locator(`[data-page-editor="${slug}"]`)
+      await expect(editor).toBeVisible()
+      await editor.getByRole('button', { name: 'Add block' }).tap()
+      await editor.getByLabel('Heading', { exact: true }).fill('How to apply')
+      await page.getByRole('button', { name: 'Publish' }).tap()
+      const dialog = page.locator(DIALOG)
+      if ((await dialog.count()) > 0 || (await dialog.waitFor({ timeout: 4000 }).then(() => true).catch(() => false))) {
+        await dialog.getByLabel('Your password').fill(ROLES.control.password)
+        await dialog.getByRole('button', { name: 'Confirm' }).tap()
+      }
+      await expect(page.getByText('The website is published.')).toBeVisible({ timeout: 20_000 })
+
+      await outside.goto('/', { waitUntil: 'domcontentloaded' })
+      await expect(outside.locator('[data-site-name]')).toHaveText(name, { timeout: 20_000 })
+      const credit = outside.locator('[data-site-footer] [data-developer-credit]')
+      await expect(credit).toBeVisible()
+      await expect(credit).toHaveText('Developed by CoordiNet')
+      await expect(outside.locator('[data-site-footer]')).not.toContainText('Kumargaon')
+      await outside.goto(`/p/${slug}`, { waitUntil: 'domcontentloaded' })
+      await expect(outside.locator(`[data-site-page="${slug}"] h1`)).toHaveText(title)
+      await expect(outside.locator('[data-block="heading"]')).toHaveText('How to apply')
+      await expect(outside).toHaveTitle(new RegExp(title))
+      await outside.locator('[data-developer-credit] a').tap()
+      await expect(outside).toHaveURL(/\/about-coordinet$/)
+      const about = outside.locator('[data-about-developers]')
+      await expect(about).toContainText('About CoordiNet')
+      await expect(about).toContainText('Ratul Islam')
+      await expect(about).toContainText('Rakibul Hasan')
+      await outside.goto('/p/student', { waitUntil: 'domcontentloaded' })
+      await expect(outside.locator('[data-site-page-missing]')).toBeVisible()
+
+      await visit(page, '/control-room/website')
+      await page.getByLabel('Site name').fill(draftName)
+      await page.getByRole('button', { name: 'Save draft' }).tap()
+      await expect(page.getByText('The draft is saved.')).toBeVisible({ timeout: 20_000 })
+      await page.goto('/?preview=1', { waitUntil: 'domcontentloaded' })
+      await expect(page.locator('[data-site-preview]')).toBeVisible({ timeout: 20_000 })
+      await expect(page.locator('[data-site-name]')).toHaveText(draftName)
+      await outside.goto('/?preview=1', { waitUntil: 'domcontentloaded' })
+      await expect(outside.locator('[data-site-name]')).toHaveText(name)
+      await expect(outside.locator('[data-site-preview]')).toHaveCount(0)
+
+      const versions = await need(chief, 'GET', '/api/super-admin/site/versions')
+      expect(versions.items[0].live).toBe(true)
+      expect(versions.items[0].saved_by).toBe(ROLES.control.identifier)
+      expect(versions.items[0].saved_at).toBeTruthy()
+    } finally {
+      await visitor.close()
+      const reset = { ...before.content, pages: (before.content.pages || []).filter((entry) => entry.slug !== slug) }
+      await call(chief, 'PUT', '/api/super-admin/site/draft', reset)
+      await call(chief, 'POST', '/api/super-admin/site/publish')
     }
   })
 })

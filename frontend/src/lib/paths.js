@@ -21,6 +21,8 @@ const query = (path, params) => {
 
 export const paths = {
   root: () => build(),
+  page: (slug) => build('p', String(slug)),
+  aboutDevelopers: () => build('about-coordinet'),
   downloadAndroid: () => '/download/android',
   profile: () => build('profile'),
   person: (userId) => build('people', String(userId)),
@@ -104,6 +106,7 @@ export const paths = {
     security: () => build('control-room', 'settings', 'security'),
     users: (params) => query(build('control-room', 'users'), params),
     settings: () => build('control-room', 'settings'),
+    website: () => build('control-room', 'website'),
     watch: () => build('control-room', 'settings', 'monitor'),
     release: () => build('control-room', 'settings', 'app'),
     approvals: () => build('control-room', 'approvals'),
