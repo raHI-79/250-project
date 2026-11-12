@@ -36,28 +36,33 @@ export default function PageHeader({
   }, [setCollapsed])
   return (
     <div className={cx('mb-5', className)}>
-      <div className="relative isolate -mx-4 -mt-5 rounded-b-sheet bg-header px-4 pt-5 pb-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div
+        data-page-header
+        className="relative isolate -mx-4 -mt-5 rounded-b-sheet bg-header px-4 pt-3 pb-3 sm:-mx-6 sm:px-6 sm:pt-5 sm:pb-5 lg:-mx-8 lg:px-8"
+      >
         <HeaderArt variant="page" />
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
           <div className="min-w-0 flex-1">
             {eyebrow && (
-              <p className="text-2xs font-extrabold tracking-[0.12em] text-white/95 uppercase">
+              <p className="hidden text-2xs font-extrabold tracking-[0.12em] text-white/95 uppercase sm:block">
                 {eyebrow}
               </p>
             )}
             <h1
               ref={anchor}
-              className="font-display mt-1 wrap-long text-title leading-tight text-white sm:text-title-lg"
+              className="font-display wrap-long text-section leading-tight text-white sm:mt-1 sm:text-title-lg"
             >
               {title}
             </h1>
             {subtitle && (
-              <p className="mt-2 max-w-3xl wrap-long text-sm text-white/95">{subtitle}</p>
+              <p className="mt-2 hidden max-w-3xl wrap-long text-sm text-white/95 sm:block">
+                {subtitle}
+              </p>
             )}
           </div>
           {date && <div className="shrink-0 pt-1">{date}</div>}
         </div>
-        {tabs && <div className="mt-4">{tabs}</div>}
+        {tabs && <div className="mt-2.5 sm:mt-4">{tabs}</div>}
       </div>
       {actions && <div className="mt-4 flex flex-wrap gap-2 sm:justify-end">{actions}</div>}
     </div>

@@ -817,47 +817,47 @@ select:-webkit-autofill {
     pointer-events: none;
     user-select: none;
     border-radius: inherit;
-    background-image: url("/brand/header-iict.svg");
-    background-repeat: no-repeat;
-    background-position: right bottom;
-    background-size: auto 100%;
-    opacity: var(--header-art-opacity, 0.3);
+    background: #0a6faf url("/brand/header-iict.svg") center bottom / auto 100% no-repeat;
   }
 
-  .header-art-hero {
-    --header-art-opacity: 0.3;
+  .header-art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      to bottom,
+      rgb(4 32 54 / 0) 0%,
+      rgb(4 32 54 / 0.55) 30%,
+      rgb(4 32 54 / 0.5) 65%,
+      rgb(4 32 54 / 0.4) 100%
+    );
   }
 
   .header-art-panel {
-    --header-art-opacity: 0.3;
     bottom: 2.5rem;
   }
 
-  .header-art-page {
-    --header-art-opacity: 0.2;
-    background-size: auto 84%;
-  }
-
-  @media (max-width: 639.98px) {
-    .header-art {
-      background-size: auto 58%;
-    }
-
-    .header-art-page {
-      --header-art-opacity: 0.16;
-      background-size: auto 46%;
+  @media (min-width: 640px) {
+    .header-art::after {
+      background: linear-gradient(
+        to right,
+        rgb(4 32 54 / 0.55) 0%,
+        rgb(4 32 54 / 0.47) 55%,
+        rgb(4 32 54 / 0.22) 100%
+      );
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 35%);
+      mask-image: linear-gradient(to bottom, transparent 0%, #000 35%);
     }
   }
 
   :root[data-theme="dark"] .header-art {
-    filter: brightness(0.68);
-    opacity: calc(var(--header-art-opacity, 0.3) * 0.7);
+    filter: brightness(0.7);
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .header-art {
-      filter: brightness(0.68);
-      opacity: calc(var(--header-art-opacity, 0.3) * 0.7);
+      filter: brightness(0.7);
     }
   }
 }

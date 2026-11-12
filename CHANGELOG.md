@@ -4,6 +4,20 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.7.2
+
+### Header art and header size
+
+- **The building is always centred.** Every blue header draws the new wide IICT
+  illustration as its background, centred at the bottom at full height, so the
+  palm trees fill the width at any screen size. A soft darker overlay (top to
+  bottom on phones, left to right on desktop, 55 % at the darkest) keeps the
+  greeting, the date, the tabs and the badges readable.
+- **A compact home hero.** On phones the top bar and the hero together take about
+  a fifth of the screen: a smaller avatar, the greeting and the short date on two
+  lines and a slimmer search bar on a dark chip. Page headers on phones show only
+  the title and the tabs; desktop keeps a moderate height with the subtitle.
+
 ## 2.7.1
 
 ### Attendance on the website
