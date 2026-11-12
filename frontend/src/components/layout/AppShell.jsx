@@ -14,12 +14,18 @@ import { useUnreadMessages } from '../../lib/hooks'
 import { setAppBadge, useSectionBadges } from '../../lib/badges'
 import { openSheetCount, releaseStaleLock } from '../../lib/scrollLock'
 import { MESSAGES_BADGE } from '../../lib/nav'
+import { useFollowedLinks, useNotificationFeed, useNotifications } from '../../lib/notifications'
+import { useAuth } from '../../context/auth'
 
 export default function AppShell({ groups, tabs = [], showBell = true, showSearch = true }) {
   const location = useLocation()
   const unread = useUnreadMessages()
   const badges = useSectionBadges()
-  useEffect(() => setAppBadge(unread), [unread])
+  const { user } = useAuth()
+  const alerts = useNotifications().unread
+  useNotificationFeed(showBell ? user?.id : null)
+  useFollowedLinks(location, user?.role, showBell ? user?.id : null)
+  useEffect(() => setAppBadge(unread + alerts), [unread, alerts])
   const [menuOpen, setMenuOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [collapsed, setCollapsed] = useState(false)

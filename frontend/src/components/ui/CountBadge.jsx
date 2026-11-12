@@ -1,6 +1,7 @@
 import cx from '../../lib/cx'
+import { BADGE_MAX, badgeLabel } from '../../lib/notificationState'
 
-export default function CountBadge({ count, max = 9, className }) {
+export default function CountBadge({ count, max = BADGE_MAX, className }) {
   const value = Number(count) || 0
   if (value <= 0) return null
   return (
@@ -11,7 +12,7 @@ export default function CountBadge({ count, max = 9, className }) {
         className,
       )}
     >
-      {value > max ? `${max}+` : value}
+      {badgeLabel(value, max)}
     </span>
   )
 }

@@ -56,6 +56,7 @@ export const useResource = (path, query) => {
           source: own,
           data: current.source === own ? current.data : null,
           error: failure.message,
+          status: failure.status || 0,
         }))
       })
       .finally(() => {
@@ -75,6 +76,7 @@ export const useHighlight = (ready, key = 'highlight') => {
   const [params] = useSearchParams()
   const target = params.get(key) || ''
   const [active, setActive] = useState('')
+  const [missing, setMissing] = useState(false)
   const nodes = useRef(new Map())
   const register = useCallback(
     (id) => (node) => {
@@ -85,8 +87,12 @@ export const useHighlight = (ready, key = 'highlight') => {
     [],
   )
   useEffect(() => {
-    if (!target || !ready) return undefined
+    if (!target || !ready) {
+      setMissing(false)
+      return undefined
+    }
     const node = nodes.current.get(target)
+    setMissing(!node)
     if (!node) return undefined
     node.scrollIntoView({ behavior: 'smooth', block: 'center' })
     setActive(target)
@@ -94,7 +100,7 @@ export const useHighlight = (ready, key = 'highlight') => {
     return () => window.clearTimeout(timer)
   }, [target, ready])
   const highlighted = useCallback((id) => String(id) === active, [active])
-  return { register, highlighted, target }
+  return { register, highlighted, target, missing }
 }
 
 export const useQueryTab = (tabs, fallback, key = 'tab') => {

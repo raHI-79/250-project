@@ -619,6 +619,7 @@ func registerPollRoutes(mux *http.ServeMux, deps Dependencies, polls *handler.Po
 
 func registerBoardRoutes(group RouteGroup, notices *handler.Notice, contacts *handler.Directory) {
 	group.Handle("GET /api/students/notices", notices.StudentNotices())
+	group.Handle("GET /api/students/notice/{id}", notices.StudentNotice())
 	group.Handle("GET /api/students/directory", contacts.Students())
 }
 
@@ -668,6 +669,8 @@ func registerPushRoutes(mux *http.ServeMux, deps Dependencies, pushes *handler.P
 func registerNotificationRoutes(group RouteGroup, notifications *handler.Notifications) {
 	group.Handle("GET /api/notifications", notifications.List())
 	group.Handle("GET /api/notifications/unread-count", notifications.UnreadCount())
+	group.Handle("POST /api/notifications/read", notifications.Read())
+	group.Handle("POST /api/notifications/read-all", notifications.ReadAll())
 }
 
 func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handler.Catalog) {

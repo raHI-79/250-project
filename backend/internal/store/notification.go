@@ -19,6 +19,7 @@ type Notification struct {
 	Body      string
 	Link      NotificationLink
 	CreatedAt time.Time
+	Read      bool
 }
 
 const (
@@ -40,7 +41,11 @@ $7, NULLIF($8::bigint, 0), NULLIF($9::text, '')::date)`
     WHERE u.id = $1
 )
 SELECT n.id, n.type, n.title, n.body, COALESCE(n.link_kind, ''), COALESCE(n.link_ref, 0),
-COALESCE(to_char(n.link_date, 'YYYY-MM-DD'), ''), n.created_at
+COALESCE(to_char(n.link_date, 'YYYY-MM-DD'), ''), n.created_at,
+(EXISTS (SELECT 1 FROM notification_reads r WHERE r.user_id = v.id AND r.notification_id = n.id)
+ OR n.created_at <= COALESCE(
+    (SELECT m.read_before FROM notification_read_marks m WHERE m.user_id = v.id),
+    '-infinity'::timestamptz)) AS is_read
 FROM notifications n, viewer v
 WHERE (n.recipient_user_id = v.id
     OR (n.recipient_user_id IS NULL
@@ -55,6 +60,17 @@ ORDER BY n.created_at DESC, n.id DESC
 LIMIT $2`
 	countNotificationsSQL = `SELECT COUNT(*) FROM (` + notificationAudienceSQL + `
 AND n.created_at > $2) matches`
+	countUnreadNotificationsSQL = `SELECT COUNT(*) FROM (` + notificationAudienceSQL + `) matches
+WHERE NOT matches.is_read`
+	markNotificationsReadSQL = `INSERT INTO notification_reads (user_id, notification_id)
+SELECT $1, matches.id FROM (` + notificationAudienceSQL + `) matches
+WHERE matches.id = ANY($2::bigint[])
+ON CONFLICT (user_id, notification_id) DO NOTHING`
+	markAllNotificationsReadSQL = `INSERT INTO notification_read_marks (user_id, read_before)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO UPDATE
+SET read_before = GREATEST(notification_read_marks.read_before, EXCLUDED.read_before),
+    updated_at = now()`
 )
 
 func (s *Store) CreateDirectNotification(ctx context.Context, userID int64, kind, title, body string,
@@ -95,6 +111,7 @@ func (s *Store) ListNotifications(ctx context.Context, userID int64, limit int) 
 			&notification.Link.Ref,
 			&notification.Link.Date,
 			&notification.CreatedAt,
+			&notification.Read,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a notification: %w", err)
@@ -113,4 +130,29 @@ func (s *Store) CountNotificationsSince(ctx context.Context, userID int64, since
 		return 0, fmt.Errorf("store: could not count the notifications of the user %d: %w", userID, err)
 	}
 	return total, nil
+}
+
+func (s *Store) CountUnreadNotifications(ctx context.Context, userID int64) (int, error) {
+	var total int
+	if err := s.pool.QueryRow(ctx, countUnreadNotificationsSQL, userID).Scan(&total); err != nil {
+		return 0, fmt.Errorf("store: could not count the unread notifications of the user %d: %w", userID, err)
+	}
+	return total, nil
+}
+
+func (s *Store) MarkNotificationsRead(ctx context.Context, userID int64, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if _, err := s.pool.Exec(ctx, markNotificationsReadSQL, userID, ids); err != nil {
+		return fmt.Errorf("store: could not mark the notifications of the user %d read: %w", userID, err)
+	}
+	return nil
+}
+
+func (s *Store) MarkAllNotificationsRead(ctx context.Context, userID int64, before time.Time) error {
+	if _, err := s.pool.Exec(ctx, markAllNotificationsReadSQL, userID, before); err != nil {
+		return fmt.Errorf("store: could not mark every notification of the user %d read: %w", userID, err)
+	}
+	return nil
 }

@@ -1,3 +1,5 @@
+import paths from '../../lib/paths'
+import MissingItem from '../../components/MissingItem'
 import { useState } from 'react'
 import { Megaphone } from 'lucide-react'
 import {
@@ -92,6 +94,7 @@ export default function TeacherNoticesPage() {
   return (
     <>
       <PageHeader eyebrow="Notice board" title="Notices" subtitle="Post a notice for a batch or for one section" />
+      <MissingItem highlight={highlight} what="notice" all="All notices" to={paths.teacher.notices()} />
       <Card hover={false} className="mb-6">
         <form onSubmit={publish} className="flex flex-col gap-4">
           {error && <Alert tone="error">{error}</Alert>}

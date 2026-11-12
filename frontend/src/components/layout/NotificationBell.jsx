@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, BellOff, CheckCheck } from 'lucide-react'
-import api from '../../lib/api'
 import cx from '../../lib/cx'
 import { notificationTarget } from '../../lib/paths'
-import { readRaw, writeRaw } from '../../lib/storage'
+import {
+  markAllNotificationsRead,
+  markNotificationRead,
+  useNotifications,
+} from '../../lib/notifications'
 import { stampLabel } from '../../lib/time'
 import { useAuth } from '../../context/auth'
 import Button from '../ui/Button'
@@ -13,43 +16,13 @@ import EmptyState from '../ui/EmptyState'
 import Sheet from '../ui/Sheet'
 import { useMediaQuery } from '../../lib/hooks'
 
-const POLL_INTERVAL = 30000
-
-const lastSeenKey = (userId) => `sustcse.notifications.lastSeen.${userId}`
-
 export default function NotificationBell() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const userId = user?.id
-  const [items, setItems] = useState([])
+  const { items, unread } = useNotifications()
   const [open, setOpen] = useState(false)
-  const [readIds, setReadIds] = useState([])
-  const [lastSeen, setLastSeen] = useState(() => (userId ? readRaw(lastSeenKey(userId)) : null))
   const containerRef = useRef(null)
   const phone = useMediaQuery('(max-width: 639.98px)')
-  const load = useCallback(async () => {
-    const data = await api.get('/api/notifications', { query: { limit: 30 } }).catch(() => null)
-    if (!data) return
-    setItems(Array.isArray(data.items) ? data.items : [])
-  }, [])
-  useEffect(() => {
-    if (!userId) return undefined
-    setLastSeen(readRaw(lastSeenKey(userId)))
-    load()
-    let timer = window.setInterval(load, POLL_INTERVAL)
-    const onVisibility = () => {
-      window.clearInterval(timer)
-      if (document.visibilityState === 'visible') {
-        load()
-        timer = window.setInterval(load, POLL_INTERVAL)
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [userId, load])
   useEffect(() => {
     if (!open) return undefined
     const onClickOutside = (event) => {
@@ -66,28 +39,17 @@ export default function NotificationBell() {
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [open])
-  const seenAt = lastSeen ? new Date(lastSeen).getTime() : 0
-  const isUnread = useCallback(
-    (item) =>
-      !readIds.includes(item.id) &&
-      (!seenAt || new Date(item.created_at).getTime() > seenAt),
-    [readIds, seenAt],
-  )
-  const unread = useMemo(() => items.filter(isUnread).length, [items, isUnread])
+  const isUnread = (item) => !item.read
   const markAll = () => {
-    if (!userId) return
-    const now = new Date().toISOString()
-    writeRaw(lastSeenKey(userId), now)
-    setLastSeen(now)
-    setReadIds(items.map((item) => item.id))
+    markAllNotificationsRead()
   }
   const openItem = (item) => {
-    setReadIds((current) => (current.includes(item.id) ? current : [...current, item.id]))
+    markNotificationRead(item.id)
     setOpen(false)
     navigate(notificationTarget(item.link, user?.role))
   }
   const markAllButton =
-    items.length > 0 ? (
+    unread > 0 ? (
       <Button variant="ghost" size="sm" onClick={markAll} className="ml-auto">
         <CheckCheck size={14} />
         Mark all as read
@@ -110,6 +72,8 @@ export default function NotificationBell() {
             <li key={item.id}>
               <button
                 type="button"
+                data-notification={item.id}
+                data-unread={isUnread(item) ? 'true' : 'false'}
                 onClick={() => openItem(item)}
                 className={cx(
                   'flex w-full items-start gap-2 border-b border-line px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-wash',

@@ -29,6 +29,7 @@ import ExamsPage from './pages/student/ExamsPage'
 import CoursesStudentPage from './pages/student/CoursesPage'
 import FixedRoutinePage from './pages/student/FixedRoutinePage'
 import NoticesPage from './pages/NoticesPage'
+import NoticeDetailPage from './pages/NoticeDetailPage'
 import MaterialsPage from './pages/student/MaterialsPage'
 import StudentsDirectoryPage from './pages/student/StudentsDirectoryPage'
 import PollsPage from './pages/student/PollsPage'
@@ -153,6 +154,7 @@ export default function Router() {
           <Route path={paths.student.fixedRoutine()} element={<FixedRoutinePage />} />
           <Route path={paths.student.courses()} element={<CoursesStudentPage />} />
           <Route path={paths.student.notices()} element={<NoticesPage />} />
+          <Route path={paths.student.notice(':id')} element={<NoticeDetailPage />} />
           <Route path={paths.student.materials()} element={<MaterialsPage />} />
           <Route path={paths.student.students()} element={<StudentsDirectoryPage />} />
           <Route path={paths.student.polls()} element={<PollsPage />} />

@@ -148,3 +148,62 @@ func TestNotificationLimitAndCount(t *testing.T) {
 		})
 	}
 }
+
+func TestNotificationReadState(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	student := insertAccount(t, ctx, pool, "student", "2023331006", "CSE-23", "A", false)
+	other := insertAccount(t, ctx, pool, "student", "2023331007", "CSE-22", "A", false)
+	seedNotifications(t, ctx, store, student)
+	all, err := store.ListNotifications(ctx, student, 30)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("ListNotifications() = %d, %v, want 3", len(all), err)
+	}
+	for _, entry := range all {
+		if entry.Read {
+			t.Fatalf("the notification %d started as read", entry.ID)
+		}
+	}
+	unread, err := store.CountUnreadNotifications(ctx, student)
+	if err != nil || unread != 3 {
+		t.Fatalf("CountUnreadNotifications() = %d, %v, want 3", unread, err)
+	}
+	if err := store.MarkNotificationsRead(ctx, student, []int64{all[0].ID}); err != nil {
+		t.Fatalf("MarkNotificationsRead() returned an unexpected error: %v", err)
+	}
+	if err := store.MarkNotificationsRead(ctx, student, []int64{all[0].ID}); err != nil {
+		t.Fatalf("marking the same notification twice failed: %v", err)
+	}
+	unread, err = store.CountUnreadNotifications(ctx, student)
+	if err != nil || unread != 2 {
+		t.Fatalf("after one read CountUnreadNotifications() = %d, %v, want 2", unread, err)
+	}
+	after, err := store.ListNotifications(ctx, student, 30)
+	if err != nil || !after[0].Read || after[1].Read {
+		t.Fatalf("the read flags are wrong: %+v, %v", after, err)
+	}
+	if err := store.MarkNotificationsRead(ctx, other, []int64{all[1].ID, all[2].ID}); err != nil {
+		t.Fatalf("MarkNotificationsRead() for a stranger returned an error: %v", err)
+	}
+	var strangers int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM notification_reads WHERE user_id = $1`, other).
+		Scan(&strangers); err != nil {
+		t.Fatalf("could not count the reads: %v", err)
+	}
+	if strangers > 1 {
+		t.Fatalf("a stranger marked %d notifications that were never theirs", strangers)
+	}
+	if err := store.MarkAllNotificationsRead(ctx, student, time.Now().Add(time.Minute)); err != nil {
+		t.Fatalf("MarkAllNotificationsRead() returned an unexpected error: %v", err)
+	}
+	unread, err = store.CountUnreadNotifications(ctx, student)
+	if err != nil || unread != 0 {
+		t.Fatalf("after reading all CountUnreadNotifications() = %d, %v, want 0", unread, err)
+	}
+	if err := store.MarkAllNotificationsRead(ctx, student, time.Unix(0, 0)); err != nil {
+		t.Fatalf("an older mark returned an error: %v", err)
+	}
+	unread, err = store.CountUnreadNotifications(ctx, student)
+	if err != nil || unread != 0 {
+		t.Fatalf("an older mark brought %d notifications back", unread)
+	}
+}

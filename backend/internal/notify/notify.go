@@ -76,6 +76,9 @@ type Store interface {
 	CreateBroadcastNotification(ctx context.Context, role, batch, section, kind, title, body string, link store.NotificationLink) error
 	ListNotifications(ctx context.Context, userID int64, limit int) ([]store.Notification, error)
 	CountNotificationsSince(ctx context.Context, userID int64, since time.Time) (int, error)
+	CountUnreadNotifications(ctx context.Context, userID int64) (int, error)
+	MarkNotificationsRead(ctx context.Context, userID int64, ids []int64) error
+	MarkAllNotificationsRead(ctx context.Context, userID int64, before time.Time) error
 	ListNotificationRecipients(ctx context.Context, role, batch, section string) ([]int64, error)
 	ListNotificationAudience(ctx context.Context, role, batch, section string) ([]store.NotificationRecipient, error)
 	NotificationRole(ctx context.Context, userID int64) (string, error)
@@ -152,7 +155,7 @@ func pageFor(kind, role string) (string, bool) {
 	return page, ok
 }
 
-func linkQuery(link store.NotificationLink) url.Values {
+func linkQuery(link store.NotificationLink, role string) url.Values {
 	query := url.Values{}
 	switch link.Kind {
 	case LinkTeacherNextDay:
@@ -173,7 +176,11 @@ func linkQuery(link store.NotificationLink) url.Values {
 		if link.Ref > 0 {
 			query.Set("c", strconv.FormatInt(link.Ref, 10))
 		}
-	case LinkExam, LinkNotice, LinkPoll, LinkAttendTeacher, LinkPhoneRequests:
+	case LinkNotice:
+		if link.Ref > 0 && role != auth.RoleStudent && role != auth.RoleCR {
+			query.Set("highlight", strconv.FormatInt(link.Ref, 10))
+		}
+	case LinkExam, LinkPoll, LinkAttendTeacher, LinkPhoneRequests:
 		if link.Ref > 0 {
 			query.Set("highlight", strconv.FormatInt(link.Ref, 10))
 		}
@@ -200,7 +207,10 @@ func PageURL(origin, role string, link store.NotificationLink) string {
 		return base
 	}
 	address := base + page
-	if query := linkQuery(link); len(query) > 0 {
+	if link.Kind == LinkNotice && link.Ref > 0 && (role == auth.RoleStudent || role == auth.RoleCR) {
+		address += "/" + strconv.FormatInt(link.Ref, 10)
+	}
+	if query := linkQuery(link, role); len(query) > 0 {
 		address += "?" + query.Encode()
 	}
 	return address
@@ -332,6 +342,67 @@ func (s *Service) Recent(ctx context.Context, userID int64, limit int) ([]store.
 
 func (s *Service) UnreadCount(ctx context.Context, userID int64, since time.Time) (int, error) {
 	return s.notifications.CountNotificationsSince(ctx, userID, since)
+}
+
+func (s *Service) Unread(ctx context.Context, userID int64) (int, error) {
+	return s.notifications.CountUnreadNotifications(ctx, userID)
+}
+
+func (s *Service) Read(ctx context.Context, userID int64, ids []int64) error {
+	return s.notifications.MarkNotificationsRead(ctx, userID, ids)
+}
+
+func (s *Service) ReadAll(ctx context.Context, userID int64, before time.Time) error {
+	return s.notifications.MarkAllNotificationsRead(ctx, userID, before)
+}
+
+func SamePage(left, right string) bool {
+	first, err := url.Parse(strings.TrimSpace(left))
+	if err != nil {
+		return false
+	}
+	second, err := url.Parse(strings.TrimSpace(right))
+	if err != nil {
+		return false
+	}
+	if strings.TrimSuffix(first.Path, "/") != strings.TrimSuffix(second.Path, "/") {
+		return false
+	}
+	wanted := second.Query()
+	given := first.Query()
+	for key, values := range wanted {
+		if len(values) == 0 || given.Get(key) != values[0] {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Service) ReadPage(ctx context.Context, userID int64, page string) (int, error) {
+	role, err := s.notifications.NotificationRole(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	recent, err := s.notifications.ListNotifications(ctx, userID, MaxLimit)
+	if err != nil {
+		return 0, err
+	}
+	ids := make([]int64, 0)
+	for _, entry := range recent {
+		if entry.Read || entry.Link.Kind == "" {
+			continue
+		}
+		if entry.Link.Ref == 0 && entry.Link.Date == "" {
+			continue
+		}
+		if SamePage(page, PageURL("", role, entry.Link)) {
+			ids = append(ids, entry.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	return len(ids), s.notifications.MarkNotificationsRead(ctx, userID, ids)
 }
 
 func content(kind, title, body string) (string, string, string, error) {

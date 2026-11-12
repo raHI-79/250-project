@@ -94,12 +94,12 @@ WHERE kind IN ('push', 'fcm') AND created_at >= $1 AND created_at < $2`
 	failingPathsSQL = `WITH latest AS (
     SELECT DISTINCT ON (detail) detail, message, created_at
     FROM system_events
-    WHERE kind = 'http_5xx' AND created_at >= $1 AND created_at < $2
+    WHERE kind = $4 AND created_at >= $1 AND created_at < $2
     ORDER BY detail, created_at DESC
 ), totals AS (
     SELECT detail, COUNT(*) AS total
     FROM system_events
-    WHERE kind = 'http_5xx' AND created_at >= $1 AND created_at < $2
+    WHERE kind = $4 AND created_at >= $1 AND created_at < $2
     GROUP BY detail
 )
 SELECT totals.detail, totals.total, latest.message, latest.created_at

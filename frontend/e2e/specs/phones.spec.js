@@ -3,6 +3,7 @@ import { DATE_PAGES, DATE_PANELS, PHONE_PAGES, ROLES } from '../fixtures/roles.j
 import { clear, expectNoProblems, watch } from '../helpers/audit.js'
 import { appCanReach, asApp } from '../helpers/appShell.js'
 import { exerciseDateFields, setTheme } from '../helpers/dates.js'
+import { postNotice, removeNotice } from '../helpers/notices.js'
 import { signIn, visit } from '../helpers/signIn.js'
 import {
   DIALOG,
@@ -189,5 +190,64 @@ test.describe('a screen that breaks on a phone', () => {
     await screen.getByRole('button', { name: 'Go home' }).tap()
     await expect(page).toHaveURL(/\/student\/today/)
     await expect(screen).toHaveCount(0)
+  })
+})
+
+test.describe('notice links on a phone', () => {
+  test('a home notice card and a notification open that notice and lower the bell', async ({ page, appShell }) => {
+    test.setTimeout(5 * 60_000)
+    if (appShell) await asApp(page)
+    const title = `Phone suite notice ${Date.now()}`
+    const notice = await postNotice(title)
+    try {
+      await signIn(page, ROLES.student)
+      await visit(page, '/student/today')
+      const card = page.locator(`[data-notice-card="${notice.id}"]`)
+      await card.scrollIntoViewIfNeeded()
+      await card.tap()
+      await expect(page).toHaveURL(new RegExp(`/student/notices/${notice.id}$`))
+      await expect(page.locator(`[data-notice="${notice.id}"]`)).toContainText(title)
+      await expect(page.locator('[data-notice]')).toHaveCount(1)
+      const bell = page.getByRole('button', { name: 'Notifications' }).first()
+      const count = async () => {
+        const badge = bell.locator('[aria-label$=" unread"]')
+        if ((await badge.count()) === 0) return 0
+        return Number.parseInt((await badge.getAttribute('aria-label')) || '0', 10)
+      }
+      await expect.poll(count, { timeout: 15_000 }).toBe(await count())
+      const afterCard = await count()
+      await bell.tap()
+      const row = page.locator('[data-notification]').filter({ hasText: title }).first()
+      await expect(row).toHaveAttribute('data-unread', 'false')
+      await page.keyboard.press('Escape')
+      const second = `Phone suite notice ${Date.now()} again`
+      const other = await postNotice(second)
+      try {
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await expect.poll(count, { timeout: 20_000 }).toBe(afterCard + 1)
+        await bell.tap()
+        const fresh = page.locator('[data-notification]').filter({ hasText: second }).first()
+        await expect(fresh).toHaveAttribute('data-unread', 'true')
+        await fresh.tap()
+        await expect(page).toHaveURL(new RegExp(`/student/notices/${other.id}$`))
+        await expect(page.locator(`[data-notice="${other.id}"]`)).toContainText(second)
+        expect(await count()).toBe(afterCard)
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await expect(page.locator(`[data-notice="${other.id}"]`)).toContainText(second)
+        await page.waitForLoadState('networkidle').catch(() => {})
+        expect(await count()).toBe(afterCard)
+      } finally {
+        await removeNotice(other)
+      }
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await expect(page.getByText('This notice is no longer available')).toBeVisible()
+      await page.getByRole('link', { name: 'All notices' }).tap()
+      await expect(page).toHaveURL(/\/student\/notices$/)
+      await page.goto(`/student/notices?highlight=${notice.id}`, { waitUntil: 'domcontentloaded' })
+      await expect(page).toHaveURL(new RegExp(`/student/notices/${notice.id}$`))
+      await expect(page.locator(`[data-notice="${notice.id}"]`)).toContainText(title)
+    } finally {
+      await removeNotice(notice)
+    }
   })
 })

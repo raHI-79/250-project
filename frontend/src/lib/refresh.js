@@ -7,6 +7,8 @@ const listeners = new Set()
 const QUIET_PATHS = [
   /^\/api\/analytics\//,
   /^\/api\/push\//,
+  /^\/api\/client-log$/,
+  /^\/api\/notifications\/read(-all)?$/,
   /^\/api\/me\/badges\/[^/]+\/seen$/,
   /^\/api\/teacher\/attendance\/sessions\/\d+\/location$/,
 ]
@@ -44,6 +46,7 @@ export const resourceView = (state, source, busy) => {
   return {
     data,
     error: own ? state.error : '',
+    status: own ? state.status || 0 : 0,
     loading: Boolean(source) && data === null && (busy || !own),
     refreshing: Boolean(source) && busy && data !== null,
   }

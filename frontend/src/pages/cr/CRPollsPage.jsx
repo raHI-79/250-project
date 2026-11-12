@@ -1,3 +1,5 @@
+import paths from '../../lib/paths'
+import MissingItem from '../../components/MissingItem'
 import { useState } from 'react'
 import { Plus, Vote, X } from 'lucide-react'
 import {
@@ -181,6 +183,7 @@ export default function CRPollsPage() {
         </form>
       </Card>
       <p className="font-display mb-3 text-lg font-semibold text-ink">My polls</p>
+      <MissingItem highlight={highlight} what="poll" all="All polls" to={paths.cr.polls()} />
       {polls.error && <Alert tone="error" className="mb-5">{polls.error}</Alert>}
       {polls.loading ? (
         <SkeletonCard />

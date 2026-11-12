@@ -1,3 +1,5 @@
+import paths from '../../lib/paths'
+import MissingItem from '../../components/MissingItem'
 import { useState } from 'react'
 import { Check, Vote } from 'lucide-react'
 import {
@@ -122,6 +124,7 @@ export default function PollsPage() {
   return (
     <PullToRefresh onRefresh={reload}>
       <PageHeader eyebrow="Your batch" title="Polls" subtitle="Polls your class representatives opened" />
+      <MissingItem highlight={highlight} what="poll" all="All polls" to={paths.student.polls()} />
       {error && <Alert tone="error" className="mb-5">{error}</Alert>}
       {loading ? (
         <SkeletonCard />
