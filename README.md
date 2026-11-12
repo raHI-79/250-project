@@ -1232,7 +1232,8 @@ logged and never blocks the decision or changes its answer.
 ### Attendance
 
 Attendance is the one feature tied to a single device. A teacher opens a session
-for one class of the running semester for 5 to 30 minutes; while it is open the
+for one class of the running semester for a quick 5 to 30 minutes, a custom 1 to
+240 minutes or until a time today, worth 1 to 4 class hours; while it is open the
 teacher's Android app advertises a Bluetooth Low Energy token that changes every
 10 seconds and keeps posting the teacher's GPS position every 15 seconds, both
 from a foreground service, so a locked screen does not stop attendance.
@@ -1256,6 +1257,15 @@ phone marks one student and a student marks once, however many requests arrive
 at the same moment. Closing the session turns every roster student without a
 record into an absence.
 
+A mark is present, late or absent. A digital mark after the late boundary - the
+original end, or a number of minutes the teacher set - is late, so marks after an
+extension are late. The percentage is credit over the hours held: the hours when
+present, the hours times the late weight (0.5 by default, a site setting) when
+late, nothing when absent. With a 2-hour class present, a 3-hour class late and a
+1-hour class absent that is `(2 + 1.5) / 6 = 58 %`. A student who joins a course
+later is absent, with the note *Joined later*, from the classes held this semester
+before they joined; a teacher can change those entries.
+
 The pure rules - the token and code slices, the great-circle distance, the
 accuracy and freshness limits, the percentage and the warning cadence - live in
 `backend/internal/attendance` with no database behind them, which is also where
@@ -1263,6 +1273,33 @@ the `.xlsx` workbook is built. See
 [docs/ANDROID.md](docs/ANDROID.md#how-attendance-works-in-the-app) for the
 permissions and the GPS accuracy note, and chapter 12 of
 [docs/SPEC.md](docs/SPEC.md) for the full rules.
+
+### The public website
+
+`GET /api/site/content` gives the published website content, or the built-in
+content when nothing is published. The super admin edits it under Control room →
+Website:
+
+| Method and path | What it does |
+| --- | --- |
+| `GET /api/super-admin/site/draft` | the draft, or the published content when there is no draft |
+| `PUT /api/super-admin/site/draft` | checks and saves the draft |
+| `POST /api/super-admin/site/publish` | makes the draft live as a new version |
+| `GET /api/super-admin/site/versions` | every published version with who and when |
+| `POST /api/super-admin/site/versions/{id}/restore` | makes an earlier version live again |
+| `POST /api/super-admin/site/images` | checks, re-encodes and stores an image |
+
+Every write needs the password confirmation of the control room. To edit and
+publish: open **Control room → Website**, change the fields on the Header, Home,
+Sections, Footer, Sign-in and SEO or Pages tabs, **Save draft**, look at it with
+**Preview**, then **Publish**. An earlier version comes back from the **Versions**
+tab with **Restore**. The "Developed by CoordiNet" credit is rendered by the code
+and cannot be edited, hidden or replaced. Chapter 18 of
+[docs/SPEC.md](docs/SPEC.md) has the block types and the rules.
+
+Other endpoints added in 2.8.0: `POST /api/client-log` (a screen reporting that
+it broke), `POST /api/notifications/read` and `/read-all`,
+`GET /api/students/notice/{id}`, and `GET`/`PUT /api/admin/attendance/late-weight`.
 
 ### Attachments
 

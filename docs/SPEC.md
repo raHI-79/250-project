@@ -476,6 +476,15 @@ Notifications are created when a notice is posted, a class or exam is created,
 changed or cancelled, a reschedule is asked for or decided, a routine is
 published, a poll opens, and when an undecided class is marked **No response**.
 
+**Read state lives on the server.** Each notification carries a read flag for the
+signed-in person. Opening one from the bell, following its link from anywhere, or
+tapping its push marks it read and lowers the bell at once; if the request fails
+the count goes back. **Mark all as read** sets a time before which everything is
+read. A badge shows the exact number up to 99 and **99+** above. A notice link
+opens `/student/notices/<id>`, which loads that notice, scrolls to it and marks
+the section seen; a removed notice, exam or poll says it is no longer available
+and links to the full list.
+
 **Messages never reach the bell.** A new message still pushes, and it raises the
 Messages unread badge on the sidebar, on the bottom tab bar and on the installed
 app icon through `navigator.setAppBadge`. Every bell row shows a date and a
@@ -599,19 +608,31 @@ office.
 A teacher starts attendance for one course, batch and section of the running
 semester, prefilled from today's class, and chooses the method: **Bluetooth** or
 **Roll call**. Section `ALL` covers both sections. The session stays open for a
-duration the teacher picks between **5 and 30 minutes** and can be extended by
-the same amount or closed early. Starting a Bluetooth session sends every roster
+duration the teacher picks: the quick chips **5, 10, 15, 20 and 30 minutes**,
+**Custom** with any number of minutes from **1 to 240**, or **Open until** a time
+later today. **Extend** works the same way, with quick **+5** and **+10** and a
+custom number of minutes, and the session can be closed early. The server checks
+that the end is after the start and within **four hours** of it, and answers with
+a clear message otherwise.
+
+The teacher also chooses the **class hours** of the session, 1 to 4, prefilled
+from the routine item's length (up to one hour is 1, more than one and up to two
+is 2, and so on) and editable; a session started before this rule counts as 1.
+For a digital session the teacher sets when a mark becomes **late**: *at the
+original end*, the default, or *late after N minutes* from the start, any number
+up to the end. Starting a Bluetooth session sends every roster
 student a push, `Attendance open · <course title>`, that opens the mark screen; a
 roll call pushes nobody, shows no code and is never offered to a student, because
 the teacher marks the roster.
 
 A roll call shows the roster with each student's name, registration number and
-photo, two clear buttons — **Present** and **Absent**, unmarked until one is
-tapped and highlighted afterwards — a **Mark all present** shortcut that leaves
+photo, three compact buttons — **P**, **L** and **A** for present, late and
+absent, each at least 44 px, unmarked until one is tapped and filled afterwards — a **Mark all present** shortcut that leaves
 the marks the teacher already set, and a note per student with its own Save
 button that says when it is saved. **Finish** asks for a confirmation and then
-marks everybody still unmarked absent. The same per-student Present, Absent and
-note editing works during and after a Bluetooth session.
+marks everybody still unmarked absent. The same per-student P, L, A and note
+editing works during and after a Bluetooth session and from the history at any
+time, and every change is written to the audit log.
 
 Each session draws its own random `token_key`, which never reaches a student.
 
@@ -720,10 +741,27 @@ keeps a note, who made it and when.
 A hundred or more students marking at once is normal: the teacher's phone only
 broadcasts, and the server handles each mark on its own.
 
+A mark is **present**, **late** or **absent**. A digital mark (Bluetooth, code or
+web) made up to the late boundary is present and one made after it is late. The
+boundary is the session's original end unless the teacher set *late after N
+minutes*; so in a session that was never extended nobody can be late by time,
+and once it is extended every mark after the original end is late. The server
+decides this at the moment the mark is saved and tells the student which it was.
+
 ### 12.7 Percentages and the warning
 
-The percentage of a student in a course is `present / sessions held for that
-student`. When it falls below **50 %**, after at least three sessions, the student
+Every session is worth its class hours. A student's **credit** for a session is
+the hours when present, the hours times the **late weight** when late, and 0 when
+absent. The late weight is a site setting, **0.5** by default so that two lates
+equal one class, editable in the control room (Site settings) and in the office
+portal (Attendance, Sheets). The percentage of a student in a course is
+`credit / total hours of the sessions held for that student`. For example, with
+the default weight, a 2-hour class present, a 3-hour class late and a 1-hour
+class absent give `(2 + 3 × 0.5 + 0) / (2 + 3 + 1) = 3.5 / 6 = 58 %`. The 50 %
+alert, the home stat, My attendance, the teacher's course list, the dashboard and
+the Excel export all use this number.
+
+When it falls below **50 %**, after at least three sessions, the student
 gets one push and bell notification, *Your attendance in <course title> is <n> %
 — below 50 %*, and then at most once a week while it stays below. It links to
 that course's attendance.
@@ -732,12 +770,13 @@ that course's attendance.
 
 - **Students** — the Attendance tab, a Home quick action and the push open the
   mark screen. **My attendance** lists each course with its percentage, red below
-  50 %, and every session date with Present or Absent, the time, the teacher's
+  50 %, its credit over the classes held and its late count, and every session
+  date with Present, Late or Absent, the class hours, the time, the teacher's
   name and any note, filtered by course and month, in the app and on the website.
 - **Teachers** — start, extend and close a session by Bluetooth or roll call;
   the live count, the latest marks with their method and **Show code**; the
   session detail with every student's status, time, distance and method, each
-  settable to Present or Absent with a note; the history; **Sheets** with the
+  settable to Present, Late or Absent with a note; the history; **Sheets** with the
   Excel export and the delete; and **Phone requests**. The sheet list shows each
   course's average attendance and the students below 50 %.
 - **The office** — the history of every session, the sheets with the same Excel
@@ -759,13 +798,33 @@ every percentage is recounted from what is left.
 Generated on the server with `excelize`. There is **one sheet per course, batch
 and section**, and the Bluetooth, code, web and roll-call sessions of that class
 all land in it. The sheet carries the student name, the registration number, one
-column per session date with `P` or `A` and the note as a cell comment, the
-present count, the total and the percentage, with below 50 % highlighted red and
-the header frozen.
+column per session date with `P`, `L` or `A` (late in its own amber colour) and
+the note as a cell comment, then **Classes held**, **Attended** (the credit),
+**Lates** and **Percentage**, with below 50 % highlighted red and the header
+frozen. A **Class hours** row under the students gives the hours of each session
+and their total.
 **Download all my classes** puts every course-batch-section the teacher teaches
 into one workbook and adds a Summary sheet with the course, batch, section,
 number of sessions, average percentage and how many students are below 50 %. A
 date range filter defaults to the running semester.
+
+### 12.11 Students who join a course later
+
+A student who is approved later, moved into the section, or adds the course as a
+drop course in the middle of the semester is counted from the start of the course
+in the running semester. Every session of that course, batch and section that was
+held before they joined, since the batch's running semester began, counts for
+them as **absent**, with the method *system* and the note **Joined later**. They
+appear in the roster, the history and the Excel export of those sessions with
+`A`, and their percentage and the 50 % alert use every session held since the
+semester started. A teacher of the course can still change any of those entries
+to present or late with a note, audited like any other edit.
+
+The missing records are created when a registration is approved, when a drop
+course is added, and by the scheduler on every run, which also covers a student
+moved between sections; the migration that introduced the rule filled them in for
+the students who already existed. Only sessions that hold at least one real mark
+are counted.
 
 ## 13. The control room
 
@@ -1027,3 +1086,88 @@ exams, notices, polls, group chats and messages.
 It refuses to run while `APP_ENV` is `production`, it is safe to run twice, every
 account uses `DEMO_PASSWORD` from `backend/.env`, and it prints the identifiers
 only — never the password.
+
+
+## 18. The public website and its editor
+
+### 18.1 What can be edited
+
+**Control room → Website** lets the super admin change the public website without
+code:
+
+- **Header** — site name, tagline, logo (the SUST logo when empty) and extra menu
+  links.
+- **Home** — the hero line, title and text, the two call-to-action buttons, the
+  campus slideshow (upload, reorder, caption, remove) and the About title and text.
+- **Sections** — which home sections show and in which order: the numbers of the
+  department, About, the notices preview, the Android app download and any custom
+  section.
+- **Footer** — address, phone, email, office hours, footer text, quick links and
+  social links, or the whole footer hidden.
+- **Sign-in and SEO** — the sign-in title and text, the page title, description
+  and share image.
+- **Pages** — public pages at `/p/<slug>`, each with its own title and SEO fields.
+
+### 18.2 Blocks
+
+Custom home sections and pages are built from the same safe blocks: a heading;
+text with basic formatting (`**bold**`, `*italic*`, lines starting with `-` for a
+list and `[text](https://…)` for a link, and nothing else); an image with alt
+text; an image and text side by side; a button; a list of cards with a title,
+text, date and image for news or events; and a list of questions and answers.
+Text is parsed into elements by the page; nothing renders raw HTML, and `<` and
+`>` are refused when saving.
+
+### 18.3 Rules
+
+Every text has a length limit. A link is `http://`, `https://` or a path of this
+site. An image is one uploaded here or built in; an upload must be a JPG, PNG or
+WEBP of at most 4 MB and 6000 px, and it is decoded and encoded again before it is
+stored in the existing file storage. A slug is small letters, digits and dashes,
+unique, and never a name the portal already uses (`student`, `teacher`, `cr`,
+`office-portal`, `control-room`, `api`, `uploads`, `about-coordinet` and the
+like). Deleting a page or a section asks for confirmation.
+
+### 18.4 Draft, preview, publish and restore
+
+Edits are saved as one **draft**. **Preview** opens the public pages with the
+draft in a new tab, for the super admin only; everybody else keeps seeing the
+published website. **Publish** makes the draft live and stores it as a new
+version with who published it and when. **Restore** makes an earlier version live
+again, as a new version, and puts it in the draft. Publishing and restoring need
+the password confirmation and are written to the audit log.
+
+The content is versioned JSON in `site_content_versions`. Public pages read it
+from `GET /api/site/content`, cached for 30 seconds, and fall back to the built-in
+content when nothing is published or the stored content is not valid.
+
+### 18.5 The developer credit
+
+Every public page footer, and the About area of the profile in the app, shows
+**Developed by CoordiNet**, linking to an **About CoordiNet** page that lists
+Ratul Islam and Rakibul Hasan. The credit is rendered by the code and is not part
+of the editable content: the editor neither shows nor accepts it, the content API
+refuses any field that tries to hide or replace it, and a hidden footer or custom
+footer text never removes it.
+
+## 19. Staying up
+
+- **Error boundary.** Every route and every sheet sits in an error boundary. A
+  screen that breaks shows *Something went wrong* with **Try again** and **Go
+  home** instead of a blank page; the Android back button keeps working and
+  closes an open sheet first. The name, message and route of the problem, and
+  nothing personal, are sent to `POST /api/client-log`, written to the server
+  log and listed under System health as *Screens that broke*.
+- **Feature switches.** A switched-off feature answers **403** with the code
+  `feature_off`, never a 5xx, and is not counted as a server error. The app reads
+  the switches from the config, does not call or poll a switched-off feature,
+  hides its menu item, tab, badge and home tile, and a direct visit says
+  *<Feature> is turned off by the department*.
+- **Idle connections.** A pooled database connection that sat idle is checked
+  before it is used again and replaced when the database had dropped it.
+- **Alerts.** The server-error alert fires only with at least 10 real server
+  errors and more than 1 % of the requests of the period, and lists the top
+  addresses with their counts. A deleted attendance sheet is information.
+- **Header art.** Every blue header sizes the IICT art so the building and its
+  nearest trees fit the header width, anchored centre bottom, with the sky
+  blending into the header; wide desktop headers keep the full-width trees.

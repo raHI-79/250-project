@@ -4,7 +4,42 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
-## 2.7.3
+## 2.8.0
+
+### Attendance rules
+
+- **Present, late or absent.** The roll call has three compact buttons, P, L and
+  A. A teacher can change any student to Late, with a note, from the history at
+  any time. My attendance, the session lists and the Excel sheet show L in its
+  own colour and count lates separately.
+- **Late by time.** A Bluetooth, code or web mark after the late boundary is
+  late. The boundary is the original end, so marks after an extension are late,
+  or "Late after N minutes" set when starting.
+- **Flexible times.** 5, 10, 15, 20 and 30 minutes stay as quick chips; Custom
+  takes 1 to 240 minutes and Open until takes a time today. Extend has +5, +10
+  and a custom number. The server checks the limits and says what is wrong.
+- **Class hours and credit.** A session is worth 1 to 4 class hours, prefilled
+  from the routine. Present counts the hours, late counts the hours times the
+  late weight (0.5 by default, set in the control room or the office portal) and
+  absent counts nothing. Every percentage, the 50 % alert and the Excel export
+  use credit over the hours held. Existing sessions count as 1 hour.
+- **Late joiners.** A student who joins a course later is absent, with the note
+  Joined later, from the classes held this semester before they joined, and a
+  teacher can change those entries. Existing students were filled in.
+
+### The public website
+
+- **Edit the website without code.** Control room → Website edits the header,
+  the home page and its slideshow, the order and visibility of the sections, the
+  footer, the sign-in texts and the SEO fields.
+- **New sections and pages.** Custom home sections and public pages at
+  /p/<slug> are built from safe blocks: heading, formatted text, image, image
+  with text, button, cards and questions and answers.
+- **Draft, preview, publish, restore.** Edits save as a draft, Preview shows it
+  to the super admin only, Publish keeps every version with who and when, and
+  Restore brings one back. Publishing needs the password confirmation.
+- **Developed by CoordiNet.** Every public page and the app profile carry the
+  credit, linking to About CoordiNet. It cannot be edited, hidden or replaced.
 
 ### No more blank screens
 
