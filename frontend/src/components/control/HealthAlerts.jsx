@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Alert, Button, useToast } from '../ui'
 import api from '../../lib/api'
 
+const TONES = { error: 'error', warning: 'warning', info: 'info' }
+
 export default function HealthAlerts({ alerts = [], onDismissed, className }) {
   const toast = useToast()
   const [busy, setBusy] = useState('')
@@ -22,9 +24,16 @@ export default function HealthAlerts({ alerts = [], onDismissed, className }) {
     <div className={className}>
       <div className="flex flex-col gap-2">
         {alerts.map((alert) => (
-          <Alert key={alert.key} tone={alert.tone === 'error' ? 'error' : 'warning'}>
+          <Alert key={alert.key} tone={TONES[alert.tone] || 'warning'} data-alert={alert.key}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span className="min-w-0 wrap-long">{alert.message}</span>
+              <span className="min-w-0 wrap-long">
+                {alert.message}
+                {(alert.details || []).length > 0 && (
+                  <span className="mt-1 block text-xs">
+                    {alert.details.map((entry) => `${entry.label} (${entry.count})`).join(' · ')}
+                  </span>
+                )}
+              </span>
               <span className="ml-auto flex shrink-0 items-center gap-2">
                 {alert.section && (
                   <a

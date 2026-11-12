@@ -1,4 +1,11 @@
 import {
+  FEATURE_ATTENDANCE,
+  FEATURE_MESSAGES,
+  featureOn,
+  visibleItems,
+} from '../../lib/features'
+import { useFeatures } from '../../lib/featureState'
+import {
   CalendarClock,
   ClipboardList,
   CheckCircle2,
@@ -63,8 +70,12 @@ export default function TodayPage() {
   const now = useNow(60000)
   const summary = useResource('/api/students/today')
   const routine = useResource('/api/students/upcoming-routine')
-  const chats = useResource('/api/messages/conversations')
-  const attendance = useResource('/api/students/attendance/mine')
+  const features = useFeatures()
+  const messagesOn = featureOn(features, FEATURE_MESSAGES)
+  const chats = useResource(messagesOn ? '/api/messages/conversations' : '')
+  const attendance = useResource(
+    featureOn(features, FEATURE_ATTENDANCE) ? '/api/students/attendance/mine' : '',
+  )
   const crItems = useResource(role === 'cr' ? '/api/cr/upcoming' : null, {
     date: todayDate(),
   })
@@ -174,7 +185,7 @@ export default function TodayPage() {
       <div className="mt-5">
         {routine.loading ? <SkeletonCard /> : <NextUpCard item={nextUp} />}
       </div>
-      <QuickActions actions={actions} className="mt-6" />
+      <QuickActions actions={visibleItems(features, actions)} className="mt-6" />
       <Section title="Today">
         {routine.error ? (
           <Alert tone="error">{routine.error}</Alert>
@@ -221,19 +232,21 @@ export default function TodayPage() {
           <ExamStrip exams={exams} to={paths.student.exams()} />
         </Section>
       )}
-      <Section title="Messages">
-        {chats.loading ? (
-          <SkeletonRows rows={3} />
-        ) : unreadChats.length === 0 ? (
-          <EmptyState
-            icon={MessageCircle}
-            title="You are all caught up"
-            text="New messages from teachers and classmates land here."
-          />
-        ) : (
-          <MessagePreview conversations={unreadChats} role={role} />
-        )}
-      </Section>
+      {messagesOn && (
+        <Section title="Messages">
+          {chats.loading ? (
+            <SkeletonRows rows={3} />
+          ) : unreadChats.length === 0 ? (
+            <EmptyState
+              icon={MessageCircle}
+              title="You are all caught up"
+              text="New messages from teachers and classmates land here."
+            />
+          ) : (
+            <MessagePreview conversations={unreadChats} role={role} />
+          )}
+        </Section>
+      )}
     </PullToRefresh>
   )
 }

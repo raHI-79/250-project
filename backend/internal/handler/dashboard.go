@@ -38,17 +38,19 @@ const (
 	SectionSystemSignIns = "sign-ins"
 	SectionSystemSheets  = "attendance-sheets"
 
-	serverErrorSpike  = 10
-	failureShare      = 0.2
-	backupStaleAfter  = 36 * time.Hour
-	signInSpikeLimit  = 10
-	spikeWindow       = time.Hour
-	semesterDays      = 180
-	minFailureVolume  = 5
-	minPushVolume     = 20
-	minRequestVolume  = 200
-	failingPathLimit  = 8
-	sheetDeleteWindow = 24 * time.Hour
+	serverErrorSpike   = 10
+	serverErrorPerCent = 100
+	alertDetailLimit   = 5
+	failureShare       = 0.2
+	backupStaleAfter   = 36 * time.Hour
+	signInSpikeLimit   = 10
+	spikeWindow        = time.Hour
+	semesterDays       = 180
+	minFailureVolume   = 5
+	minPushVolume      = 20
+	minRequestVolume   = 200
+	failingPathLimit   = 8
+	sheetDeleteWindow  = 24 * time.Hour
 )
 
 var (
@@ -203,11 +205,17 @@ type systemPanel struct {
 	BackupNote    string            `json:"backup_note,omitempty"`
 }
 
+type alertDetail struct {
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
 type alertItem struct {
-	Key     string `json:"key"`
-	Message string `json:"message"`
-	Tone    string `json:"tone"`
-	Section string `json:"section,omitempty"`
+	Key     string        `json:"key"`
+	Message string        `json:"message"`
+	Tone    string        `json:"tone"`
+	Section string        `json:"section,omitempty"`
+	Details []alertDetail `json:"details,omitempty"`
 }
 
 type dashboardResponse struct {
@@ -532,11 +540,12 @@ func (d *Dashboard) Numbers() http.HandlerFunc {
 		}
 		body.Alerts = alertsFor(alertFacts{
 			Health:    health,
-			Requests:  volume,
+			Requests:  realFailures(volume, health.Server5xx),
 			Push:      pushes,
 			Backup:    backup,
 			Spike:     spike,
 			Deletions: deletions,
+			Paths:     paths,
 			Quiet:     quiet,
 			Now:       now,
 		})
@@ -578,11 +587,29 @@ func pushAlerting(volume store.PushVolume) bool {
 	return volume.Share() > failureShare
 }
 
+func topPaths(paths []store.FailingPath) []alertDetail {
+	details := make([]alertDetail, 0, alertDetailLimit)
+	for _, entry := range paths {
+		if len(details) == alertDetailLimit {
+			break
+		}
+		details = append(details, alertDetail{Label: entry.Path, Count: entry.Total})
+	}
+	return details
+}
+
+func realFailures(volume store.RequestVolume, recorded int) store.RequestVolume {
+	if recorded < volume.Failures {
+		volume.Failures = recorded
+	}
+	return volume
+}
+
 func serverErrorAlerting(volume store.RequestVolume) bool {
-	if volume.Requests < minRequestVolume {
+	if volume.Failures < serverErrorSpike {
 		return false
 	}
-	return volume.Failures >= serverErrorSpike
+	return volume.Failures*serverErrorPerCent > volume.Requests
 }
 
 var pushReasonLabels = map[string]string{
@@ -618,6 +645,7 @@ type alertFacts struct {
 	Backup    store.BackupState
 	Spike     int
 	Deletions int
+	Paths     []store.FailingPath
 	Quiet     map[string]time.Time
 	Now       time.Time
 }
@@ -638,6 +666,7 @@ func alertsFor(facts alertFacts) []alertItem {
 			Message: fmt.Sprintf(
 				"%d of the %d requests in this period ended in a server error.",
 				facts.Requests.Failures, facts.Requests.Requests),
+			Details: topPaths(facts.Paths),
 		})
 	}
 	if failing(facts.Health.EmailsSent, facts.Health.EmailsFailed) {
@@ -678,7 +707,7 @@ func alertsFor(facts alertFacts) []alertItem {
 	if facts.Deletions > 0 {
 		add(alertItem{
 			Key:     AlertSheetDeletes,
-			Tone:    "warning",
+			Tone:    "info",
 			Section: SectionSystemSheets,
 			Message: "An attendance sheet was deleted in the last day.",
 		})

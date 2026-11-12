@@ -80,6 +80,9 @@ function installBridge({ plugins, version }) {
   }
 }
 
+export const localURL = (address) =>
+  address.startsWith(APP_API) ? address.replace(APP_API, LOCAL_API) : address
+
 export async function asApp(page) {
   await page.addInitScript(installBridge, { plugins: PLUGINS, version: APP_VERSION })
   await page.route(`${APP_API}/**`, async (route) => {

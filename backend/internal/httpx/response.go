@@ -10,6 +10,7 @@ const contentTypeJSON = "application/json"
 
 type errorResponse struct {
 	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
 }
 
 func WriteJSON(w http.ResponseWriter, status int, data any) {
@@ -35,4 +36,8 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 func WriteError(w http.ResponseWriter, status int, message string) {
 	WriteJSON(w, status, errorResponse{Error: message})
+}
+
+func WriteCoded(w http.ResponseWriter, status int, code, message string) {
+	WriteJSON(w, status, errorResponse{Error: message, Code: code})
 }

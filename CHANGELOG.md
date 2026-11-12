@@ -4,6 +4,45 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.7.3
+
+### No more blank screens
+
+- **Picking a day no longer blanks the routine.** Choosing a date in the date
+  field drew the Upcoming routine page once before the new day had loaded and the
+  whole app disappeared. A page now waits for its own data, in light and dark
+  mode, on the website and in the app.
+- **A calm screen instead of a blank one.** Every page and every sheet sits in an
+  error boundary: "Something went wrong" with Try again and Go home. The Android
+  back button keeps working there and closes an open sheet first. The problem
+  (name, message and page only) is reported and listed under System health as
+  "Screens that broke".
+
+### Notifications and notice links
+
+- **Opening a notification marks it read everywhere.** Read state is kept by the
+  server, so the bell goes down at once on the phone and the website and stays
+  down. Badges show the exact number up to 99 and 99+ above; the app icon counts
+  messages and notifications together.
+- **A notice link opens that notice.** The home carousel, the bell, pushes and the
+  search open the notice itself. A removed notice, exam or poll says it is no
+  longer available and links to the full list.
+
+### Header art and server errors
+
+- **The whole IICT building, always.** Every blue header sizes the art so the
+  building and its nearest trees fit the width, anchored centre bottom with the
+  sky blending into the header; wide desktop headers keep the full-width trees.
+- **A switched-off feature is not a server error.** It answers 403 `feature_off`,
+  is not counted under System health, and the app no longer calls or polls it:
+  its menu item, tab, badge and home tile are hidden and a direct visit says
+  "Messages is turned off by the department".
+- **Fewer one-off errors after a quiet spell.** A database connection that went
+  away while idle is checked and replaced before the next request uses it.
+- **Quieter alerts.** The server-error alert needs at least 10 real errors and
+  more than 1 % of requests, and lists the top addresses; a deleted attendance
+  sheet is shown as information.
+
 ## 2.7.2
 
 ### Header art and header size

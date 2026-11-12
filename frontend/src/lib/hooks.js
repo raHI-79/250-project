@@ -230,6 +230,9 @@ export const refreshUnread = () => window.dispatchEvent(new Event(UNREAD_EVENT))
 
 export const useUnreadMessages = (enabled = true) => {
   const [count, setCount] = useState(0)
+  useEffect(() => {
+    if (!enabled) setCount(0)
+  }, [enabled])
   const load = useCallback(() => {
     if (!enabled) return undefined
     return api

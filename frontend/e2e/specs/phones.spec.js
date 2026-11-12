@@ -1,7 +1,7 @@
 import { expect, test as base } from '@playwright/test'
 import { DATE_PAGES, DATE_PANELS, PHONE_PAGES, ROLES } from '../fixtures/roles.js'
 import { clear, expectNoProblems, watch } from '../helpers/audit.js'
-import { appCanReach, asApp } from '../helpers/appShell.js'
+import { appCanReach, asApp, localURL } from '../helpers/appShell.js'
 import { exerciseDateFields, setTheme } from '../helpers/dates.js'
 import { postNotice, removeNotice } from '../helpers/notices.js'
 import { signIn, visit } from '../helpers/signIn.js'
@@ -249,5 +249,39 @@ test.describe('notice links on a phone', () => {
     } finally {
       await removeNotice(notice)
     }
+  })
+})
+
+test.describe('a switched-off feature on a phone', () => {
+  test('is neither called nor shown, and a direct visit says so', async ({ page, appShell }) => {
+    if (appShell) await asApp(page)
+    await page.route('**/api/auth/config', async (route) => {
+      const response = await route.fetch({ url: localURL(route.request().url()) })
+      const body = await response.json()
+      body.features = { ...(body.features || {}), messages: false }
+      await route.fulfill({ response, json: body })
+    })
+    const called = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/api/messages')) called.push(request.url())
+    })
+    const problems = watch(page)
+    await signIn(page, ROLES.student)
+    clear(problems)
+    problems.signedIn = true
+    await visit(page, '/student/today')
+    await expect(page.locator('a[href="/student/messages"]')).toHaveCount(0)
+    await page.goto('/student/messages', { waitUntil: 'domcontentloaded' })
+    const off = page.locator('[data-feature-off="messages"]')
+    await expect(off).toBeVisible()
+    await expect(off).toContainText('Messages is turned off by the department')
+    await page.waitForTimeout(1500)
+    await visit(page, '/student/polls')
+    await expect(page.locator('[data-feature-off]')).toHaveCount(0)
+    const afterConfig = called.length
+    await page.waitForTimeout(2500)
+    expect(called.length, `a switched-off feature was still called: ${called.join(', ')}`).toBe(afterConfig)
+    expect(afterConfig, 'the first load polled a switched-off feature').toBeLessThanOrEqual(2)
+    expectNoProblems({ ...problems, api: problems.api.filter((line) => !line.includes('/api/messages')) }, 'a switched-off feature')
   })
 })

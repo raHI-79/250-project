@@ -36,12 +36,43 @@ test('the shared layer is decorative and never takes a tap', () => {
   assert.match(base, /pointer-events: none;/)
 })
 
-test('the art is centred at the bottom and fills the full height at every width', () => {
+const ART_WIDTH = 3200
+
+const ART_HEIGHT = 420
+
+const BUILDING_WIDTH = 1000
+
+const artWidth = (width, height) =>
+  Math.max(width, Math.min((ART_WIDTH / BUILDING_WIDTH) * width, (ART_WIDTH / ART_HEIGHT) * height))
+
+test('the whole building fits the header at every width, anchored centre bottom', () => {
   const css = read('index.css')
+  const base = ruleOf(css, '.header-art')
+  assert.match(base, /container-type: size;/)
+  assert.match(base, /background: #0a6faf;/)
+  const art = ruleOf(css, '.header-art::before')
   assert.match(
-    ruleOf(css, '.header-art'),
-    /background: #0a6faf url\("\/brand\/header-iict\.svg"\) center bottom \/ auto 100% no-repeat;/,
+    art,
+    /background: url\("\/brand\/header-iict\.svg"\) center bottom \/ auto 100% no-repeat;/,
   )
+  assert.match(art, /background-size: max\(100cqw, min\(320cqw, 761\.905cqh\)\) auto;/)
+  assert.equal((ART_WIDTH / BUILDING_WIDTH) * 100, 320)
+  assert.equal(((ART_WIDTH / ART_HEIGHT) * 100).toFixed(3), '761.905')
+  ;[
+    [360, 190],
+    [390, 210],
+    [412, 230],
+    [768, 200],
+    [1280, 190],
+    [1920, 220],
+    [390, 520],
+  ].forEach(([width, height]) => {
+    const drawn = artWidth(width, height)
+    const building = (BUILDING_WIDTH / ART_WIDTH) * drawn
+    assert.ok(building <= width + 0.5, `the building is cut at ${width}px`)
+    assert.ok(drawn >= width, `the art leaves a gap at ${width}px`)
+  })
+  assert.equal(artWidth(1920, 220), 1920, 'a wide header lost its full-width trees')
   const svg = read('../public/brand/header-iict.svg')
   assert.match(svg, /viewBox="0 0 3200 420"/)
   assert.match(svg, /preserveAspectRatio="xMidYMax slice"/)

@@ -3,6 +3,7 @@ import api from './api'
 import { newerThan } from './semver'
 import { APP_VERSION } from './version'
 import { isNative } from './native'
+import { setFeatures } from './featureState'
 
 const REFRESH_AFTER = 120000
 
@@ -18,6 +19,7 @@ export const readSite = async () => {
   try {
     const data = await api.get('/api/auth/config', { auth: false })
     cached = data || {}
+    if (cached.features) setFeatures(cached.features)
     announce()
   } catch {
     if (!cached) cached = {}

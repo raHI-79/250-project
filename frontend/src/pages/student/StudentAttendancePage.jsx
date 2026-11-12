@@ -1,3 +1,6 @@
+import FeatureOff from '../../components/FeatureOff'
+import { FEATURE_WEB_ATTENDANCE, featureOn } from '../../lib/features'
+import { useFeatures } from '../../lib/featureState'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bluetooth, CheckCircle2, KeyRound, Smartphone } from 'lucide-react'
 import {
@@ -121,6 +124,7 @@ function PhonePanel({ phone, busy, onRegister, onRequest }) {
 export default function StudentAttendancePage() {
   const toast = useToast()
   const [tab, setTab] = useQueryTab(TAB_VALUES, STUDENT_TAB_MARK)
+  const webOn = featureOn(useFeatures(), FEATURE_WEB_ATTENDANCE)
   const [device, setDevice] = useState('')
   const [step, setStep] = useState(STEP_IDLE)
   const [token, setToken] = useState('')
@@ -429,7 +433,10 @@ export default function StudentAttendancePage() {
         ) : (
           <EmptyState icon={Smartphone} title="Only in the app" text={WEB_PHONE_MESSAGE} />
         ))}
-      {tab === STUDENT_TAB_MARK && !app && markTab}
+      {tab === STUDENT_TAB_MARK && !app && webOn && markTab}
+      {tab === STUDENT_TAB_MARK && !app && !webOn && (
+        <FeatureOff feature={FEATURE_WEB_ATTENDANCE} compact />
+      )}
       {tab === STUDENT_TAB_MARK && app && (
       <div className="flex flex-col gap-5">
         <PhonePanel phone={phone} busy={busy} onRegister={register} onRequest={request} />
