@@ -26,8 +26,9 @@ func exportRows(rows []store.ExportRow) []attendance.ExportRow {
 			RegNo:     row.RegNo,
 			SessionID: row.SessionID,
 			StartedAt: row.StartedAt,
-			Status:    row.Status,
-			Note:      row.Note,
+			Status:     row.Status,
+			Note:       row.Note,
+			NoLocation: row.NoLocation,
 		})
 	}
 	return out

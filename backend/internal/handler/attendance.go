@@ -49,6 +49,7 @@ type AttendanceStore interface {
 	SetAttendanceLocation(ctx context.Context, sessionID, teacherID int64, lat, lng, accuracy float64) error
 	ExtendAttendanceSession(ctx context.Context, sessionID, teacherID int64,
 		minutes int) (store.AttendanceSession, error)
+	SwitchAttendanceToCodeOnly(ctx context.Context, sessionID, teacherID int64) (store.AttendanceSession, error)
 	CloseAttendanceSession(ctx context.Context, sessionID, teacherID int64) (store.AttendanceSession, error)
 	ListTeacherAttendance(ctx context.Context, teacherID int64, from, to time.Time) ([]store.AttendanceSession, error)
 	ListSessionRecords(ctx context.Context, sessionID int64) ([]store.AttendanceRecord, error)
@@ -89,6 +90,7 @@ type sessionBody struct {
 	EndsAt      string `json:"ends_at"`
 	Status      string `json:"status"`
 	Method      string `json:"method"`
+	CodeOnly    bool   `json:"code_only"`
 	Present     int    `json:"present"`
 	Roster      int    `json:"roster"`
 	Code        string `json:"code,omitempty"`
@@ -112,8 +114,9 @@ type markBody struct {
 	AccuracyM int    `json:"accuracy_m,omitempty"`
 	MarkedAt  string `json:"marked_at,omitempty"`
 	Note      string `json:"note,omitempty"`
-	EditedBy  string `json:"edited_by,omitempty"`
-	EditedAt  string `json:"edited_at,omitempty"`
+	EditedBy   string `json:"edited_by,omitempty"`
+	EditedAt   string `json:"edited_at,omitempty"`
+	NoLocation bool   `json:"no_location,omitempty"`
 }
 
 type classBody struct {
@@ -153,6 +156,7 @@ func newSessionBody(session store.AttendanceSession, now time.Time, forTeacher b
 		EndsAt:      timestamp(session.EndsAt),
 		Status:      session.Status,
 		Method:      session.Method,
+		CodeOnly:    session.CodeOnly,
 		Present:     session.Present,
 		Roster:      session.Roster,
 		HasLocation: session.HasLocation,
@@ -183,8 +187,9 @@ func newMarkBody(record store.AttendanceRecord) markBody {
 		PhotoURL:  record.PhotoPath,
 		Status:    record.Status,
 		Method:    record.Method,
-		Note:      record.Note,
-		EditedBy:  record.EditedBy,
+		Note:       record.Note,
+		EditedBy:   record.EditedBy,
+		NoLocation: record.NoLocation,
 	}
 	if record.HasPosition {
 		body.DistanceM = int(math.Round(record.DistanceM))

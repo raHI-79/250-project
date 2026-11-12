@@ -21,6 +21,7 @@ const (
 	columnCountW  = 11.0
 	presentLetter = "P"
 	absentLetter  = "A"
+	NoLocation    = "No location"
 )
 
 type ExportRow struct {
@@ -29,8 +30,9 @@ type ExportRow struct {
 	RegNo     string
 	SessionID int64
 	StartedAt time.Time
-	Status    string
-	Note      string
+	Status     string
+	Note       string
+	NoLocation bool
 }
 
 type ExportClass struct {
@@ -46,9 +48,10 @@ type studentLine struct {
 	studentID int64
 	name      string
 	regNo     string
-	marks     map[int64]ExportRow
-	present   int
-	held      int
+	marks      map[int64]ExportRow
+	present    int
+	held       int
+	noLocation int
 }
 
 func SheetName(class ExportClass, taken map[string]bool) string {
@@ -97,6 +100,9 @@ func lines(class ExportClass) ([]*studentLine, []ExportRow) {
 		line.held++
 		if row.Status == Present {
 			line.present++
+			if row.NoLocation {
+				line.noLocation++
+			}
 		}
 		if !seen[row.SessionID] {
 			seen[row.SessionID] = true
@@ -197,11 +203,20 @@ func BuildWorkbook(classes []ExportClass, withSummary bool) (*bytes.Buffer, erro
 func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 	header, centered, low int) error {
 	order, sessions := lines(class)
+	flagged := false
+	for _, line := range order {
+		if line.noLocation > 0 {
+			flagged = true
+		}
+	}
 	titles := []string{"Student", "Reg no"}
 	for _, session := range sessions {
 		titles = append(titles, session.StartedAt.Format(dateHeader))
 	}
 	titles = append(titles, "Present", "Total", "Percentage")
+	if flagged {
+		titles = append(titles, NoLocation)
+	}
 	for column, title := range titles {
 		cell, err := excelize.CoordinatesToCellName(column+1, 1)
 		if err != nil {
@@ -238,12 +253,12 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 			if err := book.SetCellStyle(sheet, cell, cell, centered); err != nil {
 				return fmt.Errorf("attendance: could not style a mark: %w", err)
 			}
-			if ok && mark.Note != "" {
+			if text := markComment(mark, ok); text != "" {
 				comment := excelize.Comment{
 					Cell:   cell,
 					Author: noteAuthor,
 					Paragraph: []excelize.RichTextRun{
-						{Text: mark.Note},
+						{Text: text},
 					},
 				}
 				if err := book.AddComment(sheet, comment); err != nil {
@@ -271,6 +286,15 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 		if err := book.SetCellStyle(sheet, presentCell, shareCell, style); err != nil {
 			return fmt.Errorf("attendance: could not style a percentage: %w", err)
 		}
+		if flagged && line.noLocation > 0 {
+			flagCell := cellAt(6+len(sessions), row)
+			if err := book.SetCellInt(sheet, flagCell, int64(line.noLocation)); err != nil {
+				return fmt.Errorf("attendance: could not write a no location count: %w", err)
+			}
+			if err := book.SetCellStyle(sheet, flagCell, flagCell, centered); err != nil {
+				return fmt.Errorf("attendance: could not style a no location count: %w", err)
+			}
+		}
 	}
 	if err := book.SetPanes(sheet, &excelize.Panes{
 		Freeze:      true,
@@ -296,7 +320,11 @@ func writeClassSheet(book *excelize.File, sheet string, class ExportClass,
 		}
 	}
 	countFrom, _ := excelize.ColumnNumberToName(3 + len(sessions))
-	countTo, _ := excelize.ColumnNumberToName(5 + len(sessions))
+	lastCount := 5 + len(sessions)
+	if flagged {
+		lastCount++
+	}
+	countTo, _ := excelize.ColumnNumberToName(lastCount)
 	if err := book.SetColWidth(sheet, countFrom, countTo, columnCountW); err != nil {
 		return fmt.Errorf("attendance: could not size the total columns: %w", err)
 	}
@@ -352,6 +380,19 @@ func writeSummarySheet(book *excelize.File, classes []ExportClass, header, cente
 		return fmt.Errorf("attendance: could not size the summary columns: %w", err)
 	}
 	return nil
+}
+
+func markComment(mark ExportRow, found bool) string {
+	if !found {
+		return ""
+	}
+	if mark.NoLocation && mark.Status == Present {
+		if mark.Note != "" {
+			return NoLocation + " · " + mark.Note
+		}
+		return NoLocation
+	}
+	return mark.Note
 }
 
 func cellAt(column, row int) string {

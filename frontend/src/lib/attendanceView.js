@@ -61,3 +61,30 @@ export const percentOf = (present, held) => {
 }
 
 export const classKey = (entry) => `${entry.course_id}|${entry.batch}|${entry.section}`
+
+export const NO_LOCATION_FLAG = 'No location'
+
+export const markFlags = (mark) =>
+  mark?.no_location && mark?.status === 'present' ? [NO_LOCATION_FLAG] : []
+
+export const startBody = (entry, minutes, method, codeOnly) => ({
+  course_id: entry.course_id,
+  batch: entry.batch,
+  section: entry.section,
+  schedule_item_id: entry.schedule_item_id || 0,
+  minutes,
+  method,
+  code_only: method !== TAKE_ROLL_CALL && Boolean(codeOnly),
+})
+
+export const takeMethods = (app) => [
+  { value: TAKE_BLUETOOTH, label: app ? 'Bluetooth' : 'Code + location' },
+  { value: TAKE_ROLL_CALL, label: 'Roll call' },
+]
+
+export const CODE_ONLY_LABEL = 'Code only (no location check)'
+
+export const codeOnlyMarkBody = (session, code) => ({
+  session_id: session.id,
+  code: String(code || '').trim(),
+})

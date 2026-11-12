@@ -31,6 +31,7 @@ type AttendanceSession struct {
 	TokenKey        string
 	ClosedAt        time.Time
 	Method          string
+	CodeOnly        bool
 	Present         int
 	Roster          int
 }
@@ -44,6 +45,7 @@ type NewAttendanceSession struct {
 	Minutes        int
 	TokenKey       string
 	Method         string
+	CodeOnly       bool
 }
 
 type RosterStudent struct {
@@ -74,17 +76,19 @@ type AttendanceRecord struct {
 	Note        string
 	EditedBy    string
 	EditedAt    time.Time
+	NoLocation  bool
 }
 
 type MarkInput struct {
-	SessionID int64
-	StudentID int64
-	Method    string
-	DeviceID  string
-	Lat       float64
-	Lng       float64
-	AccuracyM float64
-	DistanceM float64
+	SessionID  int64
+	StudentID  int64
+	Method     string
+	DeviceID   string
+	Lat        float64
+	Lng        float64
+	AccuracyM  float64
+	DistanceM  float64
+	NoLocation bool
 }
 
 type CourseAttendance struct {
@@ -134,13 +138,13 @@ type AttendanceAlert struct {
 const sessionColumns = `a.id, a.course_id, c.code, c.title, a.batch, a.section,
 COALESCE(a.schedule_item_id, 0), a.teacher_id, COALESCE(t.user_id, 0), COALESCE(t.name, ''),
 a.started_at, a.ends_at, a.status, a.teacher_lat, a.teacher_lng, a.teacher_accuracy_m,
-a.location_updated_at, a.token_key, a.closed_at, a.method,
+a.location_updated_at, a.token_key, a.closed_at, a.method, a.code_only,
 (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'present')`
 
 const (
 	openSessionSQL = `INSERT INTO attendance_sessions
-(course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key, method)
-VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6), $7, $8)
+(course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key, method, code_only)
+VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6), $7, $8, $9)
 RETURNING id`
 	runningSessionSQL = `SELECT a.id FROM attendance_sessions a
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
@@ -178,6 +182,10 @@ LIMIT 1`
 SET teacher_lat = $3, teacher_lng = $4, teacher_accuracy_m = $5, location_updated_at = now()
 WHERE id = $1 AND teacher_id = $2 AND status = 'open'
 RETURNING id`
+	codeOnlySQL = `UPDATE attendance_sessions
+SET code_only = true
+WHERE id = $1 AND teacher_id = $2 AND status = 'open' AND method <> 'roll_call'
+RETURNING id`
 	extendSessionSQL = `UPDATE attendance_sessions
 SET ends_at = ends_at + make_interval(mins => $3)
 WHERE id = $1 AND teacher_id = $2 AND status = 'open'
@@ -210,8 +218,8 @@ ORDER BY s.reg_no`
                       WHERE d.student_id = s.id AND d.course_id = a.course_id))
 )`
 	markSQL = `INSERT INTO attendance_records
-(session_id, student_id, status, method, device_id, lat, lng, accuracy_m, distance_m)
-SELECT $1, $2, 'present', $3, $4, $5, $6, $7, $8
+(session_id, student_id, status, method, device_id, lat, lng, accuracy_m, distance_m, no_location)
+SELECT $1, $2, 'present', $3, $4, $5, $6, $7, $8, $9
 FROM attendance_sessions a
 WHERE a.id = $1 AND a.status = 'open' AND a.ends_at > now()
 RETURNING id`
@@ -219,7 +227,7 @@ RETURNING id`
 COALESCE(u.photo_path, ''),
 COALESCE(r.status, ''), COALESCE(r.method, ''), COALESCE(r.device_id, ''),
 r.distance_m, r.accuracy_m, r.marked_at, COALESCE(r.note, ''),
-COALESCE(e.name, es.full_name, ''), r.edited_at
+COALESCE(e.name, es.full_name, ''), r.edited_at, COALESCE(r.no_location, false)
 FROM attendance_sessions a
 JOIN students s ON (s.batch = a.batch AND (a.section = 'ALL' OR s.section = a.section))
   OR s.id IN (SELECT d.student_id FROM student_drop_courses d WHERE d.course_id = a.course_id)
@@ -234,7 +242,7 @@ ORDER BY s.reg_no`
 VALUES ($1, $2, $3, 'manual', $4, $5, now())
 ON CONFLICT (session_id, student_id) DO UPDATE
 SET status = EXCLUDED.status, method = 'manual', note = EXCLUDED.note,
-    edited_by = EXCLUDED.edited_by, edited_at = now()
+    edited_by = EXCLUDED.edited_by, edited_at = now(), no_location = false
 RETURNING id`
 	studentCoursesSQL = `SELECT a.course_id, c.code, c.title, COALESCE(t.name, ''),
 COUNT(*), COUNT(*) FILTER (WHERE r.status = 'present')
@@ -273,7 +281,7 @@ WHERE a.course_id = $1 AND a.batch = $2 AND a.section = $3
   AND a.started_at >= $4 AND a.started_at < $5
 GROUP BY r.student_id`
 	exportRowsSQL = `SELECT s.id, s.full_name, s.reg_no, a.id, a.started_at,
-r.status, COALESCE(r.note, '')
+r.status, COALESCE(r.note, ''), r.no_location
 FROM attendance_sessions a
 JOIN attendance_records r ON r.session_id = a.id
 JOIN students s ON s.id = r.student_id
@@ -287,7 +295,7 @@ WHERE a.batch = $1 AND a.started_at >= $2 AND a.started_at < $3
 GROUP BY a.course_id, c.code, c.title, a.batch, a.section
 ORDER BY c.code, a.section`
 	batchExportRowsSQL = `SELECT s.id, s.full_name, s.reg_no, a.id, a.started_at,
-r.status, COALESCE(r.note, '')
+r.status, COALESCE(r.note, ''), r.no_location
 FROM attendance_sessions a
 JOIN attendance_records r ON r.session_id = a.id
 JOIN students s ON s.id = r.student_id
@@ -411,7 +419,8 @@ func (s *Store) OpenAttendanceSession(ctx context.Context,
 		method = SessionBluetooth
 	}
 	err = s.pool.QueryRow(ctx, openSessionSQL, fresh.CourseID, fresh.Batch, fresh.Section,
-		fresh.ScheduleItemID, fresh.TeacherID, fresh.Minutes, fresh.TokenKey, method).Scan(&id)
+		fresh.ScheduleItemID, fresh.TeacherID, fresh.Minutes, fresh.TokenKey, method,
+		fresh.CodeOnly && method != SessionRollCall).Scan(&id)
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not open an attendance session: %w", err)
 	}
@@ -502,6 +511,7 @@ func scanSession(row rowScanner) (AttendanceSession, error) {
 		&session.TokenKey,
 		&closedAt,
 		&session.Method,
+		&session.CodeOnly,
 		&session.Present,
 	)
 	if err != nil {
@@ -544,6 +554,20 @@ func (s *Store) ExtendAttendanceSession(ctx context.Context, sessionID, teacherI
 	}
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not extend the session %d: %w", sessionID, err)
+	}
+	return s.AttendanceSession(ctx, sessionID)
+}
+
+func (s *Store) SwitchAttendanceToCodeOnly(ctx context.Context, sessionID,
+	teacherID int64) (AttendanceSession, error) {
+	var id int64
+	err := s.pool.QueryRow(ctx, codeOnlySQL, sessionID, teacherID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AttendanceSession{}, ErrAttendanceClosed
+	}
+	if err != nil {
+		return AttendanceSession{}, fmt.Errorf("store: could not switch the session %d to code only: %w",
+			sessionID, err)
 	}
 	return s.AttendanceSession(ctx, sessionID)
 }
@@ -612,8 +636,12 @@ func (s *Store) OnRoster(ctx context.Context, sessionID, studentID int64) (bool,
 
 func (s *Store) MarkAttendance(ctx context.Context, mark MarkInput) error {
 	var id int64
+	var lat, lng, accuracy, distance *float64
+	if !mark.NoLocation {
+		lat, lng, accuracy, distance = &mark.Lat, &mark.Lng, &mark.AccuracyM, &mark.DistanceM
+	}
 	err := s.pool.QueryRow(ctx, markSQL, mark.SessionID, mark.StudentID, mark.Method,
-		mark.DeviceID, mark.Lat, mark.Lng, mark.AccuracyM, mark.DistanceM).Scan(&id)
+		mark.DeviceID, lat, lng, accuracy, distance, mark.NoLocation).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrAttendanceClosed
 	}
@@ -658,6 +686,7 @@ func (s *Store) ListSessionRecords(ctx context.Context, sessionID int64) ([]Atte
 			&record.Note,
 			&record.EditedBy,
 			&editedAt,
+			&record.NoLocation,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan an attendance mark: %w", err)
@@ -826,8 +855,9 @@ type ExportRow struct {
 	RegNo     string
 	SessionID int64
 	StartedAt time.Time
-	Status    string
-	Note      string
+	Status     string
+	Note       string
+	NoLocation bool
 }
 
 func (s *Store) TeacherExportRows(ctx context.Context, teacherID, courseID int64, batch, section string,
@@ -850,7 +880,7 @@ func (s *Store) exportRows(ctx context.Context, query string, args ...any) ([]Ex
 	for rows.Next() {
 		var entry ExportRow
 		err := rows.Scan(&entry.StudentID, &entry.FullName, &entry.RegNo,
-			&entry.SessionID, &entry.StartedAt, &entry.Status, &entry.Note)
+			&entry.SessionID, &entry.StartedAt, &entry.Status, &entry.Note, &entry.NoLocation)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan an attendance export row: %w", err)
 		}

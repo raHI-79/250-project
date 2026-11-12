@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -24,6 +25,7 @@ const (
 	MessageRequestWaiting  = "Your teachers already have a request from you. Wait for their answer."
 	MessageReasonNeeded    = "Tell your teachers why you need another phone."
 	MessageMarkNeedsProof  = "Send the Bluetooth token or the code on the board."
+	MessageCodeOnlyNeeds   = "This class is marked with the 4-digit code only. Enter the code the teacher shows."
 
 	titlePhoneRequest = " wants to use a new phone"
 	titlePhoneAllowed = "Your new phone is approved"
@@ -100,6 +102,7 @@ type openSessionBody struct {
 	Section     string `json:"section"`
 	EndsAt      string `json:"ends_at"`
 	Present     bool   `json:"present"`
+	CodeOnly    bool   `json:"code_only"`
 }
 
 type studentOpenResponse struct {
@@ -232,6 +235,7 @@ func (s *StudentAttendance) Open() http.HandlerFunc {
 			Section:     session.Section,
 			EndsAt:      timestamp(session.EndsAt),
 			Present:     marked,
+			CodeOnly:    session.CodeOnly,
 		}
 		if !fromApp {
 			response.Message = ""
@@ -313,6 +317,10 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 				attendance.MessageRollCallOnly, "a roll call session")
 			return
 		}
+		if session.CodeOnly {
+			s.markCodeOnly(w, r, profile, session, request, deviceID, now)
+			return
+		}
 		method := attendance.MethodApp
 		switch {
 		case fromApp && strings.TrimSpace(request.Token) != "":
@@ -357,7 +365,7 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 					distance, request.AccuracyM, request.IsMock))
 			return
 		}
-		err = s.students.MarkAttendance(r.Context(), store.MarkInput{
+		s.saveMark(w, r, profile, session, store.MarkInput{
 			SessionID: session.ID,
 			StudentID: profile.StudentID,
 			Method:    method,
@@ -367,29 +375,56 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 			AccuracyM: request.AccuracyM,
 			DistanceM: distance,
 		})
-		switch {
-		case errors.Is(err, store.ErrAlreadyMarked):
-			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
-				attendance.MessageAlreadyMarked, "already marked")
-			return
-		case errors.Is(err, store.ErrDeviceUsed):
-			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
-				attendance.MessagePhoneUsed, "this phone already marked somebody")
-			return
-		case errors.Is(err, store.ErrAttendanceClosed):
-			refuse(w, profile.StudentID, session.ID, http.StatusConflict,
-				attendance.MessageSessionClosed, "the session closed meanwhile")
-			return
-		case err != nil:
-			log.Printf("handler: could not save an attendance mark: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
-			return
-		}
-		if err := s.students.TouchDevice(r.Context(), profile.UserID, deviceID); err != nil {
-			log.Printf("handler: could not touch the phone of a marking student: %v", err)
-		}
-		httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessageMarkSaved})
 	}
+}
+
+func (s *StudentAttendance) markCodeOnly(w http.ResponseWriter, r *http.Request,
+	profile store.StudentProfile, session store.AttendanceSession, request markRequest,
+	deviceID string, now time.Time) {
+	if strings.TrimSpace(request.Code) == "" {
+		refuse(w, profile.StudentID, session.ID, http.StatusBadRequest,
+			MessageCodeOnlyNeeds, "no code in a code only session")
+		return
+	}
+	if !attendance.CodeMatches(session.TokenKey, session.ID, now, request.Code) {
+		refuse(w, profile.StudentID, session.ID, http.StatusForbidden,
+			attendance.MessageWrongToken, "a code from no current slice")
+		return
+	}
+	s.saveMark(w, r, profile, session, store.MarkInput{
+		SessionID:  session.ID,
+		StudentID:  profile.StudentID,
+		Method:     attendance.MethodCode,
+		DeviceID:   deviceID,
+		NoLocation: true,
+	})
+}
+
+func (s *StudentAttendance) saveMark(w http.ResponseWriter, r *http.Request,
+	profile store.StudentProfile, session store.AttendanceSession, mark store.MarkInput) {
+	err := s.students.MarkAttendance(r.Context(), mark)
+	switch {
+	case errors.Is(err, store.ErrAlreadyMarked):
+		refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+			attendance.MessageAlreadyMarked, "already marked")
+		return
+	case errors.Is(err, store.ErrDeviceUsed):
+		refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+			attendance.MessagePhoneUsed, "this phone already marked somebody")
+		return
+	case errors.Is(err, store.ErrAttendanceClosed):
+		refuse(w, profile.StudentID, session.ID, http.StatusConflict,
+			attendance.MessageSessionClosed, "the session closed meanwhile")
+		return
+	case err != nil:
+		log.Printf("handler: could not save an attendance mark: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+		return
+	}
+	if err := s.students.TouchDevice(r.Context(), profile.UserID, mark.DeviceID); err != nil {
+		log.Printf("handler: could not touch the phone of a marking student: %v", err)
+	}
+	httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessageMarkSaved})
 }
 
 func (s *StudentAttendance) Mine() http.HandlerFunc {

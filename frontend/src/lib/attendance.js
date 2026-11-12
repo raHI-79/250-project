@@ -2,6 +2,7 @@ import { registerPlugin } from '@capacitor/core'
 import { SESSION_KEY } from './api'
 import { API_BASE, isAndroidApp } from './native'
 import { readJson } from './storage'
+import { freshness } from './webLocation.js'
 
 export * from './attendanceView.js'
 
@@ -43,9 +44,14 @@ export const openAppSettings = () => AttendanceBeacon.openSettings()
 
 export const openLocationSettings = () => AttendanceBeacon.openLocationSettings()
 
-export const POSITION_FRESH_MS = 60000
-
 export const positionState = (session, status, now) => {
+  if (session?.code_only) {
+    return {
+      label: 'Not checked · code only',
+      tone: 'warn',
+      reason: 'Marks are flagged No location for you to review.',
+    }
+  }
   if (!status) return { label: 'Waiting', tone: 'idle' }
   if (!status.place) {
     return status.asked
@@ -53,14 +59,7 @@ export const positionState = (session, status, now) => {
       : { label: 'Not allowed yet', tone: 'bad', fix: 'ask' }
   }
   if (!status.location_on) return { label: 'Off', tone: 'bad', fix: 'location' }
-  if (!session?.location_updated_at) return { label: 'Allowed · waiting for GPS', tone: 'idle' }
-  const age = now.getTime() - new Date(session.location_updated_at).getTime()
-  if (age > POSITION_FRESH_MS) return { label: 'Out of date', tone: 'warn' }
-  const accuracy = Number(session.accuracy_m) || 0
-  return {
-    label: accuracy > 0 ? `Sending · accuracy ${accuracy} m` : 'Sending',
-    tone: 'good',
-  }
+  return freshness(session, now)
 }
 
 export const bluetoothState = (status) => {
@@ -152,23 +151,3 @@ export const downloadWorkbook = async (path, filters, fallback = 'attendance.xls
   window.setTimeout(() => URL.revokeObjectURL(link.href), 2000)
   return { path: '', name }
 }
-
-export const browserPosition = () =>
-  new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve({ found: false })
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          found: true,
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy_m: position.coords.accuracy,
-        })
-      },
-      () => resolve({ found: false }),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    )
-  })

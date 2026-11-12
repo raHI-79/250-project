@@ -288,3 +288,55 @@ func TestFileNameNamesOneClassOrEveryClass(t *testing.T) {
 		t.Errorf("FileName() for every class = %q", all)
 	}
 }
+
+func TestWorkbookFlagsCodeOnlyMarksWithNoLocation(t *testing.T) {
+	class := sampleClass()
+	class.Rows[1].NoLocation = true
+	buffer, err := BuildWorkbook([]ExportClass{class}, false)
+	if err != nil {
+		t.Fatalf("BuildWorkbook() returned an unexpected error: %v", err)
+	}
+	book := openWorkbook(t, buffer)
+	sheet := "CSE245 CSE-23-A"
+	if got := cell(t, book, sheet, "I1"); got != NoLocation {
+		t.Errorf("I1 = %q, want the %q column", got, NoLocation)
+	}
+	if got := cell(t, book, sheet, "D2"); got != "P" {
+		t.Errorf("D2 = %q, want the mark to stay present", got)
+	}
+	if got := cell(t, book, sheet, "I2"); got != "1" {
+		t.Errorf("I2 = %q, want one mark without a location", got)
+	}
+	if got := cell(t, book, sheet, "I3"); got != "" {
+		t.Errorf("I3 = %q, want nothing for a student with every mark checked", got)
+	}
+	comments, err := book.GetComments(sheet)
+	if err != nil {
+		t.Fatalf("GetComments() returned an unexpected error: %v", err)
+	}
+	flagged := false
+	for _, comment := range comments {
+		if comment.Cell != "D2" {
+			continue
+		}
+		for _, run := range comment.Paragraph {
+			if run.Text == NoLocation {
+				flagged = true
+			}
+		}
+	}
+	if !flagged {
+		t.Errorf("comments = %v, want D2 flagged %q", comments, NoLocation)
+	}
+}
+
+func TestWorkbookWithoutCodeOnlyMarksHasNoFlagColumn(t *testing.T) {
+	buffer, err := BuildWorkbook([]ExportClass{sampleClass()}, false)
+	if err != nil {
+		t.Fatalf("BuildWorkbook() returned an unexpected error: %v", err)
+	}
+	book := openWorkbook(t, buffer)
+	if got := cell(t, book, "CSE245 CSE-23-A", "I1"); got != "" {
+		t.Errorf("I1 = %q, want no extra column when every mark has a location", got)
+	}
+}
