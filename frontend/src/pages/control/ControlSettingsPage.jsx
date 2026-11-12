@@ -188,6 +188,21 @@ export default function ControlSettingsPage() {
           </Card>
           <Card hover={false}>
             <CardHeader
+              title="Attendance"
+              subtitle="Present counts the full class hours, absent nothing and late this share. With 0.5, two lates equal one class."
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <Input
+                label="Late weight"
+                inputMode="decimal"
+                value={field('attendance_late_weight')}
+                onChange={(event) => set('attendance_late_weight')(event.target.value)}
+                hint="From 0 to 1"
+              />
+            </div>
+          </Card>
+          <Card hover={false}>
+            <CardHeader
               title="Reminders and the routine window"
               subtitle="These used to live in the environment. The environment is only the default now."
             />

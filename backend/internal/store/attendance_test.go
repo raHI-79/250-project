@@ -318,19 +318,19 @@ func TestOnePhoneMarksOneStudentPerSession(t *testing.T) {
 		AccuracyM: 10,
 		DistanceM: 8,
 	}
-	if err := store.MarkAttendance(ctx, mark); err != nil {
+	if _, err := store.MarkAttendance(ctx, mark); err != nil {
 		t.Fatalf("MarkAttendance() returned an unexpected error: %v", err)
 	}
-	if err := store.MarkAttendance(ctx, mark); !errors.Is(err, ErrAlreadyMarked) {
+	if _, err := store.MarkAttendance(ctx, mark); !errors.Is(err, ErrAlreadyMarked) {
 		t.Errorf("a second mark of the same student returned %v, want ErrAlreadyMarked", err)
 	}
 	borrowed := mark
 	borrowed.StudentID = second
-	if err := store.MarkAttendance(ctx, borrowed); !errors.Is(err, ErrDeviceUsed) {
+	if _, err := store.MarkAttendance(ctx, borrowed); !errors.Is(err, ErrDeviceUsed) {
 		t.Errorf("a second student on the same phone returned %v, want ErrDeviceUsed", err)
 	}
 	borrowed.DeviceID = "phone-two"
-	if err := store.MarkAttendance(ctx, borrowed); err != nil {
+	if _, err := store.MarkAttendance(ctx, borrowed); err != nil {
 		t.Fatalf("MarkAttendance() on a second phone returned an unexpected error: %v", err)
 	}
 }
@@ -342,7 +342,7 @@ func TestMarkingStopsWhenTheSessionCloses(t *testing.T) {
 	present := insertStudentRow(t, ctx, pool, presentUser, "2023331001", "CSE-23", "A")
 	missingUser := insertUser(t, ctx, pool, RoleStudent, "2023331002", StatusActive, 0)
 	missing := insertStudentRow(t, ctx, pool, missingUser, "2023331002", "CSE-23", "A")
-	err := store.MarkAttendance(ctx, MarkInput{
+	_, err := store.MarkAttendance(ctx, MarkInput{
 		SessionID: class.sessionID,
 		StudentID: present,
 		Method:    "app",
@@ -376,7 +376,7 @@ func TestMarkingStopsWhenTheSessionCloses(t *testing.T) {
 	if got := byStudent[missing]; got.Status != "absent" || got.Method != "system" {
 		t.Errorf("the missing student = %+v, want absent by the system", got)
 	}
-	err = store.MarkAttendance(ctx, MarkInput{
+	_, err = store.MarkAttendance(ctx, MarkInput{
 		SessionID: class.sessionID,
 		StudentID: missing,
 		Method:    "app",

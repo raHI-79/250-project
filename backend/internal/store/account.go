@@ -231,6 +231,12 @@ func replaceDropCourses(ctx context.Context, tx pgx.Tx, studentID int64, courseI
 			return fmt.Errorf("store: could not add the drop course %d: %w", courseID, err)
 		}
 	}
+	if len(courseIDs) == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, joinedLaterSQL, studentID, 0); err != nil {
+		return fmt.Errorf("store: could not count the earlier classes of the student %d: %w", studentID, err)
+	}
 	return nil
 }
 

@@ -41,7 +41,7 @@ type StudentAttendanceStore interface {
 	OpenSessionForStudent(ctx context.Context, studentID int64) (store.AttendanceSession, error)
 	AttendanceSession(ctx context.Context, sessionID int64) (store.AttendanceSession, error)
 	OnRoster(ctx context.Context, sessionID, studentID int64) (bool, error)
-	MarkAttendance(ctx context.Context, mark store.MarkInput) error
+	MarkAttendance(ctx context.Context, mark store.MarkInput) (string, error)
 	StudentCourseAttendance(ctx context.Context, studentID int64) ([]store.CourseAttendance, error)
 	StudentAttendanceSessions(ctx context.Context, studentID int64) ([]store.StudentSessionRow, error)
 	DeviceBinding(ctx context.Context, userID int64) (store.DeviceBinding, error)
@@ -113,14 +113,24 @@ type studentOpenResponse struct {
 	NeedsCode bool             `json:"needs_code,omitempty"`
 }
 
+const MessageMarkLate = "You are marked late for this class."
+
+type markSavedResponse struct {
+	Message string `json:"message"`
+	Status  string `json:"status"`
+}
+
 type myCourseBody struct {
-	CourseID    int64  `json:"course_id"`
-	CourseCode  string `json:"course_code"`
-	CourseTitle string `json:"course_title"`
-	TeacherName string `json:"teacher_name"`
-	Held        int    `json:"held"`
-	Present     int    `json:"present"`
-	Percentage  int    `json:"percentage"`
+	CourseID    int64   `json:"course_id"`
+	CourseCode  string  `json:"course_code"`
+	CourseTitle string  `json:"course_title"`
+	TeacherName string  `json:"teacher_name"`
+	Held        int     `json:"held"`
+	Present     int     `json:"present"`
+	Lates       int     `json:"lates"`
+	Credit      float64 `json:"credit"`
+	Sessions    int     `json:"sessions"`
+	Percentage  int     `json:"percentage"`
 }
 
 type myClassBody struct {
@@ -134,6 +144,7 @@ type myClassBody struct {
 	Method      string `json:"method"`
 	MarkedAt    string `json:"marked_at,omitempty"`
 	Note        string `json:"note,omitempty"`
+	Hours       int    `json:"hours"`
 }
 
 type myAttendanceResponse struct {
@@ -404,7 +415,7 @@ func (s *StudentAttendance) markCodeOnly(w http.ResponseWriter, r *http.Request,
 
 func (s *StudentAttendance) saveMark(w http.ResponseWriter, r *http.Request,
 	profile store.StudentProfile, session store.AttendanceSession, mark store.MarkInput) {
-	err := s.students.MarkAttendance(r.Context(), mark)
+	status, err := s.students.MarkAttendance(r.Context(), mark)
 	switch {
 	case errors.Is(err, store.ErrAlreadyMarked):
 		refuse(w, profile.StudentID, session.ID, http.StatusConflict,
@@ -426,7 +437,11 @@ func (s *StudentAttendance) saveMark(w http.ResponseWriter, r *http.Request,
 	if err := s.students.TouchDevice(r.Context(), profile.UserID, mark.DeviceID); err != nil {
 		log.Printf("handler: could not touch the phone of a marking student: %v", err)
 	}
-	httpx.WriteJSON(w, http.StatusCreated, messageResponse{Message: MessageMarkSaved})
+	message := MessageMarkSaved
+	if status == attendance.Late {
+		message = MessageMarkLate
+	}
+	httpx.WriteJSON(w, http.StatusCreated, markSavedResponse{Message: message, Status: status})
 }
 
 func (s *StudentAttendance) Mine() http.HandlerFunc {
@@ -459,7 +474,10 @@ func (s *StudentAttendance) Mine() http.HandlerFunc {
 				TeacherName: course.TeacherName,
 				Held:        course.Held,
 				Present:     course.Present,
-				Percentage:  percentText(course.Present, course.Held),
+				Lates:       course.Lates,
+				Credit:      course.Credit,
+				Sessions:    course.Sessions,
+				Percentage:  creditPercent(course.Credit, course.Held),
 			})
 		}
 		for _, class := range classes {
@@ -473,6 +491,7 @@ func (s *StudentAttendance) Mine() http.HandlerFunc {
 				Status:      class.Status,
 				Method:      class.Method,
 				Note:        class.Note,
+				Hours:       class.Hours,
 			}
 			if class.HasMark {
 				body.MarkedAt = timestamp(class.MarkedAt)

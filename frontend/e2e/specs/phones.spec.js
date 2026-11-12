@@ -1,7 +1,15 @@
 import { expect, test as base } from '@playwright/test'
-import { DATE_PAGES, DATE_PANELS, PHONE_PAGES, ROLES } from '../fixtures/roles.js'
+import {
+  CLASS_EARLY,
+  CLASS_LATE,
+  DATE_PAGES,
+  DATE_PANELS,
+  PHONE_PAGES,
+  ROLES,
+} from '../fixtures/roles.js'
 import { clear, expectNoProblems, watch } from '../helpers/audit.js'
 import { appCanReach, asApp, localURL } from '../helpers/appShell.js'
+import { call, classOf, clearToday, need, signInByApi, workbookEntry } from '../helpers/attendance.js'
 import { exerciseDateFields, setTheme } from '../helpers/dates.js'
 import { postNotice, removeNotice } from '../helpers/notices.js'
 import { signIn, visit } from '../helpers/signIn.js'
@@ -283,5 +291,170 @@ test.describe('a switched-off feature on a phone', () => {
     expect(called.length, `a switched-off feature was still called: ${called.join(', ')}`).toBe(afterConfig)
     expect(afterConfig, 'the first load polled a switched-off feature').toBeLessThanOrEqual(2)
     expectNoProblems({ ...problems, api: problems.api.filter((line) => !line.includes('/api/messages')) }, 'a switched-off feature')
+  })
+})
+
+test.describe('attendance rules on a phone', () => {
+  test('a roll call takes P, L and A with a custom time and class hours, and a late joiner is absent', async ({
+    page,
+    appShell,
+  }) => {
+    test.skip(appShell, 'the app takes attendance by Bluetooth, the roll call is checked on the website')
+    test.setTimeout(8 * 60_000)
+    const teacher = await signInByApi(ROLES.teacher, 'teacher')
+    const student = await signInByApi(CLASS_EARLY, 'student')
+    const me = await need(student, 'GET', '/api/profile')
+    const entry = await classOf(teacher, me.batch, me.section)
+    await clearToday(teacher, entry)
+    const joiner = await signInByApi(ROLES.student, 'student')
+    const joinerProfile = await need(joiner, 'GET', '/api/profile')
+    expect(joinerProfile.batch, 'the late joiner must come from another batch').not.toBe(me.batch)
+    let sessionId = 0
+    try {
+      await signIn(page, ROLES.teacher)
+      await visit(page, '/teacher/attendance')
+      await page.locator('#attendance-class').selectOption(`${entry.course_id}|${entry.batch}|${entry.section}`)
+      await page.getByRole('tab', { name: 'Roll call' }).tap()
+      await page.getByRole('radio', { name: 'Custom' }).tap()
+      await page.getByLabel('Custom minutes').fill('0')
+      await expect(page.getByRole('button', { name: /Start attendance/ })).toBeDisabled()
+      await page.getByLabel('Custom minutes').fill('47')
+      await page.getByRole('radio', { name: '2 hours' }).tap()
+      const started = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/teacher/attendance/sessions') &&
+          response.request().method() === 'POST',
+      )
+      await page.getByRole('button', { name: /Start attendance/ }).tap()
+      const session = await (await started).json()
+      sessionId = session.id
+      expect(session.hours).toBe(2)
+      const minutes = Math.round((new Date(session.ends_at) - new Date(session.started_at)) / 60_000)
+      expect(minutes, 'a custom duration of 47 minutes').toBe(47)
+      const rows = page.locator('[data-student-row]')
+      await expect(rows.first()).toBeVisible()
+      const total = await rows.count()
+      expect(total, 'the roster needs three students').toBeGreaterThanOrEqual(3)
+      const picks = ['late', 'present', 'absent']
+      for (let index = 0; index < picks.length; index += 1) {
+        const button = rows.nth(index).locator(`[data-mark="${picks[index]}"]`)
+        const box = await button.boundingBox()
+        expect(Math.min(box.width, box.height), 'a mark button is at least 44 px').toBeGreaterThanOrEqual(44)
+        await button.tap()
+        await expect(button).toHaveAttribute('aria-pressed', 'true')
+      }
+      await expect(rows.nth(0).locator('[data-mark="present"]')).toHaveAttribute('aria-pressed', 'false')
+      await page.getByRole('button', { name: 'Finish' }).first().tap()
+      await page.locator(DIALOG).getByRole('button', { name: 'Finish' }).tap()
+      await expect(page.locator('[data-student-row]')).toHaveCount(0, { timeout: 15_000 })
+      const detail = await need(teacher, 'GET', `/api/teacher/attendance/sessions/${sessionId}`)
+      const counts = { present: 0, late: 0, absent: 0 }
+      detail.marks.forEach((mark) => {
+        counts[mark.status] += 1
+      })
+      expect(counts.late).toBe(1)
+      expect(counts.present).toBe(1)
+      expect(counts.absent).toBe(total - 2)
+      const query = `course_id=${entry.course_id}&batch=${entry.batch}&section=${entry.section}`
+      const strings = await workbookEntry(teacher, query, 'xl/sharedStrings.xml')
+      for (const text of ['Class hours', 'Classes held', 'Attended', 'Lates', 'Percentage']) {
+        expect(strings, `the export has no ${text}`).toContain(text)
+      }
+      expect(strings).toMatch(/<t[^>]*>L<\/t>/)
+      const sheet = await workbookEntry(teacher, query, 'xl/worksheets/sheet1.xml')
+      expect(sheet, 'the export carries the 2 class hours').toMatch(/<v>2<\/v>/)
+      const form = new FormData()
+      form.append('drop_course_ids', String(entry.course_id))
+      await need(joiner, 'PATCH', '/api/profile', form)
+      const mine = await need(joiner, 'GET', '/api/students/attendance/mine')
+      const earlier = mine.classes.find((row) => row.session_id === sessionId)
+      expect(earlier, 'the earlier class does not count for the late joiner').toBeTruthy()
+      expect(earlier.status).toBe('absent')
+      expect(earlier.note).toBe('Joined later')
+      const course = mine.courses.find((row) => row.course_id === entry.course_id)
+      expect(course.held).toBeGreaterThanOrEqual(2)
+      expect(course.percentage).toBeLessThan(100)
+      const roster = await need(teacher, 'GET', `/api/teacher/attendance/sessions/${sessionId}`)
+      const listed = roster.marks.find((mark) => mark.reg_no === joinerProfile.reg_no)
+      expect(listed, 'the late joiner is missing from the roster of the earlier class').toBeTruthy()
+      await need(teacher, 'PATCH', `/api/teacher/attendance/sessions/${sessionId}/students/${listed.student_id}`, {
+        status: 'late',
+        note: 'Was in the class',
+      })
+      const after = await need(joiner, 'GET', '/api/students/attendance/mine')
+      expect(after.classes.find((row) => row.session_id === sessionId).status).toBe('late')
+    } finally {
+      const empty = new FormData()
+      empty.append('drop_course_ids', '')
+      await call(joiner, 'PATCH', '/api/profile', empty)
+      if (sessionId) await call(teacher, 'DELETE', `/api/teacher/attendance/sessions/${sessionId}`)
+    }
+  })
+
+  test('a mark after an extension is late and shows as Late to the student', async ({ page, appShell }) => {
+    test.skip(appShell, 'the website marks with the code, which is what this case uses')
+    test.setTimeout(6 * 60_000)
+    const teacher = await signInByApi(ROLES.teacher, 'teacher')
+    const early = await signInByApi(CLASS_EARLY, 'student')
+    const late = await signInByApi(CLASS_LATE, 'student')
+    const me = await need(late, 'GET', '/api/profile')
+    const entry = await classOf(teacher, me.batch, me.section)
+    await clearToday(teacher, entry)
+    let sessionId = 0
+    try {
+      const base = { course_id: entry.course_id, batch: entry.batch, section: entry.section }
+      const refused = await call(teacher, 'POST', '/api/teacher/attendance/sessions', {
+        ...base,
+        minutes: 10,
+        late_after_minutes: 11,
+        method: 'bluetooth',
+        code_only: true,
+      })
+      expect(refused.status, 'late after later than the end must be refused').toBe(400)
+      const tooLong = await call(teacher, 'POST', '/api/teacher/attendance/sessions', {
+        ...base,
+        minutes: 241,
+        method: 'bluetooth',
+        code_only: true,
+      })
+      expect(tooLong.status).toBe(400)
+      const session = await need(teacher, 'POST', '/api/teacher/attendance/sessions', {
+        ...base,
+        minutes: 1,
+        hours: 1,
+        method: 'bluetooth',
+        code_only: true,
+      })
+      sessionId = session.id
+      const longer = await need(teacher, 'POST', `/api/teacher/attendance/sessions/${sessionId}/extend`, {
+        minutes: 7,
+      })
+      expect(Math.round((new Date(longer.ends_at) - new Date(longer.started_at)) / 60_000)).toBe(8)
+      const first = await need(early, 'POST', '/api/students/attendance/mark', {
+        session_id: sessionId,
+        code: longer.code,
+      })
+      expect(first.status).toBe('present')
+      const wait = new Date(longer.original_ends_at).getTime() - Date.now() + 1500
+      await page.waitForTimeout(Math.max(wait, 0))
+      const now = await need(teacher, 'GET', `/api/teacher/attendance/sessions/${sessionId}`)
+      const second = await need(late, 'POST', '/api/students/attendance/mark', {
+        session_id: sessionId,
+        code: now.session.code,
+      })
+      expect(second.status).toBe('late')
+      expect(second.message).toContain('late')
+      await need(teacher, 'POST', `/api/teacher/attendance/sessions/${sessionId}/close`)
+      await signIn(page, { ...ROLES.student, ...CLASS_LATE })
+      await visit(page, '/student/attendance?tab=mine')
+      const row = page.locator('[data-class-status="late"]').first()
+      await expect(row).toBeVisible()
+      await expect(row).toContainText('Late')
+    } finally {
+      if (sessionId) {
+        await call(teacher, 'POST', `/api/teacher/attendance/sessions/${sessionId}/close`)
+        await call(teacher, 'DELETE', `/api/teacher/attendance/sessions/${sessionId}`)
+      }
+    }
   })
 })

@@ -1,17 +1,9 @@
 import { ROLES } from '../fixtures/roles.js'
+import { signInByApi } from './attendance.js'
 
 const API = process.env.E2E_API_URL || 'http://localhost:8080'
 
-async function token(role) {
-  const response = await fetch(`${API}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier: role.identifier, password: role.password, portal: 'student' }),
-  })
-  const body = await response.json()
-  if (!response.ok) throw new Error(`could not sign in as ${role.label}: ${body.error || response.status}`)
-  return body.token
-}
+const token = (role) => signInByApi(role, 'student')
 
 export async function postNotice(title) {
   const bearer = await token(ROLES.cr)

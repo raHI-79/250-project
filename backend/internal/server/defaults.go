@@ -27,6 +27,7 @@ func SettingDefaults(cfg *config.Config) map[string]string {
 		settings.KeyRetainViews:        "90",
 		settings.KeyRetainEvents:       "365",
 		settings.KeyRetainNotices:      "120",
+		settings.KeyLateWeight:         "0.5",
 	}
 	if cfg == nil {
 		return values

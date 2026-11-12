@@ -1,3 +1,4 @@
+import { attended } from '../../lib/attendanceTiming'
 import { useEffect, useState } from 'react'
 import StudentRow from './StudentRow'
 import { Button, Sheet, useConfirm, useToast } from '../ui'
@@ -76,7 +77,8 @@ export default function SessionSheet({ sessionId, onClose, onChanged, onDeleted 
   const session = detail?.session
   const marks = detail?.marks || []
   const roster = sortedRoster(marks)
-  const present = marks.filter((mark) => mark.status === 'present').length
+  const present = marks.filter((mark) => attended(mark.status)).length
+  const late = marks.filter((mark) => mark.status === 'late').length
   return (
     <Sheet
       open={Boolean(sessionId)}
@@ -88,6 +90,8 @@ export default function SessionSheet({ sessionId, onClose, onChanged, onDeleted 
               sectionLabel(session.section),
               formatDate(session.started_at),
               `${presentOfRoster({ present, roster: marks.length })} present`,
+              late > 0 ? `${late} late` : '',
+              session.hours > 1 ? `${session.hours} class hours` : '',
             )
           : ''
       }

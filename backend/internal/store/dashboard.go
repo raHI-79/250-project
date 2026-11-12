@@ -132,7 +132,8 @@ GROUP BY path
 ORDER BY COUNT(*) DESC
 LIMIT 10`
 	batchAttendanceSQL = `SELECT a.batch, a.section,
-COALESCE(AVG(CASE WHEN r.status = 'present' THEN 1.0 ELSE 0.0 END) * 100, 0),
+COALESCE(SUM(CASE r.status WHEN 'present' THEN a.hours WHEN 'late' THEN a.hours * ` + lateWeightSQL + ` ELSE 0 END) * 100.0
+    / NULLIF(SUM(a.hours) FILTER (WHERE r.id IS NOT NULL), 0), 0)::float8,
 COUNT(DISTINCT a.id)
 FROM attendance_sessions a
 LEFT JOIN attendance_records r ON r.session_id = a.id
@@ -164,7 +165,8 @@ LIMIT 20`
     JOIN attendance_sessions a ON a.id = r.session_id
     WHERE a.started_at >= $1 AND a.started_at < $2
     GROUP BY r.student_id
-    HAVING AVG(CASE WHEN r.status = 'present' THEN 1.0 ELSE 0.0 END) < 0.5
+    HAVING SUM(CASE r.status WHEN 'present' THEN a.hours WHEN 'late' THEN a.hours * ` + lateWeightSQL + ` ELSE 0 END)
+        < 0.5 * SUM(a.hours)
 ) low),
 (SELECT COUNT(*) FROM device_change_requests WHERE status = 'pending'),
 (SELECT COUNT(*) FROM notices WHERE created_at >= $1 AND created_at < $2),

@@ -90,12 +90,12 @@ export const NO_LOCATION_FLAG = 'No location'
 export const markFlags = (mark) =>
   mark?.no_location && mark?.status === 'present' ? [NO_LOCATION_FLAG] : []
 
-export const startBody = (entry, minutes, method, codeOnly) => ({
+export const startBody = (entry, timing, method, codeOnly) => ({
   course_id: entry.course_id,
   batch: entry.batch,
   section: entry.section,
   schedule_item_id: entry.schedule_item_id || 0,
-  minutes,
+  ...(typeof timing === 'number' ? { minutes: timing } : timing),
   method,
   code_only: method !== TAKE_ROLL_CALL && Boolean(codeOnly),
 })

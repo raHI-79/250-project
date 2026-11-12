@@ -33,6 +33,7 @@ type Store interface {
 	ClaimReminder(ctx context.Context, userID int64, slot, date string) (bool, error)
 	ListLowAttendance(ctx context.Context, minSessions int, threshold float64) ([]store.AttendanceAlert, error)
 	ClaimAttendanceAlert(ctx context.Context, studentID, courseID int64, before time.Time) (bool, error)
+	BackfillJoinedLater(ctx context.Context, studentID, userID int64) (int, error)
 }
 
 type Notifier interface {
@@ -125,6 +126,11 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		log.Printf("jobs: could not remind the teachers: %v", err)
 	} else if reminded > 0 {
 		log.Printf("jobs: reminded %d teachers about undecided classes", reminded)
+	}
+	if counted, err := s.items.BackfillJoinedLater(ctx, 0, 0); err != nil {
+		log.Printf("jobs: could not count the earlier classes of late joiners: %v", err)
+	} else if counted > 0 {
+		log.Printf("jobs: counted %d earlier classes for students who joined later", counted)
 	}
 	if warned, err := s.WarnLowAttendance(ctx); err != nil {
 		log.Printf("jobs: could not warn the students about low attendance: %v", err)

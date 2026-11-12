@@ -174,3 +174,15 @@ export const DATE_PAGES = {
 }
 
 export const DATE_PANELS = ['/student/register', '/student/forgot-password', '/teacher/activate']
+
+export const CLASS_EARLY = {
+  label: 'student of the demo teacher',
+  identifier: process.env.E2E_CLASS_EARLY_ID || 's24a2',
+  password: DEMO_PASSWORD,
+}
+
+export const CLASS_LATE = {
+  label: 'second student of the demo teacher',
+  identifier: process.env.E2E_CLASS_LATE_ID || 's24a3',
+  password: DEMO_PASSWORD,
+}

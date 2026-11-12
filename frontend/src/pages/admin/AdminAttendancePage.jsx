@@ -1,3 +1,4 @@
+import LateWeightCard from '../../components/attendance/LateWeightCard'
 import { useState } from 'react'
 import { CalendarCheck, Download, PieChart, Trash2 } from 'lucide-react'
 import {
@@ -150,6 +151,7 @@ export default function AdminAttendancePage() {
         </Card>
       )}
       {tab === OFFICE_TAB_PHONES && <AdminPhoneChanges />}
+      {tab === OFFICE_TAB_SHEETS && <LateWeightCard className="mb-5" />}
       {tab === OFFICE_TAB_HISTORY && (
         <>
           {sessions.error && (
@@ -186,6 +188,7 @@ export default function AdminAttendancePage() {
                     </span>
                     <span className="shrink-0 text-sm font-semibold text-ink">
                       {session.present}/{session.roster}
+                      {session.late > 0 ? ` · ${session.late} L` : ''}
                     </span>
                     <Button
                       variant="danger"

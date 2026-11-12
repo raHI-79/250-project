@@ -236,12 +236,14 @@ func TestValidDuration(t *testing.T) {
 		want    bool
 	}{
 		{minutes: 0},
-		{minutes: 4},
+		{minutes: 1, want: true},
+		{minutes: 47, want: true},
 		{minutes: 5, want: true},
 		{minutes: 15, want: true},
 		{minutes: 30, want: true},
-		{minutes: 31},
-		{minutes: 120},
+		{minutes: 240, want: true},
+		{minutes: 241},
+		{minutes: 120, want: true},
 		{minutes: -10},
 	}
 	for _, tc := range tests {
@@ -456,5 +458,112 @@ func TestTheDistanceCheckTakesOffTheLargerAccuracy(t *testing.T) {
 	}
 	if WithinReach(100.5, 100, 100) {
 		t.Error("a mark more than 100 m from the teacher was accepted")
+	}
+}
+
+func TestStatusAtTheLateBoundary(t *testing.T) {
+	start := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	originalEnd := start.Add(10 * time.Minute)
+	lateAfter := start.Add(4 * time.Minute)
+	tests := []struct {
+		name      string
+		markedAt  time.Time
+		lateAfter time.Time
+		want      string
+	}{
+		{name: "before the original end", markedAt: start.Add(9 * time.Minute), want: Present},
+		{name: "exactly at the original end", markedAt: originalEnd, want: Present},
+		{name: "after the original end of an extended session", markedAt: originalEnd.Add(time.Second), want: Late},
+		{name: "before late after", markedAt: start.Add(3 * time.Minute), lateAfter: lateAfter, want: Present},
+		{name: "exactly at late after", markedAt: lateAfter, lateAfter: lateAfter, want: Present},
+		{name: "after late after", markedAt: lateAfter.Add(time.Second), lateAfter: lateAfter, want: Late},
+	}
+	for _, tc := range tests {
+		if got := StatusAt(tc.markedAt, originalEnd, tc.lateAfter); got != tc.want {
+			t.Errorf("%s: StatusAt() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestClassHoursFollowTheLengthOfTheClass(t *testing.T) {
+	tests := map[int]int{0: 1, 30: 1, 50: 1, 60: 1, 61: 2, 90: 2, 120: 2, 121: 3, 180: 3, 181: 4, 240: 4, 400: 4}
+	for minutes, want := range tests {
+		if got := HoursFor(minutes); got != want {
+			t.Errorf("HoursFor(%d) = %d, want %d", minutes, got, want)
+		}
+	}
+	for hours, want := range map[int]bool{0: false, 1: true, 4: true, 5: false, -1: false} {
+		if got := ValidHours(hours); got != want {
+			t.Errorf("ValidHours(%d) = %t, want %t", hours, got, want)
+		}
+	}
+}
+
+func TestCustomTimesAreChecked(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 30, 0, time.UTC)
+	if got := MinutesUntil(now, now.Add(-time.Minute)); got != 0 {
+		t.Errorf("an open-until time in the past gives %d minutes, want 0", got)
+	}
+	if got := MinutesUntil(now, time.Date(2026, 11, 12, 9, 45, 0, 0, time.UTC)); got != 45 {
+		t.Errorf("open until 09:45 gives %d minutes, want 45", got)
+	}
+	for _, tc := range []struct {
+		late, minutes int
+		want          bool
+	}{
+		{late: 0, minutes: 10, want: true},
+		{late: 1, minutes: 10, want: true},
+		{late: 10, minutes: 10, want: true},
+		{late: 11, minutes: 10},
+		{late: -1, minutes: 10},
+	} {
+		if got := ValidLateAfter(tc.late, tc.minutes); got != tc.want {
+			t.Errorf("ValidLateAfter(%d, %d) = %t, want %t", tc.late, tc.minutes, got, tc.want)
+		}
+	}
+	start := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	if !WithinWindow(start, start.Add(4*time.Hour)) {
+		t.Error("a session of exactly four hours was refused")
+	}
+	if WithinWindow(start, start.Add(4*time.Hour+time.Minute)) {
+		t.Error("a session longer than four hours was accepted")
+	}
+	if WithinWindow(start, start) {
+		t.Error("a session that ends when it starts was accepted")
+	}
+}
+
+func TestCreditWeighsLatesAndHours(t *testing.T) {
+	if got := Credit(2, 3, DefaultLateWeight); got != 3.5 {
+		t.Errorf("2 present hours and 3 late hours give %v, want 3.5", got)
+	}
+	if got := Credit(0, 2, DefaultLateWeight); got != 1 {
+		t.Errorf("two lates of one hour give %v, want one class", got)
+	}
+	if got := Rate(3.5, 6); math.Round(got) != 58 {
+		t.Errorf("3.5 of 6 hours is %v %%, want 58", got)
+	}
+	if got := Rate(1, 0); got != 0 {
+		t.Errorf("no classes held gives %v %%, want 0", got)
+	}
+	if !LowCredit(1.4, 3) || LowCredit(1.5, 3) || LowCredit(0, 2) {
+		t.Error("the 50 % alert does not follow the credit")
+	}
+	last := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	if CreditAlertDue(1, 4, last, last.Add(24*time.Hour)) {
+		t.Error("the alert repeated inside its cooldown")
+	}
+	if !CreditAlertDue(1, 4, last, last.Add(AlertCooldown)) {
+		t.Error("the alert did not come back after its cooldown")
+	}
+	for weight, want := range map[float64]bool{0: true, 0.5: true, 1: true, 1.1: false, -0.1: false} {
+		if got := ValidWeight(weight); got != want {
+			t.Errorf("ValidWeight(%v) = %t, want %t", weight, got, want)
+		}
+	}
+	for status, want := range map[string]bool{Present: true, Late: true, Absent: true, "excused": false} {
+		if got := ValidStatus(status); got != want {
+			t.Errorf("ValidStatus(%q) = %t, want %t", status, got, want)
+		}
 	}
 }

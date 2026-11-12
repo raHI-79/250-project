@@ -59,10 +59,10 @@ func (stubPresenceStore) OnRoster(ctx context.Context, sessionID, studentID int6
 	return true, nil
 }
 
-func (s *stubPresenceStore) MarkAttendance(ctx context.Context, mark store.MarkInput) error {
+func (s *stubPresenceStore) MarkAttendance(ctx context.Context, mark store.MarkInput) (string, error) {
 	s.marks++
 	s.lastMark = mark
-	return nil
+	return "present", nil
 }
 
 func openWebSession(presence *stubPresenceStore, method string) {

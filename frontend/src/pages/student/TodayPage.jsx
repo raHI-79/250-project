@@ -38,7 +38,7 @@ import {
   useSectionBadges,
 } from '../../lib/badges'
 import { paths } from '../../lib/paths'
-import { percentOf } from '../../lib/attendance'
+import { creditPercent } from '../../lib/attendanceTiming'
 import { STATUS_CANCELLED } from '../../lib/schedule'
 import { today as todayDate } from '../../lib/time'
 
@@ -96,8 +96,8 @@ export default function TodayPage() {
   const meta = data?.week ? `Week ${data.week}` : ''
   const myCourses = attendance.data?.courses || []
   const held = myCourses.reduce((total, entry) => total + (Number(entry.held) || 0), 0)
-  const attended = myCourses.reduce((total, entry) => total + (Number(entry.present) || 0), 0)
-  const overall = held > 0 ? percentOf(attended, held) : null
+  const attended = myCourses.reduce((total, entry) => total + (Number(entry.credit) || 0), 0)
+  const overall = held > 0 ? creditPercent(attended, held) : null
   const actions = [
     {
       label: 'Routine',

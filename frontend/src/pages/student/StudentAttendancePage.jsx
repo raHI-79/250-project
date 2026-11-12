@@ -212,9 +212,9 @@ export default function StudentAttendancePage() {
     setBusy('mark')
     try {
       if (codeOnly) {
-        await api.post('/api/students/attendance/mark', codeOnlyMarkBody(session, code))
+        const saved = await api.post('/api/students/attendance/mark', codeOnlyMarkBody(session, code))
         setDone(true)
-        toast.success('You are marked present.')
+        toast.success(saved?.message || 'You are marked present.')
         reload()
         return
       }
@@ -223,7 +223,7 @@ export default function StudentAttendancePage() {
         toast.error('Your location is needed to mark you present. Follow the steps above.')
         return
       }
-      await api.post('/api/students/attendance/mark', {
+      const saved = await api.post('/api/students/attendance/mark', {
         session_id: session.id,
         code: code.trim(),
         lat: position.lat,
@@ -231,7 +231,7 @@ export default function StudentAttendancePage() {
         accuracy_m: position.accuracy_m,
       })
       setDone(true)
-      toast.success('You are marked present.')
+      toast.success(saved?.message || 'You are marked present.')
       reload()
     } catch (failure) {
       toast.error(failure.message)
@@ -248,12 +248,12 @@ export default function StudentAttendancePage() {
         return
       }
       if (codeOnly) {
-        await api.post('/api/students/attendance/mark', {
+        const saved = await api.post('/api/students/attendance/mark', {
           ...codeOnlyMarkBody(session, code),
           device_id: device,
         })
         setDone(true)
-        toast.success('You are marked present.')
+        toast.success(saved?.message || 'You are marked present.')
         reload()
         return
       }
@@ -262,7 +262,7 @@ export default function StudentAttendancePage() {
         toast.error('Your phone did not report a position. Turn location on and try again.')
         return
       }
-      await api.post('/api/students/attendance/mark', {
+      const saved = await api.post('/api/students/attendance/mark', {
         session_id: session.id,
         token: useCode ? '' : token,
         code: useCode ? code.trim() : '',
@@ -273,7 +273,7 @@ export default function StudentAttendancePage() {
         device_id: device,
       })
       setDone(true)
-      toast.success('You are marked present.')
+      toast.success(saved?.message || 'You are marked present.')
       reload()
     } catch (failure) {
       toast.error(failure.message)

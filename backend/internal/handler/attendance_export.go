@@ -29,9 +29,17 @@ func exportRows(rows []store.ExportRow) []attendance.ExportRow {
 			Status:     row.Status,
 			Note:       row.Note,
 			NoLocation: row.NoLocation,
+			Hours:      row.Hours,
 		})
 	}
 	return out
+}
+
+func exportWeight(rows []store.ExportRow) (float64, bool) {
+	if len(rows) == 0 {
+		return attendance.DefaultLateWeight, false
+	}
+	return rows[0].LateWeight, true
 }
 
 func writeWorkbook(w http.ResponseWriter, classes []attendance.ExportClass,
@@ -59,12 +67,15 @@ func (a *Attendance) teacherClass(ctx context.Context, teacherID int64, class st
 	if err != nil {
 		return attendance.ExportClass{}, err
 	}
+	weight, set := exportWeight(rows)
 	return attendance.ExportClass{
 		CourseCode:  class.CourseCode,
 		CourseTitle: class.CourseTitle,
 		Batch:       class.Batch,
 		Section:     class.Section,
 		Sessions:    class.Sessions,
+		LateWeight:  weight,
+		WeightSet:   set,
 		Rows:        exportRows(rows),
 	}, nil
 }

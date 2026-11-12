@@ -4,13 +4,15 @@ import StudentRow from './StudentRow'
 import { Alert, Button, Card, CardHeader, useConfirm, useToast } from '../ui'
 import api from '../../lib/api'
 import { sectionLabel, sortedRoster } from '../../lib/attendance'
+import { STATUS_LABELS, attended } from '../../lib/attendanceTiming'
 
 export default function RollCall({ session, marks, busy, onReload, onFinish }) {
   const toast = useToast()
   const confirm = useConfirm()
   const [working, setWorking] = useState(0)
   const roster = sortedRoster(marks)
-  const present = marks.filter((entry) => entry.status === 'present').length
+  const present = marks.filter((entry) => attended(entry.status)).length
+  const late = marks.filter((entry) => entry.status === 'late').length
   const left = marks.filter((entry) => !entry.marked_at && entry.method !== 'manual').length
   const run = async (studentId, call, message) => {
     setWorking(studentId)
@@ -33,7 +35,7 @@ export default function RollCall({ session, marks, busy, onReload, onFinish }) {
           status,
           note,
         }),
-      status === 'present' ? 'Marked present' : 'Marked absent',
+      `Marked ${String(STATUS_LABELS[status] || status).toLowerCase()}`,
     ).catch(() => null)
   const note = (studentId, text) =>
     run(
@@ -70,7 +72,7 @@ export default function RollCall({ session, marks, busy, onReload, onFinish }) {
     <Card hover={false}>
       <CardHeader
         title={`Roll call · ${session.course_code}`}
-        subtitle={`${session.batch} · ${sectionLabel(session.section)} · ${present}/${marks.length} present`}
+        subtitle={`${session.batch} · ${sectionLabel(session.section)} · ${present}/${marks.length} present${late > 0 ? ` · ${late} late` : ''}`}
         className="px-0 pt-0"
       />
       {left > 0 && (

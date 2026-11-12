@@ -25,7 +25,7 @@ const (
 	MessageNotYourClass     = "This class is not yours in the running semester."
 	MessageSessionGone      = "This attendance session was not found."
 	MessageAttendanceOver   = "This attendance is already closed."
-	MessageWrongMarkStatus  = "A student is either present or absent."
+	MessageWrongMarkStatus  = "A student is present, late or absent."
 	MessageDeviceIDRequired = "The app did not send the phone id. Update the app and try again."
 	MessageSheetDeleted     = "The attendance sheet is deleted."
 	MessageSessionDeleted   = "The attendance session is deleted."
@@ -93,7 +93,11 @@ type sessionBody struct {
 	Method      string `json:"method"`
 	CodeOnly    bool   `json:"code_only"`
 	Present     int    `json:"present"`
+	Late        int    `json:"late"`
 	Roster      int    `json:"roster"`
+	Hours       int    `json:"hours"`
+	OriginalEnd string `json:"original_ends_at,omitempty"`
+	LateAfter   string `json:"late_after,omitempty"`
 	Code        string `json:"code,omitempty"`
 	CodeSeconds int    `json:"code_seconds,omitempty"`
 	TokenKey    string `json:"token_key,omitempty"`
@@ -159,11 +163,21 @@ func newSessionBody(session store.AttendanceSession, now time.Time, forTeacher b
 		Method:      session.Method,
 		CodeOnly:    session.CodeOnly,
 		Present:     session.Present,
+		Late:        session.Late,
 		Roster:      session.Roster,
+		Hours:       session.Hours,
 		HasLocation: session.HasLocation,
 	}
 	if !session.LocationAt.IsZero() {
 		body.LocationAt = timestamp(session.LocationAt)
+	}
+	if !session.OriginalEndsAt.IsZero() {
+		body.OriginalEnd = timestamp(session.OriginalEndsAt)
+		boundary := session.OriginalEndsAt
+		if !session.LateAfter.IsZero() {
+			boundary = session.LateAfter
+		}
+		body.LateAfter = timestamp(boundary)
 	}
 	if forTeacher && session.Status == attendance.StatusOpen &&
 		session.Method != attendance.TakeRollCall {
@@ -316,6 +330,25 @@ func (a *Attendance) announce(ctx context.Context, session store.AttendanceSessi
 
 func percentText(present, held int) int {
 	return int(math.Round(attendance.Percentage(present, held)))
+}
+
+func creditPercent(credit float64, heldHours int) int {
+	return int(math.Round(attendance.Rate(credit, heldHours)))
+}
+
+func classHours(start, end string) int {
+	if len(start) < 5 || len(end) < 5 {
+		return attendance.MinHours
+	}
+	from, err := time.Parse("15:04", start[:5])
+	if err != nil {
+		return attendance.MinHours
+	}
+	to, err := time.Parse("15:04", end[:5])
+	if err != nil || !to.After(from) {
+		return attendance.MinHours
+	}
+	return attendance.HoursFor(int(to.Sub(from).Minutes()))
 }
 
 func sessionIDQuery(r *http.Request, key string) int64 {

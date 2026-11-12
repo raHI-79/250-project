@@ -34,6 +34,10 @@ type AttendanceSession struct {
 	CodeOnly        bool
 	Present         int
 	Roster          int
+	Hours           int
+	OriginalEndsAt  time.Time
+	LateAfter       time.Time
+	Late            int
 }
 
 type NewAttendanceSession struct {
@@ -46,6 +50,8 @@ type NewAttendanceSession struct {
 	TokenKey       string
 	Method         string
 	CodeOnly       bool
+	Hours          int
+	LateAfter      int
 }
 
 type RosterStudent struct {
@@ -98,6 +104,9 @@ type CourseAttendance struct {
 	TeacherName string
 	Held        int
 	Present     int
+	Lates       int
+	Credit      float64
+	Sessions    int
 }
 
 type StudentSessionRow struct {
@@ -112,6 +121,7 @@ type StudentSessionRow struct {
 	Note        string
 	MarkedAt    time.Time
 	HasMark     bool
+	Hours       int
 }
 
 type ClassSummary struct {
@@ -132,29 +142,37 @@ type AttendanceAlert struct {
 	CourseTitle string
 	Held        int
 	Present     int
+	Credit      float64
 	LastSentAt  time.Time
 }
+
+const lateWeightSQL = `COALESCE((SELECT NULLIF(v.value, '')::numeric FROM settings v WHERE v.key = 'attendance_late_weight'), 0.5)`
 
 const sessionColumns = `a.id, a.course_id, c.code, c.title, a.batch, a.section,
 COALESCE(a.schedule_item_id, 0), a.teacher_id, COALESCE(t.user_id, 0), COALESCE(t.name, ''),
 a.started_at, a.ends_at, a.status, a.teacher_lat, a.teacher_lng, a.teacher_accuracy_m,
 a.location_updated_at, a.token_key, a.closed_at, a.method, a.code_only,
-(SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'present'),
+(SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status IN ('present', 'late')),
 CASE WHEN a.status = 'closed'
      THEN (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id)
      ELSE (SELECT COUNT(*) FROM students s
            JOIN users u ON u.id = s.user_id AND u.status = 'active'
            WHERE (s.batch = a.batch AND (a.section = 'ALL' OR s.section = a.section))
               OR s.id IN (SELECT d.student_id FROM student_drop_courses d WHERE d.course_id = a.course_id))
-END`
+END,
+a.hours, a.original_ends_at, a.late_after,
+(SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'late')`
 
 const markedSessionSQL = `(a.status = 'open' OR EXISTS (
     SELECT 1 FROM attendance_records m WHERE m.session_id = a.id AND m.method <> 'system'))`
 
 const (
 	openSessionSQL = `INSERT INTO attendance_sessions
-(course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key, method, code_only)
-VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6), $7, $8, $9)
+(course_id, batch, section, schedule_item_id, teacher_id, ends_at, original_ends_at, token_key,
+ method, code_only, hours, late_after)
+VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6),
+ now() + make_interval(mins => $6), $7, $8, $9, $10,
+ CASE WHEN $11::int > 0 THEN now() + make_interval(mins => $11::int) END)
 RETURNING id`
 	runningSessionSQL = `SELECT a.id, a.status FROM attendance_sessions a
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
@@ -163,11 +181,15 @@ WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
 ORDER BY (a.status = 'open') DESC, a.started_at DESC
 LIMIT 1`
 	continueSessionSQL = `UPDATE attendance_sessions
-SET ends_at = GREATEST(ends_at, now() + make_interval(mins => $2)), method = $3, code_only = $4
+SET ends_at = LEAST(GREATEST(ends_at, now() + make_interval(mins => $2)), started_at + interval '4 hours'),
+    method = $3, code_only = $4, hours = $5
 WHERE id = $1 AND status = 'open'
 RETURNING id`
 	reopenSessionSQL = `UPDATE attendance_sessions
-SET status = 'open', closed_at = NULL, ends_at = now() + make_interval(mins => $2), method = $3, code_only = $4
+SET status = 'open', closed_at = NULL,
+    ends_at = GREATEST(LEAST(now() + make_interval(mins => $2), started_at + interval '4 hours'),
+                       now() + interval '1 minute'),
+    method = $3, code_only = $4, hours = $5
 WHERE id = $1 AND status = 'closed'
 RETURNING id`
 	dropAbsenteesSQL = `DELETE FROM attendance_records WHERE session_id = $1 AND method = 'system'`
@@ -214,6 +236,7 @@ RETURNING id`
 	extendSessionSQL = `UPDATE attendance_sessions
 SET ends_at = ends_at + make_interval(mins => $3)
 WHERE id = $1 AND teacher_id = $2 AND status = 'open'
+  AND ends_at + make_interval(mins => $3) <= started_at + interval '4 hours'
 RETURNING id`
 	closeSessionSQL = `UPDATE attendance_sessions
 SET status = 'closed', closed_at = now()
@@ -244,10 +267,12 @@ ORDER BY s.reg_no`
 )`
 	markSQL = `INSERT INTO attendance_records
 (session_id, student_id, status, method, device_id, lat, lng, accuracy_m, distance_m, no_location)
-SELECT $1, $2, 'present', $3, $4, $5, $6, $7, $8, $9
+SELECT $1, $2,
+       CASE WHEN now() > COALESCE(a.late_after, a.original_ends_at) THEN 'late' ELSE 'present' END,
+       $3, $4, $5, $6, $7, $8, $9
 FROM attendance_sessions a
 WHERE a.id = $1 AND a.status = 'open' AND a.ends_at > now()
-RETURNING id`
+RETURNING status`
 	sessionRecordsSQL = `SELECT a.id, s.id, s.user_id, s.full_name, s.reg_no, s.section,
 COALESCE(u.photo_path, ''),
 COALESCE(r.status, ''), COALESCE(r.method, ''), COALESCE(r.device_id, ''),
@@ -270,7 +295,7 @@ SET status = EXCLUDED.status, method = 'manual', note = EXCLUDED.note,
     edited_by = EXCLUDED.edited_by, edited_at = now(), no_location = false
 RETURNING id`
 	studentCoursesSQL = `SELECT a.course_id, c.code, c.title, COALESCE(t.name, ''),
-COUNT(*), COUNT(*) FILTER (WHERE r.status = 'present')
+COALESCE(SUM(a.hours), 0), COALESCE(SUM(a.hours) FILTER (WHERE r.status = 'present'), 0), COUNT(*) FILTER (WHERE r.status = 'late'), COALESCE(SUM(CASE r.status WHEN 'present' THEN a.hours WHEN 'late' THEN a.hours * ` + lateWeightSQL + ` ELSE 0 END), 0)::float8, COUNT(*)
 FROM attendance_records r
 JOIN attendance_sessions a ON a.id = r.session_id
 JOIN courses c ON c.id = a.course_id
@@ -279,7 +304,7 @@ WHERE r.student_id = $1
 GROUP BY a.course_id, c.code, c.title, t.name
 ORDER BY c.code`
 	studentSessionsSQL = `SELECT a.id, a.course_id, c.code, c.title, COALESCE(t.name, ''),
-a.started_at, r.status, r.method, r.note, r.marked_at
+a.started_at, r.status, r.method, r.note, r.marked_at, a.hours
 FROM attendance_records r
 JOIN attendance_sessions a ON a.id = r.session_id
 JOIN courses c ON c.id = a.course_id
@@ -293,20 +318,20 @@ JOIN courses c ON c.id = a.course_id
 WHERE a.teacher_id = $1 AND a.started_at >= $2 AND a.started_at < $3
 GROUP BY a.course_id, c.code, c.title, a.batch, a.section
 ORDER BY c.code, a.batch, a.section`
-	classRatesSQL = `SELECT r.student_id, COUNT(*), COUNT(*) FILTER (WHERE r.status = 'present')
+	classRatesSQL = `SELECT r.student_id, COALESCE(SUM(a.hours), 0), COALESCE(SUM(a.hours) FILTER (WHERE r.status = 'present'), 0), COUNT(*) FILTER (WHERE r.status = 'late'), COALESCE(SUM(CASE r.status WHEN 'present' THEN a.hours WHEN 'late' THEN a.hours * ` + lateWeightSQL + ` ELSE 0 END), 0)::float8
 FROM attendance_records r
 JOIN attendance_sessions a ON a.id = r.session_id
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
   AND a.started_at >= $5 AND a.started_at < $6
 GROUP BY r.student_id`
-	batchClassRatesSQL = `SELECT r.student_id, COUNT(*), COUNT(*) FILTER (WHERE r.status = 'present')
+	batchClassRatesSQL = `SELECT r.student_id, COALESCE(SUM(a.hours), 0), COALESCE(SUM(a.hours) FILTER (WHERE r.status = 'present'), 0), COUNT(*) FILTER (WHERE r.status = 'late'), COALESCE(SUM(CASE r.status WHEN 'present' THEN a.hours WHEN 'late' THEN a.hours * ` + lateWeightSQL + ` ELSE 0 END), 0)::float8
 FROM attendance_records r
 JOIN attendance_sessions a ON a.id = r.session_id
 WHERE a.course_id = $1 AND a.batch = $2 AND a.section = $3
   AND a.started_at >= $4 AND a.started_at < $5
 GROUP BY r.student_id`
 	exportRowsSQL = `SELECT s.id, s.full_name, s.reg_no, a.id, a.started_at,
-r.status, COALESCE(r.note, ''), r.no_location
+r.status, COALESCE(r.note, ''), r.no_location, a.hours, (` + lateWeightSQL + `)::float8
 FROM attendance_sessions a
 JOIN attendance_records r ON r.session_id = a.id
 JOIN students s ON s.id = r.student_id
@@ -320,7 +345,7 @@ WHERE a.batch = $1 AND a.started_at >= $2 AND a.started_at < $3
 GROUP BY a.course_id, c.code, c.title, a.batch, a.section
 ORDER BY c.code, a.section`
 	batchExportRowsSQL = `SELECT s.id, s.full_name, s.reg_no, a.id, a.started_at,
-r.status, COALESCE(r.note, ''), r.no_location
+r.status, COALESCE(r.note, ''), r.no_location, a.hours, (` + lateWeightSQL + `)::float8
 FROM attendance_sessions a
 JOIN attendance_records r ON r.session_id = a.id
 JOIN students s ON s.id = r.student_id
@@ -328,7 +353,7 @@ WHERE a.course_id = $1 AND a.batch = $2 AND a.section = $3
   AND a.started_at >= $4 AND a.started_at < $5
 ORDER BY s.reg_no, a.started_at`
 	lowAttendanceSQL = `SELECT r.student_id, s.user_id, a.course_id, c.title,
-COUNT(*), COUNT(*) FILTER (WHERE r.status = 'present'), al.last_sent_at
+COALESCE(SUM(a.hours), 0), COALESCE(SUM(a.hours) FILTER (WHERE r.status = 'present'), 0), COALESCE(SUM(CASE r.status WHEN 'present' THEN a.hours WHEN 'late' THEN a.hours * ` + lateWeightSQL + ` ELSE 0 END), 0)::float8, al.last_sent_at
 FROM attendance_records r
 JOIN attendance_sessions a ON a.id = r.session_id
 JOIN courses c ON c.id = a.course_id
@@ -338,7 +363,20 @@ LEFT JOIN attendance_alerts al ON al.student_id = r.student_id AND al.course_id 
 WHERE a.status = 'closed'
 GROUP BY r.student_id, s.user_id, a.course_id, c.title, al.last_sent_at
 HAVING COUNT(*) >= $1
-   AND COUNT(*) FILTER (WHERE r.status = 'present') * 100 < COUNT(*) * $2`
+   AND COALESCE(SUM(CASE r.status WHEN 'present' THEN a.hours WHEN 'late' THEN a.hours * ` + lateWeightSQL + ` ELSE 0 END), 0)::float8 * 100 < COALESCE(SUM(a.hours), 0) * $2`
+	joinedLaterSQL = `INSERT INTO attendance_records (session_id, student_id, status, method, note)
+SELECT a.id, s.id, 'absent', 'system', 'Joined later'
+FROM attendance_sessions a
+JOIN students s ON (s.batch = a.batch AND (a.section = 'ALL' OR s.section = a.section))
+  OR s.id IN (SELECT d.student_id FROM student_drop_courses d WHERE d.course_id = a.course_id)
+JOIN users u ON u.id = s.user_id AND u.status = 'active'
+LEFT JOIN batch_semesters b ON b.batch = a.batch
+WHERE a.status = 'closed'
+  AND a.started_at >= COALESCE(b.updated_at, '-infinity'::timestamptz)
+  AND EXISTS (SELECT 1 FROM attendance_records m WHERE m.session_id = a.id AND m.method <> 'system')
+  AND ($1::bigint = 0 OR s.id = $1::bigint)
+  AND ($2::bigint = 0 OR s.user_id = $2::bigint)
+ON CONFLICT (session_id, student_id) DO NOTHING`
 	claimAlertSQL = `INSERT INTO attendance_alerts (student_id, course_id)
 VALUES ($1, $2)
 ON CONFLICT (student_id, course_id) DO UPDATE SET last_sent_at = now()
@@ -438,12 +476,16 @@ func (s *Store) OpenAttendanceSession(ctx context.Context,
 		method = SessionBluetooth
 	}
 	codeOnly := fresh.CodeOnly && method != SessionRollCall
+	hours := fresh.Hours
+	if hours < 1 {
+		hours = 1
+	}
 	var running int64
 	var status string
 	err := s.pool.QueryRow(ctx, runningSessionSQL, fresh.TeacherID, fresh.CourseID,
 		fresh.Batch, fresh.Section).Scan(&running, &status)
 	if err == nil {
-		return s.continueSession(ctx, running, status, fresh.Minutes, method, codeOnly)
+		return s.continueSession(ctx, running, status, fresh.Minutes, method, codeOnly, hours)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return AttendanceSession{}, fmt.Errorf("store: could not look for a running attendance: %w", err)
@@ -451,7 +493,7 @@ func (s *Store) OpenAttendanceSession(ctx context.Context,
 	var id int64
 	err = s.pool.QueryRow(ctx, openSessionSQL, fresh.CourseID, fresh.Batch, fresh.Section,
 		fresh.ScheduleItemID, fresh.TeacherID, fresh.Minutes, fresh.TokenKey, method,
-		codeOnly).Scan(&id)
+		codeOnly, hours, fresh.LateAfter).Scan(&id)
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not open an attendance session: %w", err)
 	}
@@ -459,7 +501,7 @@ func (s *Store) OpenAttendanceSession(ctx context.Context,
 }
 
 func (s *Store) continueSession(ctx context.Context, sessionID int64, status string, minutes int,
-	method string, codeOnly bool) (AttendanceSession, error) {
+	method string, codeOnly bool, hours int) (AttendanceSession, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not start continuing the session %d: %w", sessionID, err)
@@ -470,7 +512,7 @@ func (s *Store) continueSession(ctx context.Context, sessionID int64, status str
 		query = reopenSessionSQL
 	}
 	var id int64
-	if err := tx.QueryRow(ctx, query, sessionID, minutes, method, codeOnly).Scan(&id); err != nil {
+	if err := tx.QueryRow(ctx, query, sessionID, minutes, method, codeOnly, hours).Scan(&id); err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not continue the session %d: %w", sessionID, err)
 	}
 	if status != SessionOpen {
@@ -542,7 +584,7 @@ func (s *Store) sessionList(ctx context.Context, query string,
 func scanSession(row rowScanner) (AttendanceSession, error) {
 	var session AttendanceSession
 	var lat, lng, accuracy *float64
-	var locationAt, closedAt *time.Time
+	var locationAt, closedAt, lateAfter *time.Time
 	err := row.Scan(
 		&session.ID,
 		&session.CourseID,
@@ -567,6 +609,10 @@ func scanSession(row rowScanner) (AttendanceSession, error) {
 		&session.CodeOnly,
 		&session.Present,
 		&session.Roster,
+		&session.Hours,
+		&session.OriginalEndsAt,
+		&lateAfter,
+		&session.Late,
 	)
 	if err != nil {
 		return AttendanceSession{}, err
@@ -582,6 +628,9 @@ func scanSession(row rowScanner) (AttendanceSession, error) {
 	}
 	if closedAt != nil {
 		session.ClosedAt = *closedAt
+	}
+	if lateAfter != nil {
+		session.LateAfter = *lateAfter
 	}
 	return session, nil
 }
@@ -701,28 +750,28 @@ func (s *Store) OnRoster(ctx context.Context, sessionID, studentID int64) (bool,
 	return listed, nil
 }
 
-func (s *Store) MarkAttendance(ctx context.Context, mark MarkInput) error {
-	var id int64
+func (s *Store) MarkAttendance(ctx context.Context, mark MarkInput) (string, error) {
+	var status string
 	var lat, lng, accuracy, distance *float64
 	if !mark.NoLocation {
 		lat, lng, accuracy, distance = &mark.Lat, &mark.Lng, &mark.AccuracyM, &mark.DistanceM
 	}
 	err := s.pool.QueryRow(ctx, markSQL, mark.SessionID, mark.StudentID, mark.Method,
-		mark.DeviceID, lat, lng, accuracy, distance, mark.NoLocation).Scan(&id)
+		mark.DeviceID, lat, lng, accuracy, distance, mark.NoLocation).Scan(&status)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrAttendanceClosed
+		return "", ErrAttendanceClosed
 	}
 	if isUniqueViolation(err) {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == "attendance_records_one_per_device" {
-			return ErrDeviceUsed
+			return "", ErrDeviceUsed
 		}
-		return ErrAlreadyMarked
+		return "", ErrAlreadyMarked
 	}
 	if err != nil {
-		return fmt.Errorf("store: could not mark the student %d: %w", mark.StudentID, err)
+		return "", fmt.Errorf("store: could not mark the student %d: %w", mark.StudentID, err)
 	}
-	return nil
+	return status, nil
 }
 
 func (s *Store) ListSessionRecords(ctx context.Context, sessionID int64) ([]AttendanceRecord, error) {
@@ -798,7 +847,8 @@ func (s *Store) StudentCourseAttendance(ctx context.Context, studentID int64) ([
 	for rows.Next() {
 		var course CourseAttendance
 		err := rows.Scan(&course.CourseID, &course.CourseCode, &course.CourseTitle,
-			&course.TeacherName, &course.Held, &course.Present)
+			&course.TeacherName, &course.Held, &course.Present, &course.Lates, &course.Credit,
+			&course.Sessions)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a course attendance: %w", err)
 		}
@@ -821,7 +871,8 @@ func (s *Store) StudentAttendanceSessions(ctx context.Context, studentID int64) 
 		var entry StudentSessionRow
 		var markedAt *time.Time
 		err := rows.Scan(&entry.SessionID, &entry.CourseID, &entry.CourseCode, &entry.CourseTitle,
-			&entry.TeacherName, &entry.StartedAt, &entry.Status, &entry.Method, &entry.Note, &markedAt)
+			&entry.TeacherName, &entry.StartedAt, &entry.Status, &entry.Method, &entry.Note, &markedAt,
+			&entry.Hours)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a student attendance row: %w", err)
 		}
@@ -872,6 +923,8 @@ type StudentRate struct {
 	StudentID int64
 	Held      int
 	Present   int
+	Lates     int
+	Credit    float64
 }
 
 func (s *Store) ClassRates(ctx context.Context, teacherID, courseID int64, batch, section string,
@@ -884,7 +937,7 @@ func (s *Store) ClassRates(ctx context.Context, teacherID, courseID int64, batch
 	rates := make([]StudentRate, 0)
 	for rows.Next() {
 		var rate StudentRate
-		if err := rows.Scan(&rate.StudentID, &rate.Held, &rate.Present); err != nil {
+		if err := rows.Scan(&rate.StudentID, &rate.Held, &rate.Present, &rate.Lates, &rate.Credit); err != nil {
 			return nil, fmt.Errorf("store: could not scan a class rate: %w", err)
 		}
 		rates = append(rates, rate)
@@ -905,7 +958,7 @@ func (s *Store) BatchClassRates(ctx context.Context, courseID int64, batch, sect
 	rates := make([]StudentRate, 0)
 	for rows.Next() {
 		var rate StudentRate
-		if err := rows.Scan(&rate.StudentID, &rate.Held, &rate.Present); err != nil {
+		if err := rows.Scan(&rate.StudentID, &rate.Held, &rate.Present, &rate.Lates, &rate.Credit); err != nil {
 			return nil, fmt.Errorf("store: could not scan a batch class rate: %w", err)
 		}
 		rates = append(rates, rate)
@@ -925,6 +978,8 @@ type ExportRow struct {
 	Status     string
 	Note       string
 	NoLocation bool
+	Hours      int
+	LateWeight float64
 }
 
 func (s *Store) TeacherExportRows(ctx context.Context, teacherID, courseID int64, batch, section string,
@@ -947,7 +1002,8 @@ func (s *Store) exportRows(ctx context.Context, query string, args ...any) ([]Ex
 	for rows.Next() {
 		var entry ExportRow
 		err := rows.Scan(&entry.StudentID, &entry.FullName, &entry.RegNo,
-			&entry.SessionID, &entry.StartedAt, &entry.Status, &entry.Note, &entry.NoLocation)
+			&entry.SessionID, &entry.StartedAt, &entry.Status, &entry.Note, &entry.NoLocation,
+			&entry.Hours, &entry.LateWeight)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan an attendance export row: %w", err)
 		}
@@ -971,7 +1027,7 @@ func (s *Store) ListLowAttendance(ctx context.Context, minSessions int,
 		var alert AttendanceAlert
 		var lastSent *time.Time
 		err := rows.Scan(&alert.StudentID, &alert.UserID, &alert.CourseID, &alert.CourseTitle,
-			&alert.Held, &alert.Present, &lastSent)
+			&alert.Held, &alert.Present, &alert.Credit, &lastSent)
 		if err != nil {
 			return nil, fmt.Errorf("store: could not scan a low attendance row: %w", err)
 		}
@@ -997,4 +1053,12 @@ func (s *Store) ClaimAttendanceAlert(ctx context.Context, studentID, courseID in
 		return false, fmt.Errorf("store: could not claim the attendance alert of %d: %w", studentID, err)
 	}
 	return true, nil
+}
+
+func (s *Store) BackfillJoinedLater(ctx context.Context, studentID, userID int64) (int, error) {
+	tag, err := s.pool.Exec(ctx, joinedLaterSQL, studentID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("store: could not count the earlier classes of a student who joined later: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
 }

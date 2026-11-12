@@ -244,6 +244,8 @@ func protectedRoutes() []protectedRoute {
 		{method: http.MethodPatch, path: "/api/teacher/items/1", allowed: teacherOnly()},
 		{method: http.MethodGet, path: "/api/teacher/notices", allowed: teacherOnly()},
 		{method: http.MethodDelete, path: "/api/teacher/notices/1", allowed: teacherOnly()},
+		{method: http.MethodGet, path: "/api/admin/attendance/late-weight", allowed: adminOnly()},
+		{method: http.MethodPut, path: "/api/admin/attendance/late-weight", allowed: adminOnly()},
 		{method: http.MethodGet, path: "/api/teacher/attendance/sessions/1", allowed: teacherOnly()},
 		{method: http.MethodDelete, path: "/api/teacher/attendance/sessions/1", allowed: teacherOnly()},
 		{method: http.MethodPost, path: "/api/teacher/attendance/sessions/1/mark-all", allowed: teacherOnly()},

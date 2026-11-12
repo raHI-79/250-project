@@ -135,6 +135,8 @@ func OfficeNeeds() *RouteNeeds {
 		"GET /api/admin/attendance/sessions/{id}",
 		"DELETE /api/admin/attendance/sessions/{id}",
 		"DELETE /api/admin/attendance/sheet",
+		"GET /api/admin/attendance/late-weight",
+		"PUT /api/admin/attendance/late-weight",
 	)
 	needs.Need(auth.PermExports,
 		"GET /api/admin/attendance/export",

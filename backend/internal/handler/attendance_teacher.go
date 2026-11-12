@@ -22,6 +22,9 @@ type startRequest struct {
 	Section        string `json:"section"`
 	ScheduleItemID int64  `json:"schedule_item_id"`
 	Minutes        int    `json:"minutes"`
+	Until          string `json:"until"`
+	LateAfter      int    `json:"late_after_minutes"`
+	Hours          int    `json:"hours"`
 	Method         string `json:"method"`
 	CodeOnly       bool   `json:"code_only"`
 }
@@ -68,6 +71,7 @@ type todayClassBody struct {
 	StartTime      string `json:"start_time"`
 	EndTime        string `json:"end_time"`
 	Room           string `json:"room"`
+	Hours          int    `json:"hours"`
 }
 
 type optionsResponse struct {
@@ -110,6 +114,7 @@ func (a *Attendance) Options() http.HandlerFunc {
 				StartTime:      item.StartTime,
 				EndTime:        item.EndTime,
 				Room:           item.Room,
+				Hours:          classHours(item.StartTime, item.EndTime),
 			})
 		}
 		seen := make(map[string]bool)
@@ -125,6 +130,7 @@ func (a *Attendance) Options() http.HandlerFunc {
 				CourseTitle: row.CourseTitle,
 				Batch:       row.Batch,
 				Section:     row.Section,
+				Hours:       attendance.MinHours,
 			})
 		}
 		from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -183,8 +189,36 @@ func (a *Attendance) Start() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadTakeMethod)
 			return
 		}
-		if !attendance.ValidDuration(request.Minutes) {
+		now := a.cfg.Now()
+		minutes := request.Minutes
+		if raw := strings.TrimSpace(request.Until); raw != "" {
+			clock, err := time.ParseInLocation("15:04", raw, now.Location())
+			if err != nil {
+				httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadUntil)
+				return
+			}
+			until := time.Date(now.Year(), now.Month(), now.Day(), clock.Hour(), clock.Minute(), 0, 0,
+				now.Location())
+			minutes = attendance.MinutesUntil(now, until)
+			if minutes <= 0 {
+				httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadUntil)
+				return
+			}
+		}
+		if !attendance.ValidDuration(minutes) {
 			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadDuration)
+			return
+		}
+		if !attendance.ValidLateAfter(request.LateAfter, minutes) {
+			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadLateAfter)
+			return
+		}
+		hours := request.Hours
+		if hours == 0 {
+			hours = attendance.MinHours
+		}
+		if !attendance.ValidHours(hours) {
+			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadHours)
 			return
 		}
 		mine, err := a.teaches(r.Context(), teacher.ID, request.CourseID, batch, section)
@@ -203,14 +237,15 @@ func (a *Attendance) Start() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return
 		}
-		now := a.cfg.Now()
 		session, err := a.store.OpenAttendanceSession(r.Context(), store.NewAttendanceSession{
 			CourseID:       request.CourseID,
 			Batch:          batch,
 			Section:        section,
 			ScheduleItemID: request.ScheduleItemID,
 			TeacherID:      teacher.ID,
-			Minutes:        request.Minutes,
+			Minutes:        minutes,
+			Hours:          hours,
+			LateAfter:      request.LateAfter,
 			TokenKey:       key,
 			Method:         method,
 			CodeOnly:       request.CodeOnly && method != attendance.TakeRollCall,
@@ -343,6 +378,11 @@ func (a *Attendance) Extend() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadDuration)
 			return
 		}
+		if !attendance.WithinWindow(session.StartedAt,
+			session.EndsAt.Add(time.Duration(request.Minutes)*time.Minute)) {
+			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageTooLong)
+			return
+		}
 		longer, err := a.store.ExtendAttendanceSession(r.Context(), session.ID, teacher.ID, request.Minutes)
 		if errors.Is(err, store.ErrAttendanceClosed) {
 			httpx.WriteError(w, http.StatusConflict, MessageAttendanceOver)
@@ -433,7 +473,7 @@ func (a *Attendance) EditMark() http.HandlerFunc {
 			return
 		}
 		status := strings.ToLower(strings.TrimSpace(request.Status))
-		if status != attendance.Present && status != attendance.Absent {
+		if !attendance.ValidStatus(status) {
 			httpx.WriteError(w, http.StatusBadRequest, MessageWrongMarkStatus)
 			return
 		}
@@ -494,7 +534,7 @@ func (a *Attendance) Classes() http.HandlerFunc {
 			}
 			total, below := 0.0, 0
 			for _, rate := range rates {
-				share := attendance.Percentage(rate.Present, rate.Held)
+				share := attendance.Rate(rate.Credit, rate.Held)
 				total += share
 				if share < attendance.AlertPercentage {
 					below++

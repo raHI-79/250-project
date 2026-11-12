@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"github.com/raHI-79/250-project/backend/internal/attendance"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
 	"github.com/raHI-79/250-project/backend/internal/httpx"
@@ -11,6 +12,7 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/settings"
 	"github.com/raHI-79/250-project/backend/internal/store"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -145,10 +147,16 @@ func (c *Control) SaveSettings() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, "Nothing to save.")
 			return
 		}
-		for key := range request.Values {
+		for key, value := range request.Values {
 			if !settings.IsEditable(key) {
 				httpx.WriteError(w, http.StatusBadRequest, "Unknown setting "+key+".")
 				return
+			}
+			if key == settings.KeyLateWeight {
+				if _, ok := ParseLateWeight(value); !ok {
+					httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadWeight)
+					return
+				}
 			}
 		}
 		current, _ := middleware.CurrentUser(r.Context())
@@ -456,5 +464,53 @@ func (c *Control) Data() http.HandlerFunc {
 			body.BackupNote = state.Note
 		}
 		httpx.WriteJSON(w, http.StatusOK, body)
+	}
+}
+
+type lateWeightBody struct {
+	Weight float64 `json:"weight"`
+}
+
+func ParseLateWeight(raw string) (float64, bool) {
+	weight, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || math.IsNaN(weight) || !attendance.ValidWeight(weight) {
+		return 0, false
+	}
+	return weight, true
+}
+
+func (c *Control) lateWeight(ctx context.Context) float64 {
+	if weight, ok := ParseLateWeight(c.values.Get(ctx, settings.KeyLateWeight)); ok {
+		return weight
+	}
+	return attendance.DefaultLateWeight
+}
+
+func (c *Control) LateWeight() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		httpx.WriteJSON(w, http.StatusOK, lateWeightBody{Weight: c.lateWeight(r.Context())})
+	}
+}
+
+func (c *Control) SaveLateWeight() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request lateWeightBody
+		if !httpx.DecodeJSON(w, r, &request) {
+			return
+		}
+		if math.IsNaN(request.Weight) || !attendance.ValidWeight(request.Weight) {
+			httpx.WriteError(w, http.StatusBadRequest, attendance.MessageBadWeight)
+			return
+		}
+		current, _ := middleware.CurrentUser(r.Context())
+		value := strconv.FormatFloat(request.Weight, 'f', -1, 64)
+		values := map[string]string{settings.KeyLateWeight: value}
+		if err := c.values.Save(r.Context(), values, current.ID); err != nil {
+			log.Printf("handler: could not save the late weight: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		c.events.Record(r, store.ActionSettings, "settings", "", "Saved "+settings.KeyLateWeight+" = "+value)
+		httpx.WriteJSON(w, http.StatusOK, lateWeightBody{Weight: request.Weight})
 	}
 }
