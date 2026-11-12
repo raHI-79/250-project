@@ -62,7 +62,6 @@ import NotFoundPage from './pages/NotFoundPage'
 import { SkeletonCard } from './components/ui'
 import { useAuth } from './context/auth'
 import { isNative } from './lib/native'
-import { useNativeBackButton } from './lib/shell'
 import { usePageViews } from './lib/views'
 import {
   PORTAL_ADMIN,
@@ -94,7 +93,6 @@ function Root() {
 }
 
 export default function Router() {
-  useNativeBackButton()
   usePageViews()
   const office = !isNative()
   return (

@@ -238,6 +238,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	views := handler.NewAnalytics(deps.Config, deps.Views).WithEvents(events)
 	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{beacons.Middleware}}.
 		Handle("POST /api/analytics/view", views.View())
+	crashes := middleware.NewRateLimiter(middleware.ClientLogRateLimit, middleware.DefaultRateWindow)
+	RouteGroup{mux: mux, middleware: []func(http.Handler) http.Handler{crashes.Middleware}}.
+		Handle("POST /api/client-log", views.Crash())
 	throttled.Handle("POST /api/system/backup-status", views.BackupStatus())
 	registerLookupRoutes(authenticated, handler.NewLookups(deps.Lookups))
 	authenticated.Handle("GET /api/lookups/periods", periods.List())

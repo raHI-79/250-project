@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import cx from '../../lib/cx'
 import { lockScroll } from '../../lib/scrollLock'
+import { pushSheet } from '../../lib/sheetStack'
+import { SheetBoundary } from './ErrorBoundary'
 
 const CLOSE_AFTER = 96
 
@@ -34,9 +36,11 @@ export default function Sheet({
       if (event.key === 'Escape') close.current?.()
     }
     const release = lockScroll()
+    const leave = pushSheet({ close: () => close.current?.() })
     window.addEventListener('keydown', onKeyDown)
     return () => {
       release()
+      leave()
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [open])
@@ -116,7 +120,7 @@ export default function Sheet({
             footer ? 'pb-4' : 'pb-[max(1.25rem,env(safe-area-inset-bottom,0px))]',
           )}
         >
-          {children}
+          <SheetBoundary onClose={dismissible ? () => onClose() : null}>{children}</SheetBoundary>
         </div>
         {footer && (
           <footer

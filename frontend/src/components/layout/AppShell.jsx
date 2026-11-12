@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import ErrorBoundary from '../ui/ErrorBoundary'
 import Sidebar from './Sidebar'
 import TabBar from './TabBar'
 import TopBar from './TopBar'
@@ -61,7 +62,9 @@ export default function AppShell({ groups, tabs = [], showBell = true, showSearc
           <PushGate />
           <div key={location.pathname} className="animate-fade-in-up mx-auto max-w-6xl">
             <PhotoReminder />
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
         <TabBar tabs={bar} />

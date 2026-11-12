@@ -76,6 +76,7 @@ type DashboardStore interface {
 	PushVolume(ctx context.Context, window store.Window) (store.PushVolume, error)
 	PushBreakdown(ctx context.Context, window store.Window) ([]store.PushBreakdown, error)
 	FailingPaths(ctx context.Context, window store.Window, limit int) ([]store.FailingPath, error)
+	ClientCrashes(ctx context.Context, window store.Window, limit int) ([]store.FailingPath, error)
 	QuietAlerts(ctx context.Context) (map[string]time.Time, error)
 	DismissAlert(ctx context.Context, key string, by int64, quiet time.Duration) error
 	BackupStatus(ctx context.Context) (store.BackupState, error)
@@ -186,6 +187,7 @@ type systemPanel struct {
 	Server5xx     int               `json:"server_5xx"`
 	ServerErrors  []errorItem       `json:"server_errors"`
 	FailingPaths  []failingPathItem `json:"failing_paths"`
+	ClientCrashes []failingPathItem `json:"client_crashes"`
 	EmailsSent    int               `json:"emails_sent"`
 	EmailsFailed  int               `json:"emails_failed"`
 	PushSent      int               `json:"push_sent"`
@@ -488,6 +490,11 @@ func (d *Dashboard) Numbers() http.HandlerFunc {
 			d.fail(w, err)
 			return
 		}
+		crashes, err := d.numbers.ClientCrashes(r.Context(), window, failingPathLimit)
+		if err != nil {
+			d.fail(w, err)
+			return
+		}
 		quiet, err := d.numbers.QuietAlerts(r.Context())
 		if err != nil {
 			d.fail(w, err)
@@ -508,6 +515,15 @@ func (d *Dashboard) Numbers() http.HandlerFunc {
 		body.System.FailingPaths = make([]failingPathItem, 0, len(paths))
 		for _, entry := range paths {
 			body.System.FailingPaths = append(body.System.FailingPaths, failingPathItem{
+				Path:    entry.Path,
+				Total:   entry.Total,
+				Message: entry.Message,
+				Last:    entry.Last.Format(time.RFC3339),
+			})
+		}
+		body.System.ClientCrashes = make([]failingPathItem, 0, len(crashes))
+		for _, entry := range crashes {
+			body.System.ClientCrashes = append(body.System.ClientCrashes, failingPathItem{
 				Path:    entry.Path,
 				Total:   entry.Total,
 				Message: entry.Message,

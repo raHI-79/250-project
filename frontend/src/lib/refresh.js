@@ -44,7 +44,7 @@ export const resourceView = (state, source, busy) => {
   return {
     data,
     error: own ? state.error : '',
-    loading: Boolean(source) && busy && data === null,
+    loading: Boolean(source) && data === null && (busy || !own),
     refreshing: Boolean(source) && busy && data !== null,
   }
 }

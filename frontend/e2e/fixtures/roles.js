@@ -158,3 +158,19 @@ export const PHONE_PAGES = {
   ],
   control: pathsOf(CONTROL_PAGES),
 }
+
+export const DATE_PAGES = {
+  student: ['/student/upcoming-routine', '/student/exams'],
+  cr: [
+    '/student/upcoming-routine',
+    '/student/exams',
+    '/cr/create-class',
+    '/cr/create-class?tab=final',
+    '/cr/create-class?tab=create',
+  ],
+  teacher: ['/teacher/upcoming-routine', '/teacher/upcoming-routine?tab=final', '/teacher/create-exam'],
+  office: ['/office-portal/activity', '/office-portal/routines', '/office-portal/teachers'],
+  control: ['/control-room', '/control-room/activity', '/control-room/settings'],
+}
+
+export const DATE_PANELS = ['/student/register', '/student/forgot-password', '/teacher/activate']

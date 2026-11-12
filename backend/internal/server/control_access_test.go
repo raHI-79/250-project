@@ -153,6 +153,11 @@ func (stubFigureStore) PushBreakdown(ctx context.Context,
 	return nil, nil
 }
 
+func (stubFigureStore) ClientCrashes(ctx context.Context, window store.Window,
+	limit int) ([]store.FailingPath, error) {
+	return nil, nil
+}
+
 func (stubFigureStore) FailingPaths(ctx context.Context, window store.Window,
 	limit int) ([]store.FailingPath, error) {
 	return nil, nil

@@ -87,6 +87,7 @@ func publicRoutes() map[string]string {
 		"POST /api/human/verify":             "the human check",
 		"GET /api/push/public-key":           "the key a browser needs to subscribe",
 		"POST /api/analytics/view":           "the page view beacon",
+		"POST /api/client-log":               "a screen reporting that it broke",
 		"POST /api/system/backup-status":     "the backup workflow reporting in",
 		"GET /api/app/android-latest":        "the version the app checks against",
 		"GET /download/android":              "the app download",
