@@ -177,13 +177,27 @@ a cell comment, the present count, the total and the percentage, with below
 the teacher teaches into one workbook and adds a Summary sheet. In the app the
 file is saved to **Documents**; on the website the browser downloads it.
 
-## Google sign-in
+## Email verification and Google sign-in
 
-The registration screen offers **Continue with Google** to prove the student
-owns their `@student.sust.edu` address. It needs **two** OAuth clients in one
-Google Cloud project, and the server only ever checks the **web** client id.
+### In the app: the email code only
 
-### The web client
+The app has no Google sign-in. Registration in the app verifies the
+`@student.sust.edu` address with the 6-digit email code alone: **Send code**
+emails the code, the student enters it, then continues. The code expires 15
+minutes after it is sent and the screen counts that down; **Resend the code**
+unlocks after 60 seconds, sends a new code and makes the earlier one stop
+working, and an expired code is named as such.
+
+The Android OAuth client in the Google Cloud Console is **no longer needed**
+and can be deleted. Nothing in the app reads it, the native Google plugin is
+gone from `package.json` and the Android project, and `MainActivity` no longer
+forwards activity results to it.
+
+### On the website: Continue with Google
+
+The website keeps **Continue with Google** next to the email code. It needs the
+**web** OAuth client and nothing else, and the server only ever checks that
+client id at `POST /api/auth/google/verify-email`.
 
 **Google Cloud Console → APIs & Services → Credentials → Create credentials →
 OAuth client ID → Web application.**
@@ -196,97 +210,18 @@ OAuth client ID → Web application.**
   back to the page, it does not redirect.
 
 Put that client id in the Render environment as `GOOGLE_CLIENT_ID`. The pages
-read it at runtime from `GET /api/auth/config`, so it is **not** baked into the
-build any more and changing it needs no new APK. `VITE_GOOGLE_CLIENT_ID` is no
-longer used.
-
-### The Android client
-
-Google refuses its web sign-in inside a WebView, so the app uses native Google
-sign-in through `@capgo/capacitor-social-login` and hands the resulting ID token
-to the same `POST /api/auth/google/verify-email`. The token's audience is the
-**web** client id, which is why the plugin is initialised with it as the server
-client id. The Android client itself holds no id the app ever sends; it exists
-so Google trusts this package and this signature.
-
-1. Read the fingerprint. Push a tag so `android.yml` runs and open the
-   **Print the signing certificate fingerprints** step. It prints exactly two
-   lines, both public values:
-
-   ```
-   SHA1: AB:CD:...:EF
-   SHA256: 11:22:...:FF
-   ```
-
-   The keystore and its passwords never leave the runner and are never printed.
-   Locally the same two lines come from
-   `keytool -list -v -keystore <your.keystore> -alias <your alias>`.
-
-2. **Create credentials → OAuth client ID → Android** and fill in:
-
-   | Field | Value |
-   |---|---|
-   | Package name | `edu.sust.cse.portal` |
-   | SHA-1 certificate fingerprint | the `SHA1` line from step 1 |
-
-3. Create a **second** Android client the same way with the SHA-1 of your debug
-   keystore (`~/.android/debug.keystore`, alias `androiddebugkey`, password
-   `android`) if you want Google sign-in to work in a debug build too.
-
-### The checklist for the Google Cloud Console
-
-All of this has to be true, or the app's **Continue with Google** fails:
-
-- [ ] **One project** holds everything below. Two projects never work together.
-- [ ] An **OAuth client ID → Web application** exists. Its id is the value of
-      `GOOGLE_CLIENT_ID` on Render and the only audience the server accepts. Its
-      **Authorised JavaScript origins** list the website addresses (the app does
-      not need an origin, it never loads Google in the WebView).
-- [ ] An **OAuth client ID → Android** exists with package name
-      `edu.sust.cse.portal` and the **SHA-1** printed by the
-      *Print the signing certificate fingerprints* step of `android.yml` for the
-      very build that is installed. A release APK signed with another keystore
-      needs that keystore's SHA-1 added as a further Android client.
-- [ ] The **OAuth consent screen** is filled in and **published to
-      production** (an app left *In testing* only works for the accounts listed
-      as test users), with the `email`, `profile` and `openid` scopes.
-- [ ] **User type** is *Internal* only if every student account belongs to the
-      same Google Workspace as the project; otherwise *External*, published.
-- [ ] The phone has a Google account for the student domain signed in at the
-      Android level. Credential Manager filters by the hosted domain the portal
-      reports, so a personal Gmail account is not offered.
-
-Nothing else has to be enabled; the flow uses no Google API beyond sign-in.
-
-### What goes wrong inside the app
-
-The screen now prints the exact text Google or the server returned, under the
-button, and the server logs the reason for every refusal (never the token).
-
-- *`[28433]` or `DEVELOPER_ERROR` or `10:`* — the Android client is missing, or
-  its package name or SHA-1 does not match the installed APK. Re-read the
-  fingerprint from the workflow log for the build you installed.
-- *`16:` or `NoCredentialException`* — no Google account for the student domain
-  is signed in on the phone, or the consent screen is still *In testing* and
-  this account is not a test user.
-- *Google issued this sign-in for a different client id* — `GOOGLE_CLIENT_ID` on
-  Render is not the **web** client id of the same project.
-- *The Google sign-in expired* — the phone clock is wrong, or the token sat
-  unused for more than an hour.
-
-`MainActivity` must stay an implementation of
-`ModifiedMainActivityForSocialLoginPlugin` and must forward `onActivityResult`
-to `SocialLoginPlugin.handleGoogleLoginIntent` for the request codes between
-`GoogleProvider.REQUEST_AUTHORIZE_GOOGLE_MIN` and
-`REQUEST_AUTHORIZE_GOOGLE_MAX`. Without that forwarding the plugin waits for an
-authorisation result that never arrives and **Continue with Google** hangs and
-then fails with no reason — that was the original fault.
+read it at runtime from `GET /api/auth/config`, so it is not baked into the
+build. The **OAuth consent screen** has to be published to production (an app
+left *In testing* only works for the listed test users) with the `email`,
+`profile` and `openid` scopes.
 
 ### When the website refuses
 
 - *Google refused this address* — the address in the browser is not in the web
   client's authorised origins. Add it exactly, without a path.
 - *Your browser blocked the Google window* — allow popups for the site.
+- *Google issued this sign-in for a different client id* — `GOOGLE_CLIENT_ID` on
+  Render is not the id of the web client.
 
 ## Who the app is for
 

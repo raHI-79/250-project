@@ -24,6 +24,18 @@ and the one the Android release is tagged with.
   in a "No location" column and cell note of the Excel sheet. Code with location
   stays the default, and roll call needs no location at all.
 
+### Sign-in in the Android app
+
+- **No more endless Google spinner.** The app no longer offers Google sign-in.
+  Registration in the app verifies the university email with the 6-digit code
+  alone (Send code, enter the code, continue), counts down to the code's expiry,
+  says when a code has expired and explains the resend wait. The website keeps
+  **Continue with Google** as before.
+- **Removed:** the native Google plugin `@capgo/capacitor-social-login`, its
+  Gradle entries and the `MainActivity` hooks it needed, and the app-only Google
+  code paths. The Android OAuth client in the Google Cloud Console is no longer
+  needed; the backend's Google verify endpoint stays for the website.
+
 ## 2.7.0
 
 A full quality pass over the website, the app and the server. Every bug below has

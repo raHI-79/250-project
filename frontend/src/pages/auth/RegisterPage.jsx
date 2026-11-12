@@ -13,12 +13,23 @@ import HumanCheck from '../../components/forms/HumanCheck'
 import api from '../../lib/api'
 import { useHumanCheck } from '../../lib/human'
 import { HERO_BUILDING } from '../../lib/campus'
-import { useAuthConfig, useCountdown } from '../../lib/hooks'
+import { useAuthConfig, useCountdown, useNow } from '../../lib/hooks'
+import { isAndroidApp } from '../../lib/native'
 import { paths } from '../../lib/paths'
 import { BLOOD_GROUPS } from '../../lib/options'
 import { appendIf, isCode, registrationErrors } from '../../lib/account'
-
-const RESEND_SECONDS = 60
+import {
+  EXPIRED_TEXT,
+  RESEND_SECONDS,
+  codeDeadline,
+  codeExpired,
+  codeHint,
+  contactText,
+  googleOffered,
+  resendLabel,
+  resendNote,
+  resentText,
+} from '../../lib/registerEmail'
 
 const EMPTY = {
   fullName: '',
@@ -35,6 +46,9 @@ const EMPTY = {
 
 export default function RegisterPage() {
   const { studentEmailDomain, googleEnabled } = useAuthConfig()
+  const app = isAndroidApp()
+  const offerGoogle = googleOffered({ app, enabled: googleEnabled })
+  const now = useNow(15000)
   const human = useHumanCheck()
   const [params] = useSearchParams()
   const resuming = params.get('verify') || ''
@@ -48,6 +62,8 @@ export default function RegisterPage() {
   const [sent, setSent] = useState(Boolean(resuming))
   const [emailHint, setEmailHint] = useState('')
   const [devCode, setDevCode] = useState('')
+  const [deadline, setDeadline] = useState(null)
+  const [resent, setResent] = useState('')
   const [done, setDone] = useState(false)
   const [seconds, setSeconds] = useCountdown(0)
   const set = (key) => (event) => {
@@ -103,6 +119,8 @@ export default function RegisterPage() {
       const data = await api.post('/api/auth/register', body, { auth: false })
       setEmailHint(data?.email_hint || '')
       setDevCode(data?.dev_code || '')
+      setDeadline(codeDeadline(data?.expires_at, new Date()))
+      setResent('')
       if (emailProof) {
         setDone(true)
         return true
@@ -152,6 +170,8 @@ export default function RegisterPage() {
       )
       setEmailHint(data?.email_hint || emailHint)
       setDevCode(data?.dev_code || '')
+      setDeadline(codeDeadline(data?.expires_at, new Date()))
+      setResent(resentText(data?.email_hint || emailHint))
       setCode('')
       setSeconds(RESEND_SECONDS)
     } catch (failure) {
@@ -177,11 +197,7 @@ export default function RegisterPage() {
           setErrors((current) => ({ ...current, code: '' }))
         }}
         error={errors.code}
-        hint={
-          emailHint
-            ? `Sent to ${emailHint}. It expires in 15 minutes.`
-            : 'Sent to your university email address. It expires in 15 minutes.'
-        }
+        hint={codeHint({ emailHint, deadline, now })}
         inputMode="numeric"
         maxLength={6}
         autoComplete="one-time-code"
@@ -192,14 +208,20 @@ export default function RegisterPage() {
           No mail server is configured, so the code is shown here: {devCode}
         </Alert>
       )}
+      {codeExpired(deadline, now) ? (
+        <Alert tone="warning">{EXPIRED_TEXT}</Alert>
+      ) : (
+        resent && <Alert tone="success">{resent}</Alert>
+      )}
       <Button
         variant="secondary"
         onClick={resend}
         disabled={loading || seconds > 0 || human.blocked}
         className="w-full"
       >
-        {seconds > 0 ? `Resend in ${seconds}s` : 'Resend the code'}
+        {resendLabel(seconds)}
       </Button>
+      <p className="text-center text-xs text-faint">{resendNote(seconds)}</p>
     </>
   )
   return (
@@ -319,7 +341,7 @@ export default function RegisterPage() {
                   </FormSection>
                   <FormSection
                     title="Contact"
-                    description="Verify your university address with Google, or let us email you a code."
+                    description={contactText(offerGoogle)}
                   >
                     {emailProof ? (
                       <Field label="University email">
@@ -370,7 +392,7 @@ export default function RegisterPage() {
                             >
                               Send code
                             </Button>
-                            {googleEnabled && (
+                            {offerGoogle && (
                               <>
                                 <div className="flex items-center gap-3">
                                   <span className="h-px flex-1 bg-brand-100" />
