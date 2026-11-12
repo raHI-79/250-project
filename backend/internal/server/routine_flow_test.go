@@ -201,8 +201,8 @@ func TestRoutineFlow(t *testing.T) {
 	if err := json.Unmarshal(batches.Body.Bytes(), &batchPayload); err != nil {
 		t.Fatalf("the batch lookup body is not valid JSON: %v", err)
 	}
-	if len(batchPayload.Items) != 1 || batchPayload.Items[0] != "CSE-23" {
-		t.Errorf("batches = %v, want only CSE-23", batchPayload.Items)
+	if len(batchPayload.Items) != 3 || batchPayload.Items[1] != "CSE-23" {
+		t.Errorf("batches = %v, want the three active batches", batchPayload.Items)
 	}
 	sections := call(t, router, http.MethodGet, "/api/lookups/sections?batch=CSE-23", "", adminToken)
 	var sectionPayload struct {
@@ -211,8 +211,8 @@ func TestRoutineFlow(t *testing.T) {
 	if err := json.Unmarshal(sections.Body.Bytes(), &sectionPayload); err != nil {
 		t.Fatalf("the section lookup body is not valid JSON: %v", err)
 	}
-	if len(sectionPayload.Items) != 1 || sectionPayload.Items[0] != "A" {
-		t.Errorf("sections = %v, want only A because ALL is not a real section", sectionPayload.Items)
+	if len(sectionPayload.Items) != 2 || sectionPayload.Items[0] != "A" || sectionPayload.Items[1] != "B" {
+		t.Errorf("sections = %v, want A and B because ALL is not a real section", sectionPayload.Items)
 	}
 	courses := call(t, router, http.MethodGet, "/api/lookups/courses", "", adminToken)
 	if list := listItems(t, courses); len(list) != 1 || list[0]["code"] != "CSE233" {

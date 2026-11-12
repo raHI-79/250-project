@@ -167,7 +167,7 @@ func (a *Attendance) Start() http.HandlerFunc {
 		if !httpx.DecodeJSON(w, r, &request) {
 			return
 		}
-		batch, err := validate.Batch("Batch", request.Batch)
+		batch, err := openBatch(r.Context(), "Batch", request.Batch)
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -662,7 +662,7 @@ func decodeSheet(w http.ResponseWriter, r *http.Request) (sheetRequest, bool) {
 	if !httpx.DecodeJSON(w, r, &request) {
 		return sheetRequest{}, false
 	}
-	batch, err := validate.Batch("Batch", request.Batch)
+	batch, err := openBatch(r.Context(), "Batch", request.Batch)
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, err.Error())
 		return sheetRequest{}, false

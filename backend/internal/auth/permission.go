@@ -10,6 +10,7 @@ const (
 	PermNotices       = "notices"
 	PermAttendance    = "attendance"
 	PermExports       = "exports"
+	PermBatches       = "batches"
 )
 
 var permissionOrder = []string{
@@ -17,6 +18,7 @@ var permissionOrder = []string{
 	PermStudents,
 	PermTeachers,
 	PermCatalog,
+	PermBatches,
 	PermPeriods,
 	PermRoutines,
 	PermNotices,
@@ -29,6 +31,7 @@ var permissionLabels = map[string]string{
 	PermStudents:      "Manage students and CRs",
 	PermTeachers:      "Invite and manage teachers",
 	PermCatalog:       "Courses and semesters",
+	PermBatches:       "Running batches",
 	PermPeriods:       "Class periods and rooms",
 	PermRoutines:      "Routines",
 	PermNotices:       "Notices",

@@ -45,7 +45,7 @@ const (
 COALESCE(to_char(i.start_time, 'HH24:MI'), ''), COALESCE(to_char(i.end_time, 'HH24:MI'), ''),
 COALESCE(i.batch, ''), COALESCE(i.section, ''), COALESCE(c.code, ''), COALESCE(i.status, '')
 FROM (SELECT DISTINCT r.room FROM routines r
-      JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester) rooms
+      JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester) rooms
 CROSS JOIN generate_series($1::date, $2::date, interval '1 day') AS day
 LEFT JOIN schedule_items i ON i.room = rooms.room AND i.item_date = day::date
      AND i.mode = 'room' AND i.status <> 'cancelled' AND i.start_time IS NOT NULL

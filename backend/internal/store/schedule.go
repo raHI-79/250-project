@@ -233,7 +233,7 @@ start_time, end_time, mode, room, status)
 SELECT r.batch, r.section, r.course_id, r.teacher_id, r.type, 'fixed', r.id, t.day,
 r.start_time, r.end_time, 'room', r.room, 'awaiting_teacher'
 FROM routines r
-JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester
 JOIN teaching t ON t.day_of_week = r.day_of_week
 ON CONFLICT DO NOTHING`
 	markNoResponseSQL = `WITH updated AS (
@@ -557,7 +557,7 @@ const (
 FROM routines r
 JOIN teachers t ON t.id = r.teacher_id
 JOIN users u ON u.id = t.user_id
-JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester
 WHERE r.batch = $1 AND r.course_id = $2 AND r.teacher_id IS NOT NULL AND u.status = 'active'
   AND (r.section = $3::text OR r.section = 'ALL' OR $3::text = 'ALL')
 ORDER BY 2`

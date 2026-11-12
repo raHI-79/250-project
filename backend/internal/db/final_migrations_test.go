@@ -163,3 +163,52 @@ func TestCourseCreditMigrationGivesOldRowsThreeCredits(t *testing.T) {
 		t.Error("the database accepted a credit that is not a quarter step")
 	}
 }
+
+func TestBatchMigrationFillsTheBatchesInUse(t *testing.T) {
+	ctx, pool := migrateUpTo(t, "0044_site_content.sql")
+	userID := insertUser(t, ctx, pool, "student", "2023331079")
+	statements := []string{
+		`INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES ($1, 'Batch Student', '2023331079', 'CSE-23', 'A', 'b@student.sust.edu', '01700000079', 'O+')`,
+	}
+	for _, statement := range statements {
+		if _, err := pool.Exec(ctx, statement, userID); err != nil {
+			t.Fatalf("could not insert the student: %v", err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO batch_semesters (batch, running_semester)
+VALUES ('CSE-23', '3-1'), ('CSE-25', '1-2')`); err != nil {
+		t.Fatalf("could not set the running semesters: %v", err)
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate() returned an unexpected error: %v", err)
+	}
+	want := map[string][2]string{
+		"CSE-23": {"3-1", "active"},
+		"CSE-25": {"1-2", "inactive"},
+	}
+	rows, err := pool.Query(ctx, "SELECT name, running_semester, status FROM batches ORDER BY name")
+	if err != nil {
+		t.Fatalf("could not read the batches: %v", err)
+	}
+	defer rows.Close()
+	found := 0
+	for rows.Next() {
+		var name, semester, status string
+		if err := rows.Scan(&name, &semester, &status); err != nil {
+			t.Fatalf("could not scan a batch: %v", err)
+		}
+		expected, ok := want[name]
+		if !ok {
+			t.Errorf("unexpected batch %s", name)
+			continue
+		}
+		found++
+		if semester != expected[0] || status != expected[1] {
+			t.Errorf("%s = %s %s, want %s %s", name, semester, status, expected[0], expected[1])
+		}
+	}
+	if found != len(want) {
+		t.Errorf("batches found = %d, want %d", found, len(want))
+	}
+}

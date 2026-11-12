@@ -68,8 +68,8 @@ VALUES ($1, 'Test Student', $2, 'CSE-23', 'A', $2 || '@student.sust.edu', '01700
 
 func setRunningSemester(t *testing.T, ctx context.Context, pool *pgxpool.Pool, batch, semester string) {
 	t.Helper()
-	query := `INSERT INTO batch_semesters (batch, running_semester) VALUES ($1, $2)
-ON CONFLICT (batch) DO UPDATE SET running_semester = EXCLUDED.running_semester`
+	query := `INSERT INTO batches (name, running_semester) VALUES ($1, $2)
+ON CONFLICT (name) DO UPDATE SET running_semester = EXCLUDED.running_semester`
 	if _, err := pool.Exec(ctx, query, batch, semester); err != nil {
 		t.Fatalf("could not set the running semester of %s: %v", batch, err)
 	}

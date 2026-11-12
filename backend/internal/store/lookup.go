@@ -12,20 +12,9 @@ type TeacherOption struct {
 }
 
 const (
-	listBatchesSQL = `SELECT batch FROM (
-    SELECT s.batch AS batch FROM students s JOIN users u ON u.id = s.user_id WHERE u.status = 'active'
-    UNION
-    SELECT r.batch AS batch FROM routines r
-) sources
-WHERE batch <> ''
-ORDER BY batch`
-	listSectionsSQL = `SELECT section FROM (
-    SELECT s.section AS section FROM students s JOIN users u ON u.id = s.user_id
-    WHERE u.status = 'active' AND s.batch = $1
-    UNION
-    SELECT r.section AS section FROM routines r WHERE r.batch = $1
-) sources
-WHERE section <> '' AND section <> 'ALL'
+	listBatchesSQL  = `SELECT name FROM batches WHERE status = 'active' ORDER BY name`
+	listSectionsSQL = `SELECT section FROM batches b, unnest(b.sections) AS section
+WHERE b.name = $1 AND b.status = 'active'
 ORDER BY section`
 	listTeacherOptionsSQL = `SELECT t.id, t.user_id, t.name
 FROM teachers t

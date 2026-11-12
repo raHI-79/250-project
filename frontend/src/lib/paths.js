@@ -85,6 +85,7 @@ export const paths = {
     crs: () => build('office-portal', 'crs'),
     teachers: () => build('office-portal', 'teachers'),
     courses: () => build('office-portal', 'courses'),
+    batches: () => build('office-portal', 'running-batches'),
     periods: () => build('office-portal', 'class-periods'),
     routines: () => build('office-portal', 'routines'),
     notices: (params) => query(build('office-portal', 'notices'), params),

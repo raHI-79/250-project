@@ -370,9 +370,9 @@ FROM attendance_sessions a
 JOIN students s ON (s.batch = a.batch AND (a.section = 'ALL' OR s.section = a.section))
   OR s.id IN (SELECT d.student_id FROM student_drop_courses d WHERE d.course_id = a.course_id)
 JOIN users u ON u.id = s.user_id AND u.status = 'active'
-LEFT JOIN batch_semesters b ON b.batch = a.batch
+LEFT JOIN batches b ON b.name = a.batch
 WHERE a.status = 'closed'
-  AND a.started_at >= COALESCE(b.updated_at, '-infinity'::timestamptz)
+  AND a.started_at >= COALESCE(b.semester_since, '-infinity'::timestamptz)
   AND EXISTS (SELECT 1 FROM attendance_records m WHERE m.session_id = a.id AND m.method <> 'system')
   AND ($1::bigint = 0 OR s.id = $1::bigint)
   AND ($2::bigint = 0 OR s.user_id = $2::bigint)

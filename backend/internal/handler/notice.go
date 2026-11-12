@@ -94,7 +94,7 @@ func (n *Notice) AdminCreate() http.HandlerFunc {
 		}
 		batch := ""
 		if raw := strings.TrimSpace(r.FormValue(fieldBatch)); raw != "" {
-			valid, err := validate.Batch("Batch", raw)
+			valid, err := openBatch(r.Context(), "Batch", raw)
 			if err != nil {
 				httpx.WriteError(w, http.StatusBadRequest, err.Error())
 				return
@@ -261,7 +261,7 @@ func (n *Notice) CRCreate() http.HandlerFunc {
 		}
 		batch := profile.Batch
 		if !strings.EqualFold(target, validate.NoticeTargetOwn) {
-			batch, err = validate.Batch("Target", target)
+			batch, err = openBatch(r.Context(), "Target", target)
 			if err != nil {
 				httpx.WriteError(w, http.StatusBadRequest, err.Error())
 				return
@@ -303,7 +303,7 @@ func (n *Notice) TeacherCreate() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		batch, err := validate.Batch("Batch", r.FormValue(fieldBatch))
+		batch, err := openBatch(r.Context(), "Batch", r.FormValue(fieldBatch))
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return

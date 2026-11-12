@@ -17,7 +17,7 @@ COALESCE(r.teacher_id, 0), COALESCE(t.name, 'Deleted user'),
 r.day_of_week, to_char(r.start_time, 'HH24:MI'), to_char(r.end_time, 'HH24:MI'), r.room, r.type
 FROM routines r
 JOIN courses c ON c.id = r.course_id
-JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester
 LEFT JOIN teachers t ON t.id = r.teacher_id
 WHERE r.teacher_id = $1
 ORDER BY r.day_of_week, r.start_time, r.batch, r.section`

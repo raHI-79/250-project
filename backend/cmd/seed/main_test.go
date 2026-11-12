@@ -76,7 +76,7 @@ func TestDemoDataLoadsAndRunsTwice(t *testing.T) {
 		{name: "batches", query: "SELECT count(DISTINCT batch) FROM students", want: len(demoBatches)},
 		{name: "sections", query: "SELECT count(DISTINCT section) FROM students", want: 2},
 		{name: "polls", query: "SELECT count(*) FROM polls", want: 3},
-		{name: "running semesters", query: "SELECT count(*) FROM batch_semesters", want: len(demoBatches)},
+		{name: "running semesters", query: "SELECT count(*) FROM batches", want: len(demoBatches)},
 		{name: "semesters in the routine", query: "SELECT count(DISTINCT semester) FROM routines",
 			want: len(uniqueSemesters())},
 		{name: "publications", query: "SELECT count(*) FROM publications", want: 1},
@@ -113,7 +113,7 @@ func TestDemoDataLoadsAndRunsTwice(t *testing.T) {
 	for index, batch := range demoBatches {
 		var running string
 		err := pool.QueryRow(ctx,
-			"SELECT running_semester FROM batch_semesters WHERE batch = $1", batch).Scan(&running)
+			"SELECT running_semester FROM batches WHERE name = $1", batch).Scan(&running)
 		if err != nil {
 			t.Fatalf("could not read the running semester of %s: %v", batch, err)
 		}
@@ -128,7 +128,7 @@ func TestDemoDataLoadsAndRunsTwice(t *testing.T) {
 	}
 	idle := count(t, ctx, pool, `SELECT count(*) FROM schedule_items i
 JOIN routines r ON r.id = i.routine_id
-JOIN batch_semesters bs ON bs.batch = r.batch
+JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch
 WHERE r.semester <> bs.running_semester`)
 	if idle != 0 {
 		t.Errorf("%d dated items came from a semester that is not running", idle)

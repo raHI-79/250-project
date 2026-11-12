@@ -39,6 +39,7 @@ const (
 	LinkAttendMine     = "attendance_mine"
 	LinkAttendTeacher  = "attendance_teacher"
 	LinkPhoneRequests  = "phone_requests"
+	LinkBatches        = "batches"
 )
 
 var (
@@ -69,6 +70,7 @@ var linkPages = map[string]string{
 	LinkAttendMine:     "/student/my-attendance",
 	LinkAttendTeacher:  "/teacher/attendance",
 	LinkPhoneRequests:  "/teacher/phone-requests",
+	LinkBatches:        "/office-portal/running-batches",
 }
 
 type Store interface {

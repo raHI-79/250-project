@@ -94,20 +94,19 @@ WHERE ($1::text = '' OR r.batch = $1::text)
 ORDER BY r.batch, r.semester, r.section, r.day_of_week, r.start_time`
 	updateRoutineSemesterSQL = `UPDATE routines SET semester = $2, updated_at = now()
 WHERE id = $1 RETURNING id`
-	runningSemesterSQL      = `SELECT running_semester FROM batch_semesters WHERE batch = $1`
-	runningSemesterSinceSQL = `SELECT running_semester, updated_at FROM batch_semesters WHERE batch = $1`
-	listRunningSQL          = `SELECT batch, running_semester FROM batch_semesters ORDER BY batch`
-	seedRunningSQL          = `INSERT INTO batch_semesters (batch, running_semester)
-VALUES ($1, $2) ON CONFLICT (batch) DO NOTHING`
-	setRunningSQL = `INSERT INTO batch_semesters (batch, running_semester, updated_at)
-VALUES ($1, $2, now())
-ON CONFLICT (batch) DO UPDATE SET running_semester = EXCLUDED.running_semester, updated_at = now()`
+	runningSemesterSQL      = `SELECT running_semester FROM batches WHERE name = $1`
+	runningSemesterSinceSQL = `SELECT running_semester, semester_since FROM batches WHERE name = $1`
+	listRunningSQL          = `SELECT name, running_semester FROM batches WHERE status = 'active' ORDER BY name`
+	setRunningSQL           = `UPDATE batches
+SET semester_since = CASE WHEN running_semester = $2 THEN semester_since ELSE now() END,
+    running_semester = $2, updated_at = now()
+WHERE name = $1 RETURNING id`
 	deleteRoutineSQL       = `DELETE FROM routines WHERE id = $1 RETURNING id`
 	listSectionRoutinesSQL = `SELECT ` + routineColumns + `
 ` + routineJoins + `
 WHERE r.batch = $1 AND (r.section = $2::text OR r.section = 'ALL' OR $2::text = '')
   AND r.semester = COALESCE(NULLIF($3::text, ''),
-      (SELECT bs.running_semester FROM batch_semesters bs WHERE bs.batch = r.batch), r.semester)
+      (SELECT bs.running_semester FROM batches bs WHERE bs.name = r.batch), r.semester)
 ORDER BY r.section, r.day_of_week, r.start_time, r.room`
 )
 
@@ -182,7 +181,7 @@ func (s *Store) CreateRoutine(ctx context.Context, routine NewRoutine) (RoutineR
 	if err != nil {
 		return RoutineRow{}, fmt.Errorf("store: could not create the routine entry: %w", err)
 	}
-	if _, err := tx.Exec(ctx, seedRunningSQL, routine.Batch, routine.Semester); err != nil {
+	if _, err := tx.Exec(ctx, ensureBatchSQL, routine.Batch, routine.Semester); err != nil {
 		return RoutineRow{}, fmt.Errorf("store: could not start the semester of %s: %w", routine.Batch, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -242,7 +241,12 @@ func (s *Store) ListRunningSemesters(ctx context.Context) (map[string]string, er
 }
 
 func (s *Store) SetRunningSemester(ctx context.Context, batch, semester string) error {
-	if _, err := s.pool.Exec(ctx, setRunningSQL, batch, semester); err != nil {
+	var id int64
+	err := s.pool.QueryRow(ctx, setRunningSQL, batch, semester).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
 		return fmt.Errorf("store: could not set the running semester of %s: %w", batch, err)
 	}
 	return nil

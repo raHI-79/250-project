@@ -136,6 +136,7 @@ func run() error {
 			Devices:   userStore,
 			PushTests: pushTests,
 			People:    userStore,
+			Batches:   userStore,
 			Catalog:   userStore,
 			Lookups:   userStore,
 			Periods:   userStore,

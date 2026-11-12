@@ -117,14 +117,14 @@ ON CONFLICT (user_id) DO UPDATE
 SET device_id = EXCLUDED.device_id, bound_at = now(), last_seen_at = now()`
 	teachesStudentSQL = `SELECT EXISTS (
     SELECT 1 FROM routines r
-    JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+    JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester
     JOIN teachers t ON t.id = r.teacher_id
     JOIN students s ON s.batch = r.batch AND (r.section = 'ALL' OR s.section = r.section)
     WHERE t.user_id = $1 AND s.user_id = $2
 )`
 	batchTeachersSQL = `SELECT DISTINCT t.user_id
 FROM routines r
-JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester
 JOIN teachers t ON t.id = r.teacher_id
 JOIN users u ON u.id = t.user_id
 WHERE r.batch = $1 AND (r.section = 'ALL' OR $2 = 'ALL' OR r.section = $2) AND u.status = 'active'`
@@ -135,7 +135,7 @@ JOIN students s ON s.user_id = r.user_id
 JOIN users su ON su.id = r.user_id
 WHERE r.status = 'pending' AND su.status = 'active' AND EXISTS (
     SELECT 1 FROM routines ro
-    JOIN batch_semesters bs ON bs.batch = ro.batch AND bs.running_semester = ro.semester
+    JOIN batches bs ON bs.status = 'active' AND bs.name = ro.batch AND bs.running_semester = ro.semester
     JOIN teachers t ON t.id = ro.teacher_id
     WHERE t.user_id = $1 AND ro.batch = s.batch AND (ro.section = 'ALL' OR ro.section = s.section)
 )

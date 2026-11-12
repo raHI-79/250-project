@@ -28,6 +28,7 @@ const (
 	MessagePendingAccount      = "Your registration is pending approval by the administration."
 	MessageRejectedAccount     = "Your registration was rejected. Please contact the department office."
 	MessageRemovedAccount      = "Your account has been removed. Please contact the department office."
+	MessageBatchNotActive      = "Your batch is not active. Please contact the department office."
 	MessageUnverifiedAccount   = "Please verify your email first."
 	MessageInvitedAccount      = "Your account is not activated yet. Use the link in your invitation email."
 	MessageStudentPortal       = "Use the student login page."
@@ -475,6 +476,9 @@ func loginBlock(user store.LoginUser) (string, bool) {
 	message, blocked := statusMessage(user.Status)
 	if blocked && user.Status == store.StatusRejected && user.RejectionReason != "" {
 		return MessageRejectedAccount + " Reason: " + user.RejectionReason, true
+	}
+	if !blocked && user.Role == auth.RoleStudent && user.BatchClosed {
+		return MessageBatchNotActive, true
 	}
 	return message, blocked
 }
