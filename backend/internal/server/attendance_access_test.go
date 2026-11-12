@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -385,5 +387,51 @@ func TestACodeOnlySessionMarksFromTheWebsiteWithoutAPosition(t *testing.T) {
 	}
 	if presence.lastMark.Lat != 0 || presence.lastMark.DistanceM != 0 {
 		t.Errorf("a code only mark kept a position: %+v", presence.lastMark)
+	}
+}
+
+func TestTheWebsiteTakesAWideReadingButNeverAFarOne(t *testing.T) {
+	deps, router, presence := newAttendanceRouter(t)
+	openWebSession(presence, attendance.TakeBluetooth)
+	tokens := accessTokens(t, deps)
+	code := attendance.CurrentCode(presence.session.TokenKey, presence.session.ID, time.Now())
+	north := func(metres float64) string {
+		return strconv.FormatFloat(24.9+metres/(6371008.8*math.Pi/180), 'f', 7, 64)
+	}
+	tests := []struct {
+		name       string
+		lat        string
+		accuracy   string
+		wantStatus int
+		wantError  string
+	}{
+		{name: "a reading of 120 m", lat: north(10), accuracy: "120", wantStatus: http.StatusForbidden,
+			wantError: attendance.MessageWeakSignal},
+		{name: "150 m away with a 100 m reading", lat: north(150), accuracy: "100", wantStatus: http.StatusForbidden,
+			wantError: attendance.MessageTooFar},
+		{name: "60 m away with an 80 m reading", lat: north(60), accuracy: "80", wantStatus: http.StatusCreated},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := `{"session_id":9,"code":"` + code + `","lat":` + test.lat + `,"lng":91.8,"accuracy_m":` +
+				test.accuracy + `}`
+			rec := serveJSON(t, router, http.MethodPost, "/api/students/attendance/mark", body,
+				tokens[auth.RoleStudent], false)
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d (body = %q)", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantError != "" {
+				if got := errorField(t, rec); got != test.wantError {
+					t.Errorf("error = %q, want %q", got, test.wantError)
+				}
+				return
+			}
+			if presence.lastMark.AccuracyM != 80 {
+				t.Errorf("stored accuracy = %v, want the 80 m reading kept with the mark", presence.lastMark.AccuracyM)
+			}
+			if presence.lastMark.DistanceM < 59 || presence.lastMark.DistanceM > 61 {
+				t.Errorf("stored distance = %v, want about 60 m", presence.lastMark.DistanceM)
+			}
+		})
 	}
 }

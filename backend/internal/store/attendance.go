@@ -139,17 +139,40 @@ const sessionColumns = `a.id, a.course_id, c.code, c.title, a.batch, a.section,
 COALESCE(a.schedule_item_id, 0), a.teacher_id, COALESCE(t.user_id, 0), COALESCE(t.name, ''),
 a.started_at, a.ends_at, a.status, a.teacher_lat, a.teacher_lng, a.teacher_accuracy_m,
 a.location_updated_at, a.token_key, a.closed_at, a.method, a.code_only,
-(SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'present')`
+(SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id AND r.status = 'present'),
+CASE WHEN a.status = 'closed'
+     THEN (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id = a.id)
+     ELSE (SELECT COUNT(*) FROM students s
+           JOIN users u ON u.id = s.user_id AND u.status = 'active'
+           WHERE (s.batch = a.batch AND (a.section = 'ALL' OR s.section = a.section))
+              OR s.id IN (SELECT d.student_id FROM student_drop_courses d WHERE d.course_id = a.course_id))
+END`
+
+const markedSessionSQL = `(a.status = 'open' OR EXISTS (
+    SELECT 1 FROM attendance_records m WHERE m.session_id = a.id AND m.method <> 'system'))`
 
 const (
 	openSessionSQL = `INSERT INTO attendance_sessions
 (course_id, batch, section, schedule_item_id, teacher_id, ends_at, token_key, method, code_only)
 VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6), $7, $8, $9)
 RETURNING id`
-	runningSessionSQL = `SELECT a.id FROM attendance_sessions a
+	runningSessionSQL = `SELECT a.id, a.status FROM attendance_sessions a
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
-  AND a.status = 'open' AND a.ends_at > now()`
-	sessionByIDSQL = `SELECT ` + sessionColumns + `
+  AND ((a.started_at >= date_trunc('day', now()) AND a.started_at < date_trunc('day', now()) + interval '1 day')
+       OR (a.status = 'open' AND a.ends_at > now()))
+ORDER BY (a.status = 'open') DESC, a.started_at DESC
+LIMIT 1`
+	continueSessionSQL = `UPDATE attendance_sessions
+SET ends_at = GREATEST(ends_at, now() + make_interval(mins => $2)), method = $3, code_only = $4
+WHERE id = $1 AND status = 'open'
+RETURNING id`
+	reopenSessionSQL = `UPDATE attendance_sessions
+SET status = 'open', closed_at = NULL, ends_at = now() + make_interval(mins => $2), method = $3, code_only = $4
+WHERE id = $1 AND status = 'closed'
+RETURNING id`
+	dropAbsenteesSQL = `DELETE FROM attendance_records WHERE session_id = $1 AND method = 'system'`
+	realMarksSQL     = `SELECT COUNT(*) FROM attendance_records WHERE session_id = $1 AND method <> 'system'`
+	sessionByIDSQL   = `SELECT ` + sessionColumns + `
 FROM attendance_sessions a
 JOIN courses c ON c.id = a.course_id
 LEFT JOIN teachers t ON t.id = a.teacher_id
@@ -159,12 +182,14 @@ FROM attendance_sessions a
 JOIN courses c ON c.id = a.course_id
 LEFT JOIN teachers t ON t.id = a.teacher_id
 WHERE a.teacher_id = $1 AND a.started_at >= $2 AND a.started_at < $3
+  AND ` + markedSessionSQL + `
 ORDER BY a.started_at DESC`
 	batchSessionsSQL = `SELECT ` + sessionColumns + `
 FROM attendance_sessions a
 JOIN courses c ON c.id = a.course_id
 LEFT JOIN teachers t ON t.id = a.teacher_id
 WHERE ($1::text = '' OR a.batch = $1::text) AND a.started_at >= $2 AND a.started_at < $3
+  AND ` + markedSessionSQL + `
 ORDER BY a.started_at DESC
 LIMIT 300`
 	openForStudentSQL = `SELECT ` + sessionColumns + `
@@ -324,7 +349,11 @@ RETURNING student_id`
 const (
 	SessionBluetooth = "bluetooth"
 	SessionRollCall  = "roll_call"
+	SessionOpen      = "open"
+	SessionClosed    = "closed"
 )
+
+var ErrAttendanceEmpty = errors.New("store: the attendance session had no marks and was removed")
 
 const (
 	noteOnlySQL = `UPDATE attendance_records
@@ -404,27 +433,55 @@ func (s *Store) DeleteAttendanceSheet(ctx context.Context, courseID int64,
 
 func (s *Store) OpenAttendanceSession(ctx context.Context,
 	fresh NewAttendanceSession) (AttendanceSession, error) {
+	method := fresh.Method
+	if method == "" {
+		method = SessionBluetooth
+	}
+	codeOnly := fresh.CodeOnly && method != SessionRollCall
 	var running int64
+	var status string
 	err := s.pool.QueryRow(ctx, runningSessionSQL, fresh.TeacherID, fresh.CourseID,
-		fresh.Batch, fresh.Section).Scan(&running)
+		fresh.Batch, fresh.Section).Scan(&running, &status)
 	if err == nil {
-		return s.AttendanceSession(ctx, running)
+		return s.continueSession(ctx, running, status, fresh.Minutes, method, codeOnly)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return AttendanceSession{}, fmt.Errorf("store: could not look for a running attendance: %w", err)
 	}
 	var id int64
-	method := fresh.Method
-	if method == "" {
-		method = SessionBluetooth
-	}
 	err = s.pool.QueryRow(ctx, openSessionSQL, fresh.CourseID, fresh.Batch, fresh.Section,
 		fresh.ScheduleItemID, fresh.TeacherID, fresh.Minutes, fresh.TokenKey, method,
-		fresh.CodeOnly && method != SessionRollCall).Scan(&id)
+		codeOnly).Scan(&id)
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not open an attendance session: %w", err)
 	}
 	return s.AttendanceSession(ctx, id)
+}
+
+func (s *Store) continueSession(ctx context.Context, sessionID int64, status string, minutes int,
+	method string, codeOnly bool) (AttendanceSession, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return AttendanceSession{}, fmt.Errorf("store: could not start continuing the session %d: %w", sessionID, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	query := continueSessionSQL
+	if status != SessionOpen {
+		query = reopenSessionSQL
+	}
+	var id int64
+	if err := tx.QueryRow(ctx, query, sessionID, minutes, method, codeOnly).Scan(&id); err != nil {
+		return AttendanceSession{}, fmt.Errorf("store: could not continue the session %d: %w", sessionID, err)
+	}
+	if status != SessionOpen {
+		if _, err := tx.Exec(ctx, dropAbsenteesSQL, sessionID); err != nil {
+			return AttendanceSession{}, fmt.Errorf("store: could not reopen the marks of %d: %w", sessionID, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return AttendanceSession{}, fmt.Errorf("store: could not finish continuing the session %d: %w", sessionID, err)
+	}
+	return s.AttendanceSession(ctx, sessionID)
 }
 
 func (s *Store) AttendanceSession(ctx context.Context, sessionID int64) (AttendanceSession, error) {
@@ -435,10 +492,6 @@ func (s *Store) AttendanceSession(ctx context.Context, sessionID int64) (Attenda
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not read the attendance session %d: %w",
 			sessionID, err)
-	}
-	session.Roster, err = s.CountRoster(ctx, sessionID)
-	if err != nil {
-		return AttendanceSession{}, err
 	}
 	return session, nil
 }
@@ -513,6 +566,7 @@ func scanSession(row rowScanner) (AttendanceSession, error) {
 		&session.Method,
 		&session.CodeOnly,
 		&session.Present,
+		&session.Roster,
 	)
 	if err != nil {
 		return AttendanceSession{}, err
@@ -586,6 +640,19 @@ func (s *Store) CloseAttendanceSession(ctx context.Context, sessionID,
 	}
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not close the session %d: %w", sessionID, err)
+	}
+	var marks int
+	if err := tx.QueryRow(ctx, realMarksSQL, sessionID).Scan(&marks); err != nil {
+		return AttendanceSession{}, fmt.Errorf("store: could not count the marks of %d: %w", sessionID, err)
+	}
+	if marks == 0 {
+		if _, err := tx.Exec(ctx, deleteSessionSQL, sessionID); err != nil {
+			return AttendanceSession{}, fmt.Errorf("store: could not drop the empty session %d: %w", sessionID, err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return AttendanceSession{}, fmt.Errorf("store: could not finish dropping the session %d: %w", sessionID, err)
+		}
+		return AttendanceSession{ID: sessionID, Status: SessionClosed}, ErrAttendanceEmpty
 	}
 	if _, err := tx.Exec(ctx, absentRosterSQL, sessionID); err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not mark the absentees of %d: %w", sessionID, err)

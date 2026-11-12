@@ -475,6 +475,7 @@ func TestStudentAttendanceCountsPresentOverHeld(t *testing.T) {
 		if _, err := store.CloseAttendanceSession(ctx, sessionID, class.teacherID); err != nil {
 			t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
 		}
+		ageSession(t, ctx, pool, sessionID, len(statuses)-index)
 	}
 	courses, err := store.StudentCourseAttendance(ctx, studentID)
 	if err != nil {
@@ -531,6 +532,7 @@ func TestLowAttendanceListsOnlyTheStudentsUnderFifty(t *testing.T) {
 		if _, err := store.CloseAttendanceSession(ctx, sessionID, class.teacherID); err != nil {
 			t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
 		}
+		ageSession(t, ctx, pool, sessionID, 4-round)
 	}
 	alerts, err := store.ListLowAttendance(ctx, 3, 50)
 	if err != nil {

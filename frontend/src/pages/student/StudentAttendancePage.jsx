@@ -21,8 +21,9 @@ import { useQueryTab, useResource } from '../../lib/hooks'
 import { formatClock } from '../../lib/time'
 import { isAndroidApp } from '../../lib/native'
 import { paths } from '../../lib/paths'
+import { dots } from '../../lib/dots'
 import useWebLocation from '../../lib/useWebLocation'
-import { browserEnv, studentPlaceState } from '../../lib/webLocation'
+import { WEB_ACCURACY_LIMIT_M, browserEnv, studentPlaceState } from '../../lib/webLocation'
 import {
   STUDENT_TAB_MARK,
   STUDENT_TAB_MINE,
@@ -146,6 +147,7 @@ export default function StudentAttendancePage() {
     app && phone.registered && phone.this_phone && session && !session.present && !codeOnly
   const { place, locate } = useWebLocation({
     active: !app && Boolean(session) && !session?.present && !done && !codeOnly,
+    limit: WEB_ACCURACY_LIMIT_M,
   })
   const [locating, setLocating] = useState(false)
   const askPlace = async () => {
@@ -353,11 +355,15 @@ export default function StudentAttendancePage() {
     <Card hover={false} rule>
       <p className="label-caps">Open now</p>
       <p className="font-display mt-1 text-section font-bold text-ink">
-        {session.course_code} · {session.course_title}
+        {dots(session.course_code, session.course_title)}
       </p>
       <p className="mt-1 text-xs text-muted">
-        {session.teacher_name} · {session.batch} · {sectionLabel(session.section)} · closes{' '}
-        {formatClock(session.ends_at)}
+        {dots(
+          session.teacher_name,
+          session.batch,
+          sectionLabel(session.section),
+          `closes ${formatClock(session.ends_at)}`,
+        )}
       </p>
       {children}
     </Card>
@@ -439,11 +445,15 @@ export default function StudentAttendancePage() {
           <Card hover={false} rule>
             <p className="label-caps">Open now</p>
             <p className="font-display mt-1 text-section font-bold text-ink">
-              {session.course_code} · {session.course_title}
+              {dots(session.course_code, session.course_title)}
             </p>
             <p className="mt-1 text-xs text-muted">
-              {session.teacher_name} · {session.batch} · {sectionLabel(session.section)} · closes{' '}
-              {formatClock(session.ends_at)}
+              {dots(
+                session.teacher_name,
+                session.batch,
+                sectionLabel(session.section),
+                `closes ${formatClock(session.ends_at)}`,
+              )}
             </p>
             {session.present || done ? (
               <Alert tone="success" className="mt-4" title="You are marked present">

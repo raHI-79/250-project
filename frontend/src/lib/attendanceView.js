@@ -62,6 +62,29 @@ export const percentOf = (present, held) => {
 
 export const classKey = (entry) => `${entry.course_id}|${entry.batch}|${entry.section}`
 
+const joined = (...parts) =>
+  parts
+    .map((part) => (part === null || part === undefined ? '' : String(part).trim()))
+    .filter(Boolean)
+    .join(' · ')
+
+export const markMeta = (mark, clock = (value) => value) =>
+  joined(
+    mark?.marked_at ? clock(mark.marked_at) : '',
+    mark?.distance_m ? `${mark.distance_m} m` : '',
+    mark?.accuracy_m ? `±${mark.accuracy_m} m` : '',
+  )
+
+export const presentOfRoster = (session) =>
+  `${Number(session?.present) || 0}/${Number(session?.roster) || 0}`
+
+export const CLOSED_TEXT = 'Attendance closed. Everyone missing is marked absent.'
+
+export const EMPTY_CLOSED_TEXT = 'Nobody was marked, so this empty attendance was not kept.'
+
+export const closedMessage = (result) =>
+  result?.removed ? result.message || EMPTY_CLOSED_TEXT : CLOSED_TEXT
+
 export const NO_LOCATION_FLAG = 'No location'
 
 export const markFlags = (mark) =>

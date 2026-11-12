@@ -223,8 +223,8 @@ func TestCheckPositionAppliesEveryRule(t *testing.T) {
 			if refusal != tc.want {
 				t.Fatalf("CheckPosition() refusal = %q, want %q", refusal, tc.want)
 			}
-			if refusal == "" && distance > MaxDistanceM {
-				t.Errorf("an accepted mark reported %.2f m, want at most %.2f m", distance, MaxDistanceM)
+			if refusal == "" && distance > MaxReachM {
+				t.Errorf("an accepted mark reported %.2f m, want at most %.2f m", distance, MaxReachM)
 			}
 		})
 	}
@@ -380,5 +380,81 @@ func TestSharedTokenVector(t *testing.T) {
 	}
 	if !TokenMatches(vectorKey, vectorSession, at, vectorToken) {
 		t.Error("TokenMatches() refused the shared vector")
+	}
+}
+
+func TestTheWebsiteAcceptsAWiderAccuracyThanTheApp(t *testing.T) {
+	if AccuracyLimit(false) != 50 || AccuracyLimit(true) != 100 {
+		t.Fatalf("limits = %v app, %v web, want 50 and 100", AccuracyLimit(false), AccuracyLimit(true))
+	}
+	teacher := Anchor{Lat: 24.9169, Lng: 91.8316, UpdatedAt: at.Add(-5 * time.Second), Known: true}
+	tests := []struct {
+		name     string
+		accuracy float64
+		web      bool
+		want     string
+	}{
+		{name: "the app at 50 m", accuracy: 50},
+		{name: "the app at 51 m", accuracy: 51, want: MessageWeakSignal},
+		{name: "the website at 51 m", accuracy: 51, web: true},
+		{name: "the website at 100 m", accuracy: 100, web: true},
+		{name: "the website at 101 m", accuracy: 101, web: true, want: MessageWeakSignal},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			student := Position{Lat: 24.91695, Lng: 91.8316, AccuracyM: tc.accuracy, Web: tc.web}
+			if _, refusal := CheckPosition(student, teacher, at); refusal != tc.want {
+				t.Errorf("refusal = %q, want %q", refusal, tc.want)
+			}
+		})
+	}
+}
+
+const metresPerDegree = 6371008.8 * math.Pi / 180
+
+func TestTheDistanceCheckTakesOffTheLargerAccuracy(t *testing.T) {
+	teacherLat, teacherLng := 24.9169, 91.8316
+	north := func(metres float64) float64 { return teacherLat + metres/metresPerDegree }
+	tests := []struct {
+		name     string
+		metres   float64
+		student  float64
+		teacher  float64
+		web      bool
+		accepted bool
+	}{
+		{name: "the app, 60 m away with a 40 m reading", metres: 60, student: 40, accepted: true},
+		{name: "the app, 60 m away with a 20 m reading", metres: 60, student: 20},
+		{name: "the app, the teacher's reading is the larger", metres: 60, student: 10, teacher: 35, accepted: true},
+		{name: "the website, 95 m away with a 90 m reading", metres: 95, student: 90, web: true, accepted: true},
+		{name: "the website, 105 m away is always too far", metres: 105, student: 100, web: true},
+		{name: "the website, 101 m away with a teacher at 150 m", metres: 101, student: 80, teacher: 150, web: true},
+		{name: "the website, 40 m away with a 5 m reading", metres: 40, student: 5, web: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			teacher := Anchor{Lat: teacherLat, Lng: teacherLng, AccuracyM: tc.teacher,
+				UpdatedAt: at.Add(-5 * time.Second), Known: true}
+			student := Position{Lat: north(tc.metres), Lng: teacherLng, AccuracyM: tc.student, Web: tc.web}
+			distance, refusal := CheckPosition(student, teacher, at)
+			if math.Abs(distance-tc.metres) > 0.5 {
+				t.Fatalf("distance = %.2f m, want about %.0f m", distance, tc.metres)
+			}
+			if tc.accepted && refusal != "" {
+				t.Errorf("refusal = %q, want the mark accepted", refusal)
+			}
+			if !tc.accepted && refusal != MessageTooFar {
+				t.Errorf("refusal = %q, want %q", refusal, MessageTooFar)
+			}
+		})
+	}
+	if got := EffectiveDistanceM(60, 40, 10); got != 20 {
+		t.Errorf("EffectiveDistanceM(60, 40, 10) = %v, want 20", got)
+	}
+	if got := EffectiveDistanceM(10, 40, 0); got != 0 {
+		t.Errorf("EffectiveDistanceM(10, 40, 0) = %v, want 0", got)
+	}
+	if WithinReach(100.5, 100, 100) {
+		t.Error("a mark more than 100 m from the teacher was accepted")
 	}
 }

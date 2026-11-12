@@ -26,6 +26,19 @@ func newRollCall(t *testing.T, ctx context.Context, store *Store, class classFix
 	return session
 }
 
+func ageSession(t *testing.T, ctx context.Context, pool *pgxpool.Pool, sessionID int64, days int) {
+	t.Helper()
+	query := `UPDATE attendance_sessions
+SET started_at = started_at - make_interval(days => $2),
+    ends_at = ends_at - make_interval(days => $2),
+    closed_at = closed_at - make_interval(days => $2),
+    location_updated_at = location_updated_at - make_interval(days => $2)
+WHERE id = $1`
+	if _, err := pool.Exec(ctx, query, sessionID, days); err != nil {
+		t.Fatalf("could not move the session %d back %d days: %v", sessionID, days, err)
+	}
+}
+
 func markRow(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	sessionID, studentID int64, status, method string) {
 	t.Helper()
@@ -46,6 +59,9 @@ func TestARollCallSessionKeepsItsMethod(t *testing.T) {
 	if bluetooth.Method != SessionBluetooth {
 		t.Errorf("method = %q, want %q by default", bluetooth.Method, SessionBluetooth)
 	}
+	userID := insertUser(t, ctx, pool, RoleStudent, "2023331100", StatusActive, 0)
+	studentID := insertStudentRow(t, ctx, pool, userID, "2023331100", "CSE-23", "A")
+	markRow(t, ctx, pool, class.sessionID, studentID, "present", "app")
 	closed, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID)
 	if err != nil {
 		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
@@ -53,6 +69,7 @@ func TestARollCallSessionKeepsItsMethod(t *testing.T) {
 	if closed.Status != "closed" {
 		t.Fatalf("status = %q, want closed", closed.Status)
 	}
+	ageSession(t, ctx, pool, class.sessionID, 1)
 	roll := newRollCall(t, ctx, store, class, "CSE-23", "A")
 	if roll.Method != SessionRollCall {
 		t.Errorf("method = %q, want %q", roll.Method, SessionRollCall)
@@ -62,8 +79,8 @@ func TestARollCallSessionKeepsItsMethod(t *testing.T) {
 func TestARollCallSetsEveryStudentWithANote(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	class := newClass(t, ctx, store, pool, "CSE-23", "A")
-	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
-		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
+	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); !errors.Is(err, ErrAttendanceEmpty) {
+		t.Fatalf("closing a session nobody marked returned %v, want ErrAttendanceEmpty", err)
 	}
 	first := insertUser(t, ctx, pool, RoleStudent, "2023331101", StatusActive, 0)
 	firstID := insertStudentRow(t, ctx, pool, first, "2023331101", "CSE-23", "A")
@@ -135,11 +152,13 @@ func TestEveryMethodLandsInOneSheet(t *testing.T) {
 	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
 		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
 	}
+	ageSession(t, ctx, pool, class.sessionID, 2)
 	second := newRollCall(t, ctx, store, class, "CSE-23", "A")
 	markRow(t, ctx, pool, second.ID, studentID, "present", "manual")
 	if _, err := store.CloseAttendanceSession(ctx, second.ID, class.teacherID); err != nil {
 		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
 	}
+	ageSession(t, ctx, pool, second.ID, 1)
 	third, err := store.OpenAttendanceSession(ctx, NewAttendanceSession{
 		CourseID:  class.courseID,
 		Batch:     "CSE-23",
@@ -152,7 +171,7 @@ func TestEveryMethodLandsInOneSheet(t *testing.T) {
 		t.Fatalf("OpenAttendanceSession() returned an unexpected error: %v", err)
 	}
 	markRow(t, ctx, pool, third.ID, studentID, "present", "web")
-	from := time.Now().AddDate(0, 0, -1)
+	from := time.Now().AddDate(0, 0, -3)
 	to := time.Now().AddDate(0, 0, 1)
 	classes, err := store.ListTeacherClasses(ctx, class.teacherID, from, to)
 	if err != nil {
@@ -182,6 +201,7 @@ func TestDeletingASessionRecountsTheStudent(t *testing.T) {
 	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
 		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
 	}
+	ageSession(t, ctx, pool, class.sessionID, 1)
 	second := newRollCall(t, ctx, store, class, "CSE-23", "A")
 	markRow(t, ctx, pool, second.ID, studentID, "absent", "manual")
 	before, err := store.StudentCourseAttendance(ctx, studentID)
@@ -218,9 +238,13 @@ func TestDeletingASessionRecountsTheStudent(t *testing.T) {
 func TestDeletingASheetTakesEverySession(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	class := newClass(t, ctx, store, pool, "CSE-23", "A")
+	userID := insertUser(t, ctx, pool, RoleStudent, "2023331141", StatusActive, 0)
+	studentID := insertStudentRow(t, ctx, pool, userID, "2023331141", "CSE-23", "A")
+	markRow(t, ctx, pool, class.sessionID, studentID, "present", "app")
 	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
 		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
 	}
+	ageSession(t, ctx, pool, class.sessionID, 1)
 	second := newRollCall(t, ctx, store, class, "CSE-23", "A")
 	deleted, err := store.DeleteAttendanceSheet(ctx, class.courseID, "CSE-23", "A")
 	if err != nil {
@@ -234,5 +258,132 @@ func TestDeletingASheetTakesEverySession(t *testing.T) {
 	}
 	if _, err := store.DeleteAttendanceSheet(ctx, class.courseID, "CSE-23", "A"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("deleting an empty sheet returned %v, want ErrNotFound", err)
+	}
+}
+
+func TestHistoryShowsPresentOverTheRosterTotal(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	class := newClass(t, ctx, store, pool, "CSE-23", "A")
+	ids := make([]int64, 0, 4)
+	for index, regNo := range []string{"2023331151", "2023331152", "2023331153", "2023331154"} {
+		userID := insertUser(t, ctx, pool, RoleStudent, regNo, StatusActive, 0)
+		ids = append(ids, insertStudentRow(t, ctx, pool, userID, regNo, "CSE-23", "A"))
+		if index < 2 {
+			markRow(t, ctx, pool, class.sessionID, ids[index], "present", "app")
+		}
+	}
+	from := time.Now().AddDate(0, 0, -1)
+	to := time.Now().AddDate(0, 0, 1)
+	open, err := store.ListTeacherAttendance(ctx, class.teacherID, from, to)
+	if err != nil {
+		t.Fatalf("ListTeacherAttendance() returned an unexpected error: %v", err)
+	}
+	if len(open) != 1 || open[0].Present != 2 || open[0].Roster != 4 {
+		t.Fatalf("the open session = %+v, want 2 of a roster of 4", open)
+	}
+	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
+		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
+	}
+	closed, err := store.ListTeacherAttendance(ctx, class.teacherID, from, to)
+	if err != nil {
+		t.Fatalf("ListTeacherAttendance() returned an unexpected error: %v", err)
+	}
+	if len(closed) != 1 || closed[0].Present != 2 || closed[0].Roster != 4 {
+		t.Fatalf("the closed session = %+v, want 2 of 4", closed)
+	}
+	single, err := store.AttendanceSession(ctx, class.sessionID)
+	if err != nil {
+		t.Fatalf("AttendanceSession() returned an unexpected error: %v", err)
+	}
+	if single.Present != 2 || single.Roster != 4 {
+		t.Errorf("the session = %d/%d, want 2/4", single.Present, single.Roster)
+	}
+}
+
+func TestASessionNobodyMarkedIsDroppedAndNeverListed(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	class := newClass(t, ctx, store, pool, "CSE-23", "A")
+	userID := insertUser(t, ctx, pool, RoleStudent, "2023331161", StatusActive, 0)
+	studentID := insertStudentRow(t, ctx, pool, userID, "2023331161", "CSE-23", "A")
+	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); !errors.Is(err, ErrAttendanceEmpty) {
+		t.Fatalf("closing an unmarked session returned %v, want ErrAttendanceEmpty", err)
+	}
+	if _, err := store.AttendanceSession(ctx, class.sessionID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("the empty session survived its close: %v", err)
+	}
+	legacy := newRollCall(t, ctx, store, class, "CSE-23", "A")
+	markRow(t, ctx, pool, legacy.ID, studentID, "absent", "system")
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET status = 'closed', closed_at = now() WHERE id = $1`,
+		legacy.ID); err != nil {
+		t.Fatalf("could not close the legacy session: %v", err)
+	}
+	listed, err := store.ListTeacherAttendance(ctx, class.teacherID, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 0, 1))
+	if err != nil {
+		t.Fatalf("ListTeacherAttendance() returned an unexpected error: %v", err)
+	}
+	if len(listed) != 0 {
+		t.Errorf("the history lists %+v, want no session without a mark", listed)
+	}
+}
+
+func TestStartingTheSameClassTheSameDayContinuesIt(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	class := newClass(t, ctx, store, pool, "CSE-23", "A")
+	firstUser := insertUser(t, ctx, pool, RoleStudent, "2023331171", StatusActive, 0)
+	first := insertStudentRow(t, ctx, pool, firstUser, "2023331171", "CSE-23", "A")
+	secondUser := insertUser(t, ctx, pool, RoleStudent, "2023331172", StatusActive, 0)
+	insertStudentRow(t, ctx, pool, secondUser, "2023331172", "CSE-23", "A")
+	markRow(t, ctx, pool, class.sessionID, first, "present", "app")
+	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
+		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
+	}
+	again, err := store.OpenAttendanceSession(ctx, NewAttendanceSession{
+		CourseID:  class.courseID,
+		Batch:     "CSE-23",
+		Section:   "A",
+		TeacherID: class.teacherID,
+		Minutes:   15,
+		TokenKey:  "another-key",
+		CodeOnly:  true,
+	})
+	if err != nil {
+		t.Fatalf("OpenAttendanceSession() returned an unexpected error: %v", err)
+	}
+	if again.ID != class.sessionID {
+		t.Fatalf("a second start the same day opened %d, want the morning session %d", again.ID, class.sessionID)
+	}
+	if again.Status != SessionOpen || !again.CodeOnly {
+		t.Errorf("the continued session = %+v, want it open again as code only", again)
+	}
+	if again.Present != 1 || again.Roster != 2 {
+		t.Errorf("the continued session = %d/%d, want the earlier mark kept of 2", again.Present, again.Roster)
+	}
+	records, err := store.ListSessionRecords(ctx, again.ID)
+	if err != nil {
+		t.Fatalf("ListSessionRecords() returned an unexpected error: %v", err)
+	}
+	for _, record := range records {
+		if record.Method == "system" {
+			t.Errorf("the absentees of the first close are still there: %+v", record)
+		}
+	}
+	ageSession(t, ctx, pool, again.ID, 1)
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET status = 'closed', closed_at = ends_at WHERE id = $1`,
+		again.ID); err != nil {
+		t.Fatalf("could not close yesterday's session: %v", err)
+	}
+	tomorrow, err := store.OpenAttendanceSession(ctx, NewAttendanceSession{
+		CourseID:  class.courseID,
+		Batch:     "CSE-23",
+		Section:   "A",
+		TeacherID: class.teacherID,
+		Minutes:   10,
+		TokenKey:  "next-day-key",
+	})
+	if err != nil {
+		t.Fatalf("OpenAttendanceSession() returned an unexpected error: %v", err)
+	}
+	if tomorrow.ID == again.ID {
+		t.Error("a start on another day continued yesterday's session")
 	}
 }

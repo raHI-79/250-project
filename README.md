@@ -1149,7 +1149,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/push/fcm` | student, CR, teacher | `{token, platform, device_id}` stores the Android device token of the app |
 | `DELETE` | `/api/push/fcm` | student, CR, teacher | `{token}` forgets that device, used on sign-out |
 | `GET` | `/api/teacher/attendance/options` | teacher | Today's classes to prefill from, every class of the running semester, and the open session if there is one |
-| `POST` | `/api/teacher/attendance/sessions` | teacher | `{course_id, batch, section, schedule_item_id?, minutes, method}` opens attendance for 5 to 30 minutes with `method` `bluetooth` (the default) or `roll_call`. A Bluetooth session pushes every roster student and returns its `token_key` and current code; a roll call pushes nobody and shows no code. Starting again while one is open returns the running one |
+| `POST` | `/api/teacher/attendance/sessions` | teacher | `{course_id, batch, section, schedule_item_id?, minutes, method}` opens attendance for 5 to 30 minutes with `method` `bluetooth` (the default) or `roll_call`. A Bluetooth session pushes every roster student and returns its `token_key` and current code; a roll call pushes nobody and shows no code. Starting the same course, batch and section again the same day continues that session (it reopens a closed one and keeps its marks) instead of opening another |
 | `GET` | `/api/teacher/attendance/sessions` | teacher | This teacher's sessions in `from`/`to`, newest first, each with its present count and roster size |
 | `GET` | `/api/teacher/attendance/sessions/{id}` | teacher | One of this teacher's own sessions with every roster student, their status, time, distance, accuracy, method and note, plus the `token_key` and the current `code` while it is open; `403` for another teacher's session |
 | `POST` | `/api/teacher/attendance/sessions/{id}/location` | teacher | `{lat, lng, accuracy_m}`; the app's foreground service posts this every 15 seconds. `409` once the session is closed |
@@ -1166,7 +1166,7 @@ Every route lives under `/api`. Errors always use the same shape:
 | `POST` | `/api/teacher/phone-requests/{id}/approve` | teacher | `{note}` rebinds the phone and tells the student; `400` when the note is missing beyond two changes a semester, `403` for another batch's student, `409` once another teacher answered |
 | `POST` | `/api/teacher/phone-requests/{id}/reject` | teacher | `{note}` refuses it and tells the student |
 | `GET` | `/api/students/attendance/open` | student, CR | `?device_id=` answers the open Bluetooth session of their courses, the state of their registered phone and the service UUID to scan for; on the website it answers `needs_code` so the page asks for the code instead |
-| `POST` | `/api/students/attendance/mark` | student, CR | From the app: `{session_id, token or code, lat, lng, accuracy_m, is_mock, device_id}`. From the website: `{session_id, code, lat, lng, accuracy_m}`, stored with method `web` and no device binding. `400` without a code on the website, `403` from another phone, on a wrong token or code, on a mock position, on a weak signal, beyond 30 metres or with a stale teacher position, `409` when already marked, when the phone already marked somebody, or when the session is a roll call |
+| `POST` | `/api/students/attendance/mark` | student, CR | From the app: `{session_id, token or code, lat, lng, accuracy_m, is_mock, device_id}`. From the website: `{session_id, code, lat, lng, accuracy_m}`, stored with method `web` and no device binding. `400` without a code on the website, `403` from another phone, on a wrong token or code, on a mock position, on a weak signal (over 50 m in the app, over 100 m on the website), beyond 30 metres after taking off the larger accuracy or beyond 100 metres at all, or with a stale teacher position, `409` when already marked, when the phone already marked somebody, or when the session is a roll call |
 | `GET` | `/api/students/attendance/mine` | student, CR | Every course with its held, present and percentage, and every class with its status, method, time and note |
 | `POST` | `/api/students/attendance/phone` | student, CR, app only | `{device_id}` registers this phone when the student has none yet |
 | `POST` | `/api/students/attendance/phone-request` | student, CR, app only | `{device_id, reason}` asks the batch's teachers for a new phone; `409` when one is pending, when it is already the registered phone, or when another account holds it |
@@ -1238,11 +1238,15 @@ teacher's Android app advertises a Bluetooth Low Energy token that changes every
 from a foreground service, so a locked screen does not stop attendance.
 
 A student's mark is accepted only when the phone heard the current or previous
-token, sits within **30 metres** of the teacher's latest position with an
-accuracy of **50 metres or better**, reports a position that is not from a mock
+token, sits within **30 metres** of the teacher's latest position once the larger
+of the two accuracies is taken off the distance (and never more than **100
+metres** away), with an accuracy of **50 metres or better** in the app or **100
+metres or better** on the website, reports a position that is not from a mock
 provider, passes the phone's own fingerprint, face or screen-lock check, and is
 the phone that student registered. The teacher's position has to be under a
-minute old. A phone with no Bluetooth, or that hears nothing within ten seconds,
+minute old. On the website both the teacher and the student read the position
+for up to 15 seconds and keep the most accurate reading, stopping early at 30
+metres or better; the teacher's reading refreshes every 20 seconds. A phone with no Bluetooth, or that hears nothing within ten seconds,
 types the rotating 4-digit code the teacher shows instead; the location rules do
 not change.
 

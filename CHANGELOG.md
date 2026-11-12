@@ -47,6 +47,23 @@ and the one the Android release is tagged with.
   buttons that open something and checks every view (see `docs/TESTING.md`). The
   demo seed now carries four weeks of attendance for it.
 
+### Attendance history and website positions
+
+- **History shows present over the roster.** Rows read "2/4" instead of "1/0": the
+  list now carries the roster total (the marked rows of a closed session, the live
+  roster of an open one). A session opened and closed without a single mark is
+  not kept, and older empty ones are not listed. Starting the same course, batch
+  and section again the same day continues that session instead of opening a
+  second one. Empty fields no longer leave a stray "·".
+- **Website positions that indoor phones can give.** The website watches the
+  position with high accuracy for up to 15 seconds, keeps the most accurate
+  reading (stopping early at 30 m), shows the live accuracy ("Finding your
+  position… ±42 m") and offers Try again; the teacher's position refreshes the
+  same way every 20 seconds. Website marks are accepted up to 100 m of accuracy
+  (the app keeps 50 m), the distance check takes off the larger of the two
+  accuracies and a mark more than 100 m from the teacher is always refused. The
+  accuracy is stored with the mark and shown in the teacher's list. Code only stays.
+
 ## 2.7.1
 
 ### Attendance on the website

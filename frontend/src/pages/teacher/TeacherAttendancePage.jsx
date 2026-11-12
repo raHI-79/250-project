@@ -24,6 +24,7 @@ import cx from '../../lib/cx'
 import { useNow, usePolling, useQueryTab, useResource } from '../../lib/hooks'
 import { formatDate, formatClock } from '../../lib/time'
 import useWebLocation from '../../lib/useWebLocation'
+import { dots } from '../../lib/dots'
 import {
   CODE_ONLY_LABEL,
   DEFAULT_MINUTES,
@@ -41,9 +42,11 @@ import {
   beaconSupported,
   belowPass,
   classKey,
+  closedMessage,
   downloadWorkbook,
   openAppSettings,
   openLocationSettings,
+  presentOfRoster,
   sectionLabel,
   startBeacon,
   startBody,
@@ -109,8 +112,7 @@ function StartPanel({
                     >
                       <span className="block font-semibold">{entry.course_code}</span>
                       <span className="mt-0.5 block text-xs text-muted">
-                        {entry.batch} · {sectionLabel(entry.section)}
-                        {entry.start_time ? ` · ${entry.start_time}` : ''}
+                        {dots(entry.batch, sectionLabel(entry.section), entry.start_time)}
                       </span>
                     </button>
                   )
@@ -210,15 +212,19 @@ function HistoryList({ sessions, loading, onOpen }) {
             >
               <span className="min-w-0 flex-1">
                 <span className="block wrap-long text-sm font-semibold text-ink">
-                  {session.course_code} · {session.course_title}
+                  {dots(session.course_code, session.course_title)}
                 </span>
                 <span className="mt-0.5 block wrap-long text-xs text-muted">
-                  {session.batch} · {sectionLabel(session.section)} ·{' '}
-                  {formatDate(session.started_at)} · {formatClock(session.started_at)}
+                  {dots(
+                    session.batch,
+                    sectionLabel(session.section),
+                    formatDate(session.started_at),
+                    formatClock(session.started_at),
+                  )}
                 </span>
               </span>
               <span className="shrink-0 text-sm font-semibold text-ink">
-                {session.present}/{session.roster}
+                {presentOfRoster(session)}
               </span>
             </button>
           </li>
@@ -246,11 +252,15 @@ function ClassList({ classes, loading, onExport, onDelete, busy }) {
           <li key={classKey(entry)} className="flex items-center gap-3 px-4 py-3">
             <span className="min-w-0 flex-1">
               <span className="block wrap-long text-sm font-semibold text-ink">
-                {entry.course_code} · {entry.course_title}
+                {dots(entry.course_code, entry.course_title)}
               </span>
               <span className="mt-0.5 block wrap-long text-xs text-muted">
-                {entry.batch} · {sectionLabel(entry.section)} · {entry.sessions} session
-                {entry.sessions === 1 ? '' : 's'} · {entry.below_fifty} below 50 %
+                {dots(
+                  entry.batch,
+                  sectionLabel(entry.section),
+                  `${entry.sessions} session${entry.sessions === 1 ? '' : 's'}`,
+                  `${entry.below_fifty} below 50 %`,
+                )}
               </span>
             </span>
             <span
@@ -500,13 +510,13 @@ export default function TeacherAttendancePage() {
   const close = async () => {
     setBusy('close')
     try {
-      await api.post(`/api/teacher/attendance/sessions/${open.id}/close`)
+      const result = await api.post(`/api/teacher/attendance/sessions/${open.id}/close`)
       if (beaconSupported()) await stopBeacon().catch(() => null)
       broadcasting.current = 0
       setStatus(null)
       setOpen(null)
       setMarks([])
-      toast.success('Attendance closed. Everyone missing is marked absent.')
+      toast.success(closedMessage(result))
       history.reload()
       classes.reload()
       options.reload()

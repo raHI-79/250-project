@@ -20,6 +20,7 @@ import api from '../../lib/api'
 import cx from '../../lib/cx'
 import { useQueryTab, useResource } from '../../lib/hooks'
 import { formatClock, formatDate } from '../../lib/time'
+import { dots } from '../../lib/dots'
 import {
   OFFICE_TAB_HISTORY,
   OFFICE_TAB_PHONES,
@@ -171,12 +172,16 @@ export default function AdminAttendancePage() {
                   <li key={session.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <span className="min-w-0 flex-1">
                       <span className="block wrap-long text-sm font-semibold text-ink">
-                        {session.course_code} · {session.course_title}
+                        {dots(session.course_code, session.course_title)}
                       </span>
                       <span className="mt-0.5 block wrap-long text-xs text-muted">
-                        {session.batch} · {sectionLabel(session.section)} ·{' '}
-                        {formatDate(session.started_at)} · {formatClock(session.started_at)} ·{' '}
-                        {session.method === 'roll_call' ? 'Roll call' : 'Bluetooth'}
+                        {dots(
+                          session.batch,
+                          sectionLabel(session.section),
+                          formatDate(session.started_at),
+                          formatClock(session.started_at),
+                          session.method === 'roll_call' ? 'Roll call' : 'Bluetooth',
+                        )}
                       </span>
                     </span>
                     <span className="shrink-0 text-sm font-semibold text-ink">

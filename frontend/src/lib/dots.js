@@ -1,6 +1,6 @@
 export const dots = (...parts) =>
   parts
-    .flat()
+    .flat(Infinity)
     .map((part) => (part === null || part === undefined ? '' : String(part).trim()))
     .filter(Boolean)
     .join(' · ')

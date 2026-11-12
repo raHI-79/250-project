@@ -3,19 +3,16 @@ import StudentRow from './StudentRow'
 import { Button, Sheet, useConfirm, useToast } from '../ui'
 import api from '../../lib/api'
 import { formatClock, formatDate } from '../../lib/time'
-import { methodLabel, sectionLabel, sortedRoster } from '../../lib/attendance'
+import { markMeta, methodLabel, presentOfRoster, sectionLabel, sortedRoster } from '../../lib/attendance'
+import { dots } from '../../lib/dots'
 
 const metaOf = (mark) =>
-  [
+  dots(
     methodLabel(mark.method),
-    mark.marked_at ? formatClock(mark.marked_at) : '',
-    mark.distance_m ? `${mark.distance_m} m` : '',
-    mark.edited_by
-      ? `Edited by ${mark.edited_by}${mark.edited_at ? ` · ${formatDate(mark.edited_at)}` : ''}`
-      : '',
-  ]
-    .filter(Boolean)
-    .join(' · ')
+    markMeta(mark, formatClock),
+    mark.edited_by ? `Edited by ${mark.edited_by}` : '',
+    mark.edited_by && mark.edited_at ? formatDate(mark.edited_at) : '',
+  )
 
 export default function SessionSheet({ sessionId, onClose, onChanged, onDeleted }) {
   const toast = useToast()
@@ -87,7 +84,11 @@ export default function SessionSheet({ sessionId, onClose, onChanged, onDeleted 
       title={session ? `${session.course_code} · ${session.batch}` : 'Attendance'}
       description={
         session
-          ? `${sectionLabel(session.section)} · ${formatDate(session.started_at)} · ${present}/${marks.length} present`
+          ? dots(
+              sectionLabel(session.section),
+              formatDate(session.started_at),
+              `${presentOfRoster({ present, roster: marks.length })} present`,
+            )
           : ''
       }
       full
