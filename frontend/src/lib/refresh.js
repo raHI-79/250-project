@@ -4,8 +4,19 @@ let version = 0
 
 const listeners = new Set()
 
-export const shouldInvalidate = (method) =>
-  !READ_METHODS.includes(String(method || '').toUpperCase())
+const QUIET_PATHS = [
+  /^\/api\/analytics\//,
+  /^\/api\/push\//,
+  /^\/api\/me\/badges\/[^/]+\/seen$/,
+  /^\/api\/teacher\/attendance\/sessions\/\d+\/location$/,
+]
+
+const pathOnly = (path) => String(path || '').split('?')[0]
+
+export const isQuietPath = (path) => QUIET_PATHS.some((pattern) => pattern.test(pathOnly(path)))
+
+export const shouldInvalidate = (method, path = '') =>
+  !READ_METHODS.includes(String(method || '').toUpperCase()) && !isQuietPath(path)
 
 export const resourceVersion = () => version
 
@@ -20,7 +31,20 @@ export const watchResources = (listener) => {
   return () => listeners.delete(listener)
 }
 
-export const afterRequest = (method) => {
-  if (!shouldInvalidate(method)) return version
+export const afterRequest = (method, path = '') => {
+  if (!shouldInvalidate(method, path)) return version
   return bumpResources()
+}
+
+export const resourceSource = (path, key) => (path ? `${path}?${key}` : '')
+
+export const resourceView = (state, source, busy) => {
+  const own = Boolean(source) && state.source === source
+  const data = own ? state.data : null
+  return {
+    data,
+    error: own ? state.error : '',
+    loading: Boolean(source) && busy && data === null,
+    refreshing: Boolean(source) && busy && data !== null,
+  }
 }

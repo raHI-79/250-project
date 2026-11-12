@@ -18,8 +18,15 @@ export default function Sidebar({ groups, open, onClose }) {
   useEffect(() => {
     if (!open) return undefined
     const release = lockScroll()
-    return release
-  }, [open])
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose?.()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      release()
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open, onClose])
   const masthead = (
     <Link to={homeFor(role)} onClick={onClose} className="flex items-center gap-3 px-4 py-4">
       <LogoBadge size="md" />
@@ -91,14 +98,19 @@ export default function Sidebar({ groups, open, onClose }) {
         {content}
       </aside>
       {open && (
-        <div className="fixed inset-0 z-60 overflow-hidden lg:hidden">
+        <div data-sheet-root className="fixed inset-0 z-60 overflow-hidden lg:hidden">
           <button
             type="button"
             aria-label="Close menu"
             onClick={onClose}
             className="animate-fade-in absolute inset-0 cursor-default bg-scrim"
           />
-          <div className="animate-slide-in-left absolute inset-y-0 left-0 flex w-sidebar max-w-[88vw] flex-col rounded-r-sheet border-r border-line bg-surface shadow-[var(--shadow-lift)]">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
+            className="animate-slide-in-left absolute inset-y-0 left-0 flex w-sidebar max-w-[88vw] flex-col rounded-r-sheet border-r border-line bg-surface shadow-[var(--shadow-lift)]"
+          >
             <IconButton
               label="Close menu"
               onClick={onClose}

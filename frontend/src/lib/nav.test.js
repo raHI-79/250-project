@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { activeNavPath, adminNav, controlNav, isNavActive } from './nav.js'
+import { activeNavPath, adminNav, controlNav, isNavActive, receivesNotifications } from './nav.js'
 import { paths } from './paths.js'
 
 const activeItems = (groups, pathname) => {
@@ -59,4 +59,12 @@ test('a route outside the menu highlights nothing', () => {
 
 test('a trailing slash does not change the match', () => {
   assert.equal(activeNavPath(controlNav, `${paths.control.admins()}/`), paths.control.admins())
+})
+
+test('only the roles the server notifies get the bell', () => {
+  assert.equal(receivesNotifications('student'), true)
+  assert.equal(receivesNotifications('cr'), true)
+  assert.equal(receivesNotifications('teacher'), true)
+  assert.equal(receivesNotifications('admin'), false)
+  assert.equal(receivesNotifications('super_admin'), false)
 })

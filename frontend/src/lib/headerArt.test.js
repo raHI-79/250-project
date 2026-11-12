@@ -29,50 +29,70 @@ test('the shared layer is decorative and never takes a tap', () => {
   const art = read('components/ui/HeaderArt.jsx')
   assert.match(art, /aria-hidden="true"/)
   assert.match(art, /'header-art'/)
-  const css = read('index.css')
-  const base = ruleOf(css, '.header-art')
+  const base = ruleOf(read('index.css'), '.header-art')
   assert.match(base, /position: absolute;/)
   assert.match(base, /inset: 0;/)
   assert.match(base, /z-index: -1;/)
   assert.match(base, /pointer-events: none;/)
-  assert.match(base, /background-position: right bottom;/)
-  assert.match(base, /background-size: auto 100%;/)
+})
+
+test('the art is centred at the bottom and fills the full height at every width', () => {
+  const css = read('index.css')
+  assert.match(
+    ruleOf(css, '.header-art'),
+    /background: #0a6faf url\("\/brand\/header-iict\.svg"\) center bottom \/ auto 100% no-repeat;/,
+  )
+  const svg = read('../public/brand/header-iict.svg')
+  assert.match(svg, /viewBox="0 0 3200 420"/)
+  assert.match(svg, /preserveAspectRatio="xMidYMax slice"/)
 })
 
 test('the illustration is one static file loaded by the stylesheet', () => {
   assert.ok(existsSync(new URL('../public/brand/header-iict.svg', root)))
-  const svg = read('../public/brand/header-iict.svg')
-  assert.doesNotMatch(svg, /<script|href=/i)
-  const css = read('index.css')
-  assert.match(ruleOf(css, '.header-art'), /url\("\/brand\/header-iict\.svg"\)/)
-  const sources = files('components').concat(files('pages'))
-  sources.forEach((name) => {
-    assert.doesNotMatch(read(name), /header-iict\.svg/, `${name} does not load the art itself`)
-  })
+  assert.doesNotMatch(read('../public/brand/header-iict.svg'), /<script|href=/i)
+  files('components')
+    .concat(files('pages'))
+    .forEach((name) => {
+      assert.doesNotMatch(read(name), /header-iict\.svg/, `${name} does not load the art itself`)
+    })
 })
 
-test('phones get the smaller art, short page headers smaller and fainter still', () => {
+const alphas = (rule) => [...rule.matchAll(/rgb\(4 32 54 \/ ([\d.]+)\)/g)].map((m) => Number(m[1]))
+
+test('a darker overlay runs top to bottom on phones and left to right on desktop', () => {
   const css = read('index.css')
-  const phone = css.slice(css.indexOf('@media (max-width: 639.98px)'))
-  assert.match(ruleOf(phone, '.header-art'), /background-size: auto 58%;/)
-  const opacity = (block) => Number(/--header-art-opacity: ([\d.]+);/.exec(block)[1])
-  const size = (block) => Number(/background-size: auto (\d+)%;/.exec(block)[1])
-  const hero = ruleOf(css, '.header-art-hero')
-  const page = ruleOf(css, '.header-art-page')
-  const phonePage = ruleOf(phone, '.header-art-page')
-  assert.ok(opacity(page) < opacity(hero))
-  assert.ok(size(page) < 100)
-  assert.ok(size(phonePage) < 58)
-  assert.ok(opacity(phonePage) <= opacity(page))
+  const phone = ruleOf(css, '.header-art::after')
+  assert.match(phone, /to bottom/)
+  assert.equal(Math.max(...alphas(phone)), 0.55)
+  assert.equal(alphas(phone)[0], 0)
+  const wide = css.slice(css.indexOf('.header-art::after {') + 1)
+  const desktop = ruleOf(wide, '.header-art::after')
+  assert.match(desktop, /to right/)
+  assert.equal(Math.max(...alphas(desktop)), 0.55)
+  assert.match(desktop, /mask-image: linear-gradient\(to bottom, transparent 0%, #000 35%\)/)
 })
 
 test('dark mode dims the art in both theme switches', () => {
   const css = read('index.css')
-  const forced = ruleOf(css, ':root[data-theme="dark"] .header-art')
-  const system = ruleOf(css, ':root:not([data-theme="light"]) .header-art')
-  ;[forced, system].forEach((rule) => {
-    assert.match(rule, /opacity: calc\(var\(--header-art-opacity, [\d.]+\) \* 0\.\d+\)/)
-  })
+  ;[':root[data-theme="dark"] .header-art', ':root:not([data-theme="light"]) .header-art'].forEach(
+    (selector) => assert.match(ruleOf(css, selector), /filter: brightness\(0\.7\);/),
+  )
+})
+
+test('the home hero is compact on phones and moderate on desktop', () => {
+  const hero = read('components/today/TodayHero.jsx')
+  assert.match(hero, /pt-2\.5 pb-6 sm:-mx-6 sm:px-6 sm:pt-5 sm:pb-14/)
+  assert.match(hero, /size="md"/)
+  assert.match(hero, /text-lg leading-tight text-white sm:text-title/)
+  assert.match(hero, /mt-2\.5 flex h-9 w-full/)
+  assert.match(read('components/today/HomeStats.jsx'), /-mt-4 flex sm:-mt-9/)
+})
+
+test('page headers show only the title and the tabs on phones', () => {
+  const header = read('components/ui/PageHeader.jsx')
+  assert.match(header, /pt-3 pb-3 sm:-mx-6 sm:px-6 sm:pt-5 sm:pb-5/)
+  assert.match(header, /hidden text-2xs font-extrabold[^"]*sm:block/)
+  assert.match(header, /mt-2 hidden max-w-3xl[^"]*sm:block/)
 })
 
 test('every blue header draws the shared header art behind its content', () => {
@@ -100,7 +120,7 @@ test('every main page opens with one of the shared headers', () => {
 })
 
 test('content the hero or the app panel overlap stays above the art', () => {
-  assert.match(read('components/today/HomeStats.jsx'), /surface-card relative -mt-9/)
+  assert.match(read('components/today/HomeStats.jsx'), /surface-card relative -mt-4/)
   assert.match(read('components/layout/AppAuthScreen.jsx'), /className="relative -mt-10/)
 })
 

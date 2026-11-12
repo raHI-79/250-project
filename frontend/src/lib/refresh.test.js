@@ -3,7 +3,10 @@ import test from 'node:test'
 import {
   afterRequest,
   bumpResources,
+  isQuietPath,
+  resourceSource,
   resourceVersion,
+  resourceView,
   shouldInvalidate,
   watchResources,
 } from './refresh.js'
@@ -33,4 +36,35 @@ test('a list refreshes after a mutation', () => {
   stop()
   bumpResources()
   assert.equal(seen.length, 2, 'the listener was still called after it stopped')
+})
+
+test('background posts do not reload what the pages show', () => {
+  assert.equal(shouldInvalidate('POST', '/api/analytics/view'), false)
+  assert.equal(shouldInvalidate('POST', '/api/push/subscribe'), false)
+  assert.equal(shouldInvalidate('POST', '/api/me/badges/notices/seen'), false)
+  assert.equal(shouldInvalidate('POST', '/api/teacher/attendance/sessions/12/location'), false)
+  assert.equal(shouldInvalidate('POST', '/api/teacher/attendance/sessions/12/close'), true)
+  assert.equal(shouldInvalidate('PATCH', '/api/teacher/attendance/sessions/12/students/4'), true)
+  assert.equal(isQuietPath('/api/analytics/view?x=1'), true)
+  const before = resourceVersion()
+  afterRequest('POST', '/api/analytics/view')
+  assert.equal(resourceVersion(), before, 'a page view reloaded every list')
+})
+
+test('a list keeps its rows while it reloads and never shows another source', () => {
+  const source = resourceSource('/api/teacher/attendance/sessions', '{}')
+  const rows = { items: [{ id: 1 }, { id: 2 }] }
+  const kept = resourceView({ source, data: rows, error: '' }, source, true)
+  assert.equal(kept.data, rows)
+  assert.equal(kept.loading, false, 'a reload swapped the rows for a skeleton')
+  assert.equal(kept.refreshing, true)
+  const first = resourceView({ source: '', data: null, error: '' }, source, true)
+  assert.equal(first.loading, true)
+  const other = resourceView({ source, data: rows, error: '' }, resourceSource('/api/x/2', '{}'), true)
+  assert.equal(other.data, null, 'a detail showed the data of another item')
+  assert.equal(other.loading, true)
+  const none = resourceView({ source, data: rows, error: '' }, '', false)
+  assert.equal(none.data, null)
+  assert.equal(none.loading, false)
+  assert.equal(resourceSource('', '{}'), '')
 })

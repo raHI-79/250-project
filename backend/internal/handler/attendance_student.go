@@ -350,10 +350,12 @@ func (s *StudentAttendance) Mark() http.HandlerFunc {
 				Lng:       request.Lng,
 				AccuracyM: request.AccuracyM,
 				IsMock:    fromApp && request.IsMock,
+				Web:       !fromApp,
 			},
 			attendance.Anchor{
 				Lat:       session.TeacherLat,
 				Lng:       session.TeacherLng,
+				AccuracyM: session.TeacherAccuracy,
 				UpdatedAt: session.LocationAt,
 				Known:     session.HasLocation,
 			},

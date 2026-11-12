@@ -9,6 +9,21 @@ const MAX_PULL = 110
 
 const SLACK = 12
 
+const scrolls = (node) => {
+  if (!(node instanceof Element)) return false
+  const { overflowY } = window.getComputedStyle(node)
+  return (overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight
+}
+
+const insideScroller = (target) => {
+  for (let node = target; node && node !== document.body; node = node.parentElement) {
+    if (!(node instanceof Element)) return false
+    if (node.closest('[data-sheet-root]')) return true
+    if (scrolls(node) && node.scrollTop > 0) return true
+  }
+  return false
+}
+
 export default function PullToRefresh({ onRefresh, className, children }) {
   const [pull, setPull] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -30,6 +45,7 @@ export default function PullToRefresh({ onRefresh, className, children }) {
     const onStart = (event) => {
       tracking.current = false
       if (busy || isScrollLocked() || event.touches.length !== 1 || !atTop()) return
+      if (insideScroller(event.target)) return
       startY.current = event.touches[0].clientY
       startX.current = event.touches[0].clientX
       tracking.current = true

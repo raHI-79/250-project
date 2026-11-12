@@ -9,6 +9,7 @@ import {
   SkeletonCard,
 } from '../ui'
 import cx from '../../lib/cx'
+import { dots } from '../../lib/dots'
 import { useResource } from '../../lib/hooks'
 import { useSearchParams } from 'react-router-dom'
 import { formatClock, formatDate } from '../../lib/time'
@@ -164,11 +165,14 @@ export default function MyAttendance() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block wrap-long text-sm font-semibold text-ink">
-                          {entry.course_code} · {formatDate(entry.date)}
+                          {dots(entry.course_code, formatDate(entry.date))}
                         </span>
                         <span className="mt-0.5 block wrap-long text-xs text-muted">
-                          {entry.teacher_name} · {methodLabel(entry.method)}
-                          {entry.marked_at ? ` · ${formatClock(entry.marked_at)}` : ''}
+                          {dots(
+                            entry.teacher_name,
+                            methodLabel(entry.method),
+                            entry.marked_at ? formatClock(entry.marked_at) : '',
+                          )}
                         </span>
                         {entry.note && (
                           <span className="mt-0.5 block text-xs text-ink-soft">{entry.note}</span>

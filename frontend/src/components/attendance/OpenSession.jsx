@@ -3,12 +3,14 @@ import { Bluetooth, Clock, MapPin, Users } from 'lucide-react'
 import { Alert, Button, Card, StatusBadge } from '../ui'
 import LocationHelp from './LocationHelp'
 import cx from '../../lib/cx'
+import { dots } from '../../lib/dots'
 import { formatClock } from '../../lib/time'
 import {
   CODE_ONLY_LABEL,
   DURATIONS,
   bluetoothState,
   markFlags,
+  markMeta,
   methodLabel,
   positionState,
   sectionLabel,
@@ -61,11 +63,14 @@ export default function OpenSession({
         <div className="min-w-0">
           <p className="label-caps">Attendance open</p>
           <p className="font-display mt-1 text-section font-bold text-ink">
-            {session.course_code} · {session.course_title}
+            {dots(session.course_code, session.course_title)}
           </p>
           <p className="mt-1 text-xs text-muted">
-            {session.batch} · {sectionLabel(session.section)} · started{' '}
-            {formatClock(session.started_at)}
+            {dots(
+              session.batch,
+              sectionLabel(session.section),
+              session.started_at ? `started ${formatClock(session.started_at)}` : '',
+            )}
           </p>
         </div>
         <StatusBadge status="active" label={`${left} min left`} />
@@ -190,9 +195,7 @@ export default function OpenSession({
                   <span className="ml-2 text-xs text-muted">{mark.reg_no}</span>
                 </span>
                 <span className="shrink-0 text-xs text-muted">
-                  {formatClock(mark.marked_at)}
-                  {mark.distance_m ? ` · ${mark.distance_m} m` : ''}
-                  {mark.method === 'app' ? '' : ` · ${methodLabel(mark.method)}`}
+                  {dots(markMeta(mark, formatClock), mark.method === 'app' ? '' : methodLabel(mark.method))}
                   {markFlags(mark).map((flag) => (
                     <span key={flag} className="ml-1 font-semibold text-warning-700">
                       · {flag}

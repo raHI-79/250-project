@@ -22,6 +22,8 @@ const (
 
 	MaxDistanceM     = 30.0
 	MaxAccuracyM     = 50.0
+	MaxWebAccuracyM  = 100.0
+	MaxReachM        = 100.0
 	TeacherFreshness = 60 * time.Second
 
 	MinDuration = 5 * time.Minute
@@ -147,13 +149,34 @@ type Position struct {
 	Lng       float64
 	AccuracyM float64
 	IsMock    bool
+	Web       bool
 }
 
 type Anchor struct {
 	Lat       float64
 	Lng       float64
+	AccuracyM float64
 	UpdatedAt time.Time
 	Known     bool
+}
+
+func AccuracyLimit(web bool) float64 {
+	if web {
+		return MaxWebAccuracyM
+	}
+	return MaxAccuracyM
+}
+
+func EffectiveDistanceM(distance, studentAccuracy, teacherAccuracy float64) float64 {
+	margin := math.Max(0, math.Max(studentAccuracy, teacherAccuracy))
+	return math.Max(0, distance-margin)
+}
+
+func WithinReach(distance, studentAccuracy, teacherAccuracy float64) bool {
+	if distance > MaxReachM {
+		return false
+	}
+	return EffectiveDistanceM(distance, studentAccuracy, teacherAccuracy) <= MaxDistanceM
 }
 
 func CheckPosition(student Position, teacher Anchor, now time.Time) (float64, string) {
@@ -163,7 +186,7 @@ func CheckPosition(student Position, teacher Anchor, now time.Time) (float64, st
 	if student.Lat == 0 && student.Lng == 0 {
 		return 0, MessageNoPosition
 	}
-	if student.AccuracyM <= 0 || student.AccuracyM > MaxAccuracyM {
+	if student.AccuracyM <= 0 || student.AccuracyM > AccuracyLimit(student.Web) {
 		return 0, MessageWeakSignal
 	}
 	if !teacher.Known || teacher.UpdatedAt.IsZero() ||
@@ -171,7 +194,7 @@ func CheckPosition(student Position, teacher Anchor, now time.Time) (float64, st
 		return 0, MessageTeacherStale
 	}
 	distance := DistanceM(teacher.Lat, teacher.Lng, student.Lat, student.Lng)
-	if distance > MaxDistanceM {
+	if !WithinReach(distance, student.AccuracyM, teacher.AccuracyM) {
 		return distance, MessageTooFar
 	}
 	return distance, ""

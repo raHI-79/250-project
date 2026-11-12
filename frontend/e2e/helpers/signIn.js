@@ -9,7 +9,16 @@ export async function signIn(page, role) {
   await identifier.fill(role.identifier)
   const password = page.locator('input[type="password"]').first()
   await password.fill(role.password)
-  await page.locator('button[type="submit"]').first().click()
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const answer = page.waitForResponse(
+      (response) => response.url().includes('/api/auth/') && response.request().method() === 'POST',
+      { timeout: 30_000 },
+    )
+    await page.locator('button[type="submit"]').first().click()
+    const response = await answer.catch(() => null)
+    if (!response || response.status() !== 429) break
+    await page.waitForTimeout(61_000)
+  }
   await expect(password, `${role.label} was not signed in`).toBeHidden({ timeout: 30_000 })
   await expect(page, `${role.label} did not reach ${role.landing}`).toHaveURL(
     new RegExp(role.landing.replace(/\//g, '\\/')),

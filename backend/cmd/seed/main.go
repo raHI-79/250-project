@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/raHI-79/250-project/backend/internal/auth"
 	"github.com/raHI-79/250-project/backend/internal/config"
@@ -171,6 +172,7 @@ func (l *loader) load() error {
 		l.loadNotices,
 		l.loadPolls,
 		l.loadConversations,
+		l.loadAttendance,
 	}
 	for _, step := range steps {
 		if err := step(); err != nil {
@@ -689,6 +691,89 @@ func (l *loader) addMessage(conversationID, senderID int64, body string) error {
 		`UPDATE conversations SET last_message_at = now() WHERE id = $1`, conversationID)
 	if err != nil {
 		return fmt.Errorf("seed: could not touch a conversation: %w", err)
+	}
+	return nil
+}
+
+type attendanceClass struct {
+	courseID  int64
+	batch     string
+	section   string
+	teacherID int64
+}
+
+func (l *loader) loadAttendance() error {
+	rows, err := l.pool.Query(l.ctx, `SELECT DISTINCT r.course_id, r.batch, r.section, r.teacher_id
+FROM routines r
+JOIN batch_semesters b ON b.batch = r.batch AND b.running_semester = r.semester
+WHERE r.teacher_id IS NOT NULL
+ORDER BY r.batch, r.section, r.course_id`)
+	if err != nil {
+		return fmt.Errorf("seed: could not list the classes to take attendance in: %w", err)
+	}
+	classes := make([]attendanceClass, 0)
+	for rows.Next() {
+		var class attendanceClass
+		if err := rows.Scan(&class.courseID, &class.batch, &class.section, &class.teacherID); err != nil {
+			rows.Close()
+			return fmt.Errorf("seed: could not read a class to take attendance in: %w", err)
+		}
+		classes = append(classes, class)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("seed: could not read the classes to take attendance in: %w", err)
+	}
+	for index, class := range classes {
+		for week := 1; week <= 4; week++ {
+			day := l.now.AddDate(0, 0, -(7*week + index%5))
+			started := time.Date(day.Year(), day.Month(), day.Day(), 9+index%4, 0, 0, 0, l.now.Location())
+			if err := l.addAttendance(class, started, index+week); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (l *loader) addAttendance(class attendanceClass, started time.Time, salt int) error {
+	var sessionID int64
+	err := l.pool.QueryRow(l.ctx,
+		`INSERT INTO attendance_sessions (course_id, batch, section, teacher_id, started_at, ends_at,
+status, closed_at, token_key, method, teacher_lat, teacher_lng, teacher_accuracy_m, location_updated_at)
+SELECT $1, $2, $3, $4, $5::timestamptz, $5::timestamptz + interval '10 minutes', 'closed',
+       $5::timestamptz + interval '10 minutes', $6, 'bluetooth', 24.9178, 91.8320, 12, $5::timestamptz
+WHERE NOT EXISTS (
+    SELECT 1 FROM attendance_sessions
+    WHERE course_id = $1 AND batch = $2 AND section = $3 AND started_at = $5::timestamptz
+)
+RETURNING id`, class.courseID, class.batch, class.section, class.teacherID, started,
+		fmt.Sprintf("demo-%d-%s-%s-%d", class.courseID, class.batch, class.section, started.Unix()),
+	).Scan(&sessionID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("seed: could not add an attendance session of %s: %w", class.batch, err)
+	}
+	_, err = l.pool.Exec(l.ctx,
+		`INSERT INTO attendance_records (session_id, student_id, status, method, device_id,
+lat, lng, accuracy_m, distance_m, marked_at)
+SELECT $1, s.id,
+       CASE WHEN (s.id + $2) % 4 = 0 THEN 'absent' ELSE 'present' END,
+       CASE WHEN (s.id + $2) % 4 = 0 THEN 'system' WHEN (s.id + $2) % 3 = 0 THEN 'code' ELSE 'app' END,
+       CASE WHEN (s.id + $2) % 4 = 0 THEN '' ELSE 'demo-phone-' || s.id END,
+       CASE WHEN (s.id + $2) % 4 = 0 THEN NULL ELSE 24.9179 END,
+       CASE WHEN (s.id + $2) % 4 = 0 THEN NULL ELSE 91.8321 END,
+       CASE WHEN (s.id + $2) % 4 = 0 THEN NULL ELSE 8 + (s.id % 20) END,
+       CASE WHEN (s.id + $2) % 4 = 0 THEN NULL ELSE 4 + (s.id % 18) END,
+       $3::timestamptz + make_interval(mins => 1 + (s.id % 8)::int)
+FROM students s
+JOIN users u ON u.id = s.user_id AND u.status = 'active'
+WHERE s.batch = $4 AND ($5 = 'ALL' OR s.section = $5)
+ON CONFLICT (session_id, student_id) DO NOTHING`, sessionID, salt, started, class.batch, class.section)
+	if err != nil {
+		return fmt.Errorf("seed: could not add the marks of an attendance session of %s: %w", class.batch, err)
 	}
 	return nil
 }

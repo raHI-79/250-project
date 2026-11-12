@@ -13,6 +13,7 @@ import {
 import api from '../../lib/api'
 import { useHighlight, useResource } from '../../lib/hooks'
 import cx from '../../lib/cx'
+import { dots } from '../../lib/dots'
 import { formatDateTime } from '../../lib/time'
 import { sectionLabel } from '../../lib/attendance'
 
@@ -27,8 +28,12 @@ function RequestCard({ request, busy, onDecide, flash }) {
             {request.student_name}
           </p>
           <p className="mt-0.5 text-xs text-muted">
-            {request.reg_no} · {request.batch} · {sectionLabel(request.section)} ·{' '}
-            {formatDateTime(request.created_at)}
+            {dots(
+              request.reg_no,
+              request.batch,
+              sectionLabel(request.section),
+              formatDateTime(request.created_at),
+            )}
           </p>
         </div>
         <span className="shrink-0 text-xs text-muted">

@@ -4,6 +4,66 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.7.2
+
+### Header art and header size
+
+- **The building is always centred.** Every blue header draws the new wide IICT
+  illustration as its background, centred at the bottom at full height, so the
+  palm trees fill the width at any screen size. A soft darker overlay (top to
+  bottom on phones, left to right on desktop, 55 % at the darkest) keeps the
+  greeting, the date, the tabs and the badges readable.
+- **A compact home hero.** On phones the top bar and the hero together take about
+  a fifth of the screen: a smaller avatar, the greeting and the short date on two
+  lines and a slimmer search bar on a dark chip. Page headers on phones show only
+  the title and the tabs; desktop keeps a moderate height with the subtitle.
+
+### Phones: nothing cut off, everything scrolls, every tap opens the right thing
+
+- **Sheets were placed against the page instead of the screen.** The fade-in of
+  every page kept `transform: translateY(0)` after it ended, and a transformed
+  parent makes every `position: fixed` child measure itself against that parent.
+  A sheet opened from a long list therefore sat at the bottom of the whole page:
+  on the Attendance history its top was at 1066 px of an 844 px screen, its title
+  under the top bar and its body impossible to scroll. Entry animations now leave
+  nothing behind, and every sheet and dialog is rendered on the page body.
+- **One sheet for every popup.** On phones it is a bottom sheet whose header always
+  stays below the safe area and the top bar, whose body scrolls inside it, whose
+  actions stay above the home indicator, with a fallback for webviews without
+  `dvh`. The keyboard resizes the page instead of covering the field
+  (`interactive-widget=resizes-content` on the website, `adjustResize` in the
+  app). Notifications open as a bottom sheet on phones, the menu closes with
+  Escape, and a lock nobody holds is released after a route change.
+- **A list no longer moves under your finger.** Every write, even the page-view
+  count, the teacher's position every 20 seconds and a section marked as seen,
+  reloaded every list on screen and swapped it for a skeleton, so a tap could
+  land on another row. Background writes no longer reload lists, a list keeps
+  its rows while it refreshes, and a detail never shows the data of another item.
+- Pull to refresh no longer starts inside a scrolled inner list. The bell shows
+  only for the roles that have notifications. The server answers `499` to a
+  request the caller abandoned instead of a `500`.
+- **The phone suite.** A new Playwright suite opens every page of every role at
+  390 px and 360 px on the website and in the app shell, taps the rows, cards and
+  buttons that open something and checks every view (see `docs/TESTING.md`). The
+  demo seed now carries four weeks of attendance for it.
+
+### Attendance history and website positions
+
+- **History shows present over the roster.** Rows read "2/4" instead of "1/0": the
+  list now carries the roster total (the marked rows of a closed session, the live
+  roster of an open one). A session opened and closed without a single mark is
+  not kept, and older empty ones are not listed. Starting the same course, batch
+  and section again the same day continues that session instead of opening a
+  second one. Empty fields no longer leave a stray "·".
+- **Website positions that indoor phones can give.** The website watches the
+  position with high accuracy for up to 15 seconds, keeps the most accurate
+  reading (stopping early at 30 m), shows the live accuracy ("Finding your
+  position… ±42 m") and offers Try again; the teacher's position refreshes the
+  same way every 20 seconds. Website marks are accepted up to 100 m of accuracy
+  (the app keeps 50 m), the distance check takes off the larger of the two
+  accuracies and a mark more than 100 m from the teacher is always refused. The
+  accuracy is stored with the mark and shown in the teacher's list. Code only stays.
+
 ## 2.7.1
 
 ### Attendance on the website

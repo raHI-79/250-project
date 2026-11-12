@@ -12,6 +12,14 @@ export const PLACE_TIMEOUT = 'timeout'
 
 export const PLACE_UNSUPPORTED = 'unsupported'
 
+export const PLACE_WEAK = 'weak'
+
+export const BEST_WINDOW_MS = 15000
+
+export const GOOD_ENOUGH_M = 30
+
+export const WEB_ACCURACY_LIMIT_M = 100
+
 export const POSITION_FRESH_MS = 60000
 
 export const WEB_BLUETOOTH_LINE =
@@ -124,7 +132,23 @@ export const placeHelp = (place, env = {}) => {
       reason: 'Tap Allow location and choose Allow when the browser asks.',
     }
   }
-  if (state === PLACE_ASKING) return { label: 'Asking the browser…', tone: 'idle' }
+  if (state === PLACE_ASKING) {
+    const accuracy = Math.round(Number(place?.accuracy) || 0)
+    return {
+      label: accuracy > 0 ? `Finding your position… ±${accuracy} m` : 'Finding your position…',
+      tone: 'idle',
+      reason: 'Keep the phone still for a few seconds; the most accurate reading is kept.',
+    }
+  }
+  if (state === PLACE_WEAK) {
+    const accuracy = Math.round(Number(place?.accuracy) || 0)
+    return {
+      label: accuracy > 0 ? `Weak GPS signal · ±${accuracy} m` : 'Weak GPS signal',
+      tone: 'warn',
+      fix: 'retry',
+      reason: `Move near a window or outside the corridor, then tap Try again. The website needs ±${WEB_ACCURACY_LIMIT_M} m or better.`,
+    }
+  }
   if (state === PLACE_DENIED) {
     return {
       label: 'Blocked in the browser',
@@ -210,29 +234,63 @@ export const geolocationPermission = async () => {
   }
 }
 
-export const readBrowserPosition = () =>
+export const betterReading = (best, next) => {
+  if (!next) return best
+  if (!best) return next
+  return Number(next.accuracy_m) < Number(best.accuracy_m) ? next : best
+}
+
+const readingOf = (position) => ({
+  lat: position.coords.latitude,
+  lng: position.coords.longitude,
+  accuracy_m: position.coords.accuracy,
+})
+
+export const readBestPosition = ({
+  windowMs = BEST_WINDOW_MS,
+  goodEnough = GOOD_ENOUGH_M,
+  onReading,
+} = {}) =>
   new Promise((resolve) => {
     if (!locationAvailable()) {
       resolve({ ok: false, state: PLACE_UNSUPPORTED })
       return
     }
-    navigator.geolocation.getCurrentPosition(
-      (position) =>
-        resolve({
-          ok: true,
-          position: {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy_m: position.coords.accuracy,
-          },
-        }),
-      async (failure) => {
-        const permission = failure?.code === ERROR_DENIED ? await geolocationPermission() : ''
-        resolve({
-          ok: false,
-          state: classifyLocationError(failure?.code, failure?.message, permission),
-        })
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    const geo = navigator.geolocation
+    let best = null
+    let done = false
+    let watch = null
+    let timer = null
+    const finish = (result) => {
+      if (done) return
+      done = true
+      if (watch !== null) geo.clearWatch(watch)
+      if (timer !== null) clearTimeout(timer)
+      resolve(result)
+    }
+    timer = setTimeout(
+      () => finish(best ? { ok: true, position: best } : { ok: false, state: PLACE_TIMEOUT }),
+      windowMs,
     )
+    const id = geo.watchPosition(
+      (position) => {
+        best = betterReading(best, readingOf(position))
+        onReading?.(best)
+        if (Number(best.accuracy_m) <= goodEnough) finish({ ok: true, position: best })
+      },
+      async (failure) => {
+        if (best) {
+          finish({ ok: true, position: best })
+          return
+        }
+        if (failure?.code === ERROR_TIMEOUT) return
+        const permission = failure?.code === ERROR_DENIED ? await geolocationPermission() : ''
+        finish({ ok: false, state: classifyLocationError(failure?.code, failure?.message, permission) })
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: windowMs },
+    )
+    if (done) geo.clearWatch(id)
+    else watch = id
   })
+
+export const readBrowserPosition = readBestPosition

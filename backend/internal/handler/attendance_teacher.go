@@ -32,6 +32,13 @@ type sheetRequest struct {
 	Section  string `json:"section"`
 }
 
+type emptyCloseResponse struct {
+	ID      int64  `json:"id"`
+	Status  string `json:"status"`
+	Removed bool   `json:"removed"`
+	Message string `json:"message"`
+}
+
 type extendRequest struct {
 	Minutes int `json:"minutes"`
 }
@@ -361,6 +368,17 @@ func (a *Attendance) Close() http.HandlerFunc {
 			return
 		}
 		closed, err := a.store.CloseAttendanceSession(r.Context(), session.ID, teacher.ID)
+		if errors.Is(err, store.ErrAttendanceEmpty) {
+			log.Printf("handler: attendance %d closed by teacher %d with no marks, so it was removed",
+				session.ID, teacher.ID)
+			httpx.WriteJSON(w, http.StatusOK, emptyCloseResponse{
+				ID:      session.ID,
+				Status:  attendance.StatusClosed,
+				Removed: true,
+				Message: MessageEmptyRemoved,
+			})
+			return
+		}
 		if errors.Is(err, store.ErrAttendanceClosed) {
 			httpx.WriteError(w, http.StatusConflict, MessageAttendanceOver)
 			return

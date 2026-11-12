@@ -31,6 +31,7 @@ const (
 	MessageSessionDeleted   = "The attendance session is deleted."
 	MessageSheetFields      = "Name the course, the batch and the section of the sheet."
 	MessageMarkMissing      = "Mark this student present or absent first, then add the note."
+	MessageEmptyRemoved     = "Nobody was marked, so this empty attendance was not kept."
 
 	auditSessionDeleted = "attendance_session_deleted"
 	auditSheetDeleted   = "attendance_sheet_deleted"

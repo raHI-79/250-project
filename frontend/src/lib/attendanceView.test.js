@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  CLOSED_TEXT,
   CODE_ONLY_LABEL,
+  EMPTY_CLOSED_TEXT,
   NO_LOCATION_FLAG,
   OFFICE_TAB_HISTORY,
   STUDENT_TAB_MARK,
@@ -10,11 +12,14 @@ import {
   TEACHER_TAB_TAKE,
   belowPass,
   classKey,
+  closedMessage,
   codeOnlyMarkBody,
   deleteSheetQuestion,
   markFlags,
+  markMeta,
   methodLabel,
   percentOf,
+  presentOfRoster,
   rollNumber,
   sheetTitle,
   sortedRoster,
@@ -122,4 +127,26 @@ test('a code only mark is flagged No location in the teacher list', () => {
 
 test('a code only mark sends the code and no position', () => {
   assert.deepEqual(codeOnlyMarkBody({ id: 9 }, ' 0427 '), { session_id: 9, code: '0427' })
+})
+
+test('the teacher list shows the time, the distance and the accuracy of a mark', () => {
+  assert.equal(
+    markMeta({ marked_at: '09:02', distance_m: 14, accuracy_m: 38 }),
+    '09:02 · 14 m · ±38 m',
+  )
+  assert.equal(markMeta({ marked_at: '09:02' }), '09:02')
+  assert.equal(markMeta({ accuracy_m: 61 }), '±61 m')
+  assert.equal(markMeta({}), '')
+  assert.equal(markMeta({ marked_at: 'x' }, (value) => `at ${value}`), 'at x')
+})
+
+test('history shows present over the roster total', () => {
+  assert.equal(presentOfRoster({ present: 2, roster: 4 }), '2/4')
+  assert.equal(presentOfRoster({}), '0/0')
+})
+
+test('closing an attendance nobody marked says it was not kept', () => {
+  assert.equal(closedMessage({ status: 'closed', present: 3 }), CLOSED_TEXT)
+  assert.equal(closedMessage({ removed: true }), EMPTY_CLOSED_TEXT)
+  assert.equal(closedMessage({ removed: true, message: 'Gone.' }), 'Gone.')
 })
