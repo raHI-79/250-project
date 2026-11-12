@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import cx from '../../lib/cx'
 import { useChrome } from '../../context/chrome'
+import HeaderArt from './HeaderArt'
 
 export default function PageHeader({
   eyebrow,
@@ -35,11 +36,12 @@ export default function PageHeader({
   }, [setCollapsed])
   return (
     <div className={cx('mb-5', className)}>
-      <div className="-mx-4 -mt-5 rounded-b-sheet bg-header px-4 pt-5 pb-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="relative isolate -mx-4 -mt-5 rounded-b-sheet bg-header px-4 pt-5 pb-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <HeaderArt variant="page" />
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
           <div className="min-w-0 flex-1">
             {eyebrow && (
-              <p className="text-2xs font-extrabold tracking-[0.12em] text-white/75 uppercase">
+              <p className="text-2xs font-extrabold tracking-[0.12em] text-white/95 uppercase">
                 {eyebrow}
               </p>
             )}
@@ -50,7 +52,7 @@ export default function PageHeader({
               {title}
             </h1>
             {subtitle && (
-              <p className="mt-2 max-w-3xl wrap-long text-sm text-white/80">{subtitle}</p>
+              <p className="mt-2 max-w-3xl wrap-long text-sm text-white/95">{subtitle}</p>
             )}
           </div>
           {date && <div className="shrink-0 pt-1">{date}</div>}

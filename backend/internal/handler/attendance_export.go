@@ -21,13 +21,14 @@ func exportRows(rows []store.ExportRow) []attendance.ExportRow {
 	out := make([]attendance.ExportRow, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, attendance.ExportRow{
-			StudentID: row.StudentID,
-			FullName:  row.FullName,
-			RegNo:     row.RegNo,
-			SessionID: row.SessionID,
-			StartedAt: row.StartedAt,
-			Status:    row.Status,
-			Note:      row.Note,
+			StudentID:  row.StudentID,
+			FullName:   row.FullName,
+			RegNo:      row.RegNo,
+			SessionID:  row.SessionID,
+			StartedAt:  row.StartedAt,
+			Status:     row.Status,
+			Note:       row.Note,
+			NoLocation: row.NoLocation,
 		})
 	}
 	return out

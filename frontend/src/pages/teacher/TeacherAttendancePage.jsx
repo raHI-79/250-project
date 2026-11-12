@@ -23,7 +23,9 @@ import api from '../../lib/api'
 import cx from '../../lib/cx'
 import { useNow, usePolling, useQueryTab, useResource } from '../../lib/hooks'
 import { formatDate, formatClock } from '../../lib/time'
+import useWebLocation from '../../lib/useWebLocation'
 import {
+  CODE_ONLY_LABEL,
   DEFAULT_MINUTES,
   DURATIONS,
   TAKE_BLUETOOTH,
@@ -44,7 +46,9 @@ import {
   openLocationSettings,
   sectionLabel,
   startBeacon,
+  startBody,
   stopBeacon,
+  takeMethods,
   turnBluetoothOn,
   updateBeacon,
 } from '../../lib/attendance'
@@ -58,24 +62,6 @@ const TABS = [
 
 const TAB_VALUES = TABS.map((entry) => entry.value)
 
-const METHODS = [
-  { value: TAKE_BLUETOOTH, label: 'Bluetooth' },
-  { value: TAKE_ROLL_CALL, label: 'Roll call' },
-]
-
-const OFF_BROWSER = 'The website shows the code for a projector. Bluetooth needs the Android app.'
-
-const WEB_STATUS = {
-  supported: false,
-  bluetooth_on: false,
-  nearby: false,
-  place: false,
-  location_on: false,
-  advertising: false,
-  asked: true,
-  error: OFF_BROWSER,
-}
-
 function StartPanel({
   options,
   minutes,
@@ -84,6 +70,9 @@ function StartPanel({
   setPicked,
   method,
   setMethod,
+  codeOnly,
+  setCodeOnly,
+  app,
   busy,
   onStart,
 }) {
@@ -148,15 +137,34 @@ function StartPanel({
             <Segmented
               className="mt-2 max-w-sm"
               label="Method"
-              options={METHODS}
+              options={takeMethods(app)}
               value={method}
               onChange={setMethod}
             />
             <p className="mt-2 text-xs text-muted">
               {method === TAKE_ROLL_CALL
-                ? 'You read the roster and tap Present or Absent for each student.'
-                : 'Students mark themselves from their registered phone, or with the code on the board.'}
+                ? 'You read the roster and tap Present or Absent for each student. No location is needed.'
+                : app
+                  ? 'Students mark themselves from their registered phone, or with the code on the board.'
+                  : 'You show the 4-digit code and your browser shares your position, so students in the room can mark themselves.'}
             </p>
+            {method !== TAKE_ROLL_CALL && (
+              <label className="mt-3 flex items-start gap-2.5 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={codeOnly}
+                  onChange={(event) => setCodeOnly(event.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-brand-600"
+                />
+                <span>
+                  <span className="block font-semibold">{CODE_ONLY_LABEL}</span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    For when location is not available. Marks are saved as Code and flagged No
+                    location in your list and the Excel sheet so you can review them.
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
           <div>
             <p className="label-caps">How long it stays open</p>
@@ -285,6 +293,7 @@ export default function TeacherAttendancePage() {
   const [tab, setTab] = useQueryTab(TAB_VALUES, TEACHER_TAB_TAKE)
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
   const [method, setMethod] = useState(TAKE_BLUETOOTH)
+  const [codeOnly, setCodeOnly] = useState(false)
   const [picked, setPicked] = useState('')
   const [busy, setBusy] = useState('')
   const [open, setOpen] = useState(null)
@@ -293,6 +302,7 @@ export default function TeacherAttendancePage() {
   const [status, setStatus] = useState(null)
   const broadcasting = useRef(0)
   const asked = useRef(false)
+  const app = beaconSupported()
   const options = useResource('/api/teacher/attendance/options')
   const history = useResource('/api/teacher/attendance/sessions')
   const classes = useResource('/api/teacher/attendance/classes')
@@ -319,11 +329,22 @@ export default function TeacherAttendancePage() {
   }, [])
   const refreshOpen = useCallback(() => refreshSession(open?.id), [refreshSession, open?.id])
   usePolling(open?.id && open?.method !== TAKE_ROLL_CALL ? refreshOpen : null, 5000)
+  const sendPlace = useCallback(
+    async (position) => {
+      if (!open?.id) return
+      const fresh = await api.post(`/api/teacher/attendance/sessions/${open.id}/location`, position)
+      if (fresh?.status === 'open') setOpen(fresh)
+    },
+    [open?.id],
+  )
+  const watching = !app && Boolean(open?.id) && open?.method !== TAKE_ROLL_CALL && !open?.code_only
+  const { place, locate } = useWebLocation({
+    active: watching,
+    every: 20000,
+    onPosition: sendPlace,
+  })
   const readStatus = useCallback(async () => {
-    if (!beaconSupported()) {
-      setStatus(WEB_STATUS)
-      return WEB_STATUS
-    }
+    if (!beaconSupported()) return null
     try {
       const fresh = await beaconStatus()
       const seen = { ...fresh, asked: asked.current }
@@ -334,15 +355,12 @@ export default function TeacherAttendancePage() {
     }
   }, [])
   usePolling(
-    beaconSupported() && open?.id && open?.method !== TAKE_ROLL_CALL ? readStatus : null,
+    app && open?.id && open?.method !== TAKE_ROLL_CALL && !open?.code_only ? readStatus : null,
     4000,
   )
   const prepare = useCallback(
     async (session) => {
-      if (!beaconSupported()) {
-        setStatus(WEB_STATUS)
-        return
-      }
+      if (!beaconSupported() || session?.code_only) return
       try {
         const place = await askBeaconLocation()
         asked.current = true
@@ -365,6 +383,15 @@ export default function TeacherAttendancePage() {
     [readStatus, toast],
   )
   const fix = async (what) => {
+    if (what === 'allow' || what === 'retry') {
+      setBusy('locate')
+      try {
+        await locate()
+      } finally {
+        setBusy('')
+      }
+      return
+    }
     try {
       if (what === 'ask') await prepare(open)
       else if (what === 'bluetooth') await turnBluetoothOn()
@@ -376,15 +403,36 @@ export default function TeacherAttendancePage() {
       toast.error(failure.message)
     }
   }
+  const switchCodeOnly = async () => {
+    const ok = await confirm({
+      title: 'Switch to code only?',
+      message:
+        'Students are marked with the 4-digit code alone and their position is not checked. Every such mark is flagged No location for you to review.',
+      confirmLabel: 'Switch',
+    })
+    if (!ok) return
+    setBusy('code-only')
+    try {
+      const session = await api.post(`/api/teacher/attendance/sessions/${open.id}/code-only`)
+      if (broadcasting.current && beaconSupported()) await stopBeacon().catch(() => null)
+      broadcasting.current = 0
+      setOpen(session)
+      toast.success('Students now mark with the code only.')
+    } catch (failure) {
+      toast.error(failure.message)
+    } finally {
+      setBusy('')
+    }
+  }
   useEffect(() => {
-    if (!open?.id || open.method === TAKE_ROLL_CALL) return
+    if (!app || !open?.id || open.method === TAKE_ROLL_CALL || open.code_only) return
     if (!open.token_key) {
       toast.error('This session did not come with its Bluetooth key. Close it and start again.')
       return
     }
     if (broadcasting.current === open.id) return
     prepare(open)
-  }, [open, prepare, toast])
+  }, [app, open, prepare, toast])
   useEffect(
     () => () => {
       if (broadcasting.current && beaconSupported()) stopBeacon().catch(() => null)
@@ -397,14 +445,10 @@ export default function TeacherAttendancePage() {
     if (!entry) return
     setBusy('start')
     try {
-      const session = await api.post('/api/teacher/attendance/sessions', {
-        course_id: entry.course_id,
-        batch: entry.batch,
-        section: entry.section,
-        schedule_item_id: entry.schedule_item_id || 0,
-        minutes,
-        method,
-      })
+      const session = await api.post(
+        '/api/teacher/attendance/sessions',
+        startBody(entry, minutes, method, codeOnly),
+      )
       setOpen(session)
       setMarks([])
       await refreshSession(session.id)
@@ -528,10 +572,13 @@ export default function TeacherAttendancePage() {
               marks={marks}
               now={now}
               status={status}
+              place={place}
+              app={app}
               busy={busy}
               onExtend={extend}
               onClose={close}
               onFix={fix}
+              onCodeOnly={switchCodeOnly}
             />
           ) : options.loading ? (
             <SkeletonCard />
@@ -544,6 +591,9 @@ export default function TeacherAttendancePage() {
               setPicked={setPicked}
               method={method}
               setMethod={setMethod}
+              codeOnly={codeOnly}
+              setCodeOnly={setCodeOnly}
+              app={app}
               busy={busy === 'start'}
               onStart={start}
             />

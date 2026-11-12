@@ -4,6 +4,50 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.7.1
+
+### Attendance on the website
+
+- **Location on the website.** A teacher on the website no longer sees a Bluetooth
+  card that can never work or an "Open app settings" link that does nothing. The
+  page says once that Bluetooth works only in the Android app, the code is the main
+  action, and the browser is asked for the teacher's position with an **Allow
+  location** button; the position then reaches the server every 20 seconds so the
+  students' distance check works from the website.
+- **Clear steps when location is blocked.** A blocked browser gets the steps for
+  Chrome on Android, Chrome on a computer, Safari on iPhone and Mac or Firefox, and a
+  **Try again** button. A location service that is switched off on the device is
+  named as such. Students entering the code on the website get the same steps.
+- **Code only (no location check).** A teacher can start a session as code only,
+  or switch an open one to it when location is not available. Those marks are
+  saved with the method Code and flagged **No location** in the teacher's list and
+  in a "No location" column and cell note of the Excel sheet. Code with location
+  stays the default, and roll call needs no location at all.
+
+### Sign-in in the Android app
+
+- **No more endless Google spinner.** The app no longer offers Google sign-in.
+  Registration in the app verifies the university email with the 6-digit code
+  alone (Send code, enter the code, continue), counts down to the code's expiry,
+  says when a code has expired and explains the resend wait. The website keeps
+  **Continue with Google** as before.
+- **Removed:** the native Google plugin `@capgo/capacitor-social-login`, its
+  Gradle entries and the `MainActivity` hooks it needed, and the app-only Google
+  code paths. The Android OAuth client in the Google Cloud Console is no longer
+  needed; the backend's Google verify endpoint stays for the website.
+
+### The IICT building in every blue header
+
+- **One shared header-art layer.** A flat tonal illustration of the IICT
+  building with palm trees now sits behind the home hero of students, CRs and
+  teachers, the blue header of every main page, the office portal and control
+  room page headers, and the top panel of the app's sign-in, register, forgot
+  password and activation screens. The header keeps its solid colour; the art is
+  a decorative layer anchored at the bottom right, smaller and fainter on short
+  page headers and on phones, dimmer in dark mode, and loaded once as a static
+  file. Header tabs and the home search bar sit on a darker chip and the small
+  header text is brighter, so white text keeps its contrast over the art.
+
 ## 2.7.0
 
 A full quality pass over the website, the app and the server. Every bug below has

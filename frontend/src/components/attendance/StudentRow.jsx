@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, NotebookPen, X } from 'lucide-react'
 import cx from '../../lib/cx'
-import { rollNumber } from '../../lib/attendance'
+import { markFlags, rollNumber } from '../../lib/attendance'
 
 const MARKS = {
   present: 'bg-success-600 text-white',
@@ -58,6 +58,14 @@ export default function StudentRow({ mark, status, busy, meta, onMark, onSaveNot
           </span>
           <span className="block wrap-long text-xs text-muted tabular-nums">{mark.reg_no}</span>
           {meta && <span className="block wrap-long text-2xs text-faint">{meta}</span>}
+          {markFlags(mark).map((flag) => (
+            <span
+              key={flag}
+              className="mt-0.5 inline-block rounded-full bg-warning-50 px-2 py-0.5 text-2xs font-semibold text-warning-700"
+            >
+              {flag}
+            </span>
+          ))}
           {mark.note && !editing && (
             <button
               type="button"

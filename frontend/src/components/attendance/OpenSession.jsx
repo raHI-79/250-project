@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Bluetooth, Clock, MapPin, Users } from 'lucide-react'
 import { Alert, Button, Card, StatusBadge } from '../ui'
+import LocationHelp from './LocationHelp'
 import cx from '../../lib/cx'
 import { formatClock } from '../../lib/time'
 import {
+  CODE_ONLY_LABEL,
   DURATIONS,
   bluetoothState,
+  markFlags,
   methodLabel,
   positionState,
   sectionLabel,
 } from '../../lib/attendance'
+import { WEB_BLUETOOTH_LINE, browserEnv, webPositionState } from '../../lib/webLocation'
 
 const minutesLeft = (endsAt, now) => {
   const end = new Date(endsAt).getTime()
@@ -17,55 +21,21 @@ const minutesLeft = (endsAt, now) => {
   return Math.max(0, Math.round((end - now.getTime()) / 60000))
 }
 
-const TONES = {
-  good: 'text-success-700',
-  warn: 'text-warning-700',
-  bad: 'text-danger-600',
-  idle: 'text-muted',
-}
-
-const FIX_LABELS = {
-  ask: 'Allow it',
-  settings: 'Open app settings',
-  location: 'Open location settings',
-  bluetooth: 'Turn Bluetooth on',
-}
-
-function StateTile({ icon: Icon, label, state, onFix }) {
-  return (
-    <div className="rounded-tile bg-wash px-4 py-3">
-      <p className="label-caps">{label}</p>
-      <p
-        className={cx(
-          'mt-1 flex items-center gap-2 text-sm font-semibold',
-          TONES[state.tone] || TONES.idle,
-        )}
-      >
-        <Icon size={16} className="shrink-0" />
-        <span className="wrap-long">{state.label}</span>
-      </p>
-      {state.reason && <p className="mt-1 text-xs text-muted">{state.reason}</p>}
-      {state.fix && (
-        <Button variant="ghost" size="sm" className="mt-1 -ml-2" onClick={() => onFix(state.fix)}>
-          {FIX_LABELS[state.fix]}
-        </Button>
-      )}
-    </div>
-  )
-}
-
 export default function OpenSession({
   session,
   marks,
   now,
   status,
+  place,
+  app,
   busy,
   onExtend,
   onClose,
   onFix,
+  onCodeOnly,
 }) {
   const [extra, setExtra] = useState(10)
-  const [showCode, setShowCode] = useState(false)
+  const [showCode, setShowCode] = useState(!app)
   const left = minutesLeft(session.ends_at, now)
   const present = session.present || 0
   const roster = session.roster || 0
@@ -81,7 +51,10 @@ export default function OpenSession({
     if (session.status !== 'open') setShowCode(false)
   }, [session.status])
   const bluetooth = bluetoothState(status)
-  const position = positionState(session, status, now)
+  const position = app
+    ? positionState(session, status, now)
+    : webPositionState(place, session, now, browserEnv())
+  const offerCodeOnly = !session.code_only && position?.tone === 'bad' && Boolean(onCodeOnly)
   return (
     <Card hover={false} rule className="animate-fade-in-up">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -97,7 +70,7 @@ export default function OpenSession({
         </div>
         <StatusBadge status="active" label={`${left} min left`} />
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className={cx('mt-4 grid gap-3', app ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
         <div className="rounded-tile bg-wash px-4 py-3">
           <p className="label-caps">Marked</p>
           <p className="font-display mt-1 text-title font-bold text-ink">
@@ -105,14 +78,41 @@ export default function OpenSession({
             <span className="text-section text-muted">/{roster}</span>
           </p>
         </div>
-        <StateTile icon={Bluetooth} label="Bluetooth" state={bluetooth} onFix={onFix} />
-        <StateTile icon={MapPin} label="Position" state={position} onFix={onFix} />
+        {app && !session.code_only && (
+          <LocationHelp icon={Bluetooth} label="Bluetooth" state={bluetooth} onFix={onFix} />
+        )}
+        <LocationHelp
+          icon={MapPin}
+          label="Position"
+          state={position}
+          onFix={onFix}
+          busy={busy === 'locate'}
+        />
       </div>
-      {bluetooth.tone !== 'good' && (
+      {!app && <p className="mt-3 text-xs text-muted">{WEB_BLUETOOTH_LINE}</p>}
+      {app && !session.code_only && bluetooth.tone !== 'good' && (
         <Alert tone="warning" className="mt-4">
           Students near you can still be marked with the 4-digit code. Tap Show code and read it out
           or put it on the board.
         </Alert>
+      )}
+      {session.code_only && (
+        <Alert tone="info" className="mt-4">
+          {CODE_ONLY_LABEL}. Students mark themselves with the code alone, and every mark is flagged
+          No location in the list and the Excel sheet.
+        </Alert>
+      )}
+      {offerCodeOnly && (
+        <div className="mt-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={busy === 'code-only'}
+            onClick={onCodeOnly}
+          >
+            Switch to {CODE_ONLY_LABEL.toLowerCase()}
+          </Button>
+        </div>
       )}
       {showCode ? (
         <div className="mt-4 rounded-card border border-brand-100 bg-brand-50 px-4 py-6 text-center">
@@ -127,8 +127,8 @@ export default function OpenSession({
       ) : null}
       <div className="mt-4 flex flex-col gap-3">
         <Button
-          variant="secondary"
-          size="sm"
+          variant={app ? 'secondary' : 'primary'}
+          size={app ? 'sm' : 'md'}
           className="self-start"
           onClick={() => setShowCode((open) => !open)}
         >
@@ -193,6 +193,11 @@ export default function OpenSession({
                   {formatClock(mark.marked_at)}
                   {mark.distance_m ? ` · ${mark.distance_m} m` : ''}
                   {mark.method === 'app' ? '' : ` · ${methodLabel(mark.method)}`}
+                  {markFlags(mark).map((flag) => (
+                    <span key={flag} className="ml-1 font-semibold text-warning-700">
+                      · {flag}
+                    </span>
+                  ))}
                 </span>
               </li>
             ))}

@@ -23,6 +23,7 @@ type startRequest struct {
 	ScheduleItemID int64  `json:"schedule_item_id"`
 	Minutes        int    `json:"minutes"`
 	Method         string `json:"method"`
+	CodeOnly       bool   `json:"code_only"`
 }
 
 type sheetRequest struct {
@@ -205,6 +206,7 @@ func (a *Attendance) Start() http.HandlerFunc {
 			Minutes:        request.Minutes,
 			TokenKey:       key,
 			Method:         method,
+			CodeOnly:       request.CodeOnly && method != attendance.TakeRollCall,
 		})
 		if err != nil {
 			log.Printf("handler: could not open an attendance session: %v", err)
@@ -212,9 +214,9 @@ func (a *Attendance) Start() http.HandlerFunc {
 			return
 		}
 		if session.TokenKey == key {
-			log.Printf("handler: attendance %d opened by teacher %d for %s %s-%s by %s until %s",
+			log.Printf("handler: attendance %d opened by teacher %d for %s %s-%s by %s, code only %t, until %s",
 				session.ID, teacher.ID, session.CourseCode, session.Batch, session.Section,
-				session.Method, session.EndsAt.Format(time.TimeOnly))
+				session.Method, session.CodeOnly, session.EndsAt.Format(time.TimeOnly))
 			if session.Method != attendance.TakeRollCall {
 				a.announce(r.Context(), session)
 			}
@@ -284,6 +286,35 @@ func (a *Attendance) Location() http.HandlerFunc {
 		log.Printf("handler: attendance %d has a position from teacher %d, accuracy %.0f m",
 			session.ID, teacher.ID, request.AccuracyM)
 		httpx.WriteJSON(w, http.StatusOK, newSessionBody(fresh, a.cfg.Now(), true))
+	}
+}
+
+func (a *Attendance) CodeOnly() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teacher, ok := a.teacher(w, r)
+		if !ok {
+			return
+		}
+		session, ok := a.ownSession(w, r, teacher)
+		if !ok {
+			return
+		}
+		if session.Method == attendance.TakeRollCall {
+			httpx.WriteError(w, http.StatusConflict, attendance.MessageRollCallOnly)
+			return
+		}
+		switched, err := a.store.SwitchAttendanceToCodeOnly(r.Context(), session.ID, teacher.ID)
+		if errors.Is(err, store.ErrAttendanceClosed) {
+			httpx.WriteError(w, http.StatusConflict, MessageAttendanceOver)
+			return
+		}
+		if err != nil {
+			log.Printf("handler: could not switch an attendance session to code only: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
+			return
+		}
+		log.Printf("handler: attendance %d switched to code only by teacher %d", session.ID, teacher.ID)
+		httpx.WriteJSON(w, http.StatusOK, newSessionBody(switched, a.cfg.Now(), true))
 	}
 }
 

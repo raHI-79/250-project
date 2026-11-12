@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  CODE_ONLY_LABEL,
+  NO_LOCATION_FLAG,
   OFFICE_TAB_HISTORY,
   STUDENT_TAB_MARK,
   TAKE_BLUETOOTH,
@@ -8,12 +10,16 @@ import {
   TEACHER_TAB_TAKE,
   belowPass,
   classKey,
+  codeOnlyMarkBody,
   deleteSheetQuestion,
+  markFlags,
   methodLabel,
   percentOf,
   rollNumber,
   sheetTitle,
   sortedRoster,
+  startBody,
+  takeMethods,
 } from './attendanceView.js'
 
 const sheet = {
@@ -84,4 +90,36 @@ test('sorts a roster by registration number', () => {
     ['2023331009', '2023331021', '2023331100'],
   )
   assert.deepEqual(sortedRoster(undefined), [])
+})
+
+test('a session starts with code and location unless the teacher picks code only', () => {
+  const entry = { course_id: 4, batch: 'CSE-23', section: 'A', schedule_item_id: 0 }
+  assert.equal(startBody(entry, 10, TAKE_BLUETOOTH, false).code_only, false)
+  assert.equal(startBody(entry, 10, TAKE_BLUETOOTH, true).code_only, true)
+  assert.equal(startBody(entry, 10, TAKE_ROLL_CALL, true).code_only, false)
+  assert.equal(CODE_ONLY_LABEL, 'Code only (no location check)')
+})
+
+test('the website offers code with location and roll call, the app offers Bluetooth', () => {
+  assert.deepEqual(
+    takeMethods(false).map((entry) => entry.label),
+    ['Code + location', 'Roll call'],
+  )
+  assert.deepEqual(
+    takeMethods(true).map((entry) => entry.label),
+    ['Bluetooth', 'Roll call'],
+  )
+})
+
+test('a code only mark is flagged No location in the teacher list', () => {
+  assert.deepEqual(markFlags({ status: 'present', method: 'code', no_location: true }), [
+    NO_LOCATION_FLAG,
+  ])
+  assert.deepEqual(markFlags({ status: 'present', method: 'code', distance_m: 4 }), [])
+  assert.deepEqual(markFlags({ status: 'absent', method: 'manual', no_location: true }), [])
+  assert.equal(NO_LOCATION_FLAG, 'No location')
+})
+
+test('a code only mark sends the code and no position', () => {
+  assert.deepEqual(codeOnlyMarkBody({ id: 9 }, ' 0427 '), { session_id: 9, code: '0427' })
 })

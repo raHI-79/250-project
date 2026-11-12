@@ -808,3 +808,56 @@ select:-webkit-autofill {
   caret-color: var(--color-brand-600);
   transition: background-color 6000000s ease-out 0s;
 }
+
+@layer components {
+  .header-art {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    user-select: none;
+    border-radius: inherit;
+    background-image: url("/brand/header-iict.svg");
+    background-repeat: no-repeat;
+    background-position: right bottom;
+    background-size: auto 100%;
+    opacity: var(--header-art-opacity, 0.3);
+  }
+
+  .header-art-hero {
+    --header-art-opacity: 0.3;
+  }
+
+  .header-art-panel {
+    --header-art-opacity: 0.3;
+    bottom: 2.5rem;
+  }
+
+  .header-art-page {
+    --header-art-opacity: 0.2;
+    background-size: auto 84%;
+  }
+
+  @media (max-width: 639.98px) {
+    .header-art {
+      background-size: auto 58%;
+    }
+
+    .header-art-page {
+      --header-art-opacity: 0.16;
+      background-size: auto 46%;
+    }
+  }
+
+  :root[data-theme="dark"] .header-art {
+    filter: brightness(0.68);
+    opacity: calc(var(--header-art-opacity, 0.3) * 0.7);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .header-art {
+      filter: brightness(0.68);
+      opacity: calc(var(--header-art-opacity, 0.3) * 0.7);
+    }
+  }
+}
