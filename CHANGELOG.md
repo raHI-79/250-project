@@ -36,6 +36,18 @@ and the one the Android release is tagged with.
   code paths. The Android OAuth client in the Google Cloud Console is no longer
   needed; the backend's Google verify endpoint stays for the website.
 
+### The IICT building in every blue header
+
+- **One shared header-art layer.** A flat tonal illustration of the IICT
+  building with palm trees now sits behind the home hero of students, CRs and
+  teachers, the blue header of every main page, the office portal and control
+  room page headers, and the top panel of the app's sign-in, register, forgot
+  password and activation screens. The header keeps its solid colour; the art is
+  a decorative layer anchored at the bottom right, smaller and fainter on short
+  page headers and on phones, dimmer in dark mode, and loaded once as a static
+  file. Header tabs and the home search bar sit on a darker chip and the small
+  header text is brighter, so white text keeps its contrast over the art.
+
 ## 2.7.0
 
 A full quality pass over the website, the app and the server. Every bug below has

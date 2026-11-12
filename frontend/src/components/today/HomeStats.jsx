@@ -24,7 +24,7 @@ export default function HomeStats({ classesToday, attendance, semester, classNam
   return (
     <div
       className={cx(
-        'surface-card -mt-9 flex flex-col divide-y divide-line sm:flex-row sm:divide-x sm:divide-y-0',
+        'surface-card relative -mt-9 flex flex-col divide-y divide-line sm:flex-row sm:divide-x sm:divide-y-0',
         className,
       )}
     >
