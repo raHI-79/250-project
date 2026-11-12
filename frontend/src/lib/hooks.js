@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from './api'
-import { resourceVersion, watchResources } from './refresh'
+import { resourceSource, resourceVersion, resourceView, watchResources } from './refresh'
 import { shiftDate } from './time'
 
 const NO_QUERY = {}
@@ -20,9 +20,9 @@ export const useResourceVersion = () => {
 export const useResource = (path, query) => {
   const key = JSON.stringify(query || NO_QUERY)
   const fresh = useResourceVersion()
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const source = resourceSource(path, key)
+  const [state, setState] = useState({ source: '', data: null, error: '' })
+  const [busy, setBusy] = useState(Boolean(path))
   const [attempt, setAttempt] = useState(0)
   const waiting = useRef([])
   const settle = useCallback(() => {
@@ -36,25 +36,30 @@ export const useResource = (path, query) => {
   }, [])
   useEffect(() => {
     if (!path) {
-      setLoading(false)
+      setBusy(false)
       settle()
       return undefined
     }
+    const own = resourceSource(path, key)
     const controller = new AbortController()
     let active = true
-    setLoading(true)
-    setError('')
+    setBusy(true)
+    setState((current) => (current.source === own ? current : { source: own, data: null, error: '' }))
     api
       .get(path, { query: JSON.parse(key), signal: controller.signal })
       .then((result) => {
-        if (active) setData(result)
+        if (active) setState({ source: own, data: result, error: '' })
       })
       .catch((failure) => {
         if (!active || failure?.name === 'AbortError') return
-        setError(failure.message)
+        setState((current) => ({
+          source: own,
+          data: current.source === own ? current.data : null,
+          error: failure.message,
+        }))
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (active) setBusy(false)
         settle()
       })
     return () => {
@@ -62,7 +67,8 @@ export const useResource = (path, query) => {
       controller.abort()
     }
   }, [path, key, attempt, fresh, settle])
-  return { data, loading, error, reload }
+  const view = resourceView(state, source, busy)
+  return { ...view, reload }
 }
 
 export const useHighlight = (ready, key = 'highlight') => {
@@ -269,4 +275,22 @@ export const useMoreDays = (path, after, horizon) => {
     }
   }, [path, last, horizon])
   return { days, loading, error, exhausted, more, reset }
+}
+
+const matchesQuery = (query) =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(query).matches
+
+export const useMediaQuery = (query) => {
+  const [matches, setMatches] = useState(() => matchesQuery(query))
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined
+    const list = window.matchMedia(query)
+    const update = () => setMatches(list.matches)
+    update()
+    list.addEventListener?.('change', update)
+    return () => list.removeEventListener?.('change', update)
+  }, [query])
+  return matches
 }

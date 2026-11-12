@@ -44,4 +44,13 @@ export const lockScroll = () => shared.lock()
 
 export const isScrollLocked = () => shared.locked()
 
+export const releaseStaleLock = (openSheets) => {
+  if (openSheets > 0 || !shared.locked()) return false
+  shared.reset()
+  return true
+}
+
+export const openSheetCount = () =>
+  typeof document === 'undefined' ? 0 : document.querySelectorAll('[data-sheet-root]').length
+
 export default shared

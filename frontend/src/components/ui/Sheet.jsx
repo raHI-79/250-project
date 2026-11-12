@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import cx from '../../lib/cx'
 import { lockScroll } from '../../lib/scrollLock'
@@ -23,7 +24,9 @@ export default function Sheet({
   const keepVisible = useCallback((event) => {
     const field = event.target
     if (!field || typeof field.scrollIntoView !== 'function') return
-    window.setTimeout(() => field.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 120)
+    const reveal = () => field.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    window.setTimeout(reveal, 120)
+    window.setTimeout(reveal, 420)
   }, [])
   useEffect(() => {
     if (!open) return undefined
@@ -40,7 +43,7 @@ export default function Sheet({
   useEffect(() => {
     if (!open) setDrag(0)
   }, [open])
-  if (!open) return null
+  if (!open || typeof document === 'undefined') return null
   const onTouchStart = (event) => {
     startY.current = event.touches[0].clientY
     dragging.current = true
@@ -55,8 +58,11 @@ export default function Sheet({
     else setDrag(0)
   }
   const dismissible = Boolean(onClose)
-  return (
-    <div className="fixed inset-0 z-80 flex items-end justify-center overflow-hidden sm:items-center sm:p-4">
+  return createPortal(
+    <div
+      data-sheet-root
+      className="fixed inset-0 z-80 flex items-end justify-center overflow-hidden sm:items-center sm:p-4"
+    >
       {dismissible ? (
         <button
           type="button"
@@ -73,9 +79,8 @@ export default function Sheet({
         aria-label={typeof title === 'string' ? title : undefined}
         style={drag ? { transform: `translateY(${drag}px)` } : undefined}
         className={cx(
-          'animate-sheet-up relative flex w-full max-w-full flex-col overflow-hidden rounded-t-sheet border border-line bg-surface shadow-[var(--shadow-lift)] sm:animate-scale-in sm:rounded-card',
-          'max-h-[90dvh] sm:max-h-[90dvh]',
-          full ? 'h-[90dvh] sm:max-w-2xl' : 'h-auto sm:max-w-lg',
+          'sheet-panel animate-sheet-up relative flex w-full max-w-full flex-col overflow-hidden rounded-t-sheet border border-line bg-surface shadow-[var(--shadow-lift)] sm:animate-scale-in sm:rounded-card',
+          full ? 'sheet-full sm:max-w-2xl' : 'h-auto sm:max-w-lg',
           className,
         )}
       >
@@ -104,6 +109,7 @@ export default function Sheet({
           )}
         </header>
         <div
+          data-sheet-body
           onFocus={keepVisible}
           className={cx(
             'min-h-0 flex-1 overscroll-contain overflow-x-hidden overflow-y-auto px-5 pt-4 text-sm text-ink-soft',
@@ -113,11 +119,15 @@ export default function Sheet({
           {children}
         </div>
         {footer && (
-          <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-line bg-surface px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
+          <footer
+            data-sheet-footer
+            className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-line bg-surface px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
+          >
             {footer}
           </footer>
         )}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -18,6 +18,35 @@ and the one the Android release is tagged with.
   lines and a slimmer search bar on a dark chip. Page headers on phones show only
   the title and the tabs; desktop keeps a moderate height with the subtitle.
 
+### Phones: nothing cut off, everything scrolls, every tap opens the right thing
+
+- **Sheets were placed against the page instead of the screen.** The fade-in of
+  every page kept `transform: translateY(0)` after it ended, and a transformed
+  parent makes every `position: fixed` child measure itself against that parent.
+  A sheet opened from a long list therefore sat at the bottom of the whole page:
+  on the Attendance history its top was at 1066 px of an 844 px screen, its title
+  under the top bar and its body impossible to scroll. Entry animations now leave
+  nothing behind, and every sheet and dialog is rendered on the page body.
+- **One sheet for every popup.** On phones it is a bottom sheet whose header always
+  stays below the safe area and the top bar, whose body scrolls inside it, whose
+  actions stay above the home indicator, with a fallback for webviews without
+  `dvh`. The keyboard resizes the page instead of covering the field
+  (`interactive-widget=resizes-content` on the website, `adjustResize` in the
+  app). Notifications open as a bottom sheet on phones, the menu closes with
+  Escape, and a lock nobody holds is released after a route change.
+- **A list no longer moves under your finger.** Every write, even the page-view
+  count, the teacher's position every 20 seconds and a section marked as seen,
+  reloaded every list on screen and swapped it for a skeleton, so a tap could
+  land on another row. Background writes no longer reload lists, a list keeps
+  its rows while it refreshes, and a detail never shows the data of another item.
+- Pull to refresh no longer starts inside a scrolled inner list. The bell shows
+  only for the roles that have notifications. The server answers `499` to a
+  request the caller abandoned instead of a `500`.
+- **The phone suite.** A new Playwright suite opens every page of every role at
+  390 px and 360 px on the website and in the app shell, taps the rows, cards and
+  buttons that open something and checks every view (see `docs/TESTING.md`). The
+  demo seed now carries four weeks of attendance for it.
+
 ## 2.7.1
 
 ### Attendance on the website

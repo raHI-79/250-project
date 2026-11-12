@@ -10,7 +10,7 @@ const PANEL_MIN_HEIGHT = '20.625rem'
 
 export default function AppAuthScreen({ title, subtitle, wide = false, className, children }) {
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-x-hidden bg-header">
+    <div className="relative flex min-h-dvh flex-col overflow-x-clip bg-header">
       <div
         style={{ minHeight: PANEL_MIN_HEIGHT }}
         className="relative isolate flex shrink-0 flex-col items-center justify-center gap-3 px-6 pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-14 text-center"

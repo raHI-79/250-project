@@ -218,7 +218,14 @@ func TestTheCountersLeaveOutWhatIsNotAHandlerFault(t *testing.T) {
 			if test.ended != nil {
 				request = request.WithContext(endedContext{Context: request.Context(), err: test.ended})
 			}
-			handler.ServeHTTP(httptest.NewRecorder(), request)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			if test.ended == context.Canceled && recorder.Code != StatusClientClosed {
+				t.Errorf("an abandoned request answered %d, want %d", recorder.Code, StatusClientClosed)
+			}
+			if test.ended == context.Canceled && len(sink.of(store.KindClient4x)) != 0 {
+				t.Error("an abandoned request was recorded as a client error")
+			}
 			if got := len(sink.of(store.KindClient5x)); got != test.wantErrors {
 				t.Errorf("recorded %d server errors, want %d", got, test.wantErrors)
 			}

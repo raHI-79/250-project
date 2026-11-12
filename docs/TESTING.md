@@ -234,6 +234,7 @@ cd frontend && npm run e2e:install
 | `E2E_OFFICE_PASSWORD` | `DEMO_PASSWORD` | `ADMIN_PASSWORD` |
 | `E2E_CONTROL_ID` | `chief` | `SUPER_ADMIN_IDENTIFIER` |
 | `E2E_CONTROL_PASSWORD` | the office password | the super admin password |
+| `E2E_API_URL` | `http://localhost:8080` | the server the app shell's requests are sent to |
 
 Run one project or one role:
 
@@ -245,6 +246,36 @@ npx playwright test --config e2e/playwright.config.js --grep "the teacher"
 The four projects are `phone-light`, `phone-dark`, `desktop-light` and
 `desktop-dark`. A failed run leaves its report under `frontend/e2e/.artifacts`,
 which is not committed.
+
+### 6.3 The phone suite
+
+`specs/phones.spec.js` runs in four more projects: `phone-web-390` and
+`phone-web-360` on the website, and `phone-app-390` and `phone-app-360` in the
+app shell. The app shell is the real build with a stand-in for the native
+bridge (`helpers/appShell.js`): Capacitor reports Android, every plugin answers
+with a harmless value, and the requests the app sends to the Render address are
+answered by the local server. The office portal and the control room are
+website only, so those two roles skip the app projects. That is eighteen cases.
+
+For every page of the role, the case taps up to two list rows, four buttons
+that open something (Open, View, Edit, Add, Invite, Reschedule, Cancel, …) and
+two links, plus the menu and the notifications, and for each view it opens it
+checks that
+
+- the view has its own title, and a row opens its own item: the view names a
+  word of the row, and a row with a date opens the session of that date,
+- its top and its title are on screen, below the top bar,
+- its body scrolls to its end and its main action is on screen,
+- it closes cleanly, the page behind is not left locked and scrolls again,
+- the page itself still reaches its bottom.
+
+Controls that change data (Delete, Approve, Start, Save, Send, …) are never
+pressed. The demo seed carries four weeks of closed attendance for every class
+of the running semester, so the History, Sheets and session views have rows.
+
+A request the browser gave up on answers `499` (client closed request), and the
+sign-in limiter of ten requests a minute is waited out, so neither counts as a
+failure.
 
 ## 7. CI
 

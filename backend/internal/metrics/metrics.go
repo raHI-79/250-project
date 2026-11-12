@@ -117,13 +117,19 @@ func (p *watchedPush) Send(ctx context.Context, subscription store.PushSubscript
 	return status, err
 }
 
+const StatusClientClosed = 499
+
 type statusWriter struct {
 	http.ResponseWriter
+	ctx    context.Context
 	status int
 	body   []byte
 }
 
 func (w *statusWriter) WriteHeader(status int) {
+	if status >= 500 && w.ctx != nil && errors.Is(w.ctx.Err(), context.Canceled) {
+		status = StatusClientClosed
+	}
 	if w.status == 0 {
 		w.status = status
 	}
@@ -158,7 +164,7 @@ func responsesStartedAt(startedAt time.Time, sink Sink,
 	counter *Counter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			watched := &statusWriter{ResponseWriter: w}
+			watched := &statusWriter{ResponseWriter: w, ctx: r.Context()}
 			next.ServeHTTP(watched, r)
 			probe := IsProbe(r)
 			settling := time.Since(startedAt) < SettleWindow
@@ -179,7 +185,7 @@ func responsesStartedAt(startedAt time.Time, sink Sink,
 					Detail:  r.Method + " " + r.URL.Path,
 					Message: watched.message(),
 				})
-			case watched.status >= 400 && watched.status < 500 && !probe:
+			case watched.status >= 400 && watched.status < 500 && !probe && !abandoned:
 				recordEvent(ctx, sink, store.SystemEvent{
 					Kind:   store.KindClient4x,
 					Detail: r.Method + " " + r.URL.Path,

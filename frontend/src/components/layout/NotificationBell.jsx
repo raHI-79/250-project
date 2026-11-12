@@ -10,6 +10,8 @@ import { useAuth } from '../../context/auth'
 import Button from '../ui/Button'
 import CountBadge from '../ui/CountBadge'
 import EmptyState from '../ui/EmptyState'
+import Sheet from '../ui/Sheet'
+import { useMediaQuery } from '../../lib/hooks'
 
 const POLL_INTERVAL = 30000
 
@@ -24,6 +26,7 @@ export default function NotificationBell() {
   const [readIds, setReadIds] = useState([])
   const [lastSeen, setLastSeen] = useState(() => (userId ? readRaw(lastSeenKey(userId)) : null))
   const containerRef = useRef(null)
+  const phone = useMediaQuery('(max-width: 639.98px)')
   const load = useCallback(async () => {
     const data = await api.get('/api/notifications', { query: { limit: 30 } }).catch(() => null)
     if (!data) return
@@ -50,6 +53,7 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!open) return undefined
     const onClickOutside = (event) => {
+      if (event.target instanceof Element && event.target.closest('[data-sheet-root]')) return
       if (!containerRef.current?.contains(event.target)) setOpen(false)
     }
     const onKeyDown = (event) => {
@@ -82,6 +86,60 @@ export default function NotificationBell() {
     setOpen(false)
     navigate(notificationTarget(item.link, user?.role))
   }
+  const markAllButton =
+    items.length > 0 ? (
+      <Button variant="ghost" size="sm" onClick={markAll} className="ml-auto">
+        <CheckCheck size={14} />
+        Mark all as read
+      </Button>
+    ) : null
+  const list = (
+    <>
+      {items.length === 0 ? (
+        <div className="p-3">
+          <EmptyState
+            icon={BellOff}
+            title="Nothing yet"
+            text="New updates will show up here."
+            className="border-0 py-6"
+          />
+        </div>
+      ) : (
+        <ul>
+          {items.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                onClick={() => openItem(item)}
+                className={cx(
+                  'flex w-full items-start gap-2 border-b border-line px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-wash',
+                  isUnread(item) && 'bg-wash/40',
+                )}
+              >
+                <span
+                  className={cx(
+                    'mt-1.5 size-2 shrink-0 rounded-full',
+                    isUnread(item) ? 'bg-accent-600' : 'bg-transparent',
+                  )}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-ink">
+                    {item.title}
+                  </span>
+                  {item.body && (
+                    <span className="mt-0.5 block text-sm text-brand-600">{item.body}</span>
+                  )}
+                  <span className="mt-1 block text-xs text-faint">
+                    {stampLabel(item.created_at)}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -96,62 +154,18 @@ export default function NotificationBell() {
           <CountBadge count={unread} className="absolute -top-0.5 -right-0.5" />
         )}
       </button>
-      {open && (
-        <div className="animate-scale-in absolute right-0 z-50 mt-2 flex max-h-[80dvh] border border-line bg-surface shadow-[var(--shadow-lift)] w-[min(22rem,calc(100vw-2rem))] origin-top-right flex-col overflow-hidden rounded-card">
+      {open && phone && (
+        <Sheet open title="Notifications" onClose={() => setOpen(false)} footer={markAllButton}>
+          <div className="-mx-5 -mt-4">{list}</div>
+        </Sheet>
+      )}
+      {open && !phone && (
+        <div className="animate-scale-in absolute right-0 z-50 mt-2 flex max-h-[min(80dvh,calc(100dvh-6rem))] w-[min(22rem,calc(100vw-2rem))] origin-top-right flex-col overflow-hidden rounded-card border border-line bg-surface shadow-[var(--shadow-lift)]">
           <div className="flex items-center gap-2 border-b border-line px-4 py-3">
             <p className="font-display text-sm font-semibold text-ink">Notifications</p>
-            {items.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={markAll} className="ml-auto">
-                <CheckCheck size={14} />
-                Mark all as read
-              </Button>
-            )}
+            {markAllButton}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {items.length === 0 ? (
-              <div className="p-3">
-                <EmptyState
-                  icon={BellOff}
-                  title="Nothing yet"
-                  text="New updates will show up here."
-                  className="border-0 py-6"
-                />
-              </div>
-            ) : (
-              <ul>
-                {items.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => openItem(item)}
-                      className={cx(
-                        'flex w-full items-start gap-2 border-b border-line px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-wash',
-                        isUnread(item) && 'bg-wash/40',
-                      )}
-                    >
-                      <span
-                        className={cx(
-                          'mt-1.5 size-2 shrink-0 rounded-full',
-                          isUnread(item) ? 'bg-accent-600' : 'bg-transparent',
-                        )}
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium text-ink">
-                          {item.title}
-                        </span>
-                        {item.body && (
-                          <span className="mt-0.5 block text-sm text-brand-600">{item.body}</span>
-                        )}
-                        <span className="mt-1 block text-xs text-faint">
-                          {stampLabel(item.created_at)}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto">{list}</div>
         </div>
       )}
     </div>

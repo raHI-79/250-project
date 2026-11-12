@@ -137,3 +137,24 @@ export const DIALOG_PAGES = {
 
 export const DIALOG_OPENERS =
   /^(Invite|Add|New|Create|Post|Edit|Remove|Suspend|Delete|Cancel|Reschedule|Set |Confirm|Publish|Preview|Request|Change|Mark|Open|Close|Export|Block)/i
+
+const pathsOf = (pages) => pages.map((entry) => entry.path)
+
+const STUDENT_TABS = ['/student/attendance?tab=mine', '/student/attendance?tab=phone']
+
+export const PHONE_PAGES = {
+  student: [...pathsOf(STUDENT_PAGES), ...STUDENT_TABS],
+  cr: [...pathsOf(CR_PAGES), ...STUDENT_TABS],
+  teacher: [
+    ...pathsOf(TEACHER_PAGES),
+    '/teacher/attendance?tab=history',
+    '/teacher/attendance?tab=classes',
+    '/teacher/attendance?tab=phones',
+  ],
+  office: [
+    ...pathsOf(OFFICE_PAGES),
+    '/office-portal/attendance?tab=sheets',
+    '/office-portal/attendance?tab=phones',
+  ],
+  control: pathsOf(CONTROL_PAGES),
+}

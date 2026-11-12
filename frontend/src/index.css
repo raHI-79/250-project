@@ -120,12 +120,12 @@
   --color-warning-500: var(--c-warning-500);
   --color-warning-600: var(--c-warning-600);
   --color-warning-700: var(--c-warning-700);
-  --animate-fade-in: fade-in 0.3s ease-out both;
-  --animate-fade-in-up: fade-in-up 0.35s ease-out both;
-  --animate-scale-in: scale-in 0.16s ease-out both;
-  --animate-slide-in-right: slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-slide-in-left: slide-in-left 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-sheet-up: sheet-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.3s ease-out backwards;
+  --animate-fade-in-up: fade-in-up 0.35s ease-out backwards;
+  --animate-scale-in: scale-in 0.16s ease-out backwards;
+  --animate-slide-in-right: slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-slide-in-left: slide-in-left 0.26s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-sheet-up: sheet-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   --animate-shimmer: shimmer 1.4s linear infinite;
   --animate-ripple: ripple 0.6s ease-out forwards;
   --animate-blob: blob 26s ease-in-out infinite;
@@ -810,6 +810,28 @@ select:-webkit-autofill {
 }
 
 @layer components {
+  .sheet-panel {
+    max-height: calc(100vh - 4.5rem);
+    max-height: calc(100dvh - max(env(safe-area-inset-top, 0px), 0px) - 4.5rem);
+  }
+
+  .sheet-full {
+    height: calc(100vh - 4.5rem);
+    height: calc(100dvh - max(env(safe-area-inset-top, 0px), 0px) - 4.5rem);
+  }
+
+  @media (min-width: 640px) {
+    .sheet-panel {
+      max-height: 90vh;
+      max-height: 90dvh;
+    }
+
+    .sheet-full {
+      height: 90vh;
+      height: 90dvh;
+    }
+  }
+
   .header-art {
     position: absolute;
     inset: 0;

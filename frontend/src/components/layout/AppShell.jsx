@@ -11,6 +11,7 @@ import { ChromeContext } from '../../context/chrome'
 import cx from '../../lib/cx'
 import { useUnreadMessages } from '../../lib/hooks'
 import { setAppBadge, useSectionBadges } from '../../lib/badges'
+import { openSheetCount, releaseStaleLock } from '../../lib/scrollLock'
 import { MESSAGES_BADGE } from '../../lib/nav'
 
 export default function AppShell({ groups, tabs = [], showBell = true, showSearch = true }) {
@@ -23,6 +24,11 @@ export default function AppShell({ groups, tabs = [], showBell = true, showSearc
   const [collapsed, setCollapsed] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const openSearch = useCallback(() => setSearchOpen(true), [])
+  useEffect(() => {
+    setMenuOpen(false)
+    const timer = window.setTimeout(() => releaseStaleLock(openSheetCount()), 0)
+    return () => window.clearTimeout(timer)
+  }, [location.pathname])
   const chrome = useMemo(
     () => ({ title, setTitle, collapsed, setCollapsed, openSearch: showSearch ? openSearch : null }),
     [title, collapsed, openSearch, showSearch],

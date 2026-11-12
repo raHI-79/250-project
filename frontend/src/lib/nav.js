@@ -209,3 +209,7 @@ export const roleLabel = (role) => {
   if (role === 'cr') return 'Class Representative'
   return 'Student'
 }
+
+const NOTIFIED_ROLES = ['student', 'cr', 'teacher']
+
+export const receivesNotifications = (role) => NOTIFIED_ROLES.includes(role)

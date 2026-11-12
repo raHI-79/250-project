@@ -108,7 +108,7 @@ const send = async (method, path, { body, query, signal, auth = true, cache } = 
   }
   const data = await parseBody(response)
   if (response.ok) {
-    afterRequest(method)
+    afterRequest(method, path)
     return data
   }
   if (response.status === 401 && !isPublicEndpoint(path)) {

@@ -11,6 +11,10 @@ const IGNORED_CONSOLE = [
 
 const NETWORK_FAILURE = /^Failed to load resource: net::ERR_/
 
+const CALLER_LEFT = /^Failed to load resource: the server responded with a status of 499 /
+
+const CALLER_LEFT_STATUS = 499
+
 const isOtherSite = (page, address) => {
   try {
     return new URL(address).origin !== new URL(page.url()).origin
@@ -22,8 +26,17 @@ const isOtherSite = (page, address) => {
 const TOLERATED_API = [
   { path: '/api/push/public-key', statuses: [404, 503] },
   { path: '/api/analytics/view', statuses: [429] },
-  { path: '/api/app/android-latest', statuses: [404, 502, 503] },
+  { path: '/api/app/android-latest', statuses: [404, 429, 502, 503] },
 ]
+
+const RESPONDED = /status of (\d{3})/
+
+const toleratedConsole = (text, source) => {
+  const match = RESPONDED.exec(text)
+  if (!match) return false
+  const status = Number(match[1])
+  return TOLERATED_API.some((entry) => source.includes(entry.path) && entry.statuses.includes(status))
+}
 
 export function watch(page) {
   const problems = {
@@ -37,6 +50,8 @@ export function watch(page) {
     if (IGNORED_CONSOLE.some((pattern) => pattern.test(text))) return
     const source = message.location()?.url || ''
     if (NETWORK_FAILURE.test(text) && isOtherSite(page, source)) return
+    if (CALLER_LEFT.test(text)) return
+    if (toleratedConsole(text, source)) return
     problems.console.push(source ? `${text} (${source})` : text)
   })
   page.on('pageerror', (error) => {
@@ -46,7 +61,7 @@ export function watch(page) {
     const url = response.url()
     if (!url.includes('/api/')) return
     const status = response.status()
-    if (status < 400) return
+    if (status < 400 || status === CALLER_LEFT_STATUS) return
     const tolerated = TOLERATED_API.find((entry) => url.includes(entry.path))
     if (tolerated && tolerated.statuses.includes(status)) return
     if (status === 401 && !problems.signedIn) return

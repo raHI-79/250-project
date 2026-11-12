@@ -65,7 +65,7 @@ test('a darker overlay runs top to bottom on phones and left to right on desktop
   assert.match(phone, /to bottom/)
   assert.equal(Math.max(...alphas(phone)), 0.55)
   assert.equal(alphas(phone)[0], 0)
-  const wide = css.slice(css.indexOf('@media (min-width: 640px)'))
+  const wide = css.slice(css.indexOf('.header-art::after {') + 1)
   const desktop = ruleOf(wide, '.header-art::after')
   assert.match(desktop, /to right/)
   assert.equal(Math.max(...alphas(desktop)), 0.55)

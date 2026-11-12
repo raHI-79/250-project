@@ -27,10 +27,7 @@ export default function TopBar({ title, collapsed, onOpenMenu, onOpenSearch, sho
         <Link
           to={homeFor(role)}
           aria-label="Home"
-          className={cx(
-            'shrink-0 transition-opacity lg:hidden',
-            collapsed && title ? 'opacity-0' : 'opacity-100',
-          )}
+          className={cx('shrink-0 lg:hidden', collapsed && title ? 'hidden' : 'block')}
         >
           <LogoBadge size="sm" />
         </Link>

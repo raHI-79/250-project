@@ -75,3 +75,16 @@ test('never leaves the lock on when a dialog tree is thrown away', () => {
   assert.equal(body.style.overflow, '')
   assert.equal(lock.locked(), false)
 })
+
+test('a lock nobody holds any more is released after a route change', async () => {
+  const { isScrollLocked, lockScroll, releaseStaleLock } = await import('./scrollLock.js')
+  const release = lockScroll()
+  assert.equal(isScrollLocked(), true)
+  assert.equal(releaseStaleLock(1), false, 'an open sheet lost its lock')
+  assert.equal(isScrollLocked(), true)
+  assert.equal(releaseStaleLock(0), true)
+  assert.equal(isScrollLocked(), false)
+  release()
+  assert.equal(isScrollLocked(), false, 'a late release locked the page again')
+  assert.equal(releaseStaleLock(0), false)
+})
