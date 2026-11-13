@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Download, X } from 'lucide-react'
 import Button from '../ui/Button'
+import { BANNER_CLASS, bannerShows } from '../../lib/appBanner'
 import { SUST_MARK } from '../../lib/brand'
 import { isAndroidBrowser } from '../../lib/native'
 import paths from '../../lib/paths'
@@ -16,10 +18,17 @@ const dismissed = () => {
 }
 
 export default function AppBanner() {
-  const [shown, setShown] = useState(() => isAndroidBrowser() && !dismissed())
+  const { pathname } = useLocation()
+  const [hidden, setHidden] = useState(() => dismissed())
+  const shown = bannerShows({ androidBrowser: isAndroidBrowser(), dismissed: hidden, pathname })
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.toggle(BANNER_CLASS, shown)
+    return () => root.classList.remove(BANNER_CLASS)
+  }, [shown])
   const close = () => {
     writeRaw(KEY, String(Date.now() + HIDE_FOR))
-    setShown(false)
+    setHidden(true)
   }
   if (!shown) return null
   return (
