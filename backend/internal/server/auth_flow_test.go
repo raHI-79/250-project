@@ -113,6 +113,10 @@ func newFlowRouterWith(t *testing.T, rateLimit int,
 	if err := db.Migrate(ctx, pool); err != nil {
 		t.Fatalf("db.Migrate() returned an unexpected error: %v", err)
 	}
+	if _, err := pool.Exec(ctx, `INSERT INTO batches (name, running_semester)
+VALUES ('CSE-22', '1-1'), ('CSE-23', '1-1'), ('CSE-24', '1-1')`); err != nil {
+		t.Fatalf("could not open the batches: %v", err)
+	}
 	tokens, err := auth.NewTokens(testSecret, time.Hour)
 	if err != nil {
 		t.Fatalf("auth.NewTokens() returned an unexpected error: %v", err)
@@ -143,6 +147,7 @@ func newFlowRouterWith(t *testing.T, rateLimit int,
 		People:    userStore,
 		Catalog:   userStore,
 		Lookups:   userStore,
+		Batches:   userStore,
 		Periods:   userStore,
 		Alerts:    alerts,
 		Classes:   userStore,

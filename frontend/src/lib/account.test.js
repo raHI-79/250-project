@@ -8,7 +8,6 @@ const complete = {
   fullName: 'Ratul Islam',
   regNo: '2023331079',
   dateOfBirth: '2003-05-14',
-  batch: 'CSE-23',
   section: 'A',
   email: 'ratul@student.sust.edu',
   phone: '01712345678',
@@ -23,12 +22,12 @@ test('a complete registration form has nothing to correct', () => {
 
 test('the single page names every field that is wrong at once', () => {
   const found = registrationErrors(
-    { ...complete, fullName: '', batch: 'CSE23', section: 'AB', email: 'ratul@gmail.com', phone: '12' },
+    { ...complete, fullName: '', regNo: '1923331079', section: 'C', email: 'ratul@gmail.com', phone: '12' },
     DOMAIN,
   )
-  assert.deepEqual(Object.keys(found).sort(), ['batch', 'email', 'fullName', 'phone', 'section'])
+  assert.deepEqual(Object.keys(found).sort(), ['email', 'fullName', 'phone', 'regNo', 'section'])
   assert.match(found.email, /@student\.sust\.edu/)
-  assert.match(found.batch, /CSE-23/)
+  assert.match(found.regNo, /start with 20/)
 })
 
 test('the password and its confirmation have to match', () => {
@@ -89,4 +88,13 @@ test('a filled reset page has nothing to correct', () => {
     }),
     {},
   )
+})
+
+test('a registration number of any length between 6 and 20 digits is accepted', () => {
+  for (const regNo of ['2023331079', '202333107912', '202301', '20233310791234567890']) {
+    assert.deepEqual(registrationErrors({ ...complete, regNo }, DOMAIN), {}, regNo)
+  }
+  for (const regNo of ['20233', '202333107912345678901', '2023-331079', '2023 331079']) {
+    assert.ok(registrationErrors({ ...complete, regNo }, DOMAIN).regNo, regNo)
+  }
 })

@@ -93,7 +93,6 @@ export default function TodayPage() {
   const unreadChats = (chats.data?.items || [])
     .filter((conversation) => conversation.unread_count > 0)
     .slice(0, MESSAGE_PREVIEW)
-  const meta = data?.week ? `Week ${data.week}` : ''
   const myCourses = attendance.data?.courses || []
   const held = myCourses.reduce((total, entry) => total + (Number(entry.held) || 0), 0)
   const attended = myCourses.reduce((total, entry) => total + (Number(entry.credit) || 0), 0)
@@ -169,7 +168,7 @@ export default function TodayPage() {
         name={user?.name || user?.identifier}
         regNo={user?.identifier}
         photo={user?.photo_url}
-        meta={meta || (user?.batch ? `${user.batch} · Section ${user.section}` : '')}
+        meta={user?.batch ? `${user.batch} · Section ${user.section}` : ''}
         now={now}
       />
       <HomeStats

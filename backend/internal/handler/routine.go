@@ -78,6 +78,10 @@ func (c *Catalog) CreateRoutine() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if _, err := openBatch(r.Context(), "Batch", entry.Batch); err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		created, err := c.catalog.CreateRoutine(r.Context(), entry)
 		var booked *store.RoomBookedError
 		switch {
@@ -239,7 +243,12 @@ func (c *Catalog) SetRunningSemester() http.HandlerFunc {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := c.catalog.SetRunningSemester(r.Context(), batch, semester); err != nil {
+		err = c.catalog.SetRunningSemester(r.Context(), batch, semester)
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.WriteError(w, http.StatusNotFound, MessageBatchNotFound)
+			return
+		}
+		if err != nil {
 			log.Printf("handler: could not set a running semester: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
 			return

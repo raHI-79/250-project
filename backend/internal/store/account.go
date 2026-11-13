@@ -102,7 +102,7 @@ ON CONFLICT DO NOTHING`
 	searchDropCourseOptionsSQL = `SELECT c.id, c.code, c.title
 FROM courses c
 WHERE EXISTS (SELECT 1 FROM routines r
-              JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+              JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester
               WHERE r.course_id = c.id)
   AND ($1::text = ''
        OR replace(c.code, ' ', '') ILIKE '%' || replace(replace(upper($1::text), '-', ''), ' ', '') || '%'
@@ -112,7 +112,7 @@ LIMIT $2`
 	otherBatchDropCourseOptionsSQL = `SELECT c.id, c.code, c.title
 FROM courses c
 WHERE EXISTS (SELECT 1 FROM routines r
-              JOIN batch_semesters bs ON bs.batch = r.batch AND bs.running_semester = r.semester
+              JOIN batches bs ON bs.status = 'active' AND bs.name = r.batch AND bs.running_semester = r.semester
               WHERE r.course_id = c.id AND ($1::text = '' OR r.batch <> $1::text))
   AND ($2::text = ''
        OR replace(c.code, ' ', '') ILIKE '%' || replace(replace(upper($2::text), '-', ''), ' ', '') || '%'

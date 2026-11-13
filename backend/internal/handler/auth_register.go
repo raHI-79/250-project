@@ -153,8 +153,7 @@ func (a *Auth) registrationFrom(r *http.Request) (store.Registration, error) {
 		check  func(string, string) (string, error)
 	}{
 		{target: &registration.FullName, field: fieldFullName, label: "Full name", check: validate.Required},
-		{target: &registration.RegNo, field: fieldRegNo, label: "Registration number", check: validate.Required},
-		{target: &registration.Batch, field: fieldBatch, label: "Batch", check: validate.Batch},
+		{target: &registration.RegNo, field: fieldRegNo, label: "Registration number", check: validate.RegNo},
 		{target: &registration.Section, field: fieldSection, label: "Section", check: validate.Section},
 		{target: &registration.Phone, field: fieldPhone, label: "Phone", check: validate.Phone},
 		{target: &registration.BloodGroup, field: fieldBloodGroup, label: "Blood group", check: validate.BloodGroup},
@@ -166,6 +165,11 @@ func (a *Auth) registrationFrom(r *http.Request) (store.Registration, error) {
 		}
 		*field.target = value
 	}
+	batch, err := registrationBatch(r.Context(), registration.RegNo)
+	if err != nil {
+		return store.Registration{}, err
+	}
+	registration.Batch = batch
 	email, err := validate.EmailInDomain("Email", r.FormValue(fieldEmail), a.cfg.StudentDomain)
 	if err != nil {
 		return store.Registration{}, err

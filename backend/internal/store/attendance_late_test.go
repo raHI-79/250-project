@@ -208,9 +208,9 @@ func TestAStudentWhoJoinsLaterIsAbsentFromTheEarlierClasses(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	class := newClass(t, ctx, store, pool, "CSE-23", "A")
 	early := newStudent(t, ctx, pool, "2023331001", "CSE-23", "A")
-	if _, err := pool.Exec(ctx, `INSERT INTO batch_semesters (batch, running_semester, updated_at)
+	if _, err := pool.Exec(ctx, `INSERT INTO batches (name, running_semester, semester_since)
 VALUES ('CSE-23', '3-1', now() - interval '10 days')
-ON CONFLICT (batch) DO UPDATE SET updated_at = EXCLUDED.updated_at`); err != nil {
+ON CONFLICT (name) DO UPDATE SET semester_since = EXCLUDED.semester_since`); err != nil {
 		t.Fatalf("could not start the semester: %v", err)
 	}
 	lastSemester := heldSession(t, ctx, pool, class, "CSE-23", "A", 30, 1)

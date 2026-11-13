@@ -58,6 +58,7 @@ type LoginUser struct {
 	Batch           string
 	Section         string
 	RejectionReason string
+	BatchClosed     bool
 }
 
 type ResetTarget struct {
@@ -104,7 +105,8 @@ u.two_step_enabled,
 COALESCE(s.full_name, t.name, ''),
 COALESCE(s.batch, ''),
 COALESCE(s.section, ''),
-COALESCE(u.rejection_reason, '')
+COALESCE(u.rejection_reason, ''),
+(s.id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM batches b WHERE b.name = s.batch AND b.status = 'active'))
 FROM users u
 LEFT JOIN students s ON s.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
@@ -291,6 +293,7 @@ func (s *Store) FindLoginUser(ctx context.Context, identifier string) (LoginUser
 		&user.Batch,
 		&user.Section,
 		&user.RejectionReason,
+		&user.BatchClosed,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return LoginUser{}, ErrNotFound

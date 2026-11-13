@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/raHI-79/250-project/backend/internal/validate"
 	"time"
 )
 
@@ -360,6 +361,11 @@ WHERE u.id = $1`
 
 func (s *Store) DecideRegistration(ctx context.Context, userID int64,
 	status, reason string) (DecidedRegistration, error) {
+	if status == StatusActive {
+		if err := s.placeInBatch(ctx, userID); err != nil {
+			return DecidedRegistration{}, err
+		}
+	}
 	var id int64
 	err := s.pool.QueryRow(ctx, decideRegistrationSQL, userID, status, reason).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -380,6 +386,41 @@ func (s *Store) DecideRegistration(ctx context.Context, userID int64,
 		return decided, err
 	}
 	return decided, nil
+}
+
+const (
+	pendingStudentSQL = `SELECT s.reg_no, s.batch FROM students s
+JOIN users u ON u.id = s.user_id
+WHERE u.id = $1 AND u.status = 'pending' AND u.role = 'student'`
+	moveStudentBatchSQL = `UPDATE students SET batch = $2, updated_at = now() WHERE user_id = $1`
+)
+
+func (s *Store) placeInBatch(ctx context.Context, userID int64) error {
+	var regNo, batch string
+	err := s.pool.QueryRow(ctx, pendingStudentSQL, userID).Scan(&regNo, &batch)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("store: could not read the registration %d: %w", userID, err)
+	}
+	derived, ok := validate.BatchOfRegNo(regNo)
+	if !ok {
+		derived = batch
+	}
+	open, err := s.BatchOpen(ctx, derived)
+	if err != nil {
+		return err
+	}
+	if !open {
+		return &BatchClosedError{Batch: derived}
+	}
+	if derived != batch {
+		if _, err := s.pool.Exec(ctx, moveStudentBatchSQL, userID, derived); err != nil {
+			return fmt.Errorf("store: could not place the registration %d in %s: %w", userID, derived, err)
+		}
+	}
+	return nil
 }
 
 func (s *Store) pendingConflict(ctx context.Context, userID int64) error {

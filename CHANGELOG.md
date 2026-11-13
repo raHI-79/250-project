@@ -4,6 +4,49 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.8.1
+
+### Running batches
+
+- **One list of batches.** Office portal → Running batches holds every batch
+  with its running semester, sections and student count. Every routine, class,
+  exam, notice, poll, attendance and filter list offers only the active ones.
+  Existing batches were carried over; a batch without students starts inactive.
+- **Deactivate and activate.** Deactivating keeps every record, signs the
+  batch's students out, refuses their sign-in with "Your batch is not active.
+  Please contact the department office." and stops the schedule generator for
+  it. Activating reverses all of it.
+- **Delete.** Removes the batch with its routine, classes, exams and attendance
+  and marks its students removed. It needs the batch name typed, the password
+  confirmation and a second admin when one exists. Each action is audited and
+  the other admins who manage batches are notified.
+- **A new office permission.** Running batches; admins who had Courses and
+  semesters received it.
+
+### Attendance marks
+
+- **Every start is a new session.** Starting attendance for a class that was
+  already taken that day used to reopen the earlier session, so its marks
+  showed up as present before anyone acted. A start now always opens a new,
+  empty session with its own code; an open session that ran out of time is
+  finished first, and unmarked students become absent only when a session ends.
+- **One phone, one role.** A phone that takes attendance as a teacher cannot
+  mark a student, and a student's attendance phone cannot take attendance.
+- **Method in the history.** Every record shows Bluetooth, Code, Roll call,
+  Teacher or System. A migration sets automatic present marks back and records
+  the count in the activity log.
+
+### Registration and home
+
+- **The batch comes from the registration number.** 2021… is CSE-21, 2023… is
+  CSE-23. The form shows it read-only beside the number, the server never
+  trusts a batch from the client, and a missing or inactive batch answers
+  "CSE-nn is not open for registration. Please contact the department office."
+  Approval applies the same rule.
+- **Any length.** A registration number is digits only, starts with 20 and has
+  6 to 20 digits.
+- **No week number.** The home header shows the date without "Week N".
+
 ## 2.8.0
 
 ### Attendance rules

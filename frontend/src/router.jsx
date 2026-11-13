@@ -58,6 +58,7 @@ import CRsPage from './pages/admin/CRsPage'
 import AdminTeachersPage from './pages/admin/AdminTeachersPage'
 import CoursesPage from './pages/admin/CoursesPage'
 import ClassPeriodsPage from './pages/admin/ClassPeriodsPage'
+import RunningBatchesPage from './pages/admin/RunningBatchesPage'
 import AdminRoutinesPage from './pages/admin/AdminRoutinesPage'
 import AdminPostNoticesPage from './pages/admin/AdminPostNoticesPage'
 import ActivityLogPage from './pages/admin/ActivityLogPage'
@@ -235,6 +236,7 @@ export default function Router() {
           <Route path={paths.admin.crs()} element={<CRsPage />} />
           <Route path={paths.admin.teachers()} element={<AdminTeachersPage />} />
           <Route path={paths.admin.courses()} element={<CoursesPage />} />
+          <Route path={paths.admin.batches()} element={<RunningBatchesPage />} />
           <Route path={paths.admin.periods()} element={<ClassPeriodsPage />} />
           <Route path={paths.admin.routines()} element={<AdminRoutinesPage />} />
           <Route path={paths.admin.notices()} element={<AdminPostNoticesPage />} />

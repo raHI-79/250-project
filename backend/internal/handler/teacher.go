@@ -514,6 +514,9 @@ func (t *Teacher) CreateExam() http.HandlerFunc {
 			return
 		}
 		exam, err := t.examFrom(request, teacher)
+		if err == nil {
+			_, err = openBatch(r.Context(), "Batch", exam.Batch)
+		}
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return

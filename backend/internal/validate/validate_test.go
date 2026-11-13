@@ -303,3 +303,53 @@ func checkResult(t *testing.T, got string, err error, want, wantErr string) {
 		t.Errorf("value = %q alongside the error, want an empty string", got)
 	}
 }
+
+func TestRegNo(t *testing.T) {
+	tests := []struct {
+		value     string
+		wantError string
+	}{
+		{value: "202301"},
+		{value: "2023331079"},
+		{value: " 202333107912 "},
+		{value: "20233310791234567890"},
+		{value: "", wantError: "Registration number is required."},
+		{value: "20233", wantError: "Registration number must start with 20 and be 6 to 20 digits long."},
+		{value: "202333107912345678901", wantError: "Registration number must start with 20 and be 6 to 20 digits long."},
+		{value: "2123331079", wantError: "Registration number must start with 20 and be 6 to 20 digits long."},
+		{value: "2023-331-079", wantError: "Registration number may only use digits."},
+	}
+	for _, test := range tests {
+		got, err := RegNo("Registration number", test.value)
+		if test.wantError == "" {
+			if err != nil || got != strings.TrimSpace(test.value) {
+				t.Errorf("RegNo(%q) = %q, %v, want it accepted", test.value, got, err)
+			}
+			continue
+		}
+		if err == nil || err.Error() != test.wantError {
+			t.Errorf("RegNo(%q) error = %v, want %q", test.value, err, test.wantError)
+		}
+	}
+}
+
+func TestBatchOfRegNo(t *testing.T) {
+	tests := []struct {
+		regNo string
+		want  string
+		ok    bool
+	}{
+		{regNo: "2021331001", want: "CSE-21", ok: true},
+		{regNo: "2023331079", want: "CSE-23", ok: true},
+		{regNo: "202533107912", want: "CSE-25", ok: true},
+		{regNo: "1923331079"},
+		{regNo: "2023"},
+		{regNo: "s23a1"},
+	}
+	for _, test := range tests {
+		got, ok := BatchOfRegNo(test.regNo)
+		if got != test.want || ok != test.ok {
+			t.Errorf("BatchOfRegNo(%q) = %q, %v, want %q, %v", test.regNo, got, ok, test.want, test.ok)
+		}
+	}
+}

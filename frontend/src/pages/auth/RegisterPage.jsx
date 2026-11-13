@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BadgeCheck, IdCard, KeyRound, Lock, Mail } from 'lucide-react'
 import { Alert, Button, DateField, Field, Input, PasswordInput, Select } from '../../components/ui'
@@ -18,6 +18,7 @@ import { isAndroidApp } from '../../lib/native'
 import { paths } from '../../lib/paths'
 import { BLOOD_GROUPS } from '../../lib/options'
 import { appendIf, isCode, registrationErrors } from '../../lib/account'
+import { batchClosedText, batchFromRegNo } from '../../lib/batches'
 import {
   EXPIRED_TEXT,
   RESEND_SECONDS,
@@ -35,7 +36,6 @@ const EMPTY = {
   fullName: '',
   regNo: '',
   dateOfBirth: '',
-  batch: '',
   section: '',
   email: '',
   phone: '',
@@ -92,8 +92,25 @@ export default function RegisterPage() {
       setLoading(false)
     }
   }
+  const batch = batchFromRegNo(form.regNo)
+  const [closed, setClosed] = useState('')
+  useEffect(() => {
+    setClosed('')
+    if (!batch) return undefined
+    let live = true
+    api
+      .get('/api/auth/sections', { auth: false, query: { batch } })
+      .then((data) => {
+        if (live && (data?.items || []).length === 0) setClosed(batch)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [batch])
   const register = async () => {
     const found = registrationErrors(form, studentEmailDomain)
+    if (!found.regNo && closed) found.regNo = batchClosedText(closed)
     setErrors(found)
     if (Object.keys(found).length > 0) {
       setError('Please correct the fields marked below.')
@@ -102,7 +119,7 @@ export default function RegisterPage() {
     const body = new FormData()
     body.append('full_name', form.fullName.trim())
     body.append('reg_no', form.regNo.trim())
-    body.append('batch', form.batch.trim().toUpperCase())
+    body.append('batch', batch)
     body.append('section', form.section.trim().toUpperCase())
     body.append('email', form.email.trim().toLowerCase())
     body.append('phone', form.phone.trim())
@@ -294,22 +311,18 @@ export default function RegisterPage() {
                         icon={IdCard}
                         value={form.regNo}
                         onChange={set('regNo')}
-                        error={errors.regNo}
+                        error={errors.regNo || (closed ? batchClosedText(closed) : '')}
                         autoComplete="username"
+                        inputMode="numeric"
                         required
                       />
                       <Input
                         label="Batch"
-                        value={form.batch}
-                        onChange={(event) => {
-                          const batch = event.target.value.toUpperCase()
-                          setForm((current) => ({ ...current, batch }))
-                          setErrors((current) => ({ ...current, batch: '' }))
-                        }}
-                        error={errors.batch}
-                        hint="Like CSE-23"
+                        value={batch}
+                        hint="Filled in from your registration number"
                         placeholder="CSE-23"
-                        required
+                        readOnly
+                        tabIndex={-1}
                       />
                       <SectionPicker
                         value={form.section}

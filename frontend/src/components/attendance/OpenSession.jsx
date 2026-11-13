@@ -242,7 +242,7 @@ export default function OpenSession({
                   <span className="ml-2 text-xs text-muted">{mark.reg_no}</span>
                 </span>
                 <span className="shrink-0 text-xs text-muted">
-                  {dots(markMeta(mark, formatClock), mark.method === 'app' ? '' : methodLabel(mark.method))}
+                  {dots(markMeta(mark, formatClock), methodLabel(mark.method, session?.method))}
                   {markFlags(mark).map((flag) => (
                     <span key={flag} className="ml-1 font-semibold text-warning-700">
                       · {flag}

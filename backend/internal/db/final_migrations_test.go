@@ -163,3 +163,156 @@ func TestCourseCreditMigrationGivesOldRowsThreeCredits(t *testing.T) {
 		t.Error("the database accepted a credit that is not a quarter step")
 	}
 }
+
+func TestBatchMigrationFillsTheBatchesInUse(t *testing.T) {
+	ctx, pool := migrateUpTo(t, "0044_site_content.sql")
+	userID := insertUser(t, ctx, pool, "student", "2023331079")
+	statements := []string{
+		`INSERT INTO students (user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES ($1, 'Batch Student', '2023331079', 'CSE-23', 'A', 'b@student.sust.edu', '01700000079', 'O+')`,
+	}
+	for _, statement := range statements {
+		if _, err := pool.Exec(ctx, statement, userID); err != nil {
+			t.Fatalf("could not insert the student: %v", err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO batch_semesters (batch, running_semester)
+VALUES ('CSE-23', '3-1'), ('CSE-25', '1-2')`); err != nil {
+		t.Fatalf("could not set the running semesters: %v", err)
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate() returned an unexpected error: %v", err)
+	}
+	want := map[string][2]string{
+		"CSE-23": {"3-1", "active"},
+		"CSE-25": {"1-2", "inactive"},
+	}
+	rows, err := pool.Query(ctx, "SELECT name, running_semester, status FROM batches ORDER BY name")
+	if err != nil {
+		t.Fatalf("could not read the batches: %v", err)
+	}
+	defer rows.Close()
+	found := 0
+	for rows.Next() {
+		var name, semester, status string
+		if err := rows.Scan(&name, &semester, &status); err != nil {
+			t.Fatalf("could not scan a batch: %v", err)
+		}
+		expected, ok := want[name]
+		if !ok {
+			t.Errorf("unexpected batch %s", name)
+			continue
+		}
+		found++
+		if semester != expected[0] || status != expected[1] {
+			t.Errorf("%s = %s %s, want %s %s", name, semester, status, expected[0], expected[1])
+		}
+	}
+	if found != len(want) {
+		t.Errorf("batches found = %d, want %d", found, len(want))
+	}
+}
+
+func TestOwnMarksMigrationSetsAutomaticPresentMarksBack(t *testing.T) {
+	ctx, pool := migrateUpTo(t, "0045_batches.sql")
+	teacherUser := insertUser(t, ctx, pool, "teacher", "T-900")
+	var teacherID, courseID int64
+	if err := pool.QueryRow(ctx, `INSERT INTO teachers (user_id, teacher_id, name, email, phone)
+VALUES ($1, 'T-900', 'Sheet Teacher', 't900@sust.edu', '01700000900') RETURNING id`, teacherUser).Scan(&teacherID); err != nil {
+		t.Fatalf("could not insert the teacher: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO courses (code, title) VALUES ('CSE 900', 'Cleanup')
+RETURNING id`).Scan(&courseID); err != nil {
+		t.Fatalf("could not insert the course: %v", err)
+	}
+	students := make([]int64, 0, 4)
+	for index := 0; index < 4; index++ {
+		regNo := "202333190" + string(rune('0'+index))
+		userID := insertUser(t, ctx, pool, "student", regNo)
+		var id int64
+		if err := pool.QueryRow(ctx, `INSERT INTO students
+(user_id, full_name, reg_no, batch, section, email, phone, blood_group)
+VALUES ($1, 'Cleanup Student', $2, 'CSE-23', 'A', $2 || '@student.sust.edu', '01700000901', 'O+')
+RETURNING id`, userID, regNo).Scan(&id); err != nil {
+			t.Fatalf("could not insert a student: %v", err)
+		}
+		students = append(students, id)
+	}
+	session := func(status string) int64 {
+		var id int64
+		closed := "NULL"
+		if status == "closed" {
+			closed = "now()"
+		}
+		query := `INSERT INTO attendance_sessions
+(course_id, batch, section, teacher_id, started_at, ends_at, original_ends_at, token_key, status, closed_at)
+VALUES ($1, 'CSE-23', 'A', $2, now() - interval '30 minutes', now() + interval '30 minutes',
+ now() + interval '30 minutes', 'key', $3, ` + closed + `) RETURNING id`
+		if err := pool.QueryRow(ctx, query, courseID, teacherID, status).Scan(&id); err != nil {
+			t.Fatalf("could not insert a %s session: %v", status, err)
+		}
+		return id
+	}
+	open, ended := session("open"), session("closed")
+	rows := []struct {
+		session int64
+		student int64
+		values  string
+	}{
+		{open, students[0], "'present', 'system', '', NULL, NULL, false, now()"},
+		{open, students[1], "'present', 'code', '', NULL, NULL, true, now()"},
+		{open, students[2], "'present', 'web', '', 24.9, 91.8, false, now()"},
+		{open, students[3], "'present', 'manual', '', NULL, NULL, false, now()"},
+		{ended, students[0], "'late', 'code', '', NULL, NULL, false, now()"},
+		{ended, students[1], "'present', 'app', 'phone-1', 24.9, 91.8, false, now() - interval '2 hours'"},
+		{ended, students[2], "'absent', 'system', '', NULL, NULL, false, now()"},
+		{ended, students[3], "'present', 'app', 'phone-2', 24.9, 91.8, false, now()"},
+	}
+	for _, row := range rows {
+		query := `INSERT INTO attendance_records
+(session_id, student_id, status, method, device_id, lat, lng, no_location, marked_at)
+VALUES ($1, $2, ` + row.values + `)`
+		if _, err := pool.Exec(ctx, query, row.session, row.student); err != nil {
+			t.Fatalf("could not insert a record: %v", err)
+		}
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate() returned an unexpected error: %v", err)
+	}
+	read := func(sessionID, studentID int64) string {
+		var status, method string
+		err := pool.QueryRow(ctx, `SELECT status, method FROM attendance_records
+WHERE session_id = $1 AND student_id = $2`, sessionID, studentID).Scan(&status, &method)
+		if err != nil {
+			return "unmarked"
+		}
+		return status + " " + method
+	}
+	want := []struct {
+		session int64
+		student int64
+		state   string
+	}{
+		{open, students[0], "unmarked"},
+		{open, students[1], "present code"},
+		{open, students[2], "present web"},
+		{open, students[3], "present manual"},
+		{ended, students[0], "absent system"},
+		{ended, students[1], "absent system"},
+		{ended, students[2], "absent system"},
+		{ended, students[3], "present app"},
+	}
+	for index, entry := range want {
+		if got := read(entry.session, entry.student); got != entry.state {
+			t.Errorf("record %d = %q, want %q", index, got, entry.state)
+		}
+	}
+	var summary string
+	if err := pool.QueryRow(ctx, `SELECT summary FROM audit_events
+WHERE action = 'attendance_cleanup'`).Scan(&summary); err != nil {
+		t.Fatalf("the cleanup left no audit entry: %v", err)
+	}
+	if !strings.HasPrefix(summary, "3 automatic present marks set back: 1 unmarked") {
+		t.Errorf("audit summary = %q, want three corrected marks", summary)
+	}
+}

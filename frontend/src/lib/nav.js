@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  Layers,
   FolderOpen,
   GaugeCircle,
   Globe,
@@ -123,6 +124,7 @@ export const adminNav = [
         permission: 'teachers',
       },
       { label: 'Courses', to: paths.admin.courses, icon: BookOpen, permission: 'catalog' },
+      { label: 'Running batches', to: paths.admin.batches, icon: Layers, permission: 'batches' },
       { label: 'Class periods', to: paths.admin.periods, icon: Clock, permission: 'periods' },
       {
         label: 'Routines',

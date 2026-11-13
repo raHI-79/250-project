@@ -40,6 +40,7 @@ type Dependencies struct {
 	Devices   handler.PushStore
 	PushTests handler.PushTester
 	People    handler.AdminStore
+	Batches   handler.BatchesStore
 	Catalog   handler.CatalogStore
 	Lookups   handler.LookupStore
 	Periods   handler.PeriodStore
@@ -206,6 +207,12 @@ func NewRouter(deps Dependencies) http.Handler {
 	admin := handler.NewAdmin(deps.Config, deps.People, deps.Notifier, mail, photos).
 		WithEvents(events).
 		WithApprovals(asks)
+	handler.UseBatchGate(deps.Batches)
+	batches := handler.NewBatches(deps.Config, deps.Batches, deps.Notifier).
+		WithEvents(events).
+		WithApprovals(asks)
+	registerBatchRoutes(AdminGroup(mux, deps), batches)
+	asks.Handle(handler.ActionDeleteBatch, batches.RunDelete)
 	periods := handler.NewPeriods(deps.Periods)
 	registerAdminRoutes(AdminGroup(mux, deps), admin, handler.NewCatalog(deps.Catalog))
 	registerPeriodRoutes(AdminGroup(mux, deps), periods)
@@ -676,6 +683,15 @@ func registerNotificationRoutes(group RouteGroup, notifications *handler.Notific
 	group.Handle("GET /api/notifications/unread-count", notifications.UnreadCount())
 	group.Handle("POST /api/notifications/read", notifications.Read())
 	group.Handle("POST /api/notifications/read-all", notifications.ReadAll())
+}
+
+func registerBatchRoutes(group RouteGroup, batches *handler.Batches) {
+	group.Handle("GET /api/admin/batches", batches.List())
+	group.Handle("POST /api/admin/batches", batches.Create())
+	group.Handle("PATCH /api/admin/batches/{batch}", batches.SetSemester())
+	group.Handle("POST /api/admin/batches/{batch}/deactivate", batches.SetStatus(store.BatchInactive))
+	group.Handle("POST /api/admin/batches/{batch}/activate", batches.SetStatus(store.BatchActive))
+	group.Handle("DELETE /api/admin/batches/{batch}", batches.Delete())
 }
 
 func registerAdminRoutes(group RouteGroup, admin *handler.Admin, catalog *handler.Catalog) {

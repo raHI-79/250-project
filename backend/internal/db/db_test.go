@@ -32,6 +32,7 @@ var expectedTables = []string{
 	"attendance_sessions",
 	"batch_drive_links",
 	"batch_semesters",
+	"batches",
 	"class_periods",
 	"courses",
 	"device_bindings",

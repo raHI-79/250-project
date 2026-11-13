@@ -38,9 +38,10 @@ const sheet = {
 test('every marking method has a label of its own', () => {
   assert.equal(methodLabel('app'), 'Bluetooth')
   assert.equal(methodLabel('code'), 'Code')
-  assert.equal(methodLabel('web'), 'Web')
-  assert.equal(methodLabel('manual'), 'By teacher')
-  assert.equal(methodLabel('system'), 'Not marked')
+  assert.equal(methodLabel('web'), 'Code')
+  assert.equal(methodLabel('manual'), 'Teacher')
+  assert.equal(methodLabel('manual', 'roll_call'), 'Roll call')
+  assert.equal(methodLabel('system'), 'System')
   assert.equal(methodLabel('nonsense'), '')
 })
 
@@ -77,6 +78,8 @@ test('a share below half is flagged', () => {
 
 test('reads the roll number off the registration number', () => {
   assert.equal(rollNumber('2023331079'), '079')
+  assert.equal(rollNumber('202333107912'), '912')
+  assert.equal(rollNumber('202301'), '301')
   assert.equal(rollNumber('2023331001'), '001')
   assert.equal(rollNumber('2023331120'), '120')
   assert.equal(rollNumber('2019-331-7'), '317')
@@ -103,6 +106,8 @@ test('a session starts with code and location unless the teacher picks code only
   assert.equal(startBody(entry, 10, TAKE_BLUETOOTH, true).code_only, true)
   assert.equal(startBody(entry, 10, TAKE_ROLL_CALL, true).code_only, false)
   assert.equal(CODE_ONLY_LABEL, 'Code only (no location check)')
+  assert.equal(startBody(entry, 10, TAKE_BLUETOOTH, false, 'phone-1').device_id, 'phone-1')
+  assert.equal('device_id' in startBody(entry, 10, TAKE_BLUETOOTH, false, ''), false)
 })
 
 test('the website offers code with location and roll call, the app offers Bluetooth', () => {

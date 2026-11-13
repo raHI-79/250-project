@@ -352,7 +352,7 @@ func (c *Conversations) resolveMembers(w http.ResponseWriter, r *http.Request, v
 		}
 	}
 	for _, target := range batches {
-		batch, err := validate.Batch("batch", target.Batch)
+		batch, err := openBatch(r.Context(), "batch", target.Batch)
 		if err != nil {
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return nil, false

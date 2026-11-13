@@ -326,14 +326,14 @@ func TestASessionNobodyMarkedIsDroppedAndNeverListed(t *testing.T) {
 	}
 }
 
-func TestStartingTheSameClassTheSameDayContinuesIt(t *testing.T) {
+func TestStartingTheSameClassAgainOpensANewEmptySession(t *testing.T) {
 	ctx, store, pool := newTestStore(t)
 	class := newClass(t, ctx, store, pool, "CSE-23", "A")
 	firstUser := insertUser(t, ctx, pool, RoleStudent, "2023331171", StatusActive, 0)
 	first := insertStudentRow(t, ctx, pool, firstUser, "2023331171", "CSE-23", "A")
 	secondUser := insertUser(t, ctx, pool, RoleStudent, "2023331172", StatusActive, 0)
-	insertStudentRow(t, ctx, pool, secondUser, "2023331172", "CSE-23", "A")
-	markRow(t, ctx, pool, class.sessionID, first, "present", "app")
+	second := insertStudentRow(t, ctx, pool, secondUser, "2023331172", "CSE-23", "A")
+	markRow(t, ctx, pool, class.sessionID, first, "present", "code")
 	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
 		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
 	}
@@ -349,41 +349,175 @@ func TestStartingTheSameClassTheSameDayContinuesIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenAttendanceSession() returned an unexpected error: %v", err)
 	}
-	if again.ID != class.sessionID {
-		t.Fatalf("a second start the same day opened %d, want the morning session %d", again.ID, class.sessionID)
+	if again.ID == class.sessionID {
+		t.Fatalf("a second start the same day reopened the session %d", class.sessionID)
 	}
-	if again.Status != SessionOpen || !again.CodeOnly {
-		t.Errorf("the continued session = %+v, want it open again as code only", again)
+	if again.TokenKey != "another-key" || again.Status != SessionOpen {
+		t.Errorf("the new session = %+v, want it open with its own key", again)
 	}
-	if again.Present != 1 || again.Roster != 2 {
-		t.Errorf("the continued session = %d/%d, want the earlier mark kept of 2", again.Present, again.Roster)
+	if again.Present != 0 || again.Roster != 2 {
+		t.Errorf("the new session = %d/%d, want nobody present of 2", again.Present, again.Roster)
 	}
 	records, err := store.ListSessionRecords(ctx, again.ID)
 	if err != nil {
 		t.Fatalf("ListSessionRecords() returned an unexpected error: %v", err)
 	}
 	for _, record := range records {
-		if record.Method == "system" {
-			t.Errorf("the absentees of the first close are still there: %+v", record)
+		if record.Status != "" || record.HasMark {
+			t.Errorf("the new session starts with a mark: %+v", record)
 		}
 	}
-	ageSession(t, ctx, pool, again.ID, 1)
-	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET status = 'closed', closed_at = ends_at WHERE id = $1`,
-		again.ID); err != nil {
-		t.Fatalf("could not close yesterday's session: %v", err)
+	var rows int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM attendance_records WHERE session_id = $1",
+		again.ID).Scan(&rows); err != nil {
+		t.Fatalf("could not count the rows of the new session: %v", err)
 	}
-	tomorrow, err := store.OpenAttendanceSession(ctx, NewAttendanceSession{
+	if rows != 0 {
+		t.Errorf("rows in the new session = %d, want none", rows)
+	}
+	earlier, err := store.ListSessionRecords(ctx, class.sessionID)
+	if err != nil {
+		t.Fatalf("ListSessionRecords() returned an unexpected error: %v", err)
+	}
+	for _, record := range earlier {
+		want := "absent"
+		if record.StudentID == first {
+			want = "present"
+		}
+		if record.Status != want {
+			t.Errorf("the first session has %d as %q, want %q", record.StudentID, record.Status, want)
+		}
+	}
+	if _, err := store.MarkAttendance(ctx, MarkInput{SessionID: again.ID, StudentID: second,
+		Method: "code", NoLocation: true}); err != nil {
+		t.Fatalf("MarkAttendance() returned an unexpected error: %v", err)
+	}
+	if _, err := store.MarkAttendance(ctx, MarkInput{SessionID: class.sessionID, StudentID: second,
+		Method: "code", NoLocation: true}); !errors.Is(err, ErrAttendanceClosed) {
+		t.Errorf("a mark in the ended session error = %v, want ErrAttendanceClosed", err)
+	}
+}
+
+func TestAnOpenSessionPastItsTimeIsFinishedBeforeANewOne(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	class := newClass(t, ctx, store, pool, "CSE-23", "A")
+	firstUser := insertUser(t, ctx, pool, RoleStudent, "2023331171", StatusActive, 0)
+	first := insertStudentRow(t, ctx, pool, firstUser, "2023331171", "CSE-23", "A")
+	secondUser := insertUser(t, ctx, pool, RoleStudent, "2023331172", StatusActive, 0)
+	second := insertStudentRow(t, ctx, pool, secondUser, "2023331172", "CSE-23", "A")
+	markRow(t, ctx, pool, class.sessionID, first, "present", "app")
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions
+SET started_at = now() - interval '2 hours', ends_at = now() - interval '1 hour',
+    original_ends_at = now() - interval '1 hour'
+WHERE id = $1`, class.sessionID); err != nil {
+		t.Fatalf("could not let the session run out: %v", err)
+	}
+	fresh, err := store.OpenAttendanceSession(ctx, NewAttendanceSession{
 		CourseID:  class.courseID,
 		Batch:     "CSE-23",
 		Section:   "A",
 		TeacherID: class.teacherID,
 		Minutes:   10,
-		TokenKey:  "next-day-key",
+		TokenKey:  "fresh-key",
 	})
 	if err != nil {
 		t.Fatalf("OpenAttendanceSession() returned an unexpected error: %v", err)
 	}
-	if tomorrow.ID == again.ID {
-		t.Error("a start on another day continued yesterday's session")
+	if fresh.ID == class.sessionID || fresh.Present != 0 {
+		t.Fatalf("the new session = %+v, want a new empty one", fresh)
+	}
+	old, err := store.AttendanceSession(ctx, class.sessionID)
+	if err != nil {
+		t.Fatalf("AttendanceSession() returned an unexpected error: %v", err)
+	}
+	if old.Status != SessionClosed {
+		t.Errorf("the run-out session is %q, want closed", old.Status)
+	}
+	var status, method string
+	if err := pool.QueryRow(ctx, `SELECT status, method FROM attendance_records
+WHERE session_id = $1 AND student_id = $2`, class.sessionID, second).Scan(&status, &method); err != nil {
+		t.Fatalf("could not read the unmarked student of the ended session: %v", err)
+	}
+	if status != "absent" || method != "system" {
+		t.Errorf("the unmarked student = %s by %s, want absent by the system", status, method)
+	}
+}
+
+func TestLateJoinerRecordsAreAbsentAndOnlyInEndedSessions(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	class := newClass(t, ctx, store, pool, "CSE-23", "A")
+	earlyUser := insertUser(t, ctx, pool, RoleStudent, "2023331171", StatusActive, 0)
+	early := insertStudentRow(t, ctx, pool, earlyUser, "2023331171", "CSE-23", "A")
+	markRow(t, ctx, pool, class.sessionID, early, "present", "app")
+	if _, err := store.CloseAttendanceSession(ctx, class.sessionID, class.teacherID); err != nil {
+		t.Fatalf("CloseAttendanceSession() returned an unexpected error: %v", err)
+	}
+	open, err := store.OpenAttendanceSession(ctx, NewAttendanceSession{
+		CourseID:  class.courseID,
+		Batch:     "CSE-23",
+		Section:   "A",
+		TeacherID: class.teacherID,
+		Minutes:   10,
+		TokenKey:  "open-key",
+	})
+	if err != nil {
+		t.Fatalf("OpenAttendanceSession() returned an unexpected error: %v", err)
+	}
+	markRow(t, ctx, pool, open.ID, early, "present", "app")
+	lateUser := insertUser(t, ctx, pool, RoleStudent, "2023331199", StatusActive, 0)
+	late := insertStudentRow(t, ctx, pool, lateUser, "2023331199", "CSE-23", "A")
+	if _, err := store.BackfillJoinedLater(ctx, 0, 0); err != nil {
+		t.Fatalf("BackfillJoinedLater() returned an unexpected error: %v", err)
+	}
+	rows, err := pool.Query(ctx, `SELECT session_id, status, method FROM attendance_records
+WHERE student_id = $1`, late)
+	if err != nil {
+		t.Fatalf("could not read the rows of the late joiner: %v", err)
+	}
+	defer rows.Close()
+	found := 0
+	for rows.Next() {
+		var sessionID int64
+		var status, method string
+		if err := rows.Scan(&sessionID, &status, &method); err != nil {
+			t.Fatalf("could not scan a row of the late joiner: %v", err)
+		}
+		found++
+		if sessionID != class.sessionID || status != "absent" || method != "system" {
+			t.Errorf("late joiner row = session %d %s by %s, want absent by the system in the ended session",
+				sessionID, status, method)
+		}
+	}
+	if found != 1 {
+		t.Errorf("late joiner rows = %d, want one for the ended session", found)
+	}
+}
+
+func TestATeacherPhoneNeverMarksAStudent(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	class := newClass(t, ctx, store, pool, "CSE-23", "A")
+	userID := insertUser(t, ctx, pool, RoleStudent, "2023331171", StatusActive, 0)
+	student := insertStudentRow(t, ctx, pool, userID, "2023331171", "CSE-23", "A")
+	if _, _, err := store.BindDevice(ctx, userID, "student-phone"); err != nil {
+		t.Fatalf("BindDevice() returned an unexpected error: %v", err)
+	}
+	start := NewAttendanceSession{CourseID: class.courseID, Batch: "CSE-23", Section: "A",
+		TeacherID: class.teacherID, Minutes: 10, TokenKey: "phone-key", TeacherDevice: "student-phone"}
+	if _, err := store.OpenAttendanceSession(ctx, start); !errors.Is(err, ErrStudentPhone) {
+		t.Fatalf("starting from a student's phone error = %v, want ErrStudentPhone", err)
+	}
+	start.TeacherDevice = "teacher-phone"
+	session, err := store.OpenAttendanceSession(ctx, start)
+	if err != nil {
+		t.Fatalf("OpenAttendanceSession() returned an unexpected error: %v", err)
+	}
+	_, err = store.MarkAttendance(ctx, MarkInput{SessionID: session.ID, StudentID: student,
+		Method: "app", DeviceID: "teacher-phone", Lat: 24.9, Lng: 91.8, AccuracyM: 10})
+	if !errors.Is(err, ErrTeacherPhone) {
+		t.Errorf("a mark from the teacher's phone error = %v, want ErrTeacherPhone", err)
+	}
+	if _, err := store.MarkAttendance(ctx, MarkInput{SessionID: session.ID, StudentID: student,
+		Method: "app", DeviceID: "student-phone", Lat: 24.9, Lng: 91.8, AccuracyM: 10}); err != nil {
+		t.Errorf("a mark from the student's own phone error = %v, want it saved", err)
 	}
 }

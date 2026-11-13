@@ -19,6 +19,7 @@ const HEADINGS = ['Asked', 'What', 'Who asked', 'Status', '']
 const ACTION_LABELS = {
   delete_user: 'Delete an account for good',
   delete_sheet: 'Delete a whole attendance sheet',
+  delete_batch: 'Delete a batch for good',
   remove_admin: 'Remove an office admin',
 }
 

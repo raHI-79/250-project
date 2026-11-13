@@ -89,12 +89,16 @@ func (a *Admin) decideRegistration(status, message string) http.HandlerFunc {
 			reason = cleaned
 		}
 		decided, err := a.people.DecideRegistration(r.Context(), userID, status, reason)
+		var closed *store.BatchClosedError
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			httpx.WriteError(w, http.StatusNotFound, MessageStudentNotFound)
 			return
 		case errors.Is(err, store.ErrNotPending):
 			httpx.WriteError(w, http.StatusConflict, MessageRegistrationNotPending)
+			return
+		case errors.As(err, &closed):
+			httpx.WriteError(w, http.StatusConflict, RegistrationClosedMessage(closed.Batch))
 			return
 		case err != nil:
 			log.Printf("handler: could not decide a registration: %v", err)

@@ -105,6 +105,14 @@ func OfficeNeeds() *RouteNeeds {
 		"GET /api/admin/batches/running-semester",
 		"PUT /api/admin/batches/{batch}/running-semester",
 	)
+	needs.Need(auth.PermBatches,
+		"GET /api/admin/batches",
+		"POST /api/admin/batches",
+		"PATCH /api/admin/batches/{batch}",
+		"POST /api/admin/batches/{batch}/deactivate",
+		"POST /api/admin/batches/{batch}/activate",
+		"DELETE /api/admin/batches/{batch}",
+	)
 	needs.Need(auth.PermPeriods,
 		"GET /api/admin/periods",
 		"POST /api/admin/periods",

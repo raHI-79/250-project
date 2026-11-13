@@ -100,10 +100,10 @@ func TestRegisterValidation(t *testing.T) {
 			wantError: "Password and the confirmation do not match.",
 		},
 		{
-			name:      "bad batch",
-			values:    withField(registrationForm(), "batch", "CSE23"),
+			name:      "bad registration number",
+			values:    withField(registrationForm(), "reg_no", "2023A31079"),
 			wantCode:  http.StatusBadRequest,
-			wantError: "Batch must look like CSE-23.",
+			wantError: "Registration number may only use digits.",
 		},
 		{
 			name:      "bad blood group",

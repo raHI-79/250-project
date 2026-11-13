@@ -317,8 +317,8 @@ RETURNING id`, role, identifier, l.hash).Scan(&userID)
 func (l *loader) loadRoutines() error {
 	for batchIndex, batch := range demoBatches {
 		_, err := l.pool.Exec(l.ctx,
-			`INSERT INTO batch_semesters (batch, running_semester) VALUES ($1, $2)
-ON CONFLICT (batch) DO UPDATE SET running_semester = EXCLUDED.running_semester`,
+			`INSERT INTO batches (name, running_semester) VALUES ($1, $2)
+ON CONFLICT (name) DO UPDATE SET running_semester = EXCLUDED.running_semester, status = 'active'`,
 			batch, demoRunning[batchIndex])
 		if err != nil {
 			return fmt.Errorf("seed: could not set the running semester of %s: %w", batch, err)
@@ -705,7 +705,7 @@ type attendanceClass struct {
 func (l *loader) loadAttendance() error {
 	rows, err := l.pool.Query(l.ctx, `SELECT DISTINCT r.course_id, r.batch, r.section, r.teacher_id
 FROM routines r
-JOIN batch_semesters b ON b.batch = r.batch AND b.running_semester = r.semester
+JOIN batches b ON b.status = 'active' AND b.name = r.batch AND b.running_semester = r.semester
 WHERE r.teacher_id IS NOT NULL
 ORDER BY r.batch, r.section, r.course_id`)
 	if err != nil {

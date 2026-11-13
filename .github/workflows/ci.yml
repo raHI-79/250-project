@@ -19,7 +19,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -66,9 +66,13 @@ jobs:
       - name: Build
         run: npm run build
 
-  browser:
-    name: Browser check
+  browser-shards:
+    name: Browser check (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:18
@@ -79,7 +83,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -148,14 +152,27 @@ jobs:
           exit 1
       - name: Walk every page
         working-directory: frontend
-        run: npm run e2e
+        run: npm run e2e -- --fully-parallel --shard=${{ matrix.shard }}/3
       - name: Keep the report of a failed run
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-check
+          name: browser-check-${{ matrix.shard }}
           path: |
             frontend/e2e/.artifacts
             frontend/vite.log
             backend/server.log
           retention-days: 7
+
+  browser:
+    name: Browser check
+    runs-on: ubuntu-latest
+    needs: browser-shards
+    if: always()
+    steps:
+      - name: Every shard passed
+        run: |
+          if [ "${{ needs.browser-shards.result }}" != "success" ]; then
+            echo "a browser shard did not pass: ${{ needs.browser-shards.result }}"
+            exit 1
+          fi

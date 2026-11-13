@@ -52,6 +52,7 @@ export const OFFICE_PAGES = [
   { path: '/office-portal/crs' },
   { path: '/office-portal/teachers' },
   { path: '/office-portal/courses' },
+  { path: '/office-portal/running-batches' },
   { path: '/office-portal/class-periods' },
   { path: '/office-portal/routines' },
   { path: '/office-portal/notices' },
