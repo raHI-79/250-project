@@ -1,3 +1,5 @@
+import { regNoProblem } from './batches.js'
+
 export const MIN_AGE = 15
 
 export const MAX_AGE = 60
@@ -8,7 +10,7 @@ export const MAX_BIO = 500
 
 export const BATCH_PATTERN = /^[A-Z]{2,6}-[0-9]{2}$/
 
-export const SECTION_PATTERN = /^[A-Z]$/
+export const SECTION_PATTERN = /^[AB]$/
 
 export const CODE_PATTERN = /^[0-9]{6}$/
 
@@ -115,11 +117,10 @@ export const registrationErrors = (form, studentEmailDomain, options = {}) => {
   if (!name) found.fullName = 'Full name is required.'
   else if (name.length > MAX_FIELD)
     found.fullName = `Full name must be at most ${MAX_FIELD} characters long.`
-  if (!String(form.regNo || '').trim()) found.regNo = 'Registration number is required.'
-  if (!BATCH_PATTERN.test(String(form.batch || '').trim().toUpperCase()))
-    found.batch = 'Batch must look like CSE-23.'
+  const regNo = regNoProblem(form.regNo)
+  if (regNo) found.regNo = regNo
   if (!SECTION_PATTERN.test(String(form.section || '').trim().toUpperCase()))
-    found.section = 'Section must be a single letter from A to Z.'
+    found.section = 'Section must be A or B.'
   const birth = birthDateError(form.dateOfBirth)
   if (birth) found.dateOfBirth = birth
   const email = emailDomainError(form.email, studentEmailDomain)

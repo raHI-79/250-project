@@ -4,6 +4,36 @@ Every released version of the SUST CSE Class & Exam Coordination System. The
 version in `frontend/package.json` and `render.yaml` is the one the app reports
 and the one the Android release is tagged with.
 
+## 2.8.1
+
+### Running batches
+
+- **One list of batches.** Office portal → Running batches holds every batch
+  with its running semester, sections and student count. Every routine, class,
+  exam, notice, poll, attendance and filter list offers only the active ones.
+  Existing batches were carried over; a batch without students starts inactive.
+- **Deactivate and activate.** Deactivating keeps every record, signs the
+  batch's students out, refuses their sign-in with "Your batch is not active.
+  Please contact the department office." and stops the schedule generator for
+  it. Activating reverses all of it.
+- **Delete.** Removes the batch with its routine, classes, exams and attendance
+  and marks its students removed. It needs the batch name typed, the password
+  confirmation and a second admin when one exists. Each action is audited and
+  the other admins who manage batches are notified.
+- **A new office permission.** Running batches; admins who had Courses and
+  semesters received it.
+
+### Registration and home
+
+- **The batch comes from the registration number.** 2021… is CSE-21, 2023… is
+  CSE-23. The form shows it read-only beside the number, the server never
+  trusts a batch from the client, and a missing or inactive batch answers
+  "CSE-nn is not open for registration. Please contact the department office."
+  Approval applies the same rule.
+- **Any length.** A registration number is digits only, starts with 20 and has
+  6 to 20 digits.
+- **No week number.** The home header shows the date without "Week N".
+
 ## 2.8.0
 
 ### Attendance rules

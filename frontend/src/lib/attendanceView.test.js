@@ -77,6 +77,8 @@ test('a share below half is flagged', () => {
 
 test('reads the roll number off the registration number', () => {
   assert.equal(rollNumber('2023331079'), '079')
+  assert.equal(rollNumber('202333107912'), '912')
+  assert.equal(rollNumber('202301'), '301')
   assert.equal(rollNumber('2023331001'), '001')
   assert.equal(rollNumber('2023331120'), '120')
   assert.equal(rollNumber('2019-331-7'), '317')

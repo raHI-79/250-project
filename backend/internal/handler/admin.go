@@ -194,7 +194,7 @@ func (a *Admin) Registrations() http.HandlerFunc {
 				UserID:      registration.ID,
 				FullName:    registration.FullName,
 				RegNo:       registration.RegNo,
-				Batch:       registration.Batch,
+				Batch:       derivedBatch(registration.RegNo, registration.Batch),
 				Section:     registration.Section,
 				Email:       registration.Email,
 				Phone:       registration.Phone,
@@ -206,6 +206,13 @@ func (a *Admin) Registrations() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, registrationsResponse{Items: items})
 	}
+}
+
+func derivedBatch(regNo, stored string) string {
+	if batch, ok := validate.BatchOfRegNo(regNo); ok {
+		return batch
+	}
+	return stored
 }
 
 func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {

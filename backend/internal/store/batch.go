@@ -18,6 +18,14 @@ var (
 	ErrBatchUnchanged = errors.New("store: the batch is already in that state")
 )
 
+type BatchClosedError struct {
+	Batch string
+}
+
+func (e *BatchClosedError) Error() string {
+	return "store: the batch " + e.Batch + " is not active"
+}
+
 type Batch struct {
 	ID              int64
 	Name            string

@@ -33,6 +33,9 @@ const (
 	MessageUserIDDigitsOnly = "User ID cannot be digits only."
 	MessageUserIDStart      = "User ID must start with a letter."
 	MessageUserIDReserved   = "This User ID is reserved."
+	MinRegNoLength          = 6
+	MaxRegNoLength          = 20
+	RegNoBatchPrefix        = "CSE-"
 	SectionA                = "A"
 	SectionB                = "B"
 	LabelBothSections       = "Both sections"
@@ -42,6 +45,8 @@ var (
 	emailPattern      = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s.]{2,}$`)
 	phonePattern      = regexp.MustCompile(`^01[3-9][0-9]{8}$`)
 	batchPattern      = regexp.MustCompile(`^[A-Z]{2,6}-[0-9]{2}$`)
+	regNoPattern      = regexp.MustCompile(`^20[0-9]{4,18}$`)
+	digitsPattern     = regexp.MustCompile(`^[0-9]+$`)
 	sectionPattern    = regexp.MustCompile(`^[AB]$`)
 	courseCodePattern = regexp.MustCompile(`^[A-Z0-9 ]+$`)
 	courseCodeDigit   = regexp.MustCompile(`[0-9]`)
@@ -156,6 +161,29 @@ func Batch(label, value string) (string, error) {
 		return "", fmt.Errorf("%s must look like CSE-23.", label)
 	}
 	return trimmed, nil
+}
+
+func RegNo(label, value string) (string, error) {
+	trimmed, err := Required(label, value)
+	if err != nil {
+		return "", err
+	}
+	if !digitsPattern.MatchString(trimmed) {
+		return "", fmt.Errorf("%s may only use digits.", label)
+	}
+	if !regNoPattern.MatchString(trimmed) {
+		return "", fmt.Errorf("%s must start with 20 and be %d to %d digits long.", label,
+			MinRegNoLength, MaxRegNoLength)
+	}
+	return trimmed, nil
+}
+
+func BatchOfRegNo(regNo string) (string, bool) {
+	trimmed := strings.TrimSpace(regNo)
+	if !regNoPattern.MatchString(trimmed) {
+		return "", false
+	}
+	return RegNoBatchPrefix + trimmed[2:4], true
 }
 
 func Section(label, value string) (string, error) {

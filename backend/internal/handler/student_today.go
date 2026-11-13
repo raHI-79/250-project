@@ -7,12 +7,10 @@ import (
 	"github.com/raHI-79/250-project/backend/internal/validate"
 	"log"
 	"net/http"
-	"time"
 )
 
 const (
-	maxSemesterWeeks = 26
-	nextExamCount    = 3
+	nextExamCount = 3
 )
 
 type nextExam struct {
@@ -25,7 +23,6 @@ type todayResponse struct {
 	DayKind        *dayKindBody `json:"day_kind,omitempty"`
 	Semester       string       `json:"semester"`
 	SemesterLabel  string       `json:"semester_label"`
-	Week           int          `json:"week"`
 	ClassesToday   int          `json:"classes_today"`
 	UpcomingExams  int          `json:"upcoming_exams"`
 	NextExam       *nextExam    `json:"next_exam"`
@@ -73,7 +70,7 @@ func (s *Student) Today() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		semester, since, err := s.students.RunningSemesterSince(r.Context(), profile.Batch)
+		semester, _, err := s.students.RunningSemesterSince(r.Context(), profile.Batch)
 		if err != nil {
 			log.Printf("handler: could not read the running semester of a student: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -84,7 +81,6 @@ func (s *Student) Today() http.HandlerFunc {
 			DayKind:        s.dayKind(r, day),
 			Semester:       semester,
 			SemesterLabel:  validate.SemesterLabel(semester),
-			Week:           semesterWeek(since, now),
 			ClassesToday:   scheduledCount(groups),
 			UpcomingExams:  len(exams),
 			NextExam:       firstExam(exams),
@@ -122,18 +118,6 @@ func scheduledCount(groups []planGroup) int {
 		}
 	}
 	return count
-}
-
-func semesterWeek(since, now time.Time) int {
-	if since.IsZero() || now.Before(since) {
-		return 1
-	}
-	days := int(now.Sub(since).Hours() / 24)
-	week := days/7 + 1
-	if week > maxSemesterWeeks {
-		return maxSemesterWeeks
-	}
-	return week
 }
 
 func nextExams(exams []store.StudentExam) []examItem {

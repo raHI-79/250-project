@@ -203,3 +203,40 @@ func TestBatchRowsCountStudentsAndRefuseDuplicates(t *testing.T) {
 		t.Errorf("rows = %+v, want CSE-23 active in 3-2 with one student", rows)
 	}
 }
+
+func TestApprovalWaitsForAnActiveBatch(t *testing.T) {
+	ctx, store, pool := newTestStore(t)
+	if _, err := store.CreateBatch(ctx, "CSE-25", "1-1", 0); err != nil {
+		t.Fatalf("CreateBatch() returned an unexpected error: %v", err)
+	}
+	userID := insertUser(t, ctx, pool, RoleStudent, "202533107912", StatusPending, 0)
+	insertStudentRow(t, ctx, pool, userID, "202533107912", "CSE-21", "A")
+	if _, err := store.SetBatchStatus(ctx, "CSE-25", BatchInactive, 0); err != nil {
+		t.Fatalf("SetBatchStatus() returned an unexpected error: %v", err)
+	}
+	var closed *BatchClosedError
+	_, err := store.DecideRegistration(ctx, userID, StatusActive, "")
+	if !errors.As(err, &closed) || closed.Batch != "CSE-25" {
+		t.Fatalf("approval error = %v, want CSE-25 reported as closed", err)
+	}
+	var status string
+	if err := pool.QueryRow(ctx, "SELECT status FROM users WHERE id = $1", userID).Scan(&status); err != nil {
+		t.Fatalf("could not read the account: %v", err)
+	}
+	if status != StatusPending {
+		t.Errorf("status = %q, want the registration still pending", status)
+	}
+	if _, err := store.SetBatchStatus(ctx, "CSE-25", BatchActive, 0); err != nil {
+		t.Fatalf("SetBatchStatus() returned an unexpected error: %v", err)
+	}
+	if _, err := store.DecideRegistration(ctx, userID, StatusActive, ""); err != nil {
+		t.Fatalf("DecideRegistration() returned an unexpected error: %v", err)
+	}
+	var batch string
+	if err := pool.QueryRow(ctx, "SELECT batch FROM students WHERE user_id = $1", userID).Scan(&batch); err != nil {
+		t.Fatalf("could not read the student: %v", err)
+	}
+	if batch != "CSE-25" {
+		t.Errorf("batch = %q, want the batch of the registration number", batch)
+	}
+}

@@ -53,6 +53,30 @@ func UseBatchGate(gate BatchGate) {
 	batchGate.Store(&batchGateBox{gate: gate})
 }
 
+func RegistrationClosedMessage(name string) string {
+	return name + " is not open for registration. Please contact the department office."
+}
+
+func registrationBatch(ctx context.Context, regNo string) (string, error) {
+	name, ok := validate.BatchOfRegNo(regNo)
+	if !ok {
+		return "", errors.New("Registration number must start with 20 followed by the batch number.")
+	}
+	box := batchGate.Load()
+	if box == nil {
+		return name, nil
+	}
+	open, err := box.gate.BatchOpen(ctx, name)
+	if err != nil {
+		log.Printf("handler: could not check the batch %s: %v", name, err)
+		return "", errors.New(middleware.MessageServerError)
+	}
+	if !open {
+		return "", errors.New(RegistrationClosedMessage(name))
+	}
+	return name, nil
+}
+
 func batchClosedMessage(name string) string {
 	return name + " is not an active batch."
 }
