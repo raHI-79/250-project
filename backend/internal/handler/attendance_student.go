@@ -429,6 +429,10 @@ func (s *StudentAttendance) saveMark(w http.ResponseWriter, r *http.Request,
 		refuse(w, profile.StudentID, session.ID, http.StatusConflict,
 			attendance.MessageSessionClosed, "the session closed meanwhile")
 		return
+	case errors.Is(err, store.ErrTeacherPhone):
+		refuse(w, profile.StudentID, session.ID, http.StatusForbidden,
+			attendance.MessageTeacherPhone, "a phone that takes attendance as a teacher")
+		return
 	case err != nil:
 		log.Printf("handler: could not save an attendance mark: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)

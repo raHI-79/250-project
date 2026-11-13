@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"strings"
 	"time"
 )
 
@@ -52,6 +53,7 @@ type NewAttendanceSession struct {
 	CodeOnly       bool
 	Hours          int
 	LateAfter      int
+	TeacherDevice  string
 }
 
 type RosterStudent struct {
@@ -169,32 +171,28 @@ const markedSessionSQL = `(a.status = 'open' OR EXISTS (
 const (
 	openSessionSQL = `INSERT INTO attendance_sessions
 (course_id, batch, section, schedule_item_id, teacher_id, ends_at, original_ends_at, token_key,
- method, code_only, hours, late_after)
+ method, code_only, hours, late_after, teacher_device_id)
 VALUES ($1, $2, $3, NULLIF($4, 0), $5, now() + make_interval(mins => $6),
  now() + make_interval(mins => $6), $7, $8, $9, $10,
- CASE WHEN $11::int > 0 THEN now() + make_interval(mins => $11::int) END)
+ CASE WHEN $11::int > 0 THEN now() + make_interval(mins => $11::int) END, $12)
 RETURNING id`
-	runningSessionSQL = `SELECT a.id, a.status FROM attendance_sessions a
+	runningSessionSQL = `SELECT a.id, (a.ends_at > now()) FROM attendance_sessions a
 WHERE a.teacher_id = $1 AND a.course_id = $2 AND a.batch = $3 AND a.section = $4
-  AND ((a.started_at >= date_trunc('day', now()) AND a.started_at < date_trunc('day', now()) + interval '1 day')
-       OR (a.status = 'open' AND a.ends_at > now()))
-ORDER BY (a.status = 'open') DESC, a.started_at DESC
-LIMIT 1`
+  AND a.status = 'open'
+ORDER BY a.started_at DESC`
 	continueSessionSQL = `UPDATE attendance_sessions
 SET ends_at = LEAST(GREATEST(ends_at, now() + make_interval(mins => $2)), started_at + interval '4 hours'),
-    method = $3, code_only = $4, hours = $5
+    method = $3, code_only = $4, hours = $5,
+    teacher_device_id = CASE WHEN $6::text <> '' THEN $6::text ELSE teacher_device_id END
 WHERE id = $1 AND status = 'open'
 RETURNING id`
-	reopenSessionSQL = `UPDATE attendance_sessions
-SET status = 'open', closed_at = NULL,
-    ends_at = GREATEST(LEAST(now() + make_interval(mins => $2), started_at + interval '4 hours'),
-                       now() + interval '1 minute'),
-    method = $3, code_only = $4, hours = $5
-WHERE id = $1 AND status = 'closed'
-RETURNING id`
-	dropAbsenteesSQL = `DELETE FROM attendance_records WHERE session_id = $1 AND method = 'system'`
-	realMarksSQL     = `SELECT COUNT(*) FROM attendance_records WHERE session_id = $1 AND method <> 'system'`
-	sessionByIDSQL   = `SELECT ` + sessionColumns + `
+	studentPhoneSQL = `SELECT EXISTS (
+    SELECT 1 FROM device_bindings b JOIN users u ON u.id = b.user_id
+    WHERE b.device_id = $1 AND u.role = 'student')`
+	teacherPhoneSQL = `SELECT EXISTS (
+    SELECT 1 FROM attendance_sessions a WHERE a.teacher_device_id = $1)`
+	realMarksSQL   = `SELECT COUNT(*) FROM attendance_records WHERE session_id = $1 AND method <> 'system'`
+	sessionByIDSQL = `SELECT ` + sessionColumns + `
 FROM attendance_sessions a
 JOIN courses c ON c.id = a.course_id
 LEFT JOIN teachers t ON t.id = a.teacher_id
@@ -480,48 +478,73 @@ func (s *Store) OpenAttendanceSession(ctx context.Context,
 	if hours < 1 {
 		hours = 1
 	}
-	var running int64
-	var status string
-	err := s.pool.QueryRow(ctx, runningSessionSQL, fresh.TeacherID, fresh.CourseID,
-		fresh.Batch, fresh.Section).Scan(&running, &status)
-	if err == nil {
-		return s.continueSession(ctx, running, status, fresh.Minutes, method, codeOnly, hours)
+	device := strings.TrimSpace(fresh.TeacherDevice)
+	if device != "" {
+		var studentPhone bool
+		if err := s.pool.QueryRow(ctx, studentPhoneSQL, device).Scan(&studentPhone); err != nil {
+			return AttendanceSession{}, fmt.Errorf("store: could not check the phone of a teacher: %w", err)
+		}
+		if studentPhone {
+			return AttendanceSession{}, ErrStudentPhone
+		}
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return AttendanceSession{}, fmt.Errorf("store: could not look for a running attendance: %w", err)
+	running, stale, err := s.openSessions(ctx, fresh)
+	if err != nil {
+		return AttendanceSession{}, err
+	}
+	for _, sessionID := range stale {
+		_, err := s.CloseAttendanceSession(ctx, sessionID, fresh.TeacherID)
+		if err != nil && !errors.Is(err, ErrAttendanceEmpty) && !errors.Is(err, ErrAttendanceClosed) {
+			return AttendanceSession{}, err
+		}
+	}
+	if running > 0 {
+		return s.continueSession(ctx, running, fresh.Minutes, method, codeOnly, hours, device)
 	}
 	var id int64
 	err = s.pool.QueryRow(ctx, openSessionSQL, fresh.CourseID, fresh.Batch, fresh.Section,
 		fresh.ScheduleItemID, fresh.TeacherID, fresh.Minutes, fresh.TokenKey, method,
-		codeOnly, hours, fresh.LateAfter).Scan(&id)
+		codeOnly, hours, fresh.LateAfter, device).Scan(&id)
 	if err != nil {
 		return AttendanceSession{}, fmt.Errorf("store: could not open an attendance session: %w", err)
 	}
 	return s.AttendanceSession(ctx, id)
 }
 
-func (s *Store) continueSession(ctx context.Context, sessionID int64, status string, minutes int,
-	method string, codeOnly bool, hours int) (AttendanceSession, error) {
-	tx, err := s.pool.Begin(ctx)
+func (s *Store) openSessions(ctx context.Context, fresh NewAttendanceSession) (int64, []int64, error) {
+	rows, err := s.pool.Query(ctx, runningSessionSQL, fresh.TeacherID, fresh.CourseID,
+		fresh.Batch, fresh.Section)
 	if err != nil {
-		return AttendanceSession{}, fmt.Errorf("store: could not start continuing the session %d: %w", sessionID, err)
+		return 0, nil, fmt.Errorf("store: could not look for a running attendance: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	query := continueSessionSQL
-	if status != SessionOpen {
-		query = reopenSessionSQL
-	}
-	var id int64
-	if err := tx.QueryRow(ctx, query, sessionID, minutes, method, codeOnly, hours).Scan(&id); err != nil {
-		return AttendanceSession{}, fmt.Errorf("store: could not continue the session %d: %w", sessionID, err)
-	}
-	if status != SessionOpen {
-		if _, err := tx.Exec(ctx, dropAbsenteesSQL, sessionID); err != nil {
-			return AttendanceSession{}, fmt.Errorf("store: could not reopen the marks of %d: %w", sessionID, err)
+	defer rows.Close()
+	var running int64
+	stale := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		var live bool
+		if err := rows.Scan(&id, &live); err != nil {
+			return 0, nil, fmt.Errorf("store: could not scan a running attendance: %w", err)
 		}
+		if live && running == 0 {
+			running = id
+			continue
+		}
+		stale = append(stale, id)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return AttendanceSession{}, fmt.Errorf("store: could not finish continuing the session %d: %w", sessionID, err)
+	if err := rows.Err(); err != nil {
+		return 0, nil, fmt.Errorf("store: could not read the running attendance: %w", err)
+	}
+	return running, stale, nil
+}
+
+func (s *Store) continueSession(ctx context.Context, sessionID int64, minutes int,
+	method string, codeOnly bool, hours int, device string) (AttendanceSession, error) {
+	var id int64
+	err := s.pool.QueryRow(ctx, continueSessionSQL, sessionID, minutes, method, codeOnly, hours,
+		device).Scan(&id)
+	if err != nil {
+		return AttendanceSession{}, fmt.Errorf("store: could not continue the session %d: %w", sessionID, err)
 	}
 	return s.AttendanceSession(ctx, sessionID)
 }
@@ -755,6 +778,15 @@ func (s *Store) MarkAttendance(ctx context.Context, mark MarkInput) (string, err
 	var lat, lng, accuracy, distance *float64
 	if !mark.NoLocation {
 		lat, lng, accuracy, distance = &mark.Lat, &mark.Lng, &mark.AccuracyM, &mark.DistanceM
+	}
+	if mark.DeviceID != "" {
+		var teacherPhone bool
+		if err := s.pool.QueryRow(ctx, teacherPhoneSQL, mark.DeviceID).Scan(&teacherPhone); err != nil {
+			return "", fmt.Errorf("store: could not check the phone of a mark: %w", err)
+		}
+		if teacherPhone {
+			return "", ErrTeacherPhone
+		}
 	}
 	err := s.pool.QueryRow(ctx, markSQL, mark.SessionID, mark.StudentID, mark.Method,
 		mark.DeviceID, lat, lng, accuracy, distance, mark.NoLocation).Scan(&status)

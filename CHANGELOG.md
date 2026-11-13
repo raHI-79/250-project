@@ -23,6 +23,19 @@ and the one the Android release is tagged with.
 - **A new office permission.** Running batches; admins who had Courses and
   semesters received it.
 
+### Attendance marks
+
+- **Every start is a new session.** Starting attendance for a class that was
+  already taken that day used to reopen the earlier session, so its marks
+  showed up as present before anyone acted. A start now always opens a new,
+  empty session with its own code; an open session that ran out of time is
+  finished first, and unmarked students become absent only when a session ends.
+- **One phone, one role.** A phone that takes attendance as a teacher cannot
+  mark a student, and a student's attendance phone cannot take attendance.
+- **Method in the history.** Every record shows Bluetooth, Code, Roll call,
+  Teacher or System. A migration sets automatic present marks back and records
+  the count in the activity log.
+
 ### Registration and home
 
 - **The batch comes from the registration number.** 2021… is CSE-21, 2023… is

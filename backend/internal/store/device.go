@@ -16,6 +16,8 @@ var (
 	ErrNotTheirStudent  = errors.New("store: this student is not taught by this teacher")
 	ErrSameDeviceBound  = errors.New("store: this phone is already the registered phone")
 	ErrAttendanceClosed = errors.New("store: the attendance session is closed")
+	ErrTeacherPhone     = errors.New("store: this phone takes attendance as a teacher")
+	ErrStudentPhone     = errors.New("store: this phone is the attendance phone of a student")
 	ErrAlreadyMarked    = errors.New("store: the student already has a record in this session")
 	ErrDeviceUsed       = errors.New("store: this phone already marked a student in this session")
 )

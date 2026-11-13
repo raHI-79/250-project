@@ -22,12 +22,11 @@ export const TAKE_BLUETOOTH = 'bluetooth'
 
 export const TAKE_ROLL_CALL = 'roll_call'
 
-export const methodLabel = (method) => {
+export const methodLabel = (method, take) => {
   if (method === 'app') return 'Bluetooth'
-  if (method === 'code') return 'Code'
-  if (method === 'web') return 'Web'
-  if (method === 'manual') return 'By teacher'
-  if (method === 'system') return 'Not marked'
+  if (method === 'code' || method === 'web') return 'Code'
+  if (method === 'manual') return take === TAKE_ROLL_CALL ? 'Roll call' : 'Teacher'
+  if (method === 'system') return 'System'
   return ''
 }
 
@@ -90,7 +89,8 @@ export const NO_LOCATION_FLAG = 'No location'
 export const markFlags = (mark) =>
   mark?.no_location && mark?.status === 'present' ? [NO_LOCATION_FLAG] : []
 
-export const startBody = (entry, timing, method, codeOnly) => ({
+export const startBody = (entry, timing, method, codeOnly, deviceId) => ({
+  ...(deviceId ? { device_id: deviceId } : {}),
   course_id: entry.course_id,
   batch: entry.batch,
   section: entry.section,

@@ -73,6 +73,8 @@ const (
 	MessageBadWeight     = "The late weight is a number between 0 and 1."
 	MessageWebNeedsCode  = "Enter the 4-digit code the teacher shows and allow the browser to share your position."
 	MessageRollCallOnly  = "This class is taken by roll call, so the teacher marks the roster."
+	MessageTeacherPhone  = "This phone takes attendance as a teacher, so it cannot mark a student present."
+	MessageStudentPhone  = "This phone is a student's attendance phone, so it cannot take attendance."
 	MessageBadTakeMethod = "Attendance is taken either by Bluetooth or by roll call."
 )
 

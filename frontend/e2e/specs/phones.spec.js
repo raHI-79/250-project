@@ -465,6 +465,70 @@ test.describe('attendance rules on a phone', () => {
       }
     }
   })
+
+  test('a new session starts with nobody present until the student marks', async ({ page, appShell }) => {
+    test.setTimeout(6 * 60_000)
+    const teacher = await signInByApi(ROLES.teacher, 'teacher')
+    const student = await signInByApi(CLASS_EARLY, 'student')
+    const me = await need(student, 'GET', '/api/profile')
+    const entry = await classOf(teacher, me.batch, me.section)
+    await clearToday(teacher, entry)
+    const start = {
+      course_id: entry.course_id,
+      batch: entry.batch,
+      section: entry.section,
+      minutes: 10,
+      hours: 1,
+      method: 'bluetooth',
+      code_only: true,
+    }
+    const sessions = []
+    try {
+      const earlier = await need(teacher, 'POST', '/api/teacher/attendance/sessions', start)
+      sessions.push(earlier.id)
+      await need(student, 'POST', '/api/students/attendance/mark', {
+        session_id: earlier.id,
+        code: earlier.code,
+      })
+      await need(teacher, 'POST', `/api/teacher/attendance/sessions/${earlier.id}/close`)
+      const fresh = await need(teacher, 'POST', '/api/teacher/attendance/sessions', start)
+      sessions.push(fresh.id)
+      expect(fresh.id, 'a second start the same day must be a new session').not.toBe(earlier.id)
+      expect(fresh.present).toBe(0)
+      const before = await need(student, 'GET', '/api/students/attendance/open')
+      expect(before.session.id).toBe(fresh.id)
+      expect(before.session.present, 'the student is present without acting').toBe(false)
+      const stale = await call(student, 'POST', '/api/students/attendance/mark', {
+        session_id: earlier.id,
+        code: earlier.code,
+      })
+      expect(stale.status, 'the ended session still takes marks').toBe(409)
+      if (appShell) await asApp(page)
+      await signIn(page, ROLES.teacher)
+      await visit(page, '/teacher/attendance')
+      await expect(page.getByText('Nobody has been marked yet.').first()).toBeVisible()
+      const now = await need(teacher, 'GET', `/api/teacher/attendance/sessions/${fresh.id}`)
+      const unmarked = (now.marks || []).filter((mark) => mark.status)
+      expect(unmarked, 'the new session already carries marks').toHaveLength(0)
+      const saved = await need(student, 'POST', '/api/students/attendance/mark', {
+        session_id: fresh.id,
+        code: now.session.code,
+      })
+      expect(saved.status).toBe('present')
+      const after = await need(student, 'GET', '/api/students/attendance/open')
+      expect(after.session.present).toBe(true)
+      await visit(page, '/teacher/attendance')
+      const row = page.locator('li', { hasText: me.reg_no || me.full_name }).first()
+      await expect(row).toBeVisible()
+      await expect(row).toContainText('Code')
+      await expect(page.getByText('Nobody has been marked yet.')).toHaveCount(0)
+    } finally {
+      for (const id of sessions) {
+        await call(teacher, 'POST', `/api/teacher/attendance/sessions/${id}/close`)
+        await call(teacher, 'DELETE', `/api/teacher/attendance/sessions/${id}`)
+      }
+    }
+  })
 })
 
 test.describe('the website editor on a phone', () => {

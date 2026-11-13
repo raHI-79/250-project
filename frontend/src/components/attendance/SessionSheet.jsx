@@ -7,9 +7,9 @@ import { formatClock, formatDate } from '../../lib/time'
 import { markMeta, methodLabel, presentOfRoster, sectionLabel, sortedRoster } from '../../lib/attendance'
 import { dots } from '../../lib/dots'
 
-const metaOf = (mark) =>
+const metaOf = (mark, take) =>
   dots(
-    methodLabel(mark.method),
+    methodLabel(mark.method, take),
     markMeta(mark, formatClock),
     mark.edited_by ? `Edited by ${mark.edited_by}` : '',
     mark.edited_by && mark.edited_at ? formatDate(mark.edited_at) : '',
@@ -115,7 +115,7 @@ export default function SessionSheet({ sessionId, onClose, onChanged, onDeleted 
             key={mark.student_id}
             mark={mark}
             status={mark.status}
-            meta={metaOf(mark)}
+            meta={metaOf(mark, session?.method)}
             busy={busy === mark.student_id}
             onMark={(status, note) => save(mark.student_id, status, note)}
             onSaveNote={(note) => save(mark.student_id, mark.status || 'absent', note)}

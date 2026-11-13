@@ -45,6 +45,7 @@ import {
   downloadWorkbook,
   openAppSettings,
   openLocationSettings,
+  phoneId,
   presentOfRoster,
   sectionLabel,
   startBeacon,
@@ -465,9 +466,10 @@ export default function TeacherAttendancePage() {
     if (!entry) return
     setBusy('start')
     try {
+      const device = await phoneId().catch(() => '')
       const session = await api.post(
         '/api/teacher/attendance/sessions',
-        startBody(entry, timingBody(timing), method, codeOnly),
+        startBody(entry, timingBody(timing), method, codeOnly, device),
       )
       setOpen(session)
       setMarks([])

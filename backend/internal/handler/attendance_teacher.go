@@ -27,6 +27,7 @@ type startRequest struct {
 	Hours          int    `json:"hours"`
 	Method         string `json:"method"`
 	CodeOnly       bool   `json:"code_only"`
+	DeviceID       string `json:"device_id"`
 }
 
 type sheetRequest struct {
@@ -249,7 +250,12 @@ func (a *Attendance) Start() http.HandlerFunc {
 			TokenKey:       key,
 			Method:         method,
 			CodeOnly:       request.CodeOnly && method != attendance.TakeRollCall,
+			TeacherDevice:  teacherDevice(r, request.DeviceID),
 		})
+		if errors.Is(err, store.ErrStudentPhone) {
+			httpx.WriteError(w, http.StatusForbidden, attendance.MessageStudentPhone)
+			return
+		}
 		if err != nil {
 			log.Printf("handler: could not open an attendance session: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, middleware.MessageServerError)
@@ -265,6 +271,13 @@ func (a *Attendance) Start() http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusCreated, newSessionBody(session, now, true))
 	}
+}
+
+func teacherDevice(r *http.Request, deviceID string) string {
+	if !middleware.FromAndroidApp(r) {
+		return ""
+	}
+	return strings.TrimSpace(deviceID)
 }
 
 func (a *Attendance) Session() http.HandlerFunc {
